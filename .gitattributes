@@ -1,0 +1,15 @@
+# Normalize text files to LF in the repo; let checkouts use native endings.
+* text=auto
+
+# Shell scripts and the Gradle wrapper must keep LF or they break on Unix.
+*.sh    text eol=lf
+gradlew text eol=lf
+
+# Windows-only scripts keep CRLF.
+*.bat   text eol=crlf
+
+# Binary artifacts.
+*.jar   binary
+*.nbt   binary
+*.dat   binary
+*.png   binary

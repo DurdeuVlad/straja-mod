@@ -1,0 +1,22 @@
+{
+  "entity.straja.straja_npc": "Straja NPC",
+  "item.straja.order_book": "Order Book",
+  "item.straja.mission_carnet": "Mission Carnet",
+  "item.straja.archive_folder": "Archive Folder",
+  "item.straja.archive_document": "Archive Document",
+  "item.straja.carbon_paper": "Carbon Paper",
+  "item.straja.archive_stamp": "Archive Stamp",
+  "item.straja.official_envelope": "Official Envelope",
+  "item.straja.room_marker": "Room Marker",
+  "item.straja.prison_marker": "Prison Marker",
+  "item.straja.cuffs": "Handcuffs",
+  "item.straja.cuff_key": "Cuff Key",
+  "item.straja.bolt_cutters": "Bolt Cutters",
+  "item.straja.crowbar": "Crowbar",
+  "item.straja.rope": "Rope",
+  "item.straja.head_sack": "Head Sack",
+  "item.straja.baton": "Service Baton",
+  "item.straja.keychain": "Straja Keychain",
+  "item.straja.fine_book": "Fine Book",
+  "item.straja.fine_notice": "Fine Notice"
+}

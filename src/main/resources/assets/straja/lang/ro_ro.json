@@ -1,0 +1,22 @@
+{
+  "entity.straja.straja_npc": "NPC Straja",
+  "item.straja.order_book": "Carnet de ordine",
+  "item.straja.mission_carnet": "Carnet de misiuni",
+  "item.straja.archive_folder": "Dosar de arhivă",
+  "item.straja.archive_document": "Document de arhivă",
+  "item.straja.carbon_paper": "Hârtie carbon",
+  "item.straja.archive_stamp": "Ștampilă de arhivă",
+  "item.straja.official_envelope": "Plic oficial",
+  "item.straja.room_marker": "Marcaj cameră",
+  "item.straja.prison_marker": "Marcaj celulă",
+  "item.straja.cuffs": "Cătușe",
+  "item.straja.cuff_key": "Cheie cătușe",
+  "item.straja.bolt_cutters": "Foarfecă",
+  "item.straja.crowbar": "Rangă",
+  "item.straja.rope": "Frânghie",
+  "item.straja.head_sack": "Sac de cap",
+  "item.straja.baton": "Baston de serviciu",
+  "item.straja.keychain": "Breloc Straja",
+  "item.straja.fine_book": "Carnet de amenzi",
+  "item.straja.fine_notice": "Înștiințare de amendă"
+}

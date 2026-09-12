@@ -1,0 +1,93 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "java",
+      "request": "launch",
+      "name": "Client",
+      "presentation": {
+        "group": "Mod Development - RusticCraft Straja Mod",
+        "order": 0
+      },
+      "projectName": "RusticCraft Straja Mod",
+      "mainClass": "net.neoforged.devlaunch.Main",
+      "args": [
+        "@C:\\Users\\Vlad\\Documents\\Github\\RusticCraft Straja Mod\\build\\moddev\\clientRunProgramArgs.txt"
+      ],
+      "vmArgs": [
+        "@C:\\Users\\Vlad\\Documents\\Github\\RusticCraft Straja Mod\\build\\moddev\\clientRunVmArgs.txt",
+        "-Dfml.modFolders\u003dstraja%%C:\\Users\\Vlad\\Documents\\Github\\RusticCraft Straja Mod\\bin\\main"
+      ],
+      "cwd": "${workspaceFolder}\\run",
+      "env": {},
+      "console": "internalConsole",
+      "shortenCommandLine": "none"
+    },
+    {
+      "type": "java",
+      "request": "launch",
+      "name": "Data",
+      "presentation": {
+        "group": "Mod Development - RusticCraft Straja Mod",
+        "order": 1
+      },
+      "projectName": "RusticCraft Straja Mod",
+      "mainClass": "net.neoforged.devlaunch.Main",
+      "args": [
+        "@C:\\Users\\Vlad\\Documents\\Github\\RusticCraft Straja Mod\\build\\moddev\\dataRunProgramArgs.txt"
+      ],
+      "vmArgs": [
+        "@C:\\Users\\Vlad\\Documents\\Github\\RusticCraft Straja Mod\\build\\moddev\\dataRunVmArgs.txt",
+        "-Dfml.modFolders\u003dstraja%%C:\\Users\\Vlad\\Documents\\Github\\RusticCraft Straja Mod\\bin\\main"
+      ],
+      "cwd": "${workspaceFolder}\\run",
+      "env": {},
+      "console": "internalConsole",
+      "shortenCommandLine": "none"
+    },
+    {
+      "type": "java",
+      "request": "launch",
+      "name": "GameTestServer",
+      "presentation": {
+        "group": "Mod Development - RusticCraft Straja Mod",
+        "order": 2
+      },
+      "projectName": "RusticCraft Straja Mod",
+      "mainClass": "net.neoforged.devlaunch.Main",
+      "args": [
+        "@C:\\Users\\Vlad\\Documents\\Github\\RusticCraft Straja Mod\\build\\moddev\\gameTestServerRunProgramArgs.txt"
+      ],
+      "vmArgs": [
+        "@C:\\Users\\Vlad\\Documents\\Github\\RusticCraft Straja Mod\\build\\moddev\\gameTestServerRunVmArgs.txt",
+        "-Dfml.modFolders\u003dstraja%%C:\\Users\\Vlad\\Documents\\Github\\RusticCraft Straja Mod\\bin\\main"
+      ],
+      "cwd": "${workspaceFolder}\\run",
+      "env": {},
+      "console": "internalConsole",
+      "shortenCommandLine": "none"
+    },
+    {
+      "type": "java",
+      "request": "launch",
+      "name": "Server",
+      "presentation": {
+        "group": "Mod Development - RusticCraft Straja Mod",
+        "order": 3
+      },
+      "projectName": "RusticCraft Straja Mod",
+      "mainClass": "net.neoforged.devlaunch.Main",
+      "args": [
+        "@C:\\Users\\Vlad\\Documents\\Github\\RusticCraft Straja Mod\\build\\moddev\\serverRunProgramArgs.txt"
+      ],
+      "vmArgs": [
+        "@C:\\Users\\Vlad\\Documents\\Github\\RusticCraft Straja Mod\\build\\moddev\\serverRunVmArgs.txt",
+        "-Dfml.modFolders\u003dstraja%%C:\\Users\\Vlad\\Documents\\Github\\RusticCraft Straja Mod\\bin\\main"
+      ],
+      "cwd": "${workspaceFolder}\\run",
+      "env": {},
+      "console": "internalConsole",
+      "shortenCommandLine": "none"
+    }
+  ]
+}
