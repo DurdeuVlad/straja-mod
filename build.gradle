@@ -202,6 +202,7 @@ tasks.register("publishCurseForge", net.darkhax.curseforgegradle.TaskPublishCurs
             .orElse(providers.environmentVariable("CURSEFORGE_API_KEY")).getOrElse("")
     def mainFile = upload(providers.gradleProperty("curseforge_project_id").getOrElse(""), tasks.jar)
     mainFile.releaseType = "beta"
+    mainFile.addEnvironment("Client")
     mainFile.addEnvironment("Server")
     mainFile.addRequirement("envelope")
 }
