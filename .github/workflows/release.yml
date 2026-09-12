@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build
+        run: |
+          chmod +x gradlew
+          ./gradlew build --no-daemon
+
+      # Set repo variable MODRINTH_PROJECT_ID and secret MODRINTH_TOKEN to enable.
+      - name: Publish to Modrinth
+        if: vars.MODRINTH_PROJECT_ID != ''
+        env:
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+        run: ./gradlew modrinth -Pmodrinth_project_id=${{ vars.MODRINTH_PROJECT_ID }} --no-daemon
+
+      # Set repo variable CURSEFORGE_PROJECT_ID and secret CURSEFORGE_API_KEY to enable.
+      - name: Publish to CurseForge
+        if: vars.CURSEFORGE_PROJECT_ID != ''
+        env:
+          CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
+        run: ./gradlew publishCurseForge -Pcurseforge_project_id=${{ vars.CURSEFORGE_PROJECT_ID }} --no-daemon
+
+      - name: GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/libs/*.jar
+          generate_release_notes: true
