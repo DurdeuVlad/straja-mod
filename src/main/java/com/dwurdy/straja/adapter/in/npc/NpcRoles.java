@@ -95,19 +95,21 @@ public final class NpcRoles {
         }
 
         // Native interim interaction until the dedicated client menu lands:
-        // normal right-click toggles the shift; sneak-right-click opens the
-        // administrative/status actions without accidentally ending duty.
+        // normal right-click toggles the shift; sneak-right-click is the
+        // administrative counter (status + salary collection + report hints).
         if (player.isShiftKeyDown()) {
+            runtime.guards().salary(gw);
+            state = runtime.personnel().ensurePersonnelRecord(gw);
             gw.tell("Secretariat: " + state.serviceNumber + " | "
                     + com.dwurdy.straja.domain.model.Rank.of(state.rank).displayName());
             gw.tell("Tură: " + (state.duty ? "ACTIVĂ" : "INACTIVĂ")
-                    + " | sold: " + state.unpaidSalary + " bronze.");
+                    + " | sold neîncasat: " + state.unpaidSalary + " bronze.");
             if (runtime.personnel().activityReportDue(gw)) {
                 gw.tell("Raportul săptămânal este SCADENT. Folosește /straja-personnel report <text>.");
             } else if (state.nextActivityReportDueAt != null) {
                 gw.tell("Următorul raport: " + runtime.guards().prettyTime(state.nextActivityReportDueAt) + ".");
             }
-            gw.tell("Salariu: /straja salary | Audiență: /straja-personnel audience <motiv>");
+            gw.tell("Audiență: /straja-personnel audience <motiv>");
             runtime.missions().list(gw);
             return;
         }
