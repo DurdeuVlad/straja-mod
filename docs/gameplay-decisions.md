@@ -141,28 +141,52 @@ Current intended patrol model:
 
 ## 10. Salary and currency
 
-Currency decision:
+### Currency ladder
 
-- **64 bronze coins = 1 silver coin**.
+There are **four active coin denominations**, ordered from lowest to highest:
+
+1. Bronze
+2. Brass
+3. Silver
+4. Gold
+
+The economy uses the same **64-to-1 conversion at every step**:
+
+- **64 Bronze = 1 Brass**
+- **64 Brass = 1 Silver**
+- **64 Silver = 1 Gold**
+
+Implementations should not use the old 1/10/100/1000 denomination assumptions. Currency denomination values/item IDs remain configurable, but the current gameplay default is the 64-based ladder above.
+
+### Base wage
+
+The current base wage is defined around **one real hour of qualifying, actually-played work**:
+
+- **Base hourly wage = 64 / 4 = 16 Bronze per real hour of qualifying duty.**
+
+Only qualifying online work time counts. Offline time never contributes salary progress.
+
+Rank salary should be expressed/configurable as rates or multipliers derived from this base rather than buried as unrelated hard-coded numbers.
+
+Current salary decisions:
+
+- **Stagiar:** paid; exact rank multiplier/rate above or equal to the base remains configurable/TBD.
+- **Străjer:** paid; exact rank multiplier/rate remains configurable/TBD.
+- **Sergent:** paid; exact rank multiplier/rate remains configurable/TBD.
+- **Inspector:** **must have a salary**; it is not an unpaid rank. Exact multiplier/rate remains configurable/TBD.
+- **Comisar:** **2× the base hourly wage by current decision = 32 Bronze per qualifying real hour.** The fact that the current Comisar account may normally play in Creative does not remove the salary rule from the system.
 
 Salary is earned for actual qualifying online duty time and accumulates as an unpaid balance. It is claimed/paid through the Secretary rather than automatically dropping a coin every interval.
 
-Current field-rank defaults per one Minecraft-day equivalent of qualifying duty time (20 minutes):
-
-- Stagiar: **28 bronze**
-- Străjer: **32 bronze**
-- Sergent: **48 bronze**
-- Inspector: configurable / not yet finally fixed
-- Comisar: configurable / not yet finally fixed
-
 Rules:
 
-- Default paid duty day: **20 minutes** of qualifying online duty time.
+- Salary accounting should be based on actual qualifying online work time, with **1 real hour** as the current reference interval for the base wage.
 - Offline time contributes zero salary progress.
-- Partial progress toward the next paid block/day is preserved when a voluntary shift ends; a player should not lose legitimate partial progress by clocking out.
+- Partial progress toward the next payable amount is preserved when a voluntary shift ends; a player should not lose legitimate partial progress by clocking out.
 - Earned but unclaimed salary is preserved.
-- Salary rates, paid-time interval and currency item IDs/denominations must be configurable.
+- Salary rates/multipliers, accounting interval and currency item IDs/denominations must be configurable.
 - Inventory/payment failure must not silently destroy the player's unpaid balance.
+- Conversion to physical coins should use the 64-based four-denomination ladder and should choose sensible denominations without losing value.
 
 Anti-AFK policy is not yet a final gameplay decision and should remain configurable/TBD rather than silently becoming a hard rule.
 
@@ -221,9 +245,9 @@ Strong preference: normal configuration should be possible from NPC/admin menus 
 At minimum the system should aim to make these editable without recompiling the mod:
 
 - rank display names/order and rank permissions;
-- salary rates per rank;
-- paid duty interval;
-- coin/item IDs and denominations;
+- salary rates/multipliers per rank;
+- base hourly wage / salary accounting interval;
+- coin/item IDs, denomination order and conversion ratios;
 - checkpoint wait/unlock and deadline values;
 - checkpoint locations/routes;
 - recruitment quiz questions/answers/cooldowns;
@@ -238,7 +262,7 @@ Commands and config files may remain as operator fallback, emergency recovery an
 ## 16. Explicit non-goals / postponed decisions
 
 - Jailer/item-dependent custody expansion is postponed for now.
-- Exact Inspector and Comisar salary defaults are not finalized.
+- Exact rank salary multipliers for Stagiar, Străjer, Sergent and Inspector are not finalized; however Inspector is explicitly a paid rank, the base rate is 16 Bronze/hour, and Comisar is currently fixed at 2× base = 32 Bronze/hour.
 - Exact promotion thresholds and exams between Stagiar -> Străjer -> Sergent -> Inspector are not finalized.
 - Anti-AFK salary behavior is not finalized.
 - Exact UI layout and technical persistence architecture are implementation choices, provided the gameplay invariants above are met.
