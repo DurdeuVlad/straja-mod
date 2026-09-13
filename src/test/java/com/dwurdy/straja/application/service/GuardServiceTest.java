@@ -300,15 +300,15 @@ class GuardServiceTest {
         TestPlayer p = recruitToJunior();
         standAt(p, 1);
         guards.startDuty(p);
-        // move every ~30s for 10 minutes -> 1 salary block
-        for (int i = 0; i < 20; i++) {
+        // move every ~30s for 20 minutes -> one paid Minecraft duty day
+        for (int i = 0; i < 40; i++) {
             p.x += 1.0;
             clock.advance(30_000);
             guards.tickPlayerDuty(p);
         }
         var state = players.state(p.uuid());
         assertTrue(state.duty);
-        assertEquals(20, state.unpaidSalary); // 1 block x 20 (junior rate)
+        assertEquals(28, state.unpaidSalary); // Junior: 28 bronze / 20-minute paid day
     }
 
     // ---------------------------------------------------------------- salary
@@ -319,17 +319,17 @@ class GuardServiceTest {
         TestPlayer p = recruitToJunior();
         standAt(p, 1);
         guards.startDuty(p);
-        for (int i = 0; i < 20; i++) {
+        for (int i = 0; i < 40; i++) {
             p.x += 1.0;
             clock.advance(30_000);
             guards.tickPlayerDuty(p);
         }
         guards.salary(p);
         var currency = (Fakes.TestCurrency) ctx.currency();
-        assertEquals(20, currency.balance);
+        assertEquals(28, currency.balance);
         // replay: the same payout must not double-deliver
         guards.salary(p);
-        assertEquals(20, currency.balance);
+        assertEquals(28, currency.balance);
         assertTrue(p.told("Nu ai salariu disponibil"));
     }
 
