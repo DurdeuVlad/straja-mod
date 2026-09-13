@@ -1,5 +1,6 @@
 package com.dwurdy.straja;
 
+import com.dwurdy.straja.adapter.in.command.PersonnelCommands;
 import com.dwurdy.straja.adapter.in.command.StrajaCommands;
 import com.dwurdy.straja.adapter.in.event.StrajaEvents;
 import com.dwurdy.straja.adapter.in.npc.StrajaNpcEntity;
@@ -30,6 +31,7 @@ public class StrajaMod {
         StrajaItems.register(modBus);
         StrajaNpcEntity.register(modBus);
         NeoForge.EVENT_BUS.addListener(StrajaCommands::onRegisterCommands);
+        NeoForge.EVENT_BUS.addListener(PersonnelCommands::onRegisterCommands);
         NeoForge.EVENT_BUS.register(new StrajaEvents());
         NeoForge.EVENT_BUS.addListener(ServerStartedEvent.class,
                 event -> StrajaRuntime.start(event.getServer()));
