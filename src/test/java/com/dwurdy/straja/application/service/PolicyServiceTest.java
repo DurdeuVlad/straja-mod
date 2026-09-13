@@ -20,7 +20,7 @@ class PolicyServiceTest {
     private static final class MemStore implements PolicyOverrideStore {
         final Map<String, String> map = new LinkedHashMap<>();
         @Override public Map<String, String> read() { return new LinkedHashMap<>(map); }
-        @Override public void write(Map<String, String> overrides) { map.clear(); map.putAll(overrides); }
+        @Override public boolean write(Map<String, String> overrides) { map.clear(); map.putAll(overrides); return true; }
         @Override public String describe() { return "test-policies.yaml"; }
     }
 

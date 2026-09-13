@@ -20,16 +20,25 @@ import net.minecraft.resources.ResourceLocation;
 public class ItemCoinCurrencyProvider implements CurrencyProvider {
     public static final String RECEIPT_TAG = "StrajaPayoutId";
 
-    private final TreeMap<Integer, String> denominations;
+    private final java.util.function.Supplier<Map<Integer, String>> denominationsSource;
 
-    public ItemCoinCurrencyProvider(Map<Integer, String> denominations) {
-        this.denominations = new TreeMap<>(denominations);
+    /**
+     * The denomination table is resolved per call so runtime policy overrides
+     * ({@code /straja policy set economy.coinItems …}) reach payouts without a
+     * restart.
+     */
+    public ItemCoinCurrencyProvider(java.util.function.Supplier<Map<Integer, String>> denominationsSource) {
+        this.denominationsSource = denominationsSource;
+    }
+
+    private TreeMap<Integer, String> denominationsTable() {
+        return new TreeMap<>(denominationsSource.get());
     }
 
     @Override public String name() { return "configured coin items"; }
 
     @Override public boolean available() {
-        for (String id : denominations.values()) {
+        for (String id : denominationsTable().values()) {
             ResourceLocation location = ResourceLocation.parse(id);
             var item = BuiltInRegistries.ITEM.getOptional(location);
             if (item.isEmpty() || "minecraft:air".equals(item.get().toString())) return false;
@@ -37,13 +46,13 @@ public class ItemCoinCurrencyProvider implements CurrencyProvider {
         return true;
     }
 
-    @Override public Map<Integer, String> denominations() { return denominations; }
+    @Override public Map<Integer, String> denominations() { return denominationsTable(); }
 
     @Override public int balanceOf(PlayerGateway player) {
         InventoryView inventory = player.inventory();
         if (inventory == null) return 0;
         int total = 0;
-        for (var entry : denominations.entrySet()) {
+        for (var entry : denominationsTable().entrySet()) {
             total += inventory.countOf(entry.getValue()) * entry.getKey();
         }
         return total;
@@ -66,7 +75,7 @@ public class ItemCoinCurrencyProvider implements CurrencyProvider {
         // Plan pass 1 without mutating: whole coins descending, never overpaying.
         int remaining = amount;
         var planned = new java.util.LinkedHashMap<Integer, Integer>();
-        for (var entry : denominations.descendingMap().entrySet()) {
+        for (var entry : denominationsTable().descendingMap().entrySet()) {
             int value = entry.getKey();
             int take = Math.min(inventory.countOf(entry.getValue()), remaining / value);
             if (take > 0) {
@@ -80,7 +89,7 @@ public class ItemCoinCurrencyProvider implements CurrencyProvider {
         Integer breakValue = null;
         int change = 0;
         if (remaining > 0) {
-            for (var entry : denominations.entrySet()) {
+            for (var entry : denominationsTable().entrySet()) {
                 int unplanned = inventory.countOf(entry.getValue())
                         - planned.getOrDefault(entry.getKey(), 0);
                 if (entry.getKey() >= remaining && unplanned > 0) {
@@ -97,7 +106,7 @@ public class ItemCoinCurrencyProvider implements CurrencyProvider {
         // extracted coin back so the atomic contract always holds.
         var extracted = new java.util.ArrayList<ItemSpec>();
         for (var entry : planned.entrySet()) {
-            String itemId = denominations.get(entry.getKey());
+            String itemId = denominationsTable().get(entry.getKey());
             int toRemove = entry.getValue();
             for (int slot = 0; slot < inventory.slots() && toRemove > 0; slot++) {
                 ItemView stack = inventory.stackAt(slot);
@@ -112,7 +121,7 @@ public class ItemCoinCurrencyProvider implements CurrencyProvider {
             }
         }
         if (breakValue != null) {
-            String itemId = denominations.get(breakValue);
+            String itemId = denominationsTable().get(breakValue);
             boolean broke = false;
             for (int slot = 0; slot < inventory.slots(); slot++) {
                 ItemView stack = inventory.stackAt(slot);
@@ -167,7 +176,7 @@ public class ItemCoinCurrencyProvider implements CurrencyProvider {
     private List<ItemSpec> stacksFor(int amount, String payoutId) {
         int remaining = amount;
         List<ItemSpec> stacks = new java.util.ArrayList<>();
-        for (var entry : denominations.descendingMap().entrySet()) {
+        for (var entry : denominationsTable().descendingMap().entrySet()) {
             int count = remaining / entry.getKey();
             if (count <= 0) continue;
             ItemSpec spec = ItemSpec.of(entry.getValue(), count);

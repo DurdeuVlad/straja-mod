@@ -189,7 +189,19 @@ public final class PolicyRegistry {
         if (raw == null || raw.isBlank()) return Result.fail("empty_value");
         try {
             Field field = StrajaPolicies.class.getField(key.field());
-            field.set(policies, parse(key.kind(), raw.trim()));
+            Object parsed = parse(key.kind(), raw.trim());
+            // Collections mutate in place so adapters that captured the
+            // reference at bootstrap (e.g. the coin provider) see the change.
+            Object current = field.get(policies);
+            if (current instanceof Map<?, ?> map && parsed instanceof Map<?, ?> next) {
+                @SuppressWarnings("unchecked") Map<Object, Object> m = (Map<Object, Object>) map;
+                m.clear(); m.putAll(next);
+            } else if (current instanceof List<?> list && parsed instanceof List<?> next) {
+                @SuppressWarnings("unchecked") List<Object> l = (List<Object>) list;
+                l.clear(); l.addAll(next);
+            } else {
+                field.set(policies, parsed);
+            }
             return Result.pass();
         } catch (IllegalArgumentException | ReflectiveOperationException e) {
             return Result.fail("invalid_value");

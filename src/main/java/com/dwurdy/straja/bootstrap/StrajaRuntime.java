@@ -114,7 +114,7 @@ public final class StrajaRuntime {
                 new SavedStores.Archive(stores),
                 new SavedStores.Npcs(stores),
                 new SavedStores.Test(stores),
-                new ItemCoinCurrencyProvider(policies.coinItemIds),
+                new ItemCoinCurrencyProvider(() -> policies.coinItemIds),
                 new EnvelopeDeliveryProvider(server, policies),
                 new com.dwurdy.straja.adapter.out.minecraft.MinecraftWorldGateway(server));
 

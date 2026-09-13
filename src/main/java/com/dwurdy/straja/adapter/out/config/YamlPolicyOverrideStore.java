@@ -52,7 +52,7 @@ public final class YamlPolicyOverrideStore implements PolicyOverrideStore {
     }
 
     @Override
-    public void write(Map<String, String> overrides) {
+    public boolean write(Map<String, String> overrides) {
         var lines = new java.util.ArrayList<String>();
         lines.add("# Straja runtime policy overrides — edited in-game via /straja policy set|reset.");
         lines.add("# Values are strings; remove a line to return that key to its TOML default.");
@@ -62,8 +62,9 @@ public final class YamlPolicyOverrideStore implements PolicyOverrideStore {
         try {
             Files.createDirectories(file.getParent());
             Files.write(file, lines, StandardCharsets.UTF_8);
-        } catch (IOException ignored) {
-            // write failure is surfaced to the actor by the caller context
+            return true;
+        } catch (IOException e) {
+            return false;
         }
     }
 

@@ -95,11 +95,15 @@ public class PolicyService implements PolicyConfigUseCase {
         }
         Map<String, String> overrides = new LinkedHashMap<>(store.read());
         overrides.put(key, rawValue.trim());
-        store.write(overrides);
+        boolean persisted = store.write(overrides);
         audit.record("policy_set", actor.name(), actor.uuid().toString(),
-                actor.name(), actor.uuid().toString(), "SUCCESS", key);
+                actor.name(), actor.uuid().toString(),
+                persisted ? "SUCCESS" : "PERSIST_FAILED", key);
         actor.tell(key + " = " + PolicyRegistry.read(ctx.policies(), key)
-                + " — aplicat imediat și salvat în " + store.describe() + ".");
+                + (persisted
+                        ? " — aplicat imediat și salvat în " + store.describe() + "."
+                        : " — aplicat imediat, dar NU s-a putut salva în " + store.describe()
+                                + " (se pierde la restart)."));
     }
 
     @Override
@@ -111,12 +115,14 @@ public class PolicyService implements PolicyConfigUseCase {
             return;
         }
         overrides.remove(key);
-        store.write(overrides);
+        boolean persisted = store.write(overrides);
         // Restore the configured (TOML) default through the same strict path.
         String baselineValue = PolicyRegistry.read(baseline, key);
         PolicyRegistry.apply(ctx.policies(), key, baselineValue);
         audit.record("policy_reset", actor.name(), actor.uuid().toString(),
-                actor.name(), actor.uuid().toString(), "SUCCESS", key);
-        actor.tell(key + " resetat la valoarea configurată: " + baselineValue + ".");
+                actor.name(), actor.uuid().toString(),
+                persisted ? "SUCCESS" : "PERSIST_FAILED", key);
+        actor.tell(key + " resetat la valoarea configurată: " + baselineValue
+                + (persisted ? "." : " (dar fișierul nu s-a putut actualiza)."));
     }
 }

@@ -9,7 +9,8 @@ import java.util.Map;
 public interface PolicyOverrideStore {
     Map<String, String> read();
 
-    void write(Map<String, String> overrides);
+    /** @return false when the write could not be persisted. */
+    boolean write(Map<String, String> overrides);
 
     /** Human-readable source for admin tells (e.g. the file name). */
     String describe();
