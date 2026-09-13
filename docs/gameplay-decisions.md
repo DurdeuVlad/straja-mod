@@ -160,25 +160,21 @@ Implementations should not use the old 1/10/100/1000 denomination assumptions. C
 
 ### Rank-based hourly wage
 
-Salary is intentionally tied to rank: **promotion must increase the hourly wage** because higher rank means more responsibility, authority and expected work.
+Salary is intentionally tied to rank: **promotion increases the hourly wage** because higher rank means more responsibility, authority and expected work.
 
-The current base wage is defined around **one real hour of qualifying, actually-played work**:
+Current default hourly wage ladder for one real hour of qualifying, actually-played work:
 
-- **Stagiar / base hourly wage = 64 / 4 = 16 Bronze per real hour of qualifying duty.**
+- **Stagiar:** 16 Bronze/hour
+- **Străjer:** 24 Bronze/hour
+- **Sergent:** 36 Bronze/hour
+- **Inspector:** 64 Bronze/hour = 1 Brass/hour
+- **Comisar:** 128 Bronze/hour = 2 Brass/hour
 
-The wage ladder must be strictly increasing:
+This is an accelerating progression rather than a flat increment. Comisar remains exactly **2× Inspector**.
 
-- **Stagiar:** 16 Bronze/hour base.
-- **Străjer:** greater than Stagiar.
-- **Sergent:** greater than Străjer.
-- **Inspector:** greater than Sergent and explicitly paid.
-- **Comisar:** **exactly 2× the Inspector hourly wage** by current design.
-
-The exact Străjer, Sergent and Inspector values/multipliers are still configurable/TBD, but they must preserve this ordering:
+These are the current gameplay defaults, but each rank's wage remains configurable in-game. The system must enforce only that a configured progression can remain coherent and understandable; the current intended default ordering is:
 
 `Stagiar < Străjer < Sergent < Inspector < Comisar`
-
-The Comisar rule is relative to Inspector, not to the base wage. Example: if Inspector were configured at 48 Bronze/hour, Comisar would be 96 Bronze/hour.
 
 The fact that the current Comisar account may usually play in Creative does not remove or special-case the salary rule; the organizational rank still has a defined wage.
 
@@ -189,7 +185,7 @@ Salary is earned continuously/proportionally from qualifying work time and accum
 Rules:
 
 - Salary accounting is based on actual qualifying online work time, with **1 real hour** as the reference unit for displayed/configured hourly rates.
-- Promotions should take effect on the wage rate from that point forward; already-earned salary must not be retroactively recalculated or lost.
+- Promotions take effect on the wage rate from that point forward; already-earned salary is not retroactively recalculated or lost.
 - Offline time contributes zero salary progress.
 - Partial progress toward the next payable amount is preserved when a voluntary shift ends; a player should not lose legitimate partial progress by clocking out.
 - Earned but unclaimed salary is preserved.
@@ -224,11 +220,74 @@ At the Secretary, an authorized member can request an audience with the Comisar.
 
 ## 13. Missions
 
+Missions should be fast to issue through templates rather than requiring the Comisar to invent every field and reward manually.
+
+General rules:
+
 - The Comisar (and any other ranks explicitly granted permission) can assign missions to Straja personnel.
 - Members can inspect their own active mission(s) through the Secretary or another appropriate NPC/UI.
 - Mission assignment, status and reports are persistent.
-- Mission templates/types should be configurable instead of hard-coded to a tiny fixed list.
-- Rank/permission requirements for assigning and receiving missions should be configurable.
+- Mission templates/types are configurable and can be created, edited, duplicated, enabled or disabled from the in-game administration UI.
+- Rank/permission requirements for assigning and receiving missions are configurable.
+- A mission reward is a **completion bonus** and is separate from normal hourly duty salary. If the member is also on qualifying duty while doing the mission, normal salary continues independently.
+- Mission rewards are calculated/stored internally in the lowest currency unit (Bronze-equivalent value) and converted to the 64-based physical coin ladder only when paid.
+
+### Mission budget model
+
+The default recommended mission reward is derived from the same wage ladder as salaries so rewards remain economically consistent when salaries are changed.
+
+Recommended per-participant reward:
+
+`hourly wage of template minimum rank × expected duration in hours × mission reward multiplier`
+
+The reward is based on the **template minimum rank**, not the assignee's personal rank. This keeps the same mission predictably priced even when a higher-ranking member accepts it.
+
+For team missions:
+
+- the template defines a maximum participant count;
+- the UI shows the recommended **reward per participant** and **maximum total budget** before issuance;
+- maximum total budget = per-participant reward × maximum paid participants;
+- only qualifying participants who actually complete/earn the mission reward are paid;
+- unused reserved budget is released;
+- reward delivery must be idempotent so reconnect/retry cannot duplicate payouts.
+
+Default reward multipliers:
+
+- **Routine:** 0.50×
+- **Standard:** 1.00×
+- **Risky:** 1.50×
+- **Critical / emergency:** 2.00×
+
+All multipliers are configurable.
+
+### Default mission templates
+
+These are starter templates, not a closed list:
+
+| Template | Minimum rank | Expected time | Default multiplier | Recommended reward / participant |
+| --- | --- | ---: | ---: | ---: |
+| Verificare / livrare / prezență | Stagiar | 15 min | 0.50× | 2 Bronze |
+| Escortă / patrulă suplimentară | Străjer | 30 min | 0.75× | 9 Bronze |
+| Investigație / urmărire / recuperare probe | Străjer | 60 min | 1.00× | 24 Bronze |
+| Reținere / mandat / capturare țintă | Străjer | 30 min | 1.50× | 18 Bronze |
+| Operațiune cu risc ridicat | Sergent | 60 min | 1.50× | 54 Bronze |
+| Operațiune specială condusă de Inspector | Inspector | 60 min | 1.50× | 96 Bronze = 1 Brass + 32 Bronze |
+| Urgență majoră / criză | Inspector | 60 min | 2.00× | 128 Bronze = 2 Brass |
+
+The administration UI should allow the issuer to choose a template and then fill only the mission-specific data, for example:
+
+- target/player/entity if applicable;
+- location/area;
+- objective text;
+- deadline;
+- number of participant slots;
+- optional notes/evidence/context.
+
+The template should prefill minimum rank, expected duration, reward multiplier, recommended reward and sensible deadline defaults.
+
+A **Custom mission** option should exist for unusual cases. The system should still calculate and display a recommended budget from chosen minimum rank, expected duration and risk multiplier. Authorized issuers may override the recommendation within configurable limits; unusually high overrides should require confirmation/reason text and remain visible in audit/history.
+
+Mission templates may also define non-cash rewards, required equipment, prerequisite specialization, automatic report requirements or whether the mission temporarily supersedes normal patrol routing.
 
 ## 14. Commissioner / administration UX
 
@@ -242,7 +301,7 @@ Expected areas include:
 - active-duty personnel;
 - activity reports;
 - audience requests;
-- missions;
+- missions and mission templates;
 - relevant gameplay configuration.
 
 Experienced-personnel override is an explicit use case: the Comisar can authorize a known experienced player directly at a higher rank without making them fake a beginner recruitment path.
@@ -262,7 +321,7 @@ At minimum the system should aim to make these editable without recompiling the 
 - recruitment quiz questions/answers/cooldowns;
 - Receptionist/Recruiter/Trainer/Secretary dialogue and documents;
 - report interval and report policies;
-- mission templates and mission permissions;
+- mission templates, expected durations, reward multipliers, participant limits and mission permissions;
 - equipment/kit rules where applicable;
 - role assignment for NPCs where practical.
 
@@ -271,7 +330,7 @@ Commands and config files may remain as operator fallback, emergency recovery an
 ## 16. Explicit non-goals / postponed decisions
 
 - Jailer/item-dependent custody expansion is postponed for now.
-- Exact Străjer, Sergent and Inspector salary values/multipliers are not finalized. The fixed salary rules are: Stagiar starts at 16 Bronze/hour, each promotion increases hourly pay, and Comisar earns exactly 2× Inspector.
+- Current default hourly salaries are fixed in this design document at 16 / 24 / 36 / 64 / 128 Bronze for Stagiar / Străjer / Sergent / Inspector / Comisar, while remaining configurable in-game.
 - Exact promotion thresholds and exams between Stagiar -> Străjer -> Sergent -> Inspector are not finalized.
 - Anti-AFK salary behavior is not finalized.
 - Exact UI layout and technical persistence architecture are implementation choices, provided the gameplay invariants above are met.
