@@ -336,6 +336,27 @@ public class StrajaPolicies {
         return out;
     }
 
+    /** "key=value" entries with integer keys and string values (coin items); malformed entries are skipped. */
+    public static Map<Integer, String> parseIntStringMap(List<? extends String> entries) {
+        Map<Integer, String> out = new LinkedHashMap<>();
+        for (String entry : entries) {
+            int sep = entry.indexOf('=');
+            if (sep <= 0 || entry.substring(sep + 1).isBlank()) continue;
+            try {
+                out.put(Integer.parseInt(entry.substring(0, sep).trim()),
+                        entry.substring(sep + 1).trim());
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return out;
+    }
+
+    public static List<String> formatIntStringMap(Map<Integer, String> map) {
+        List<String> out = new ArrayList<>();
+        map.forEach((k, v) -> out.add(k + "=" + v));
+        return out;
+    }
+
     /** "rank=itemId,count" kit entries; malformed entries are skipped. */
     public static Map<Integer, List<ItemSpec>> parseKits(List<? extends String> entries) {
         Map<Integer, List<ItemSpec>> out = new LinkedHashMap<>();
