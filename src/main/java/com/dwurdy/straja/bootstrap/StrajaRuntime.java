@@ -9,7 +9,6 @@ import com.dwurdy.straja.adapter.out.persistence.SavedStores;
 import com.dwurdy.straja.adapter.out.persistence.StoreAccess;
 import com.dwurdy.straja.adapter.out.persistence.StrajaDataProvider;
 import com.dwurdy.straja.application.StrajaContext;
-import com.dwurdy.straja.application.port.out.Clock;
 import com.dwurdy.straja.application.port.out.IdGenerator;
 import com.dwurdy.straja.application.service.AuditService;
 import com.dwurdy.straja.application.service.EquipmentService;
@@ -36,6 +35,9 @@ public final class StrajaRuntime {
     private final AuditService audit;
     private final EquipmentService equipment;
     private final GuardService guards;
+    private final com.dwurdy.straja.application.service.PersonnelWorkflowService personnel;
+    private final com.dwurdy.straja.application.service.DutySessionService dutySessions;
+    private final com.dwurdy.straja.adapter.out.minecraft.DutyTeamAdapter dutyTeams;
     private final com.dwurdy.straja.application.service.NpcAdminService npcs;
     private final com.dwurdy.straja.application.service.MissionService missions;
     private final com.dwurdy.straja.application.service.CustodyService custody;
@@ -60,8 +62,6 @@ public final class StrajaRuntime {
 
         // In test mode the server view also sees virtual players so console
         // scenarios exercise the same findPlayer/notify paths as real players.
-        // The surface is local-only: test commands can never be enabled outside
-        // local environments.
         boolean testSurface = policies.testCommandsEnabled && policies.isLocalEnvironment();
         com.dwurdy.straja.application.port.out.ServerGateway serverView = testSurface
                 ? new com.dwurdy.straja.application.port.out.ServerGateway() {
@@ -87,7 +87,8 @@ public final class StrajaRuntime {
         AtomicLong sequence = new AtomicLong();
         IdGenerator ids = new IdGenerator() {
             @Override public String newId(String prefix) {
-                return prefix + "-" + sequence.incrementAndGet() + "-" + UUID.randomUUID().toString().substring(0, 8);
+                return prefix + "-" + sequence.incrementAndGet() + "-"
+                        + UUID.randomUUID().toString().substring(0, 8);
             }
             @Override public String token() {
                 return UUID.randomUUID().toString();
@@ -120,6 +121,11 @@ public final class StrajaRuntime {
         this.audit = new AuditService(ctx);
         this.equipment = new EquipmentService(ctx);
         this.guards = new GuardService(ctx, players, audit, equipment);
+        this.personnel = new com.dwurdy.straja.application.service.PersonnelWorkflowService(
+                ctx, players, guards, audit);
+        this.dutySessions = new com.dwurdy.straja.application.service.DutySessionService(
+                ctx, players, guards, equipment);
+        this.dutyTeams = new com.dwurdy.straja.adapter.out.minecraft.DutyTeamAdapter(server);
         this.npcs = new com.dwurdy.straja.application.service.NpcAdminService(ctx);
         this.missions = new com.dwurdy.straja.application.service.MissionService(ctx, players, audit);
         this.custody = new com.dwurdy.straja.application.service.CustodyService(ctx, players, audit);
@@ -140,12 +146,6 @@ public final class StrajaRuntime {
         return instance;
     }
 
-    /**
-     * Deployment gates: outside local, misconfiguration that weakens identity
-     * or tooling must be impossible to miss. The identity gates are also
-     * enforced at the decision points (see PlayerService.isCommissioner and
-     * DebugCommands.debugAllowed); this log makes residual failures visible.
-     */
     private void logDeploymentGates() {
         if (policies.isLocalEnvironment()) return;
         if (policies.requireCommissionerUuidOutsideLocal && policies.commissionerUuid.isEmpty()) {
@@ -170,9 +170,7 @@ public final class StrajaRuntime {
         instance = null;
     }
 
-    public static StrajaRuntime get() {
-        return instance;
-    }
+    public static StrajaRuntime get() { return instance; }
 
     public MinecraftServer server() { return server; }
     public StrajaPolicies policies() { return policies; }
@@ -182,6 +180,9 @@ public final class StrajaRuntime {
     public AuditService audit() { return audit; }
     public EquipmentService equipment() { return equipment; }
     public GuardService guards() { return guards; }
+    public com.dwurdy.straja.application.service.PersonnelWorkflowService personnel() { return personnel; }
+    public com.dwurdy.straja.application.service.DutySessionService dutySessions() { return dutySessions; }
+    public com.dwurdy.straja.adapter.out.minecraft.DutyTeamAdapter dutyTeams() { return dutyTeams; }
     public com.dwurdy.straja.application.service.NpcAdminService npcs() { return npcs; }
     public com.dwurdy.straja.application.service.MissionService missions() { return missions; }
     public com.dwurdy.straja.application.service.CustodyService custody() { return custody; }
