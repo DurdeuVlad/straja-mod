@@ -10,16 +10,16 @@ import java.util.HashSet;
 import java.util.List;
 
 /**
- * Pure port of the reference 01_straja_core.js. No platform access: callers
- * pass the loaded state and get events back. State objects are mutated in
- * place (the JS built copies; persistence is the repository's job).
+ * Pure duty state machine. No platform access: callers pass loaded state and
+ * receive emitted domain events. Checkpoint deadlines are absolute wall-clock
+ * timestamps so logout cannot freeze a patrol.
  */
 public final class DutyEngine {
     public static final long MINUTE_MS = 60_000L;
     /** Fallbacks used only when no policies are supplied (e.g. pure unit tests). */
     public static final int DEFAULT_UNLOCK_MINUTES = 10;
     public static final int DEFAULT_DEADLINE_MINUTES = 30;
-    public static final int DEFAULT_SALARY_BLOCK_MINUTES = 10;
+    public static final int DEFAULT_SALARY_BLOCK_MINUTES = 20;
 
     private DutyEngine() {}
 
@@ -122,8 +122,8 @@ public final class DutyEngine {
         state.lastDutyActivityY = null;
         state.lastDutyActivityZ = null;
         state.salaryActivityPaused = false;
-        state.dutyRemainderMs = 0;
-        state.dutyMinutes = 0;
+        // dutyRemainderMs and dutyMinutes intentionally survive shift boundaries:
+        // partial paid-day progress must not be lost by ending/restarting duty.
         state.dutyBlocksCurrent = 0;
         state.specialAuthorizedBy = null;
         state.lastEndReason = null;
@@ -144,29 +144,31 @@ public final class DutyEngine {
         }
 
         List<DomainEvent> events = new ArrayList<>(accrue(state, now, salaryPerBlock, policies));
-        state.deadlineAt = null;
-
-        if (state.patrolIndex >= state.route.size() - 1) {
-            state.duty = false;
-            state.mode = "OFF_DUTY";
-            state.patrolState = "OFF";
-            state.lastAccrualAt = null;
-            state.lastDutyActivityAt = null;
-            state.lastDutyActivityX = null;
-            state.lastDutyActivityY = null;
-            state.lastDutyActivityZ = null;
-            state.salaryActivityPaused = false;
-            state.lastEndReason = "patrol_complete";
-            events.add(DomainEvent.of("patrol_complete"));
-            return Result.pass(events);
+        boolean completedRound = state.patrolIndex >= state.route.size() - 1;
+        if (completedRound) {
+            state.patrolRoundsCompleted += 1;
+            state.patrolIndex = 0;
+            events.add(DomainEvent.builder("patrol_round_complete")
+                    .put("rounds", state.patrolRoundsCompleted)
+                    .build());
+        } else {
+            state.patrolIndex += 1;
         }
 
-        state.patrolIndex += 1;
+        String nextCheckpoint = state.route.get(state.patrolIndex);
+        int nextMissionMinutes = missionMinutesFor(state.missionMinutes, nextCheckpoint, policies);
         state.patrolState = "WAITING";
         state.waitingUntil = now + unlockMinutes(policies) * MINUTE_MS;
+        // Critical anti-abuse invariant: deadline is fixed now, not when the
+        // player later logs in or the WAITING state is first ticked as ACTIVE.
+        state.deadlineAt = state.waitingUntil + nextMissionMinutes * MINUTE_MS;
+
         events.add(DomainEvent.builder("checkpoint_activated")
                 .put("checkpoint", checkpointId)
+                .put("nextCheckpoint", nextCheckpoint)
                 .put("waitingUntil", state.waitingUntil)
+                .put("deadlineAt", state.deadlineAt)
+                .put("missionMinutes", nextMissionMinutes)
                 .build());
         return Result.pass(events);
     }
@@ -185,32 +187,46 @@ public final class DutyEngine {
 
         if ("SPECIAL".equals(state.mode)) return new TickResult(events);
 
-        if ("WAITING".equals(state.patrolState) && state.waitingUntil != null && now >= state.waitingUntil) {
-            state.patrolState = "ACTIVE";
-            state.waitingUntil = null;
-            String activeCheckpoint = state.route.get(state.patrolIndex);
-            int minutes = missionMinutesFor(state.missionMinutes, activeCheckpoint, policies);
-            state.deadlineAt = now + minutes * MINUTE_MS;
-            events.add(DomainEvent.builder("checkpoint_available")
-                    .put("checkpoint", activeCheckpoint)
-                    .put("deadlineAt", state.deadlineAt)
-                    .put("missionMinutes", minutes)
-                    .build());
-        } else if ("ACTIVE".equals(state.patrolState) && state.deadlineAt != null && now >= state.deadlineAt) {
-            state.duty = false;
-            state.mode = "OFF_DUTY";
-            state.patrolState = "OFF";
-            state.deadlineAt = null;
-            state.lastAccrualAt = null;
-            state.lastDutyActivityAt = null;
-            state.lastDutyActivityX = null;
-            state.lastDutyActivityY = null;
-            state.lastDutyActivityZ = null;
-            state.salaryActivityPaused = false;
-            state.lastEndReason = "checkpoint_timeout";
-            events.add(DomainEvent.builder("duty_ended").put("reason", "checkpoint_timeout").build());
+        if ("WAITING".equals(state.patrolState)) {
+            // A player who logs out during the unlock window still has the same
+            // absolute deadline. If both unlock and deadline pass offline, the
+            // duty ends immediately when the state is processed again.
+            if (state.deadlineAt != null && now >= state.deadlineAt) {
+                endForTimeout(state, events);
+                return new TickResult(events);
+            }
+            if (state.waitingUntil != null && now >= state.waitingUntil) {
+                state.patrolState = "ACTIVE";
+                state.waitingUntil = null;
+                String activeCheckpoint = state.route.get(state.patrolIndex);
+                int minutes = missionMinutesFor(state.missionMinutes, activeCheckpoint, policies);
+                events.add(DomainEvent.builder("checkpoint_available")
+                        .put("checkpoint", activeCheckpoint)
+                        .put("deadlineAt", state.deadlineAt)
+                        .put("missionMinutes", minutes)
+                        .build());
+            }
+        } else if ("ACTIVE".equals(state.patrolState)
+                && state.deadlineAt != null && now >= state.deadlineAt) {
+            endForTimeout(state, events);
         }
         return new TickResult(events);
+    }
+
+    private static void endForTimeout(GuardState state, List<DomainEvent> events) {
+        state.duty = false;
+        state.mode = "OFF_DUTY";
+        state.patrolState = "OFF";
+        state.waitingUntil = null;
+        state.deadlineAt = null;
+        state.lastAccrualAt = null;
+        state.lastDutyActivityAt = null;
+        state.lastDutyActivityX = null;
+        state.lastDutyActivityY = null;
+        state.lastDutyActivityZ = null;
+        state.salaryActivityPaused = false;
+        state.lastEndReason = "checkpoint_timeout";
+        events.add(DomainEvent.builder("duty_ended").put("reason", "checkpoint_timeout").build());
     }
 
     public static Result endDuty(GuardState state, String reason, long now, int salaryPerBlock,
@@ -332,10 +348,10 @@ public final class DutyEngine {
     }
 
     /**
-     * Commissioner / lieutenant authorization for special duty and regear.
+     * Commissioner / captain authorization for special duty and regear.
      * Commissioner identity is decided by the caller via
-     * {@link PlayerService#isCommissioner} — this engine never re-derives it
-     * from configured names, which would bypass the UUID-pinning policies.
+     * {@link PlayerService#isCommissioner}; this engine never re-derives it
+     * from configured names, which would bypass UUID-pinning policies.
      */
     public static boolean canAuthorize(boolean commissioner, String actorName, int actorRank,
                                        String targetName, int targetRank, String action) {
