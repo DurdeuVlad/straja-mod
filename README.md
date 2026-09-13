@@ -176,10 +176,10 @@ immediately:
 
 ```
 /straja policy list                          # all overridable keys by section
-/straja policy get salary.perBlock           # effective value + source
+/straja policy get salary.perHour           # effective value + source
 /straja policy set timers.quizCooldownMinutes 25
 /straja policy set fines.allowedAmounts 10;25;50;100;250;500
-/straja policy reset salary.perBlock         # back to the TOML default
+/straja policy reset salary.perHour         # back to the TOML default
 ```
 
 Overrides persist in `config/straja-policies.yaml` (flat `key: "value"` YAML,

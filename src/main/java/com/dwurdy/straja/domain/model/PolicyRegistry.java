@@ -33,7 +33,7 @@ public final class PolicyRegistry {
         // timers
         k("timers.checkpointUnlockMinutes", "checkpointUnlockMinutes", Kind.INT);
         k("timers.checkpointDeadlineMinutes", "checkpointDeadlineMinutes", Kind.INT);
-        k("timers.salaryBlockMinutes", "salaryBlockMinutes", Kind.INT);
+        k("timers.serviceBlockMinutes", "serviceBlockMinutes", Kind.INT);
         k("timers.foodCooldownMinutes", "foodCooldownMinutes", Kind.INT);
         k("timers.quizCooldownMinutes", "quizCooldownMinutes", Kind.INT);
         k("timers.resignationCooldownDays", "resignationCooldownDays", Kind.INT);
@@ -89,9 +89,11 @@ public final class PolicyRegistry {
         k("jailer.assaultSentenceDays", "jailerAssaultSentenceDays", Kind.INT);
         k("jailer.assaultMissionMaxAssignees", "jailerAssaultMissionMaxAssignees", Kind.INT);
         k("jailer.guardImmunity", "jailerGuardImmunity", Kind.BOOL);
-        // salary
-        k("salary.perBlock", "salaryPerBlock", Kind.INT_MAP);
-        k("salary.maxBlocksPerDay", "salaryMaxBlocksPerDay", Kind.INT);
+        // salary — hourly wage (§10)
+        k("salary.perHour", "salaryPerHour", Kind.INT_MAP);
+        k("salary.commissionerPerHour", "salaryCommissionerPerHour", Kind.INT);
+        k("salary.granularitySeconds", "salaryGranularitySeconds", Kind.INT);
+        k("salary.maxPaidMinutesPerDay", "salaryMaxPaidMinutesPerDay", Kind.INT);
         k("salary.windowMinutes", "salaryWindowMinutes", Kind.INT);
         k("salary.activityGraceSeconds", "salaryActivityGraceSeconds", Kind.INT);
         k("salary.activityMoveThreshold", "salaryActivityMoveThreshold", Kind.DOUBLE);
@@ -101,7 +103,6 @@ public final class PolicyRegistry {
         k("rank.names", "rankNames", Kind.INT_STR_MAP);
         // duty / faction
         k("duty.freeDutyMinRank", "freeDutyMinRank", Kind.INT);
-        k("duty.freeDutySalaryPerDay", "freeDutySalaryPerDay", Kind.INT_MAP);
         k("duty.nativeFactionMaxLength", "nativeFactionMaxLength", Kind.INT);
         // quiz / trainer
         k("quiz.questions", "quiz", Kind.QUIZ);

@@ -39,12 +39,13 @@ public class GuardState {
     public Double lastDutyActivityY = null;
     public Double lastDutyActivityZ = null;
     public boolean salaryActivityPaused = false;
-    public long dutyRemainderMs = 0;
-    public long dutyMinutes = 0;
+    public long dutyRemainderMs = 0;         // sub-granularity duty time carried forward
+    public long dutyServiceMs = 0;           // consumed duty time this shift (service-point ticks)
     public int dutyBlocksCurrent = 0;
     public long serviceBlocks = 0;
     public Long salaryWindowKey = null;
-    public int salaryBlocksWindow = 0;
+    public long salaryPaidSecondsWindow = 0; // paid seconds consumed in the current window
+    public long salaryCarryWork = 0;         // fractional wage: second·bronze/hour units, 3600 = 1 coin
     public int unpaidSalary = 0;
     public int equipmentDebt = 0;
     public String salaryPayoutId = null;
