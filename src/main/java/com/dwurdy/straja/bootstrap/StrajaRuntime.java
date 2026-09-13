@@ -46,6 +46,7 @@ public final class StrajaRuntime {
     private final com.dwurdy.straja.application.service.ArchiveService archive;
     private final com.dwurdy.straja.application.service.MigrationService migration;
     private final com.dwurdy.straja.application.service.FormSessionService formSessions;
+    private final com.dwurdy.straja.application.service.PolicyService policyService;
     private final com.dwurdy.straja.application.port.out.MutableClock clock;
     private final com.dwurdy.straja.adapter.in.test.TestPlayerRegistry testPlayers =
             new com.dwurdy.straja.adapter.in.test.TestPlayerRegistry();
@@ -113,7 +114,7 @@ public final class StrajaRuntime {
                 new SavedStores.Archive(stores),
                 new SavedStores.Npcs(stores),
                 new SavedStores.Test(stores),
-                new ItemCoinCurrencyProvider(policies.coinItemIds),
+                new ItemCoinCurrencyProvider(() -> policies.coinItemIds),
                 new EnvelopeDeliveryProvider(server, policies),
                 new com.dwurdy.straja.adapter.out.minecraft.MinecraftWorldGateway(server));
 
@@ -131,6 +132,17 @@ public final class StrajaRuntime {
         this.archive = new com.dwurdy.straja.application.service.ArchiveService(ctx, players, audit);
         this.migration = new com.dwurdy.straja.application.service.MigrationService(ctx, audit);
         this.formSessions = new com.dwurdy.straja.application.service.FormSessionService(clock, ids);
+        // Runtime policy overrides: TOML-resolved baseline + persisted YAML
+        // layer applied to the live policies object before services run.
+        StrajaPolicies baseline = StrajaServerConfig.toPolicies();
+        this.policyService = new com.dwurdy.straja.application.service.PolicyService(
+                ctx, players, audit, baseline,
+                new com.dwurdy.straja.adapter.out.config.YamlPolicyOverrideStore(
+                        net.neoforged.fml.loading.FMLPaths.CONFIGDIR.get().resolve("straja-policies.yaml")));
+        for (String failed : policyService.applyPersistedOverrides()) {
+            com.dwurdy.straja.StrajaMod.LOGGER.warn(
+                    "[Straja] Ignored malformed policy override '{}' in straja-policies.yaml", failed);
+        }
         this.guards.onStatusChange((p, reason) -> this.missions.cancelOpenFor(p, reason));
         this.guards.onStatusChange((p, reason) -> this.rooms.releaseFor(p));
         this.guards.onPromotedToGuard(p -> this.rooms.assignAutomatically(p));
@@ -212,6 +224,7 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.service.ArchiveService archive() { return archive; }
     public com.dwurdy.straja.application.service.MigrationService migration() { return migration; }
     public com.dwurdy.straja.application.port.in.FormSessionUseCase formSessions() { return formSessions; }
+    public com.dwurdy.straja.application.port.in.PolicyConfigUseCase policyConfig() { return policyService; }
     public com.dwurdy.straja.application.port.out.MutableClock clock() { return clock; }
     public com.dwurdy.straja.adapter.in.test.TestPlayerRegistry testPlayers() { return testPlayers; }
     public String bootId() { return bootId; }

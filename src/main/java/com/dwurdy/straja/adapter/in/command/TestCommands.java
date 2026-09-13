@@ -371,6 +371,34 @@ final class TestCommands {
                         .executes(ctx -> run(ctx, runtime ->
                                 runtime.guards().setupPatrol(player(ctx, runtime))))));
 
+        test.then(Commands.literal("policy-list")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(ctx -> run(ctx, runtime ->
+                                runtime.policyConfig().list(player(ctx, runtime))))));
+
+        test.then(Commands.literal("policy-get")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("key", StringArgumentType.word())
+                                .executes(ctx -> run(ctx, runtime ->
+                                        runtime.policyConfig().get(player(ctx, runtime),
+                                                StringArgumentType.getString(ctx, "key")))))));
+
+        test.then(Commands.literal("policy-set")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("key", StringArgumentType.word())
+                                .then(Commands.argument("value", StringArgumentType.greedyString())
+                                        .executes(ctx -> run(ctx, runtime ->
+                                                runtime.policyConfig().set(player(ctx, runtime),
+                                                        StringArgumentType.getString(ctx, "key"),
+                                                        StringArgumentType.getString(ctx, "value"))))))));
+
+        test.then(Commands.literal("policy-reset")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("key", StringArgumentType.word())
+                                .executes(ctx -> run(ctx, runtime ->
+                                        runtime.policyConfig().reset(player(ctx, runtime),
+                                                StringArgumentType.getString(ctx, "key")))))));
+
         // missions
         test.then(Commands.literal("select-slot")
                 .then(Commands.argument("id", StringArgumentType.word())

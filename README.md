@@ -167,6 +167,26 @@ which mirror the reference KubeJS configuration. World-dependent state
 (checkpoints, officer locations, cells, rooms, NPCs) is configured in-game by
 the Commissioner and lives in SavedData, not in this file.
 
+### Runtime overrides — `straja-policies.yaml`
+
+Day-to-day tuning doesn't need a restart: the Commissioner (or an op/console)
+edits ~120 curated keys in-game and they apply to the live services
+immediately:
+
+```
+/straja policy list                          # all overridable keys by section
+/straja policy get salary.perBlock           # effective value + source
+/straja policy set timers.quizCooldownMinutes 25
+/straja policy set fines.allowedAmounts 10;25;50;100;250;500
+/straja policy reset salary.perBlock         # back to the TOML default
+```
+
+Overrides persist in `config/straja-policies.yaml` (flat `key: "value"` YAML,
+hand-editable) and re-apply on boot — a malformed line is skipped and logged,
+never fatal. Structured values use `;`-separated entries in the same encodings
+as the TOML. Identity, security gates and debug/test flags are deliberately
+**not** overridable — they stay TOML-pinned.
+
 ## Building & releasing
 
 ```bash

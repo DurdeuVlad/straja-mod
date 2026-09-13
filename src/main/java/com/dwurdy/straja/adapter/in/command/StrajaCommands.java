@@ -145,6 +145,26 @@ public final class StrajaCommands {
         setup.then(Commands.literal("npcs").executes(NpcCommands::spawnMissing));
         root.then(adminOnly(setup));
 
+        // runtime policy overrides (persisted YAML layer, live apply)
+        var policy = Commands.literal("policy");
+        policy.then(Commands.literal("list")
+                .executes(c -> adminActor(c, StrajaRuntime.get().policyConfig()::list)));
+        policy.then(Commands.literal("get")
+                .then(Commands.argument("key", StringArgumentType.word())
+                        .executes(c -> adminActor(c, p -> StrajaRuntime.get().policyConfig()
+                                .get(p, StringArgumentType.getString(c, "key"))))));
+        policy.then(Commands.literal("set")
+                .then(Commands.argument("key", StringArgumentType.word())
+                        .then(Commands.argument("value", StringArgumentType.greedyString())
+                                .executes(c -> adminActor(c, p -> StrajaRuntime.get().policyConfig()
+                                        .set(p, StringArgumentType.getString(c, "key"),
+                                                StringArgumentType.getString(c, "value")))))));
+        policy.then(Commands.literal("reset")
+                .then(Commands.argument("key", StringArgumentType.word())
+                        .executes(c -> adminActor(c, p -> StrajaRuntime.get().policyConfig()
+                                .reset(p, StringArgumentType.getString(c, "key"))))));
+        root.then(adminOnly(policy));
+
         // inbox communication
         for (String op : new String[]{"report", "message", "request"}) {
             var command = Commands.literal(op)
@@ -880,7 +900,7 @@ public final class StrajaCommands {
                 "mission", "cuffs", "prison", "fine", "complaint", "room", "archive",
                 // typed setup and administrator operations
                 "promote", "demote", "suspend", "fire", "reinstate", "faction",
-                "set-checkpoint", "set-mission-time", "set-location", "setup",
+                "set-checkpoint", "set-mission-time", "set-location", "setup", "policy",
                 "migrate", "backup", "npc", "debug", "test");
 
         private CommandPolicy() {}
@@ -901,6 +921,7 @@ public final class StrajaCommands {
                     "/straja report|message|request <text> | inbox",
                     "/straja promote | demote | suspend | reinstate | fire | faction <jucător> <nume>",
                     "/straja setup — checklist ghidat | setup here | setup patrol | setup npcs",
+                    "/straja policy list | get <cheie> | set <cheie> <valoare> | reset <cheie>",
                     "/straja set-checkpoint <id> | set-mission-time <id> <min> | set-location <nume>",
                     "/straja mission | cuffs | prison | fine | complaint | room | archive — help pe subcomandă",
                     "/straja npc list|spawn|assign|set-name|set-skin|remove",

@@ -22,7 +22,7 @@ class ItemCoinCurrencyProviderTest {
     private static final String GOLD = "test:gold";
 
     private final ItemCoinCurrencyProvider currency = new ItemCoinCurrencyProvider(
-            Map.of(1, BRONZE, 10, BRASS, 100, SILVER, 1000, GOLD));
+            () -> Map.of(1, BRONZE, 10, BRASS, 100, SILVER, 1000, GOLD));
 
     private TestPlayer playerWith(Object... slotSpecs) {
         TestPlayer player = new TestPlayer("payer", 36);
