@@ -37,8 +37,8 @@ class StrajaPoliciesTest {
     @Test
     void intMapRoundTripsAndSkipsMalformedEntries() {
         var defaults = new StrajaPolicies();
-        var parsed = StrajaPolicies.parseIntMap(StrajaPolicies.formatIntMap(defaults.salaryPerBlock));
-        assertEquals(defaults.salaryPerBlock, parsed);
+        var parsed = StrajaPolicies.parseIntMap(StrajaPolicies.formatIntMap(defaults.salaryPerHour));
+        assertEquals(defaults.salaryPerHour, parsed);
 
         var tolerant = StrajaPolicies.parseIntMap(java.util.List.of(
                 "1=20", "garbage", "=5", "3=", "x=y", "4=40"));

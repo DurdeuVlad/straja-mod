@@ -73,19 +73,10 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
 
     private long now() { return ctx.clock().nowMillis(); }
 
-    /** Per-unit salary: free-duty shifts earn the per-Minecraft-day rate. */
-    private int salaryFor(GuardState state) {
-        if ("FREE".equals(state.mode)) {
-            var table = ctx.policies().freeDutySalaryPerDay;
-            Integer rate = table.get(state.rank);
-            // The commissioner (rank 0) and any unlisted senior rank earn the top rate.
-            if (rate == null) {
-                rate = table.values().stream().mapToInt(Integer::intValue).max()
-                        .orElse(ctx.policies().salaryPerBlock(state.rank));
-            }
-            return rate;
-        }
-        return ctx.policies().salaryPerBlock(state.rank);
+    /** Hourly wage (§10): the Comisar rate comes from the personnel flag, not rank. */
+    private int salaryFor(PlayerGateway player, GuardState state) {
+        if (players.isCommissioner(player)) return ctx.policies().salaryCommissionerPerHour;
+        return ctx.policies().salaryPerHour(state.rank);
     }
 
     /** Sergent+ ranks and the commissioner run shifts at will, without patrol. */
@@ -107,9 +98,9 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
     private void notifyEvents(PlayerGateway player, List<DomainEvent> events) {
         for (DomainEvent event : events) {
             switch (event.type()) {
-                case "salary_block" -> player.tell("Ai acumulat +" + event.data().get("amount")
-                        + " monede în sold (" + event.data().get("blocks") + " blocuri de "
-                        + event.data().getOrDefault("blockMinutes", 10) + " minute).");
+                case "salary_accrual" -> player.tell("Ai acumulat +" + event.data().get("amount")
+                        + " monede în sold (" + event.data().get("paidMinutes")
+                        + " min plătite, " + event.data().get("hourlyWage") + "/h).");
                 case "checkpoint_activated" -> player.tell("Checkpoint atins. Următorul devine disponibil peste 10 minute.");
                 case "checkpoint_available" -> player.tell("Checkpoint disponibil: " + event.data().get("checkpoint")
                         + ". Ai " + event.data().get("missionMinutes") + " minute.");
@@ -708,7 +699,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         }
         int nextRank = state.rank - 1;
         if (nextRank < Rank.STAGIAR.level() && (state.duty || state.serviceEquipment != null)) {
-            Result ended = DutyEngine.endDuty(state, "demoted_to_civil", now(), salaryFor(state), ctx.policies());
+            Result ended = DutyEngine.endDuty(state, "demoted_to_civil", now(), salaryFor(target, state), ctx.policies());
             equipment.settleEquipmentDebt(state);
             equipment.reclaimServiceEquipment(target, state);
         }
@@ -733,7 +724,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         state.resignationDeadlineAt = null;
         state.resignationRank = null;
         if (state.duty) {
-            DutyEngine.endDuty(state, "suspended", now(), salaryFor(state), ctx.policies());
+            DutyEngine.endDuty(state, "suspended", now(), salaryFor(target, state), ctx.policies());
             equipment.settleEquipmentDebt(state);
             equipment.reclaimServiceEquipment(target, state);
         }
@@ -774,7 +765,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         }
         GuardState state = players.state(target);
         if (state.duty || state.serviceEquipment != null) {
-            DutyEngine.endDuty(state, "fired", now(), salaryFor(state), ctx.policies());
+            DutyEngine.endDuty(state, "fired", now(), salaryFor(target, state), ctx.policies());
             equipment.settleEquipmentDebt(state);
             equipment.reclaimServiceEquipment(target, state);
         }
@@ -850,7 +841,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             if (applyCoreResult(player, state, free)) {
                 if (!equipment.issueServiceEquipment(player, state)) {
                     Result failed = DutyEngine.endDuty(state, "service_equipment_issue_failed",
-                            now(), salaryFor(state), ctx.policies());
+                            now(), salaryFor(player, state), ctx.policies());
                     applyCoreResult(player, state, failed);
                     player.tell("Serviciul nu a început: echipamentul de serviciu nu a putut fi predat complet.");
                     return;
@@ -858,7 +849,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
                 players.save(player.uuid(), state);
                 audit.record("duty_start", player.name(), player.uuid().toString(),
                         player.name(), player.uuid().toString(), "SUCCESS", "free_shift");
-                player.tell("Tură liberă începută. Ești plătit pe zi de Minecraft; "
+                player.tell("Tură liberă începută. Ești plătit pe oră; "
                         + "termini tura când dorești de la secretară sau cu /straja stop.");
             }
             return;
@@ -872,7 +863,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         Result result = DutyEngine.startDuty(state, route, now(), setup.missionMinutes, ctx.policies());
         if (applyCoreResult(player, state, result)) {
             if (!equipment.issueServiceEquipment(player, state)) {
-                Result failed = DutyEngine.endDuty(state, "service_equipment_issue_failed", now(), salaryFor(state), ctx.policies());
+                Result failed = DutyEngine.endDuty(state, "service_equipment_issue_failed", now(), salaryFor(player, state), ctx.policies());
                 applyCoreResult(player, state, failed);
                 player.tell("Serviciul nu a început: echipamentul de serviciu nu a putut fi predat complet.");
                 return;
@@ -899,7 +890,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             return;
         }
         markDutyActivity(player, state, now());
-        Result result = DutyEngine.activateCheckpoint(state, id, now(), salaryFor(state), setup.missionMinutes, ctx.policies());
+        Result result = DutyEngine.activateCheckpoint(state, id, now(), salaryFor(player, state), setup.missionMinutes, ctx.policies());
         if (applyCoreResult(player, state, result)) {
             audit.record("duty_checkpoint", player.name(), player.uuid().toString(),
                     player.name(), player.uuid().toString(), "SUCCESS", id);
@@ -923,7 +914,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             return;
         }
         markDutyActivity(player, state, now());
-        Result result = DutyEngine.endDuty(state, "voluntary_stop", now(), salaryFor(state), ctx.policies());
+        Result result = DutyEngine.endDuty(state, "voluntary_stop", now(), salaryFor(player, state), ctx.policies());
         if (applyCoreResult(player, state, result)) {
             audit.record("duty_stop", player.name(), player.uuid().toString(),
                     player.name(), player.uuid().toString(), "SUCCESS", "voluntary_stop");
@@ -977,7 +968,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             actor.tell("Ținta nu este un străjer operațional.");
             return;
         }
-        Result result = DutyEngine.startSpecial(targetState, actor.name(), now(), salaryFor(targetState), ctx.policies());
+        Result result = DutyEngine.startSpecial(targetState, actor.name(), now(), salaryFor(target, targetState), ctx.policies());
         if (applyCoreResult(target, targetState, result)) {
             actor.tell("Special Duty pornit pentru " + target.name() + ".");
         }
@@ -993,7 +984,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             actor.tell("Ținta nu este un străjer operațional.");
             return;
         }
-        Result result = DutyEngine.resumeSpecial(targetState, now(), salaryFor(targetState), ctx.policies());
+        Result result = DutyEngine.resumeSpecial(targetState, now(), salaryFor(target, targetState), ctx.policies());
         if (applyCoreResult(target, targetState, result)) {
             actor.tell("Patrula lui " + target.name() + " a fost reluată.");
         }
@@ -1009,7 +1000,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             actor.tell("Ținta nu este un străjer operațional.");
             return;
         }
-        Result result = DutyEngine.completeSpecial(targetState, now(), salaryFor(targetState), ctx.policies());
+        Result result = DutyEngine.completeSpecial(targetState, now(), salaryFor(target, targetState), ctx.policies());
         if (applyCoreResult(target, targetState, result)) {
             actor.tell("Special Duty al lui " + target.name() + " a fost închis.");
         }
@@ -1037,7 +1028,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         }
         if (!state.resignationPending) {
             if (state.duty) {
-                DutyEngine.endDuty(state, "resignation_notice", now(), salaryFor(state), ctx.policies());
+                DutyEngine.endDuty(state, "resignation_notice", now(), salaryFor(player, state), ctx.policies());
                 equipment.settleEquipmentDebt(state);
                 equipment.reclaimServiceEquipment(player, state);
             }
@@ -1518,7 +1509,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         player.tell("Sergent: preia plângeri, investighează și mobilizează Stagiari/Străjeri; nu emite misiuni plătite.");
         player.tell("Inspectorul și Comisaru' declară misiuni plătite la secretară și aprobă recompensele.");
         player.tell("Patrulă: 4 checkpoint-uri; 10 minute pauză între puncte; timpul fiecărei misiuni este stabilit de Inspector sau Comisaru'.");
-        player.tell("Salariu: un bloc complet la fiecare 10 minute. Monede: 1 / 64 / 4096 / 262144 Bronz.");
+        player.tell("Salariu: plată orară, acumulată continuu. Monede: 1 / 64 / 4096 / 262144 Bronz.");
         player.tell("Special Duty suspendă temporar checkpoint-urile și cere autorizare. Rapoartele merg la Comisaru'.");
         player.tell("Semnarea demisiei se face la Comisaru'. Revenirea este posibilă după cooldown și este limitată la Sergent.");
         var training = pendingModules(state);
@@ -1584,7 +1575,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         if (lease != null && p.serviceLeaseMinutes > 0
                 && current - lease.issuedAt >= p.serviceLeaseMinutes * DutyEngine.MINUTE_MS) {
             var ended = DutyEngine.endDuty(state, "service_lease_expired", current,
-                    salaryFor(state), p);
+                    salaryFor(player, state), p);
             player.tell("Contractul de echipament a expirat (" + p.serviceLeaseMinutes
                     + " min). Tura s-a încheiat și echipamentul a fost rechemat.");
             equipment.reclaimServiceEquipment(player, state);
@@ -1592,7 +1583,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             notifyEvents(player, ended.events());
             return new DutyEngine.TickResult(ended.events());
         }
-        var result = DutyEngine.tickDuty(state, current, salaryFor(state),
+        var result = DutyEngine.tickDuty(state, current, salaryFor(player, state),
                 ctx.setup().read().missionMinutes, ctx.policies(), activity.accrualNow);
         if (!state.duty && state.serviceEquipment != null) {
             equipment.reclaimServiceEquipment(player, state);

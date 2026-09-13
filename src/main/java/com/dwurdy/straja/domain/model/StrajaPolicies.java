@@ -27,7 +27,6 @@ public class StrajaPolicies {
     // timers
     public int checkpointUnlockMinutes = 10;
     public int checkpointDeadlineMinutes = 30;
-    public int salaryBlockMinutes = 10;
     public int foodCooldownMinutes = 30;
     public int quizCooldownMinutes = 10;
     public int resignationCooldownDays = 7;
@@ -96,9 +95,14 @@ public class StrajaPolicies {
         return !jailerGuardImmunity || !attackerOnDutyGuard;
     }
 
-    // salary
-    public Map<Integer, Integer> salaryPerBlock = new LinkedHashMap<>(Map.of(1, 20, 2, 30, 3, 40, 4, 50));
-    public int salaryMaxBlocksPerDay = 24;
+    // salary — hourly wage per docs/gameplay-decisions.md §10:
+    // Stagiar 16, Străjer 24, Sergent 36, Inspector 64, Comisar 128 Bronze/h,
+    // accrued continuously at salaryGranularitySeconds with sub-coin carry.
+    public Map<Integer, Integer> salaryPerHour = new LinkedHashMap<>(Map.of(1, 16, 2, 24, 3, 36, 4, 64));
+    public int salaryCommissionerPerHour = 128;
+    public int salaryGranularitySeconds = 60;
+    public int serviceBlockMinutes = 10;
+    public int salaryMaxPaidMinutesPerDay = 240;
     public int salaryWindowMinutes = 24 * 60;
     public int salaryActivityGraceSeconds = 90;
     public double salaryActivityMoveThreshold = 0.15;
@@ -112,10 +116,9 @@ public class StrajaPolicies {
     public Map<Integer, Integer> promotionServiceBlocks = new LinkedHashMap<>(Map.of(2, 60, 3, 180));
 
     // free duty: senior ranks and the commissioner run shifts without the
-    // patrol route; salary accrues per minecraftDayMinutes of duty and the
-    // anti-AFK movement gate is intentionally not applied to them.
+    // patrol route; they earn the same hourly wage and the anti-AFK movement
+    // gate is intentionally not applied to them (trusted ranks, §10).
     public int freeDutyMinRank = 3;
-    public Map<Integer, Integer> freeDutySalaryPerDay = new LinkedHashMap<>(Map.of(3, 80, 4, 100));
     public int nativeFactionMaxLength = 40;
 
     // quiz
@@ -247,8 +250,8 @@ public class StrajaPolicies {
         return "local".equalsIgnoreCase(environment);
     }
 
-    public int salaryPerBlock(int rank) {
-        return salaryPerBlock.getOrDefault(rank, 0);
+    public int salaryPerHour(int rank) {
+        return salaryPerHour.getOrDefault(rank, 0);
     }
 
     /** Configurable display name for a rank level; falls back to the enum name. */

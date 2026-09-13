@@ -471,7 +471,7 @@ class GuardServiceTest {
         TestPlayer p = recruitToStagiar();
         standAt(p, 1);
         guards.startDuty(p);
-        // move every ~30s for 10 minutes -> 1 salary block
+        // move every ~30s for 10 minutes -> 10 paid minutes at Stagiar 16/h
         for (int i = 0; i < 20; i++) {
             p.x += 1.0;
             clock.advance(30_000);
@@ -479,7 +479,8 @@ class GuardServiceTest {
         }
         var state = players.state(p.uuid());
         assertTrue(state.duty);
-        assertEquals(20, state.unpaidSalary); // 1 block x 20 (junior rate)
+        assertEquals(2, state.unpaidSalary); // 600s x 16/3600 = 2.67 -> 2 coins, fraction carried
+        assertEquals(1, state.serviceBlocks); // 10 minutes = 1 service point
     }
 
     // ---------------------------------------------------------------- salary
@@ -497,10 +498,10 @@ class GuardServiceTest {
         }
         guards.salary(p);
         var currency = (Fakes.TestCurrency) ctx.currency();
-        assertEquals(20, currency.balance);
+        assertEquals(2, currency.balance); // 10min at Stagiar 16/h
         // replay: the same payout must not double-deliver
         guards.salary(p);
-        assertEquals(20, currency.balance);
+        assertEquals(2, currency.balance); // 10min at Stagiar 16/h
         assertTrue(p.told("Nu ai salariu disponibil"));
     }
 
@@ -896,17 +897,16 @@ class GuardServiceTest {
     }
 
     @Test
-    void freeDutyAccruesPerMinecraftDayAndIgnoresAfkGate() {
+    void freeDutyAccruesHourlyAndIgnoresAfkGate() {
         TestPlayer senior = guardAtRank(Rank.SERGENT.level());
         guards.startDuty(senior);
-        long dayMs = ctx.policies().minecraftDayMinutes * 60_000L;
-        // Well beyond the anti-AFK grace, with zero movement — trusted ranks still accrue.
-        clock.advance(dayMs + ctx.policies().salaryActivityGraceSeconds * 2000L);
+        // One real hour — far beyond the 90s AFK grace, with zero movement.
+        clock.advance(3600_000L);
         guards.tickPlayerDuty(senior);
         var state = players.state(senior.uuid());
         assertTrue(state.duty);
-        assertEquals(ctx.policies().freeDutySalaryPerDay.get(Rank.SERGENT.level()).intValue(),
-                state.unpaidSalary, "one Minecraft day of free duty pays the daily rate");
+        assertEquals(ctx.policies().salaryPerHour(Rank.SERGENT.level()),
+                state.unpaidSalary, "one real hour of free duty pays the hourly wage");
         assertFalse(state.salaryActivityPaused, "trusted ranks never hit the AFK salary gate");
     }
 

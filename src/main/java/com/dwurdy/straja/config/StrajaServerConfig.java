@@ -23,7 +23,7 @@ public final class StrajaServerConfig {
 
     public static final ModConfigSpec.IntValue CHECKPOINT_UNLOCK_MINUTES;
     public static final ModConfigSpec.IntValue CHECKPOINT_DEADLINE_MINUTES;
-    public static final ModConfigSpec.IntValue SALARY_BLOCK_MINUTES;
+    public static final ModConfigSpec.IntValue SERVICE_BLOCK_MINUTES;
     public static final ModConfigSpec.IntValue FOOD_COOLDOWN_MINUTES;
     public static final ModConfigSpec.IntValue QUIZ_COOLDOWN_MINUTES;
     public static final ModConfigSpec.IntValue RESIGNATION_COOLDOWN_DAYS;
@@ -79,8 +79,10 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.ConfigValue<String> COIN_SILVER_ITEM;
     public static final ModConfigSpec.ConfigValue<String> COIN_GOLD_ITEM;
 
-    public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> SALARY_PER_BLOCK;
-    public static final ModConfigSpec.IntValue SALARY_MAX_BLOCKS_PER_DAY;
+    public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> SALARY_PER_HOUR;
+    public static final ModConfigSpec.IntValue SALARY_COMMISSIONER_PER_HOUR;
+    public static final ModConfigSpec.IntValue SALARY_GRANULARITY_SECONDS;
+    public static final ModConfigSpec.IntValue SALARY_MAX_PAID_MINUTES_PER_DAY;
     public static final ModConfigSpec.IntValue SALARY_WINDOW_MINUTES;
     public static final ModConfigSpec.IntValue SALARY_ACTIVITY_GRACE_SECONDS;
     public static final ModConfigSpec.DoubleValue SALARY_ACTIVITY_MOVE_THRESHOLD;
@@ -88,7 +90,7 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> PROMOTION_SERVICE_BLOCKS;
 
     public static final ModConfigSpec.IntValue FREE_DUTY_MIN_RANK;
-    public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> FREE_DUTY_SALARY_PER_DAY;
+
 
     public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> QUIZ_QUESTIONS;
     public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> TRAINING_QUIZ_QUESTIONS;
@@ -204,7 +206,10 @@ public final class StrajaServerConfig {
         B.push("timers");
         CHECKPOINT_UNLOCK_MINUTES = B.defineInRange("checkpointUnlockMinutes", 10, 1, 1440);
         CHECKPOINT_DEADLINE_MINUTES = B.defineInRange("checkpointDeadlineMinutes", 30, 1, 1440);
-        SALARY_BLOCK_MINUTES = B.defineInRange("salaryBlockMinutes", 10, 1, 60);
+        SERVICE_BLOCK_MINUTES = B.comment(
+                        "Duty-time interval that earns one service point",
+                        "(promotion credit). Salary accrues separately — see [salary].")
+                .defineInRange("serviceBlockMinutes", 10, 1, 60);
         FOOD_COOLDOWN_MINUTES = B.defineInRange("foodCooldownMinutes", 30, 1, 1440);
         QUIZ_COOLDOWN_MINUTES = B.defineInRange("quizCooldownMinutes", 10, 0, 1440);
         RESIGNATION_COOLDOWN_DAYS = B.defineInRange("resignationCooldownDays", 7, 0, 365);
@@ -281,14 +286,22 @@ public final class StrajaServerConfig {
         B.pop();
 
         B.push("salary");
-        SALARY_PER_BLOCK = B.comment(
-                        "Coins paid per completed service block, per rank.",
-                        "Entries: \"rank=coins\" (rank 1=Stagiar ... 4=Inspector).",
-                        "An empty or fully malformed list falls back to the built-in defaults.")
-                .defineListAllowEmpty(List.of("perBlock"),
-                        StrajaPolicies.formatIntMap(defaults.salaryPerBlock),
-                        () -> "1=20", StrajaServerConfig::isIntMapEntry);
-        SALARY_MAX_BLOCKS_PER_DAY = B.defineInRange("maxBlocksPerDay", 24, 0, 10000);
+        SALARY_PER_HOUR = B.comment(
+                        "Hourly wage in Bronze coins, per rank (§10):",
+                        "Stagiar 16, Străjer 24, Sergent 36, Inspector 64 by default.",
+                        "Accrues continuously in granularitySeconds chunks.",
+                        "Entries: \"rank=coinsPerHour\".")
+                .defineListAllowEmpty(List.of("perHour"),
+                        StrajaPolicies.formatIntMap(defaults.salaryPerHour),
+                        () -> "1=16", StrajaServerConfig::isIntMapEntry);
+        SALARY_COMMISSIONER_PER_HOUR = B.comment(
+                        "Comisar hourly wage in Bronze (default 128 = 2× Inspector).")
+                .defineInRange("commissionerPerHour", 128, 0, 100000);
+        SALARY_GRANULARITY_SECONDS = B.comment(
+                        "Accrual chunk size in seconds; sub-chunk duty time and",
+                        "sub-coin fractions carry forward — nothing is truncated.")
+                .defineInRange("granularitySeconds", 60, 1, 3600);
+        SALARY_MAX_PAID_MINUTES_PER_DAY = B.defineInRange("maxPaidMinutesPerDay", 240, 0, 100000);
         SALARY_WINDOW_MINUTES = B.defineInRange("windowMinutes", 1440, 1, 100000);
         SALARY_ACTIVITY_GRACE_SECONDS = B.defineInRange("activityGraceSeconds", 90, 5, 3600);
         SALARY_ACTIVITY_MOVE_THRESHOLD = B.defineInRange("activityMoveThreshold", 0.15, 0.0, 10.0);
@@ -318,13 +331,6 @@ public final class StrajaServerConfig {
                         "Guards at or above this rank (and the commissioner) start and",
                         "end shifts at will — no patrol route or checkpoints required.")
                 .defineInRange("freeDutyMinRank", defaults.freeDutyMinRank, 1, 4);
-        FREE_DUTY_SALARY_PER_DAY = B.comment(
-                        "Free-duty salary per Minecraft day of duty, per rank.",
-                        "These ranks are trusted — the anti-AFK movement gate is not applied.",
-                        "Entries: \"rank=coins\".")
-                .defineListAllowEmpty(List.of("freeDutySalaryPerDay"),
-                        StrajaPolicies.formatIntMap(defaults.freeDutySalaryPerDay),
-                        () -> "3=80", StrajaServerConfig::isIntMapEntry);
         B.pop();
 
         B.push("quiz");
@@ -536,7 +542,7 @@ public final class StrajaServerConfig {
 
         p.checkpointUnlockMinutes = CHECKPOINT_UNLOCK_MINUTES.get();
         p.checkpointDeadlineMinutes = CHECKPOINT_DEADLINE_MINUTES.get();
-        p.salaryBlockMinutes = SALARY_BLOCK_MINUTES.get();
+        p.serviceBlockMinutes = SERVICE_BLOCK_MINUTES.get();
         p.foodCooldownMinutes = FOOD_COOLDOWN_MINUTES.get();
         p.quizCooldownMinutes = QUIZ_COOLDOWN_MINUTES.get();
         p.resignationCooldownDays = RESIGNATION_COOLDOWN_DAYS.get();
@@ -593,9 +599,11 @@ public final class StrajaServerConfig {
         p.coinItemIds.put(4096, COIN_SILVER_ITEM.get());
         p.coinItemIds.put(262144, COIN_GOLD_ITEM.get());
 
-        p.salaryPerBlock = mapOrDefault(StrajaPolicies.parseIntMap(SALARY_PER_BLOCK.get()),
-                defaults().salaryPerBlock);
-        p.salaryMaxBlocksPerDay = SALARY_MAX_BLOCKS_PER_DAY.get();
+        p.salaryPerHour = mapOrDefault(StrajaPolicies.parseIntMap(SALARY_PER_HOUR.get()),
+                defaults().salaryPerHour);
+        p.salaryCommissionerPerHour = SALARY_COMMISSIONER_PER_HOUR.get();
+        p.salaryGranularitySeconds = SALARY_GRANULARITY_SECONDS.get();
+        p.salaryMaxPaidMinutesPerDay = SALARY_MAX_PAID_MINUTES_PER_DAY.get();
         p.salaryWindowMinutes = SALARY_WINDOW_MINUTES.get();
         p.salaryActivityGraceSeconds = SALARY_ACTIVITY_GRACE_SECONDS.get();
         p.salaryActivityMoveThreshold = SALARY_ACTIVITY_MOVE_THRESHOLD.get();
@@ -604,9 +612,6 @@ public final class StrajaServerConfig {
         p.promotionServiceBlocks = mapOrDefault(StrajaPolicies.parseIntMap(PROMOTION_SERVICE_BLOCKS.get()),
                 defaults().promotionServiceBlocks);
         p.freeDutyMinRank = FREE_DUTY_MIN_RANK.get();
-        p.freeDutySalaryPerDay = mapOrDefault(
-                StrajaPolicies.parseIntMap(FREE_DUTY_SALARY_PER_DAY.get()),
-                defaults().freeDutySalaryPerDay);
         p.quiz = listOrDefault(StrajaPolicies.parseQuiz(QUIZ_QUESTIONS.get()), defaults().quiz);
         p.trainingQuiz = listOrDefault(StrajaPolicies.parseQuiz(TRAINING_QUIZ_QUESTIONS.get()),
                 defaults().trainingQuiz);

@@ -87,9 +87,9 @@ class PolicyServiceTest {
     @Test
     void mapAndQuizKeysRoundTrip() {
         TestPlayer c = commissioner();
-        policies.set(c, "salary.perBlock", "1=16;2=24;3=36;4=64");
-        assertEquals(16, ctx.policies().salaryPerBlock(1));
-        assertEquals(64, ctx.policies().salaryPerBlock(4));
+        policies.set(c, "salary.perHour", "1=16;2=24;3=36;4=64");
+        assertEquals(16, ctx.policies().salaryPerHour(1));
+        assertEquals(64, ctx.policies().salaryPerHour(4));
 
         policies.set(c, "quiz.questions", "juramant|0|Cât timp ai?|30 minute;30");
         assertEquals(1, ctx.policies().quiz.size());

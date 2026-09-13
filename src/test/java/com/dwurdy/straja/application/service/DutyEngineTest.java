@@ -67,7 +67,7 @@ class DutyEngineTest {
         StrajaPolicies custom = new StrajaPolicies();
         custom.checkpointUnlockMinutes = 20;
         custom.checkpointDeadlineMinutes = 60;
-        custom.salaryBlockMinutes = 5;
+        custom.serviceBlockMinutes = 5;
         GuardState state = new GuardState();
         state.rank = Rank.STAGIAR.level();
         var result = DutyEngine.startDuty(state, ROUTE, 0, Map.of(), custom);
@@ -80,13 +80,12 @@ class DutyEngineTest {
     }
 
     @Test
-    void configuredSalaryBlockMinutesChangeAccrual() {
+    void configuredServiceBlockMinutesChangeAccrual() {
         StrajaPolicies custom = new StrajaPolicies();
-        custom.salaryBlockMinutes = 5;
+        custom.serviceBlockMinutes = 5;
         GuardState state = juniorOnDuty();
-        // 12 minutes -> 2 blocks of 5 (would be 1 block under the default 10)
+        // 12 minutes -> 2 service points (would be 1 under the default 10)
         DutyEngine.accrue(state, 12 * DutyEngine.MINUTE_MS, 20, custom);
-        assertEquals(40, state.unpaidSalary);
         assertEquals(2, state.serviceBlocks);
     }
 
@@ -143,27 +142,66 @@ class DutyEngineTest {
     // ---------------------------------------------------------------- salary
 
     @Test
-    void accrualPaysCompleteBlocksOnly() {
+    void accrualQuantizesToGranularityAndCarriesRemainder() {
         GuardState state = juniorOnDuty();
-        // 9 minutes -> no block
-        DutyEngine.accrue(state, 9 * DutyEngine.MINUTE_MS, 20, POLICY);
+        // 30 seconds < 60s granularity -> nothing consumed yet
+        DutyEngine.accrue(state, 30_000, 60, POLICY);
         assertEquals(0, state.unpaidSalary);
-        // 25 minutes total -> 2 blocks of 10
-        DutyEngine.accrue(state, 25 * DutyEngine.MINUTE_MS, 20, POLICY);
-        assertEquals(40, state.unpaidSalary);
-        assertEquals(2, state.serviceBlocks);
-        // remainder carries over
-        DutyEngine.accrue(state, 30 * DutyEngine.MINUTE_MS, 20, POLICY);
-        assertEquals(3, state.serviceBlocks);
+        assertEquals(30_000, state.dutyRemainderMs, "sub-granularity time carries");
+        // +60s -> 90s total -> one 60s chunk at 60/h -> 1 coin, 30s still carried
+        DutyEngine.accrue(state, 90_000, 60, POLICY);
+        assertEquals(1, state.unpaidSalary);
+        assertEquals(30_000, state.dutyRemainderMs);
+    }
+
+    @Test
+    void hourlyWageAccruesProportionally() {
+        GuardState state = juniorOnDuty();
+        // 30 real minutes at Străjer rate 24/h -> 12 Bronze (§10 acceptance)
+        DutyEngine.accrue(state, 30 * DutyEngine.MINUTE_MS, 24, POLICY);
+        assertEquals(12, state.unpaidSalary);
+    }
+
+    @Test
+    void promotionMidShiftChangesOnlyForwardAccrual() {
+        GuardState state = juniorOnDuty();
+        DutyEngine.accrue(state, 30 * DutyEngine.MINUTE_MS, 16, POLICY); // Stagiar 16/h -> 8
+        assertEquals(8, state.unpaidSalary);
+        state.rank = Rank.GUARD.level(); // promoted to Străjer
+        DutyEngine.accrue(state, 60 * DutyEngine.MINUTE_MS, 24, POLICY); // +30min at 24/h -> +12
+        assertEquals(20, state.unpaidSalary, "prior accrual is never retroactively changed");
+    }
+
+    @Test
+    void subCoinFractionsCarryAcrossTicks() {
+        GuardState state = juniorOnDuty();
+        // Stagiar 16/h, 60s granularity: each chunk earns 16*60/3600 = 0.2667
+        for (int i = 0; i < 4; i++) {
+            DutyEngine.accrue(state, (i + 1) * 60_000L, 16, POLICY);
+        }
+        assertEquals(1, state.unpaidSalary, "4 chunks × 4/15 coin = 1.0667 -> 1 coin paid, rest carried");
+        assertTrue(state.salaryCarryWork > 0, "the fraction is carried, not lost");
+    }
+
+    @Test
+    void freeDutyAccruesSameHourlyWage() {
+        GuardState state = new GuardState();
+        state.rank = Rank.SERGENT.level();
+        state.invited = true;
+        var started = DutyEngine.startFreeDuty(state, 0, POLICY, false);
+        assertTrue(started.ok());
+        // one real hour at Sergent 36/h
+        DutyEngine.accrue(state, 3600_000L, 36, POLICY);
+        assertEquals(36, state.unpaidSalary);
     }
 
     @Test
     void salaryCapSuppressesPayAboveDailyLimit() {
         GuardState state = juniorOnDuty();
-        // 260 minutes = 26 blocks; cap is 24 blocks/day
-        DutyEngine.accrue(state, 260 * DutyEngine.MINUTE_MS, 20, POLICY);
-        assertEquals(24 * 20, state.unpaidSalary);
-        assertEquals(26, state.serviceBlocks);
+        // 260 minutes of duty; cap is 240 paid minutes at 60/h -> 240 coins
+        DutyEngine.accrue(state, 260 * DutyEngine.MINUTE_MS, 60, POLICY);
+        assertEquals(240, state.unpaidSalary);
+        assertEquals(26, state.serviceBlocks, "suppressed time still earns service credit");
     }
 
     @Test
@@ -247,12 +285,10 @@ class DutyEngineTest {
 
     @Test
     void toCoinsBreaksDownLargestFirst() {
-        var coins = new TreeMap<>(Map.of(1, "b", 10, "r", 100, "s", 1000, "g"));
+        var coins = new TreeMap<>(Map.of(1, "b", 64, "r", 4096, "s", 262144, "g"));
         var result = DutyEngine.toCoins(2543, coins);
-        assertEquals(List.of(1000, 2), List.of(result.get(0)[0], result.get(0)[1]));
-        assertEquals(List.of(100, 5), List.of(result.get(1)[0], result.get(1)[1]));
-        assertEquals(List.of(10, 4), List.of(result.get(2)[0], result.get(2)[1]));
-        assertEquals(List.of(1, 3), List.of(result.get(3)[0], result.get(3)[1]));
+        assertEquals(List.of(64, 39), List.of(result.get(0)[0], result.get(0)[1]));
+        assertEquals(List.of(1, 47), List.of(result.get(1)[0], result.get(1)[1]));
         assertTrue(DutyEngine.toCoins(0, coins).isEmpty());
     }
 }

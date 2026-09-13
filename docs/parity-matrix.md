@@ -68,7 +68,7 @@ Test suite: **331 unit tests** (`gradlew test --rerun-tasks`, all green) across
 | Duty start/stop, deadline from mission minutes | PASS | `unit:DutyEngineTest`; `rcon:` start/stop-duty |
 | Patrol routes, duplicate/short-route rejection | PASS | `unit:DutyEngineTest.startDutyRejectsDuplicateOrShortRoutes` |
 | Checkpoint unlock/wait/activate/deadline | PASS | `unit:DutyEngineTest`; `rcon:` `checkpoint_timeout` end observed on live server; `checkpointUnlockMinutes`/`checkpointDeadlineMinutes` honored (`configuredTimersOverrideDefaults`) |
-| Salary block accrual (10 min) + daily cap | PASS | `unit:DutyEngineTest.salaryCapSuppressesPayAboveDailyLimit`; `salaryBlockMinutes` honored (`configuredSalaryBlockMinutesChangeAccrual`) |
+| Hourly-wage accrual (§10: 16/24/36/64/128 Bronze/h) + paid-minutes cap | PASS | `unit:DutyEngineTest.hourlyWageAccruesProportionally`, `subCoinFractionsCarryAcrossTicks`, `salaryCapSuppressesPayAboveDailyLimit`; granularity/service-block timers honored |
 | Anti-AFK movement-based accrual | PASS | `unit:DutyEngineTest`; `rcon:` accrual paused until movement observed |
 | Special Duty mode | PARTIAL | `code:DutyEngine` — implemented, thinner coverage |
 | Salary payment in real Ady's coins | PASS | `rcon:` salary paid as 6× `adys_decorations:brass_coin` (60 base units); `unit:GuardServiceTest.salaryInProgress*` — crashed attempts lock for review / recover via receipt, never double-pay |

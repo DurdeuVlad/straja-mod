@@ -14,7 +14,7 @@ public final class DutyEngine {
     /** Fallbacks used only when no policies are supplied (e.g. pure unit tests). */
     public static final int DEFAULT_UNLOCK_MINUTES = 10;
     public static final int DEFAULT_DEADLINE_MINUTES = 30;
-    public static final int DEFAULT_SALARY_BLOCK_MINUTES = 10;
+    public static final int DEFAULT_SERVICE_BLOCK_MINUTES = 10;
 
     private DutyEngine() {}
 
@@ -35,57 +35,80 @@ public final class DutyEngine {
                 ? policies.checkpointUnlockMinutes : DEFAULT_UNLOCK_MINUTES;
     }
 
-    private static int blockMinutes(StrajaPolicies policies) {
-        return policies != null && policies.salaryBlockMinutes > 0
-                ? policies.salaryBlockMinutes : DEFAULT_SALARY_BLOCK_MINUTES;
+    private static int serviceBlockMinutes(StrajaPolicies policies) {
+        return policies != null && policies.serviceBlockMinutes > 0
+                ? policies.serviceBlockMinutes : DEFAULT_SERVICE_BLOCK_MINUTES;
     }
 
-    /** Accrues salary for complete configured block chunks. Returns emitted events. */
-    public static List<DomainEvent> accrue(GuardState state, long now, int salaryPerBlock,
+    private static long granularityMs(StrajaPolicies policies) {
+        return Math.max(1, policies != null ? policies.salaryGranularitySeconds : 60) * 1000L;
+    }
+
+    /**
+     * Hourly-wage accrual (§10): duty time is quantized to
+     * {@code salaryGranularitySeconds}; each chunk earns
+     * {@code wage × seconds / 3600} Bronze and the sub-coin fraction carries
+     * in {@code salaryCarryWork}, so promotion mid-shift only changes the
+     * forward rate and nothing is ever truncated away. Service points still
+     * tick per {@code serviceBlockMinutes} and are never suppressed by the
+     * paid-time cap — duty is duty.
+     */
+    public static List<DomainEvent> accrue(GuardState state, long now, int salaryPerHour,
                                            StrajaPolicies policies) {
         List<DomainEvent> events = new ArrayList<>();
         if (!state.duty || state.lastAccrualAt == null || now <= state.lastAccrualAt) return events;
 
         boolean capped = policies != null && policies.salaryWindowMinutes > 0
-                && policies.salaryMaxBlocksPerDay >= 0;
+                && policies.salaryMaxPaidMinutesPerDay >= 0;
         if (capped) {
             long windowKey = now / (policies.salaryWindowMinutes * MINUTE_MS);
             if (state.salaryWindowKey == null || state.salaryWindowKey != windowKey) {
                 state.salaryWindowKey = windowKey;
-                state.salaryBlocksWindow = 0;
+                state.salaryPaidSecondsWindow = 0;
             }
-            if (state.salaryBlocksWindow < 0) state.salaryBlocksWindow = 0;
+            if (state.salaryPaidSecondsWindow < 0) state.salaryPaidSecondsWindow = 0;
         }
 
+        long granMs = granularityMs(policies);
         long elapsed = now - state.lastAccrualAt;
         long total = state.dutyRemainderMs + elapsed;
-        long minutes = total / MINUTE_MS;
-        state.dutyRemainderMs = total % MINUTE_MS;
+        long chunks = total / granMs;
+        state.dutyRemainderMs = total % granMs;
         state.lastAccrualAt = now;
-        if (minutes <= 0) return events;
+        if (chunks <= 0) return events;
 
-        // Free-duty shifts are paid per Minecraft day of duty, not per block.
-        int block = "FREE".equals(state.mode) && policies != null && policies.minecraftDayMinutes > 0
-                ? policies.minecraftDayMinutes : blockMinutes(policies);
-        long before = state.dutyMinutes / block;
-        state.dutyMinutes += minutes;
-        long after = state.dutyMinutes / block;
-        int blocks = (int) (after - before);
-        if (blocks <= 0) return events;
+        long consumedMs = chunks * granMs;
 
-        state.dutyBlocksCurrent += blocks;
-        state.serviceBlocks += blocks;
-        int payableBlocks = capped
-                ? Math.max(0, Math.min(blocks, policies.salaryMaxBlocksPerDay - state.salaryBlocksWindow))
-                : blocks;
-        if (capped) state.salaryBlocksWindow += payableBlocks;
-        state.unpaidSalary += payableBlocks * salaryPerBlock;
-        if (payableBlocks > 0) {
-            events.add(DomainEvent.builder("salary_block")
-                    .put("blocks", payableBlocks)
-                    .put("amount", payableBlocks * salaryPerBlock)
-                    .put("blockMinutes", block)
-                    .put("suppressedBlocks", blocks - payableBlocks)
+        // Service points (promotion credit) tick on their own interval.
+        long blockMs = serviceBlockMinutes(policies) * MINUTE_MS;
+        long beforeBlocks = state.dutyServiceMs / blockMs;
+        state.dutyServiceMs += consumedMs;
+        int blocks = (int) (state.dutyServiceMs / blockMs - beforeBlocks);
+        if (blocks > 0) {
+            state.dutyBlocksCurrent += blocks;
+            state.serviceBlocks += blocks;
+        }
+
+        // Paid seconds are capped per window; suppressed time still earns
+        // service credit but no wage.
+        long consumedSeconds = consumedMs / 1000;
+        long payableSeconds = consumedSeconds;
+        if (capped) {
+            long remaining = policies.salaryMaxPaidMinutesPerDay * 60L - state.salaryPaidSecondsWindow;
+            payableSeconds = Math.max(0, Math.min(consumedSeconds, remaining));
+            state.salaryPaidSecondsWindow += payableSeconds;
+        }
+
+        long work = state.salaryCarryWork + payableSeconds * Math.max(0, (long) salaryPerHour);
+        int coins = (int) (work / 3600L);
+        state.salaryCarryWork = work % 3600L;
+        if (coins > 0) {
+            state.unpaidSalary += coins;
+            events.add(DomainEvent.builder("salary_accrual")
+                    .put("amount", coins)
+                    .put("paidMinutes", payableSeconds / 60)
+                    .put("suppressedSeconds", consumedSeconds - payableSeconds)
+                    .put("hourlyWage", salaryPerHour)
                     .build());
         }
         return events;
@@ -121,7 +144,7 @@ public final class DutyEngine {
         state.lastDutyActivityZ = null;
         state.salaryActivityPaused = false;
         state.dutyRemainderMs = 0;
-        state.dutyMinutes = 0;
+        state.dutyServiceMs = 0;
         state.dutyBlocksCurrent = 0;
         state.specialAuthorizedBy = null;
         state.lastEndReason = null;
@@ -163,7 +186,7 @@ public final class DutyEngine {
         state.lastDutyActivityZ = null;
         state.salaryActivityPaused = false;
         state.dutyRemainderMs = 0;
-        state.dutyMinutes = 0;
+        state.dutyServiceMs = 0;
         state.dutyBlocksCurrent = 0;
         state.specialAuthorizedBy = null;
         state.lastEndReason = null;
@@ -171,7 +194,7 @@ public final class DutyEngine {
     }
 
     public static Result activateCheckpoint(GuardState state, String checkpointId, long now,
-                                            int salaryPerBlock, java.util.Map<String, Integer> missionMinutes,
+                                            int salaryPerHour, java.util.Map<String, Integer> missionMinutes,
                                             StrajaPolicies policies) {
         if (!state.duty || !"NORMAL".equals(state.mode)) return Result.fail("not_normal_duty");
         if (!"ACTIVE".equals(state.patrolState)) return Result.fail("checkpoint_not_active");
@@ -179,7 +202,7 @@ public final class DutyEngine {
             return Result.fail("wrong_checkpoint");
         }
 
-        List<DomainEvent> events = new ArrayList<>(accrue(state, now, salaryPerBlock, policies));
+        List<DomainEvent> events = new ArrayList<>(accrue(state, now, salaryPerHour, policies));
         state.deadlineAt = null;
 
         if (state.patrolIndex >= state.route.size() - 1) {
@@ -211,13 +234,13 @@ public final class DutyEngine {
      * @param accrualNow timestamp used for salary accrual (allows anti-AFK to
      *                   clamp accrual independently of the deadline clock)
      */
-    public static TickResult tickDuty(GuardState state, long now, int salaryPerBlock,
+    public static TickResult tickDuty(GuardState state, long now, int salaryPerHour,
                                       java.util.Map<String, Integer> missionMinutes,
                                       StrajaPolicies policies, Long accrualNow) {
         List<DomainEvent> events = new ArrayList<>();
         if (!state.duty) return new TickResult(events);
         long salaryTimestamp = accrualNow != null ? Math.min(now, accrualNow) : now;
-        events.addAll(accrue(state, salaryTimestamp, salaryPerBlock, policies));
+        events.addAll(accrue(state, salaryTimestamp, salaryPerHour, policies));
 
         // Only NORMAL patrols have checkpoint deadlines; SPECIAL and FREE
         // shifts accrue salary without a route.
@@ -251,9 +274,9 @@ public final class DutyEngine {
         return new TickResult(events);
     }
 
-    public static Result endDuty(GuardState state, String reason, long now, int salaryPerBlock,
+    public static Result endDuty(GuardState state, String reason, long now, int salaryPerHour,
                                  StrajaPolicies policies) {
-        List<DomainEvent> events = new ArrayList<>(accrue(state, now, salaryPerBlock, policies));
+        List<DomainEvent> events = new ArrayList<>(accrue(state, now, salaryPerHour, policies));
         state.duty = false;
         state.mode = "OFF_DUTY";
         state.patrolState = "OFF";
@@ -319,10 +342,10 @@ public final class DutyEngine {
                 .build()));
     }
 
-    public static Result startSpecial(GuardState state, String actor, long now, int salaryPerBlock,
+    public static Result startSpecial(GuardState state, String actor, long now, int salaryPerHour,
                                       StrajaPolicies policies) {
         if (!state.duty || !"NORMAL".equals(state.mode)) return Result.fail("normal_duty_required");
-        List<DomainEvent> events = new ArrayList<>(accrue(state, now, salaryPerBlock, policies));
+        List<DomainEvent> events = new ArrayList<>(accrue(state, now, salaryPerHour, policies));
         state.mode = "SPECIAL";
         state.patrolState = "SUSPENDED";
         state.waitingUntil = null;
@@ -332,10 +355,10 @@ public final class DutyEngine {
         return Result.pass(events);
     }
 
-    public static Result resumeSpecial(GuardState state, long now, int salaryPerBlock,
+    public static Result resumeSpecial(GuardState state, long now, int salaryPerHour,
                                        StrajaPolicies policies) {
         if (!state.duty || !"SPECIAL".equals(state.mode)) return Result.fail("special_duty_required");
-        List<DomainEvent> events = new ArrayList<>(accrue(state, now, salaryPerBlock, policies));
+        List<DomainEvent> events = new ArrayList<>(accrue(state, now, salaryPerHour, policies));
         state.mode = "NORMAL";
         state.patrolState = "ACTIVE";
         String checkpoint = state.patrolIndex < state.route.size() ? state.route.get(state.patrolIndex) : "";
@@ -350,10 +373,10 @@ public final class DutyEngine {
         return Result.pass(events);
     }
 
-    public static Result completeSpecial(GuardState state, long now, int salaryPerBlock,
+    public static Result completeSpecial(GuardState state, long now, int salaryPerHour,
                                          StrajaPolicies policies) {
         if (!state.duty || !"SPECIAL".equals(state.mode)) return Result.fail("special_duty_required");
-        return endDuty(state, "special_complete", now, salaryPerBlock, policies);
+        return endDuty(state, "special_complete", now, salaryPerHour, policies);
     }
 
     /** Splits an amount into denominations, largest first. */
