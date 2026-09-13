@@ -9,12 +9,11 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
-import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
 /**
- * NeoForge event adapter: server lifecycle, per-tick duty timers, and
- * login-time restart recovery. No business rules live here — everything is
- * delegated to application services.
+ * NeoForge event adapter: server ticks, login/logout duty recovery, NPC reload
+ * and Minecraft interaction hooks. Business decisions remain in application
+ * services; this class only translates platform events.
  */
 public final class StrajaEvents {
     public StrajaEvents() {}
@@ -29,11 +28,20 @@ public final class StrajaEvents {
         runtime.prison().tick();
         runtime.fines().tick();
         if (runtime.serverGateway().tickCount() % 20 != 0) return;
+
         for (var player : runtime.serverGateway().onlinePlayers()) {
+            runtime.personnel().ensurePersonnelRecord(player);
             runtime.guards().tickPlayerDuty(player);
+
+            var entity = runtime.server().getPlayerList().getPlayer(player.uuid());
+            if (entity != null) {
+                var state = runtime.players().state(player.uuid());
+                runtime.dutyTeams().sync(entity, state, runtime.players());
+            }
         }
         if (runtime.policies().testCommandsEnabled && runtime.policies().isLocalEnvironment()) {
             for (var virtual : runtime.testPlayers().all()) {
+                runtime.personnel().ensurePersonnelRecord(virtual);
                 runtime.guards().tickPlayerDuty(virtual);
             }
         }
@@ -68,16 +76,31 @@ public final class StrajaEvents {
         StrajaRuntime runtime = StrajaRuntime.get();
         if (runtime == null || !(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) return;
         var gateway = new MinecraftPlayerGateway(event.getEntity().getServer(), player.getUUID());
+
+        runtime.personnel().ensurePersonnelRecord(gateway);
+        // Do NOT close active duty merely because the server/reconnect boundary
+        // changed. The session service preserves deadlines but never back-pays
+        // the offline interval.
+        runtime.dutySessions().onLogin(gateway);
         var state = runtime.players().state(player.getUUID());
-        runtime.guards().closeDutyAfterRestart(gateway, state, runtime.bootId());
         state.runtimeBootId = runtime.bootId();
         runtime.players().save(player.getUUID(), state);
+        runtime.dutyTeams().sync(player, state, runtime.players());
+
         runtime.custody().deliverPendingKeys(gateway);
         runtime.custody().deliverPendingItems(gateway);
         runtime.complaints().claimPendingRewards(gateway);
         runtime.archive().deliverPending(gateway);
         runtime.rooms().assignAutomatically(gateway);
         runtime.rooms().processWaitlist();
+    }
+
+    @SubscribeEvent
+    public void onLogout(PlayerEvent.PlayerLoggedOutEvent event) {
+        StrajaRuntime runtime = StrajaRuntime.get();
+        if (runtime == null || !(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) return;
+        var gateway = new MinecraftPlayerGateway(event.getEntity().getServer(), player.getUUID());
+        runtime.dutySessions().onLogout(gateway);
     }
 
     /**
@@ -90,7 +113,6 @@ public final class StrajaEvents {
         if (runtime == null || event.getEntity().level().isClientSide()) return;
         if (!(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer target)) return;
         var targetGateway = new MinecraftPlayerGateway(target.getServer(), target.getUUID());
-        // Downed targets cannot be harmed further.
         if (runtime.custody().isDowned(targetGateway)) {
             event.setCanceled(true);
             return;
@@ -98,7 +120,6 @@ public final class StrajaEvents {
         var attackerEntity = event.getSource().getEntity();
         if (!(attackerEntity instanceof net.minecraft.server.level.ServerPlayer attacker)) return;
         var attackerGateway = new MinecraftPlayerGateway(attacker.getServer(), attacker.getUUID());
-        // A restrained attacker cannot deal damage.
         if (runtime.custody().actionBlocked(attackerGateway, "combat")) {
             event.setCanceled(true);
             return;
@@ -113,10 +134,7 @@ public final class StrajaEvents {
         }
     }
 
-    /**
-     * Right-clicking a player with a restraint tool routes to the custody
-     * service: cuffs request, rope bind, head sack, key/cutters release.
-     */
+    /** Routes restraint/fine-book player interactions to native services. */
     @SubscribeEvent
     public void onEntityInteract(
             net.neoforged.neoforge.event.entity.player.PlayerInteractEvent.EntityInteract event) {
@@ -230,10 +248,7 @@ public final class StrajaEvents {
         runtime.fines().createJailerAssaultMission(gateway, npc.getStringUUID(), outcome);
     }
 
-    /**
-     * Jailer death escalates the assault mission; a wanted suspect's death at a
-     * guard's hand closes the arrest task with the reduced death bounty.
-     */
+    /** Jailer/suspect death hooks. */
     @SubscribeEvent
     public void onEntityDeath(net.neoforged.neoforge.event.entity.living.LivingDeathEvent event) {
         StrajaRuntime runtime = StrajaRuntime.get();
