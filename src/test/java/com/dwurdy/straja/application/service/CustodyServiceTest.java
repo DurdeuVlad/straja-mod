@@ -1,7 +1,9 @@
 package com.dwurdy.straja.application.service;
 
 import com.dwurdy.straja.application.StrajaContext;
+import com.dwurdy.straja.application.port.in.CustodyRoleplayUseCase;
 import com.dwurdy.straja.application.port.out.ItemView;
+import com.dwurdy.straja.domain.model.CustodyStore;
 import com.dwurdy.straja.domain.model.ItemSpec;
 import com.dwurdy.straja.domain.model.Rank;
 import com.dwurdy.straja.support.Fakes;
@@ -67,6 +69,79 @@ class CustodyServiceTest {
         assertTrue(custody.isCuffed(civilian));
         // guard received the cuff key
         assertTrue(guard.inventory.slots.stream().anyMatch(s -> CustodyService.CUFF_KEY.equals(s.id())));
+    }
+
+    @Test
+    void cuffRequestCannotBeAcceptedAfterIssuerIsSuspendedWhileOffline() {
+        assertTrue(custody.requestCuffs(guard, civilian));
+        var req = ctx.custody().read().cuffRequests.values().iterator().next();
+        guard.online = false;
+        var state = players.state(guard.uuid());
+        state.suspended = true;
+        players.save(guard.uuid(), state);
+
+        assertFalse(custody.accept(civilian, req.id));
+        assertFalse(custody.isCuffed(civilian));
+        assertTrue(ctx.custody().read().cuffRequests.isEmpty());
+        assertTrue(audit.tail(20).stream().anyMatch(e -> "cuff_accept".equals(e.action)
+                && "REFUSED".equals(e.result)
+                && e.details.contains("issuer_no_longer_eligible")));
+    }
+
+    @Test
+    void activeCuffIsRecoveredWhenIssuerIsFired() {
+        assertTrue(custody.requestCuffs(guard, civilian));
+        var req = ctx.custody().read().cuffRequests.values().iterator().next();
+        assertTrue(custody.accept(civilian, req.id));
+
+        var state = players.state(guard.uuid());
+        state.fired = true;
+        players.save(guard.uuid(), state);
+        custody.tick();
+
+        assertFalse(custody.isCuffed(civilian));
+        assertTrue(civilian.told("emitentul nu mai este eligibil"));
+        assertTrue(audit.tail(20).stream().anyMatch(e -> "cuff_recovery".equals(e.action)
+                && "SUCCESS".equals(e.result)
+                && e.details.contains("issuer_no_longer_eligible")));
+    }
+
+    @Test
+    void firedIssuerRecoveryQueuesHiddenItemForOfflineTarget() {
+        giveItem(civilian, "minecraft:diamond_sword");
+        hold(civilian, "minecraft:diamond_sword");
+        assertTrue(custody.requestCuffs(guard, civilian));
+        var req = ctx.custody().read().cuffRequests.values().iterator().next();
+        assertTrue(custody.accept(civilian, req.id));
+        civilian.online = false;
+
+        var state = players.state(guard.uuid());
+        state.fired = true;
+        players.save(guard.uuid(), state);
+        custody.tick();
+
+        assertFalse(custody.isCuffed(civilian));
+        assertTrue(ctx.custody().read().pendingItems.containsKey(civilian.uuid().toString()));
+        civilian.online = true;
+        custody.deliverPendingItems(civilian);
+        assertEquals(1, civilian.inventory.countOf("minecraft:diamond_sword"));
+    }
+
+    @Test
+    void legacyCuffWithoutIssuerUuidFailsClosedAndIsRecovered() {
+        assertTrue(custody.requestCuffs(guard, civilian));
+        var request = ctx.custody().read().cuffRequests.values().iterator().next();
+        assertTrue(custody.accept(civilian, request.id));
+
+        var store = ctx.custody().read();
+        store.cuffed.get(civilian.uuid().toString()).issuerUuid = "";
+        ctx.custody().write(store);
+
+        custody.tick();
+
+        assertFalse(custody.isCuffed(civilian));
+        assertTrue(audit.tail(20).stream().anyMatch(e -> "cuff_recovery".equals(e.action)
+                && e.details.contains("issuer_no_longer_eligible")));
     }
 
     @Test
@@ -202,7 +277,7 @@ class CustodyServiceTest {
     void batonNonLethalPassesThroughCapped() {
         hold(guard, CustodyService.BATON);
         var outcome = custody.batonStrike(guard, civilian, 10, 0, 4);
-        assertEquals(CustodyService.BatonOutcome.Action.ALLOW_NONLETHAL, outcome.action());
+        assertEquals(CustodyRoleplayUseCase.DamageAction.ALLOW_NONLETHAL, outcome.action());
         assertEquals(9, custody.capBatonDamage(10, 0)); // never below 1 hp
     }
 
@@ -210,7 +285,7 @@ class CustodyServiceTest {
     void batonLethalKnockoutRequestsSurrender() {
         hold(guard, CustodyService.BATON);
         var outcome = custody.batonStrike(guard, civilian, 6, 0, 8);
-        assertEquals(CustodyService.BatonOutcome.Action.CANCEL, outcome.action());
+        assertEquals(CustodyRoleplayUseCase.DamageAction.CANCEL, outcome.action());
         assertEquals("surrender_requested", outcome.reason());
         assertTrue(custody.isDowned(civilian));
         assertEquals(1, civilian.health);
@@ -350,5 +425,357 @@ class CustodyServiceTest {
         // simulate restart: read a fresh copy
         var reloaded = ctx.custody().read();
         assertTrue(reloaded.cuffed.containsKey(civilian.uuid().toString()));
+    }
+
+    // ------------------------------------------------------------ projection
+
+    private void holdNothing(TestPlayer p) {
+        for (int i = 0; i < p.inventory.slots(); i++) {
+            if (p.inventory.stackAt(i).isEmpty()) { p.selectSlot(i); return; }
+        }
+    }
+
+    private java.util.List<CustodyRoleplayUseCase.AvailableAction> actionsOf(
+            TestPlayer p, CustodyRoleplayUseCase.Action action) {
+        return custody.availableActions(p).stream()
+                .filter(a -> a.action() == action).toList();
+    }
+
+    @Test
+    void projectionEmitsRequestAcceptRefuseAndGiveCuffs() {
+        custody.requestCuffs(guard, civilian);
+        var req = ctx.custody().read().cuffRequests.values().iterator().next();
+
+        var targetIds = custody.availableActions(civilian).stream()
+                .map(a -> a.action() + ":" + a.recordId()).toList();
+        assertTrue(targetIds.contains("ACCEPT_REQUEST:" + req.id));
+        assertTrue(targetIds.contains("REFUSE_REQUEST:" + req.id));
+
+        var guardActions = custody.availableActions(guard).stream()
+                .map(CustodyRoleplayUseCase.AvailableAction::action).toList();
+        assertTrue(guardActions.contains(CustodyRoleplayUseCase.Action.GIVE_CUFFS));
+        assertFalse(guardActions.contains(CustodyRoleplayUseCase.Action.ACCEPT_REQUEST));
+        assertFalse(actionsOf(civilian, CustodyRoleplayUseCase.Action.GIVE_CUFFS).stream()
+                .findAny().isPresent());
+        // expired request disappears from the projection
+        clock.advance(61_000);
+        assertTrue(custody.availableActions(civilian).isEmpty());
+    }
+
+    @Test
+    void projectionExposesHeadSackAndWakeDowned() {
+        custody.requestCuffs(guard, civilian);
+        var req = ctx.custody().read().cuffRequests.values().iterator().next();
+        custody.accept(civilian, req.id);
+        hold(guard, CustodyService.HEAD_SACK);
+        custody.applyHeadSack(guard, civilian);
+        var kinds = custody.availableActions(civilian).stream()
+                .map(CustodyRoleplayUseCase.AvailableAction::action).toList();
+        assertTrue(kinds.contains(CustodyRoleplayUseCase.Action.REMOVE_HEAD_SACK));
+
+        custody.startDowned(civilian, guard, "test");
+        // downed + before cooldown: neither removal nor wake is offered
+        kinds = custody.availableActions(civilian).stream()
+                .map(CustodyRoleplayUseCase.AvailableAction::action).toList();
+        assertFalse(kinds.contains(CustodyRoleplayUseCase.Action.REMOVE_HEAD_SACK));
+        assertFalse(kinds.contains(CustodyRoleplayUseCase.Action.WAKE_DOWNED));
+        clock.advance(61_000);
+        assertTrue(actionsOf(civilian, CustodyRoleplayUseCase.Action.WAKE_DOWNED).size() == 1);
+    }
+
+    @Test
+    void projectionReleaseRequiresToolOnlineRestrainedOther() {
+        custody.requestCuffs(guard, civilian);
+        var req = ctx.custody().read().cuffRequests.values().iterator().next();
+        custody.accept(civilian, req.id);
+
+        // no release-capable tool in hand -> no release action
+        holdNothing(guard);
+        assertTrue(actionsOf(guard, CustodyRoleplayUseCase.Action.RELEASE_TARGET).isEmpty());
+
+        hold(guard, CustodyService.CUFF_KEY);
+        var release = actionsOf(guard, CustodyRoleplayUseCase.Action.RELEASE_TARGET);
+        assertEquals(1, release.size());
+        assertEquals(civilian.uuid().toString(), release.get(0).recordId());
+
+        // the restrained player never sees itself as a release target
+        giveItem(civilian, CustodyService.CUFF_KEY);
+        hold(civilian, CustodyService.CUFF_KEY);
+        assertTrue(actionsOf(civilian, CustodyRoleplayUseCase.Action.RELEASE_TARGET).isEmpty());
+
+        // offline target -> not actionable
+        civilian.online = false;
+        assertTrue(actionsOf(guard, CustodyRoleplayUseCase.Action.RELEASE_TARGET).isEmpty());
+        civilian.online = true;
+
+        // malformed persisted record is dropped silently, never surfaces
+        var store = ctx.custody().read();
+        store.cuffed.put("ghost", new CustodyStore.CuffRecord());
+        ctx.custody().write(store);
+        release = assertDoesNotThrow(() ->
+                actionsOf(guard, CustodyRoleplayUseCase.Action.RELEASE_TARGET));
+        assertEquals(1, release.size());
+        assertEquals(civilian.uuid().toString(), release.get(0).recordId());
+    }
+
+    @Test
+    void releaseByIdResolvesOnlineTargetByUuid() {
+        custody.requestCuffs(guard, civilian);
+        var req = ctx.custody().read().cuffRequests.values().iterator().next();
+        custody.accept(civilian, req.id);
+        hold(guard, CustodyService.CUFF_KEY);
+        assertTrue(custody.releaseById(guard, civilian.uuid().toString()));
+        assertFalse(custody.isCuffed(civilian));
+
+        custody.requestCuffs(guard, civilian);
+        var req2 = ctx.custody().read().cuffRequests.values().iterator().next();
+        custody.accept(civilian, req2.id);
+        giveItem(guard, CustodyService.CUFF_KEY);
+        hold(guard, CustodyService.CUFF_KEY);
+        assertFalse(custody.releaseById(guard, "not-a-player"));
+        assertFalse(custody.releaseById(guard, null));
+        civilian.online = false;
+        assertFalse(custody.releaseById(guard, civilian.uuid().toString()));
+        assertTrue(custody.isCuffed(civilian), "offline target must fail closed");
+    }
+
+    // ------------------------------------------------------------ recovery
+
+    @Test
+    void loginRecoveryRevalidatesIssuerAndRestoresHiddenItemOnce() {
+        giveItem(civilian, "minecraft:diamond_sword");
+        hold(civilian, "minecraft:diamond_sword");
+        custody.requestCuffs(guard, civilian);
+        var req = ctx.custody().read().cuffRequests.values().iterator().next();
+        custody.accept(civilian, req.id);
+        assertEquals(0, civilian.inventory.countOf("minecraft:diamond_sword"));
+
+        var state = players.state(guard.uuid());
+        state.fired = true;
+        players.save(guard.uuid(), state);
+
+        custody.recoverOnLogin(civilian);
+        assertFalse(custody.isCuffed(civilian));
+        assertEquals(1, civilian.inventory.countOf("minecraft:diamond_sword"));
+        assertTrue(audit.tail(20).stream().anyMatch(e -> "cuff_recovery".equals(e.action)
+                && e.details.contains("issuer_no_longer_eligible")));
+
+        custody.recoverOnLogin(civilian);
+        assertEquals(1, civilian.inventory.countOf("minecraft:diamond_sword"),
+                "login recovery must not duplicate the restored item");
+    }
+
+    @Test
+    void logoutRecoveryDropsOnlyTransientRequests() {
+        // durable restraint on civilian
+        custody.requestCuffs(guard, civilian);
+        var req = ctx.custody().read().cuffRequests.values().iterator().next();
+        custody.accept(civilian, req.id);
+        // transient request issued by guard to a second player
+        var civ2 = server.add("civ2");
+        assertTrue(custody.requestCuffs(guard, civ2));
+        assertFalse(ctx.custody().read().cuffRequests.isEmpty());
+
+        custody.recoverOnLogout(guard);
+        assertTrue(ctx.custody().read().cuffRequests.isEmpty(),
+                "logout removes requests issued by the player");
+        assertTrue(custody.isCuffed(civilian), "durable restraint survives logout");
+
+        custody.recoverOnLogout(civilian);
+        assertTrue(custody.isCuffed(civilian), "target logout keeps the cuff record");
+    }
+
+    @Test
+    void deathRecoveryQueuesHiddenItemAndClearsStateIdempotently() {
+        giveItem(civilian, "minecraft:diamond_sword");
+        hold(civilian, "minecraft:diamond_sword");
+        custody.requestCuffs(guard, civilian);
+        var req = ctx.custody().read().cuffRequests.values().iterator().next();
+        custody.accept(civilian, req.id);
+        hold(guard, CustodyService.ROPE);
+        custody.applyRope(guard, civilian);
+        hold(guard, CustodyService.HEAD_SACK);
+        custody.applyHeadSack(guard, civilian);
+        custody.startDowned(civilian, guard, "test");
+        var civ2 = server.add("civ2");
+        custody.requestCuffs(guard, civ2); // unrelated pending request survives
+
+        custody.recoverAfterDeath(civilian);
+
+        var store = ctx.custody().read();
+        assertFalse(store.cuffed.containsKey(civilian.uuid().toString()));
+        assertFalse(store.bound.containsKey(civilian.uuid().toString()));
+        assertFalse(store.headSacks.containsKey(civilian.uuid().toString()));
+        assertFalse(store.downed.containsKey(civilian.uuid().toString()));
+        assertEquals(1, store.cuffRequests.size(), "unrelated request must survive");
+        var pending = store.pendingItems.get(civilian.uuid().toString());
+        assertNotNull(pending, "hidden item must be queued, never injected mid-death");
+        assertEquals(1, pending.size());
+        assertEquals("minecraft:diamond_sword", pending.get(0).itemId);
+        assertEquals(0, civilian.inventory.countOf("minecraft:diamond_sword"));
+        assertTrue(audit.tail(20).stream().anyMatch(e -> "custody_death_recovery".equals(e.action)));
+
+        custody.recoverAfterDeath(civilian);
+        var after = ctx.custody().read();
+        assertEquals(1, after.pendingItems.get(civilian.uuid().toString()).size(),
+                "second death recovery must not queue duplicates");
+        assertEquals(0, civilian.inventory.countOf("minecraft:diamond_sword"));
+    }
+
+    @Test
+    void tickDropsMalformedRecordsAndOrphanHeadSack() {
+        var store = ctx.custody().read();
+        // cuff record with no usable identity -> malformed, fail closed
+        store.cuffed.put("ghost", new CustodyStore.CuffRecord());
+        // bound record with no usable identity under a real key -> malformed
+        store.bound.put(civilian.uuid().toString(), new CustodyStore.BoundRecord());
+        // orphan head sack: valid identity but no cuff/bound record
+        var sack = new CustodyStore.HeadSackRecord();
+        sack.target = civilian.name();
+        sack.targetUuid = civilian.uuid().toString();
+        sack.issuer = guard.name();
+        sack.issuerUuid = guard.uuid().toString();
+        store.headSacks.put("orphan_" + civilian.uuid(), sack);
+        // downed record with no identity -> malformed
+        store.downed.put("ghost_downed", new CustodyStore.DownedRecord());
+        // downed record with valid identity but unusable wake state -> malformed
+        var brokenDowned = new CustodyStore.DownedRecord();
+        brokenDowned.target = civilian.name();
+        brokenDowned.targetUuid = civilian.uuid().toString();
+        brokenDowned.dimension = "";
+        brokenDowned.wakesAt = 0;
+        store.downed.put("broken_downed", brokenDowned);
+        // persisted null / blank-id requests must not NPE the expiry sweep
+        store.cuffRequests.put("null_request", null);
+        store.cuffRequests.put("blank_request", new CustodyStore.CuffRequest());
+        ctx.custody().write(store);
+
+        assertDoesNotThrow(() -> custody.tick());
+
+        var after = ctx.custody().read();
+        assertFalse(after.cuffed.containsKey("ghost"));
+        assertFalse(after.bound.containsKey(civilian.uuid().toString()));
+        assertTrue(after.headSacks.isEmpty(), "orphan head sack must be removed");
+        assertFalse(after.downed.containsKey("ghost_downed"));
+        assertFalse(after.downed.containsKey("broken_downed"));
+        assertFalse(after.cuffRequests.containsKey("null_request"));
+        assertFalse(after.cuffRequests.containsKey("blank_request"));
+        assertTrue(audit.tail(40).stream().anyMatch(e ->
+                e.details != null && e.details.contains("malformed")
+                        || e.details != null && e.details.contains("orphan")));
+    }
+
+    @Test
+    void loginAndTickDropRestraintsWithMalformedOrIneligibleIssuer() {
+        // valid cuff from the real guard + bound/sack with a bogus issuer UUID
+        custody.requestCuffs(guard, civilian);
+        var req = ctx.custody().read().cuffRequests.values().iterator().next();
+        custody.accept(civilian, req.id);
+        var store = ctx.custody().read();
+        var bound = new CustodyStore.BoundRecord();
+        bound.target = civilian.name();
+        bound.targetUuid = civilian.uuid().toString();
+        bound.issuer = "ghost";
+        bound.issuerUuid = "not-a-uuid";
+        store.bound.put(civilian.uuid().toString(), bound);
+        var sack = new CustodyStore.HeadSackRecord();
+        sack.target = civilian.name();
+        sack.targetUuid = civilian.uuid().toString();
+        sack.issuer = "ghost";
+        sack.issuerUuid = "";
+        store.headSacks.put(civilian.uuid().toString(), sack);
+        ctx.custody().write(store);
+
+        custody.recoverOnLogin(civilian);
+
+        var after = ctx.custody().read();
+        assertTrue(custody.isCuffed(civilian), "valid cuff survives");
+        assertFalse(after.bound.containsKey(civilian.uuid().toString()),
+                "bound record with malformed issuer UUID must be dropped");
+        assertFalse(after.headSacks.containsKey(civilian.uuid().toString()),
+                "head sack with malformed issuer UUID must be dropped");
+        assertTrue(audit.tail(30).stream().anyMatch(e -> "custody_recovery".equals(e.action)
+                && e.details.contains("bound") && e.details.contains("issuer")));
+        assertTrue(audit.tail(30).stream().anyMatch(e -> "custody_recovery".equals(e.action)
+                && e.details.contains("head_sack") && e.details.contains("issuer")));
+    }
+
+    @Test
+    void tickDropsBoundAndOrphanedSackWhenIssuerBecomesIneligible() {
+        // bound + sack issued by the real guard with valid provenance
+        var store = ctx.custody().read();
+        var bound = new CustodyStore.BoundRecord();
+        bound.target = civilian.name();
+        bound.targetUuid = civilian.uuid().toString();
+        bound.issuer = guard.name();
+        bound.issuerUuid = guard.uuid().toString();
+        store.bound.put(civilian.uuid().toString(), bound);
+        var sack = new CustodyStore.HeadSackRecord();
+        sack.target = civilian.name();
+        sack.targetUuid = civilian.uuid().toString();
+        sack.issuer = guard.name();
+        sack.issuerUuid = guard.uuid().toString();
+        store.headSacks.put(civilian.uuid().toString(), sack);
+        ctx.custody().write(store);
+        // issuer loses authority before the next tick
+        var state = players.state(guard.uuid());
+        state.fired = true;
+        players.save(guard.uuid(), state);
+
+        custody.tick();
+
+        var after = ctx.custody().read();
+        assertFalse(after.bound.containsKey(civilian.uuid().toString()),
+                "bound record must be dropped when the issuer is no longer eligible");
+        assertTrue(after.headSacks.isEmpty(),
+                "dropping the bound record orphans the sack in the same pass");
+    }
+
+    @Test
+    void loginRecoveryDropsMalformedDownedRecord() {
+        var store = ctx.custody().read();
+        var downed = new CustodyStore.DownedRecord();
+        downed.target = civilian.name();
+        downed.targetUuid = civilian.uuid().toString();
+        downed.dimension = "";
+        downed.wakesAt = 0;
+        store.downed.put(civilian.uuid().toString(), downed);
+        ctx.custody().write(store);
+
+        custody.recoverOnLogin(civilian);
+
+        assertFalse(ctx.custody().read().downed.containsKey(civilian.uuid().toString()),
+                "malformed downed record must be discarded, not applied");
+        assertTrue(audit.tail(20).stream().anyMatch(e -> "custody_recovery".equals(e.action)
+                && e.details.contains("downed")));
+    }
+
+    @Test
+    void pendingItemsSkipMalformedEntriesAndDeliverValidOnce() {
+        var store = ctx.custody().read();
+        var items = new java.util.ArrayList<CustodyStore.PendingItem>();
+        items.add(null);
+        items.add(new CustodyStore.PendingItem()); // blank itemId, count 0
+        var empty = new CustodyStore.PendingItem();
+        empty.itemId = "minecraft:stone";
+        empty.count = 0;
+        items.add(empty);
+        var good = new CustodyStore.PendingItem();
+        good.itemId = "minecraft:apple";
+        good.count = 2;
+        items.add(good);
+        store.pendingItems.put(civilian.uuid().toString(), items);
+        ctx.custody().write(store);
+
+        custody.deliverPendingItems(civilian);
+
+        assertEquals(2, civilian.inventory.countOf("minecraft:apple"),
+                "valid items after malformed entries must still deliver");
+        assertTrue(ctx.custody().read().pendingItems.isEmpty(),
+                "malformed entries and delivered items must all be removed");
+        assertTrue(audit.tail(20).stream().anyMatch(e ->
+                e.details != null && e.details.contains("malformed_pending_item")));
+        custody.deliverPendingItems(civilian);
+        assertEquals(2, civilian.inventory.countOf("minecraft:apple"), "no duplicate delivery");
     }
 }

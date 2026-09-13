@@ -25,7 +25,9 @@ final class TestCommands {
     private TestCommands() {}
 
     static LiteralArgumentBuilder<CommandSourceStack> build() {
-        var test = Commands.literal("test");
+        // Keep permission in the advertised tree and retain the runtime's
+        // configured/local gates in gated() for direct or stale-client calls.
+        var test = StrajaCommands.adminOnly(Commands.literal("test"));
 
         test.then(Commands.literal("create-player")
                 .then(Commands.argument("name", StringArgumentType.word())
@@ -183,12 +185,44 @@ final class TestCommands {
                 .then(Commands.argument("id", StringArgumentType.word())
                         .executes(ctx -> run(ctx, runtime ->
                                 runtime.guards().recruit(player(ctx, runtime))))));
+        test.then(Commands.literal("faction")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("name", StringArgumentType.greedyString())
+                                .executes(ctx -> run(ctx, runtime -> send(ctx,
+                                        "faction=" + runtime.guards().declareNativeFaction(player(ctx, runtime),
+                                                StringArgumentType.getString(ctx, "name"))))))));
         test.then(Commands.literal("quiz")
                 .then(Commands.argument("id", StringArgumentType.word())
                         .then(Commands.argument("answer", StringArgumentType.greedyString())
                                 .executes(ctx -> run(ctx, runtime ->
                                         runtime.guards().quiz(player(ctx, runtime),
                                                 StringArgumentType.getString(ctx, "answer")))))));
+        test.then(Commands.literal("set-blocks")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("blocks", IntegerArgumentType.integer(0))
+                                .executes(ctx -> {
+                                    var runtime = gated(ctx);
+                                    if (runtime == null) return 0;
+                                    var player = player(ctx, runtime);
+                                    if (player == null) return 0;
+                                    GuardState state = runtime.players().state(player.uuid());
+                                    state.serviceBlocks = IntegerArgumentType.getInteger(ctx, "blocks");
+                                    runtime.players().save(player.uuid(), state);
+                                    send(ctx, "serviceBlocks=" + state.serviceBlocks + " pentru " + player.name());
+                                    return 1;
+                                }))));
+        test.then(Commands.literal("training-progress")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(ctx -> run(ctx, runtime ->
+                                runtime.guards().showProgress(player(ctx, runtime))))));
+        test.then(Commands.literal("training-promote")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(ctx -> run(ctx, runtime ->
+                                runtime.guards().requestPromotion(player(ctx, runtime))))));
+        test.then(Commands.literal("training-manual")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(ctx -> run(ctx, runtime ->
+                                runtime.guards().giveManual(player(ctx, runtime))))));
         test.then(Commands.literal("salary")
                 .then(Commands.argument("id", StringArgumentType.word())
                         .executes(ctx -> run(ctx, runtime ->
@@ -322,6 +356,21 @@ final class TestCommands {
                                         runtime.guards().setLocation(player(ctx, runtime),
                                                 StringArgumentType.getString(ctx, "name")))))));
 
+        test.then(Commands.literal("setup")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(ctx -> run(ctx, runtime ->
+                                runtime.guards().showSetup(player(ctx, runtime))))));
+
+        test.then(Commands.literal("setup-here")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(ctx -> run(ctx, runtime ->
+                                runtime.guards().setupLocationsHere(player(ctx, runtime))))));
+
+        test.then(Commands.literal("setup-patrol")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(ctx -> run(ctx, runtime ->
+                                runtime.guards().setupPatrol(player(ctx, runtime))))));
+
         // missions
         test.then(Commands.literal("select-slot")
                 .then(Commands.argument("id", StringArgumentType.word())
@@ -354,6 +403,13 @@ final class TestCommands {
                                     send(ctx, "give=" + ok);
                                 })))));
 
+        test.then(Commands.literal("mission-issue")
+                .then(Commands.argument("issuer", StringArgumentType.word())
+                        .then(Commands.argument("target", StringArgumentType.word())
+                                .executes(ctx -> run(ctx, runtime -> send(ctx,
+                                        "issue=" + runtime.missionRoleplay().issueDraft(
+                                                playerArg(ctx, runtime, "issuer"),
+                                                resolveVirtual(ctx, runtime, "target"))))))));
         test.then(Commands.literal("mission-invite")
                 .then(Commands.argument("issuer", StringArgumentType.word())
                         .then(Commands.argument("mid", StringArgumentType.word())
@@ -511,8 +567,8 @@ final class TestCommands {
                                                     tgt.health(), tgt.absorption(),
                                                     IntegerArgumentType.getInteger(ctx, "damage"));
                                             if (outcome.action()
-                                                    == com.dwurdy.straja.application.service.CustodyService
-                                                            .BatonOutcome.Action.ALLOW_NONLETHAL) {
+                                                    == com.dwurdy.straja.application.port.in.CustodyRoleplayUseCase
+                                                            .DamageAction.ALLOW_NONLETHAL) {
                                                 double capped = runtime.custody().capBatonDamage(
                                                         tgt.health(), tgt.absorption());
                                                 tgt.setHealth(Math.max(1, tgt.health() - Math.min(capped,

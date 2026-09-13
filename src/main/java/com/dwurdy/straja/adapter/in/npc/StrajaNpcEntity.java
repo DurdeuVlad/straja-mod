@@ -26,7 +26,8 @@ import java.util.function.Supplier;
  * Native Straja NPC. Server-authoritative: the role is an explicit persistent
  * field, never derived from the display name or position. All interactions are
  * routed through {@link NpcInteractionService} which applies the same
- * permission checks as the command layer.
+ * permission checks as the command layer and presents role-specific clickable
+ * chat actions when a player interacts.
  */
 public class StrajaNpcEntity extends PathfinderMob {
     public static final String TYPE_NAME = "straja_npc";

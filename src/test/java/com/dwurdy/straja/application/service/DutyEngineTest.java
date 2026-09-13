@@ -2,6 +2,7 @@ package com.dwurdy.straja.application.service;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.dwurdy.straja.domain.model.DutyEngine;
 import com.dwurdy.straja.domain.model.StrajaPolicies;
 import com.dwurdy.straja.domain.model.GuardState;
 import com.dwurdy.straja.domain.model.Rank;

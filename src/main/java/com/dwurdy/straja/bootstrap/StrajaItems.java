@@ -59,6 +59,9 @@ public final class StrajaItems {
     public static final DeferredItem<Item> FINE_NOTICE = ITEMS.register("fine_notice",
             () -> new Item(new Item.Properties().stacksTo(1)));
 
+    public static final DeferredItem<Item> TRAINING_MANUAL = ITEMS.register("training_manual",
+            () -> new Item(new Item.Properties().stacksTo(1).rarity(Rarity.UNCOMMON)));
+
     private StrajaItems() {}
 
     public static void register(IEventBus bus) {

@@ -2,8 +2,10 @@ package com.dwurdy.straja;
 
 import com.dwurdy.straja.adapter.in.command.StrajaCommands;
 import com.dwurdy.straja.adapter.in.event.StrajaEvents;
+import com.dwurdy.straja.adapter.in.form.FormPayloads;
 import com.dwurdy.straja.adapter.in.npc.StrajaNpcEntity;
 import com.dwurdy.straja.bootstrap.StrajaItems;
+import com.dwurdy.straja.bootstrap.StrajaMenus;
 import com.dwurdy.straja.bootstrap.StrajaRuntime;
 import com.dwurdy.straja.config.StrajaServerConfig;
 import net.neoforged.bus.api.IEventBus;
@@ -13,6 +15,7 @@ import net.neoforged.fml.config.ModConfig;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
+import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,7 +31,9 @@ public class StrajaMod {
     public StrajaMod(IEventBus modBus, ModContainer container) {
         container.registerConfig(ModConfig.Type.SERVER, StrajaServerConfig.SPEC);
         StrajaItems.register(modBus);
+        StrajaMenus.register(modBus);
         StrajaNpcEntity.register(modBus);
+        modBus.addListener(RegisterPayloadHandlersEvent.class, FormPayloads::register);
         NeoForge.EVENT_BUS.addListener(StrajaCommands::onRegisterCommands);
         NeoForge.EVENT_BUS.register(new StrajaEvents());
         NeoForge.EVENT_BUS.addListener(ServerStartedEvent.class,

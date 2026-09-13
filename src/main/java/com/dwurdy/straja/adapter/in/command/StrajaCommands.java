@@ -1,11 +1,15 @@
 package com.dwurdy.straja.adapter.in.command;
 
 import com.dwurdy.straja.adapter.out.minecraft.MinecraftPlayerGateway;
+import com.dwurdy.straja.adapter.in.npc.NpcInteractionService;
+import com.dwurdy.straja.adapter.in.npc.NpcRoles;
+import com.dwurdy.straja.adapter.out.persistence.StrajaDataProvider;
 import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.bootstrap.StrajaRuntime;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.commands.CommandSourceStack;
@@ -30,36 +34,40 @@ public final class StrajaCommands {
         dispatcher.register(root());
     }
 
-    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> root() {
+    private static LiteralArgumentBuilder<CommandSourceStack> root() {
         var root = Commands.literal("straja");
 
         root.executes(StrajaCommands::help);
         root.then(Commands.literal("help").executes(StrajaCommands::help));
+        // NPC clicks use a short-lived, player-bound token; this is not a
+        // public gameplay-command alias and is intentionally absent from help.
+        root.then(npcActionNode());
         root.then(Commands.literal("status").executes(c -> player(c, StrajaRuntime.get().guards()::showStatus)));
         root.then(Commands.literal("rules").executes(c -> player(c, StrajaRuntime.get().guards()::showRules)));
         root.then(Commands.literal("regulament").executes(c -> player(c, StrajaRuntime.get().guards()::showRules)));
+        root.then(adminOnly(Commands.literal("backup").executes(StrajaCommands::backup)));
 
         // recruitment
-        root.then(Commands.literal("invite")
+        root.then(adminOnly(Commands.literal("invite")
                 .then(Commands.argument("player", EntityArgument.player())
-                        .executes(c -> StrajaRuntime.get().guards().invite(actor(c), target(c, "player")) ? 1 : 0)));
-        root.then(Commands.literal("recruit").executes(c -> player(c, StrajaRuntime.get().guards()::recruit)));
-        root.then(Commands.literal("recrute").executes(c -> player(c, StrajaRuntime.get().guards()::recruit)));
-        root.then(Commands.literal("quiz")
+                        .executes(c -> StrajaRuntime.get().guards().invite(actor(c), target(c, "player")) ? 1 : 0))));
+        root.then(adminOnly(Commands.literal("recruit").executes(c -> player(c, StrajaRuntime.get().guards()::recruit))));
+        root.then(adminOnly(Commands.literal("recrute").executes(c -> player(c, StrajaRuntime.get().guards()::recruit))));
+        root.then(adminOnly(Commands.literal("quiz")
                 .executes(c -> player(c, p -> StrajaRuntime.get().guards().quiz(p, null)))
                 .then(Commands.argument("answer", StringArgumentType.greedyString())
                         .executes(c -> player(c, p -> StrajaRuntime.get().guards()
-                                .quiz(p, StringArgumentType.getString(c, "answer"))))));
+                                .quiz(p, StringArgumentType.getString(c, "answer")))))));
 
         // duty
-        root.then(Commands.literal("start").executes(c -> player(c, StrajaRuntime.get().guards()::startDuty)));
-        root.then(Commands.literal("checkpoint")
+        root.then(adminOnly(Commands.literal("start").executes(c -> player(c, StrajaRuntime.get().guards()::startDuty))));
+        root.then(adminOnly(Commands.literal("checkpoint")
                 .then(Commands.argument("id", StringArgumentType.word())
                         .executes(c -> player(c, p -> StrajaRuntime.get().guards()
-                                .checkpoint(p, StringArgumentType.getString(c, "id"))))));
-        root.then(Commands.literal("stop").executes(c -> player(c, StrajaRuntime.get().guards()::stopDuty)));
+                                .checkpoint(p, StringArgumentType.getString(c, "id")))))));
+        root.then(adminOnly(Commands.literal("stop").executes(c -> player(c, StrajaRuntime.get().guards()::stopDuty))));
 
-        var special = Commands.literal("special");
+        var special = adminOnly(Commands.literal("special"));
         special.then(Commands.literal("start").then(Commands.argument("player", EntityArgument.player())
                 .executes(c -> { StrajaRuntime.get().guards().specialStart(actor(c), target(c, "player")); return 1; })));
         special.then(Commands.literal("resume").then(Commands.argument("player", EntityArgument.player())
@@ -69,58 +77,82 @@ public final class StrajaCommands {
         root.then(special);
 
         // resignation
-        var resign = Commands.literal("resign");
+        var resign = adminOnly(Commands.literal("resign"));
         resign.executes(c -> player(c, p -> StrajaRuntime.get().guards().resign(p, null)));
         resign.then(Commands.argument("action", StringArgumentType.word())
                 .executes(c -> player(c, p -> StrajaRuntime.get().guards()
                         .resign(p, StringArgumentType.getString(c, "action")))));
         root.then(resign);
-        var demisie = Commands.literal("demisie");
+        var demisie = adminOnly(Commands.literal("demisie"));
         demisie.executes(c -> player(c, p -> StrajaRuntime.get().guards().resign(p, null)));
         demisie.then(Commands.argument("action", StringArgumentType.word())
                 .executes(c -> player(c, p -> StrajaRuntime.get().guards()
                         .resign(p, StringArgumentType.getString(c, "action")))));
         root.then(demisie);
-        root.then(Commands.literal("rejoin").executes(c -> player(c, StrajaRuntime.get().guards()::rejoin)));
+        root.then(adminOnly(Commands.literal("rejoin").executes(c -> player(c, StrajaRuntime.get().guards()::rejoin))));
 
         // economy/equipment
-        root.then(Commands.literal("salary").executes(c -> player(c, StrajaRuntime.get().guards()::salary)));
-        root.then(Commands.literal("coins").executes(c -> player(c, StrajaRuntime.get().guards()::coins)));
-        root.then(Commands.literal("food").executes(c -> player(c, StrajaRuntime.get().guards()::food)));
-        root.then(Commands.literal("kit").executes(c -> player(c, StrajaRuntime.get().guards()::kit)));
-        root.then(Commands.literal("regear").executes(c -> player(c, StrajaRuntime.get().guards()::requestRegear)));
-        root.then(Commands.literal("approve-regear").then(Commands.argument("player", EntityArgument.player())
-                .executes(c -> { StrajaRuntime.get().guards().approveRegear(actor(c), target(c, "player")); return 1; })));
+        root.then(adminOnly(Commands.literal("salary").executes(c -> player(c, StrajaRuntime.get().guards()::salary))));
+        root.then(adminOnly(Commands.literal("coins").executes(c -> player(c, StrajaRuntime.get().guards()::coins))));
+        root.then(adminOnly(Commands.literal("food").executes(c -> player(c, StrajaRuntime.get().guards()::food))));
+        root.then(adminOnly(Commands.literal("kit").executes(c -> player(c, StrajaRuntime.get().guards()::kit))));
+        root.then(adminOnly(Commands.literal("regear").executes(c -> player(c, StrajaRuntime.get().guards()::requestRegear))));
+        root.then(adminOnly(Commands.literal("approve-regear").then(Commands.argument("player", EntityArgument.player())
+                .executes(c -> { StrajaRuntime.get().guards().approveRegear(actor(c), target(c, "player")); return 1; }))));
 
         // admin rank ops
         for (String op : new String[]{"promote", "demote", "suspend", "fire"}) {
-            root.then(Commands.literal(op).then(Commands.argument("player", EntityArgument.player())
-                    .executes(c -> { adminRank(c, op); return 1; })));
+            var command = Commands.literal(op)
+                    .then(Commands.argument("player", EntityArgument.player())
+                            .executes(c -> { adminRank(c, op); return 1; }));
+            root.then(adminOnly(command));
         }
-        root.then(Commands.literal("reinstate").then(Commands.argument("player", EntityArgument.player())
-                .executes(c -> StrajaRuntime.get().guards().reinstate(actor(c), target(c, "player")) ? 1 : 0)));
+        var reinstate = Commands.literal("reinstate")
+                .then(Commands.argument("player", EntityArgument.player())
+                        .executes(c -> StrajaRuntime.get().guards().reinstate(actor(c), target(c, "player")) ? 1 : 0));
+        root.then(adminOnly(reinstate));
+        root.then(adminOnly(Commands.literal("faction")
+                .then(Commands.argument("player", EntityArgument.player())
+                        .then(Commands.argument("name", StringArgumentType.greedyString())
+                                .executes(c -> StrajaRuntime.get().guards()
+                                        .setNativeFactionFor(actor(c), target(c, "player"),
+                                                StringArgumentType.getString(c, "name")) ? 1 : 0)))));
 
         // setup
-        root.then(Commands.literal("set-checkpoint").then(Commands.argument("id", StringArgumentType.word())
-                .executes(c -> player(c, p -> StrajaRuntime.get().guards()
-                        .setCheckpoint(p, StringArgumentType.getString(c, "id"))))));
-        root.then(Commands.literal("set-mission-time")
+        var setCheckpoint = Commands.literal("set-checkpoint")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(c -> adminActor(c, p -> StrajaRuntime.get().guards()
+                                .setCheckpoint(p, StringArgumentType.getString(c, "id")))));
+        root.then(adminOnly(setCheckpoint));
+        var setMissionTime = Commands.literal("set-mission-time")
                 .then(Commands.argument("id", StringArgumentType.word())
                         .then(Commands.argument("minutes", IntegerArgumentType.integer())
-                                .executes(c -> player(c, p -> StrajaRuntime.get().guards()
+                                .executes(c -> adminActor(c, p -> StrajaRuntime.get().guards()
                                         .setMissionTime(p, StringArgumentType.getString(c, "id"),
-                                                IntegerArgumentType.getInteger(c, "minutes")))))));
-        root.then(Commands.literal("set-location").then(Commands.argument("name", StringArgumentType.word())
-                .executes(c -> player(c, p -> StrajaRuntime.get().guards()
-                        .setLocation(p, StringArgumentType.getString(c, "name"))))));
-        root.then(Commands.literal("setup").executes(c -> player(c, StrajaRuntime.get().guards()::showSetup)));
+                                                IntegerArgumentType.getInteger(c, "minutes"))))));
+        root.then(adminOnly(setMissionTime));
+        var setLocation = Commands.literal("set-location")
+                .then(Commands.argument("name", StringArgumentType.word())
+                        .executes(c -> adminActor(c, p -> StrajaRuntime.get().guards()
+                                .setLocation(p, StringArgumentType.getString(c, "name")))));
+        root.then(adminOnly(setLocation));
+        var setup = Commands.literal("setup")
+                .executes(c -> adminActor(c, StrajaRuntime.get().guards()::showSetup));
+        setup.then(Commands.literal("here")
+                .executes(c -> adminActor(c, StrajaRuntime.get().guards()::setupLocationsHere)));
+        setup.then(Commands.literal("patrol")
+                .executes(c -> adminActor(c, StrajaRuntime.get().guards()::setupPatrol)));
+        setup.then(Commands.literal("npcs").executes(NpcCommands::spawnMissing));
+        root.then(adminOnly(setup));
 
         // inbox communication
         for (String op : new String[]{"report", "message", "request"}) {
-            root.then(Commands.literal(op).then(Commands.argument("text", StringArgumentType.greedyString())
-                    .executes(c -> player(c, p -> inboxOp(c, p, op)))));
+            var command = Commands.literal(op)
+                    .then(Commands.argument("text", StringArgumentType.greedyString())
+                            .executes(c -> player(c, p -> inboxOp(c, p, op))));
+            root.then(adminOnly(command));
         }
-        root.then(Commands.literal("inbox").executes(StrajaCommands::inbox));
+        root.then(adminOnly(Commands.literal("inbox").executes(StrajaCommands::inbox)));
 
         // missions
         root.then(missionNode());
@@ -150,14 +182,19 @@ public final class StrajaCommands {
         return root;
     }
 
+    private static LiteralArgumentBuilder<CommandSourceStack> npcActionNode() {
+        return Commands.literal("npc-action")
+                .then(Commands.argument("token", StringArgumentType.word())
+                        .executes(StrajaCommands::npcAction));
+    }
+
     /**
      * {@code /straja migrate <worldPath>} — reads kubejs_persistent_data.nbt and
      * playerdata/*.dat under the given world directory and merges them into the
      * native stores. Idempotent; reports per-store counts.
      */
     private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> migrateNode() {
-        var node = Commands.literal("migrate")
-                .requires(source -> source.hasPermission(2));
+        var node = adminOnly(Commands.literal("migrate"));
         node.then(Commands.argument("worldPath", StringArgumentType.greedyString())
                 .executes(c -> {
                     var source = c.getSource();
@@ -205,7 +242,7 @@ public final class StrajaCommands {
     }
 
     private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> missionNode() {
-        var node = Commands.literal("mission");
+        var node = adminOnly(Commands.literal("mission"));
         node.executes(c -> player(c, p -> StrajaRuntime.get().missions().list(p)));
         node.then(Commands.literal("list").executes(c -> player(c, p -> StrajaRuntime.get().missions().list(p))));
         node.then(Commands.literal("carnet").executes(c -> player(c, StrajaRuntime.get().missions()::giveCarnet)));
@@ -310,7 +347,7 @@ public final class StrajaCommands {
     }
 
     private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> cuffsNode() {
-        var node = Commands.literal("cuffs");
+        var node = adminOnly(Commands.literal("cuffs"));
         node.executes(c -> player(c, p -> StrajaRuntime.get().custody().cuffStatus(p)));
         node.then(Commands.literal("status").executes(c -> player(c, StrajaRuntime.get().custody()::cuffStatus)));
         node.then(Commands.literal("downed").executes(c -> player(c, StrajaRuntime.get().custody()::downedStatus)));
@@ -354,7 +391,7 @@ public final class StrajaCommands {
     }
 
     private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> prisonNode() {
-        var node = Commands.literal("prison");
+        var node = adminOnly(Commands.literal("prison"));
         node.executes(c -> player(c, p -> StrajaRuntime.get().prison().status(p)));
         node.then(Commands.literal("status").executes(c -> player(c, StrajaRuntime.get().prison()::status)));
         node.then(Commands.literal("cells").executes(c -> player(c, StrajaRuntime.get().prison()::listCells)));
@@ -418,7 +455,7 @@ public final class StrajaCommands {
     }
 
     private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> fineNode() {
-        var node = Commands.literal("fine");
+        var node = adminOnly(Commands.literal("fine"));
         node.then(Commands.literal("help").executes(ctx -> {
             String[] lines = {
                     "/straja fine book | write <jucător> <sumă> <lege> <descriere> | draft | issue <jucător>",
@@ -511,7 +548,7 @@ public final class StrajaCommands {
     }
 
     private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> complaintNode() {
-        var node = Commands.literal("complaint");
+        var node = adminOnly(Commands.literal("complaint"));
         node.then(Commands.literal("submit")
                 .then(Commands.argument("accused", StringArgumentType.word())
                         .then(Commands.argument("category", StringArgumentType.word())
@@ -564,7 +601,7 @@ public final class StrajaCommands {
     }
 
     private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> roomNode() {
-        var node = Commands.literal("room");
+        var node = adminOnly(Commands.literal("room"));
         node.executes(c -> player(c, p -> StrajaRuntime.get().rooms().status(p)));
         node.then(Commands.literal("status").executes(c -> player(c, StrajaRuntime.get().rooms()::status)));
         node.then(Commands.literal("list").executes(c -> player(c, StrajaRuntime.get().rooms()::list)));
@@ -591,7 +628,7 @@ public final class StrajaCommands {
     }
 
     private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> archiveNode() {
-        var node = Commands.literal("archive");
+        var node = adminOnly(Commands.literal("archive"));
         node.then(Commands.literal("role").then(Commands.argument("player", StringArgumentType.word())
                 .then(Commands.argument("enabled", StringArgumentType.word())
                         .executes(c -> player(c, p -> StrajaRuntime.get().archive()
@@ -680,10 +717,10 @@ public final class StrajaCommands {
         return node;
     }
 
-    /** Resolves a player by name/uuid through the server view (includes test virtuals). */
+    /** Resolves a player by name/uuid through the query port (includes test virtuals). */
     private static PlayerGateway find(CommandContext<CommandSourceStack> ctx, String name) {
         String wanted = StringArgumentType.getString(ctx, name);
-        return StrajaRuntime.get().context().server().findPlayer(wanted);
+        return StrajaRuntime.get().playerQueries().findPlayer(wanted);
     }
 
     // ------------------------------------------------------------ plumbing
@@ -718,6 +755,22 @@ public final class StrajaCommands {
         }
         op.accept(new MinecraftPlayerGateway(ctx.getSource().getServer(), player.getUUID()));
         return 1;
+    }
+
+    private static int npcAction(CommandContext<CommandSourceStack> ctx) {
+        ServerPlayer player = ctx.getSource().getPlayer();
+        if (player == null) {
+            ctx.getSource().sendFailure(Component.literal("Această acțiune necesită un jucător."));
+            return 0;
+        }
+        String actionId = NpcInteractionService.consumeActionToken(
+                StringArgumentType.getString(ctx, "token"), player.getUUID());
+        boolean handled = actionId != null
+                && NpcRoles.performAction(actionId, player, player.serverLevel());
+        if (!handled) {
+            ctx.getSource().sendFailure(Component.literal("Acțiunea NPC a expirat sau nu este validă."));
+        }
+        return handled ? 1 : 0;
     }
 
     private static void adminRank(CommandContext<CommandSourceStack> ctx, String op) {
@@ -767,20 +820,91 @@ public final class StrajaCommands {
         return 1;
     }
 
+    static List<String> helpLines(boolean admin) {
+        return CommandPolicy.helpLines(admin);
+    }
+
+    /** Shared typed-command policy: every non-public root is permission level 2. */
+    static boolean isAdminOnly(String command) {
+        return CommandPolicy.isAdminOnly(command);
+    }
+
+    static LiteralArgumentBuilder<CommandSourceStack> adminOnly(
+            LiteralArgumentBuilder<CommandSourceStack> node) {
+        if (!isAdminOnly(node.getLiteral())) {
+            throw new IllegalArgumentException("Unclassified admin command: " + node.getLiteral());
+        }
+        return node.requires(StrajaCommands::hasAdminPermission);
+    }
+
+    private static boolean hasAdminPermission(CommandSourceStack source) {
+        return source.hasPermission(2);
+    }
+
     private static int help(CommandContext<CommandSourceStack> ctx) {
-        String[] lines = {
-                "/straja status | rules | recruit | quiz <răspuns>",
-                "/straja start | checkpoint <id> | stop | special <start|resume|complete> <jucător>",
-                "/straja salary | food | kit | regear | approve-regear <jucător>",
-                "/straja resign <confirm|anuleaza> | rejoin | report <text> | message <text> | request <text>",
-                "/straja invite <jucător> | promote | demote | suspend | reinstate | fire",
-                "/straja set-checkpoint <id> | set-mission-time <id> <min> | set-location <nume> | setup",
-                "/straja npc list|spawn|assign|set-name|set-skin|remove",
-                "/straja mission | fine | complaint | prison | room | archive — vezi /straja <sub> help"
-        };
-        for (String line : lines) {
+        for (String line : helpLines(ctx.getSource().hasPermission(2))) {
             ctx.getSource().sendSystemMessage(Component.literal(line));
         }
         return 1;
+    }
+
+    private static int backup(CommandContext<CommandSourceStack> ctx) {
+        try {
+            var result = StrajaDataProvider.createBackup(ctx.getSource().getServer());
+            ctx.getSource().sendSuccess(() -> Component.literal(
+                    "Backup Straja creat: " + result.id() + " (" + result.storeCount()
+                            + " store-uri, " + result.retainedSnapshotCount() + " snapshot-uri păstrate)."), true);
+            return 1;
+        } catch (RuntimeException error) {
+            ctx.getSource().sendFailure(Component.literal("Backup Straja eșuat: " + error.getMessage()));
+            return 0;
+        }
+    }
+
+    private static int adminActor(CommandContext<CommandSourceStack> ctx,
+                                  java.util.function.Consumer<PlayerGateway> op) {
+        op.accept(actor(ctx));
+        return 1;
+    }
+
+    /** Pure policy manifest kept separate so command-surface tests need no MC runtime. */
+    static final class CommandPolicy {
+        private static final Set<String> ADMIN_ONLY_COMMANDS = Set.of(
+                // recruitment and guard lifecycle
+                "invite", "recruit", "recrute", "quiz", "start", "checkpoint", "stop", "special",
+                "resign", "demisie", "rejoin",
+                // economy and communication
+                "salary", "coins", "food", "kit", "regear", "approve-regear",
+                "report", "message", "request", "inbox",
+                // roleplay service lanes
+                "mission", "cuffs", "prison", "fine", "complaint", "room", "archive",
+                // typed setup and administrator operations
+                "promote", "demote", "suspend", "fire", "reinstate", "faction",
+                "set-checkpoint", "set-mission-time", "set-location", "setup",
+                "migrate", "backup", "npc", "debug", "test");
+
+        private CommandPolicy() {}
+
+        static boolean isAdminOnly(String command) {
+            return ADMIN_ONLY_COMMANDS.contains(command);
+        }
+
+        static List<String> helpLines(boolean admin) {
+            if (!admin) {
+                return List.of("/straja status | rules | regulament | help");
+            }
+            return List.of(
+                    "/straja status | rules | regulament | help",
+                    "/straja invite <jucător> | recruit | quiz <răspuns> | resign | rejoin",
+                    "/straja start | checkpoint <id> | stop | special <start|resume|complete> <jucător>",
+                    "/straja salary | coins | food | kit | regear | approve-regear <jucător>",
+                    "/straja report|message|request <text> | inbox",
+                    "/straja promote | demote | suspend | reinstate | fire | faction <jucător> <nume>",
+                    "/straja setup — checklist ghidat | setup here | setup patrol | setup npcs",
+                    "/straja set-checkpoint <id> | set-mission-time <id> <min> | set-location <nume>",
+                    "/straja mission | cuffs | prison | fine | complaint | room | archive — help pe subcomandă",
+                    "/straja npc list|spawn|assign|set-name|set-skin|remove",
+                    "/straja migrate <worldPath> | backup | debug ... | test ...");
+        }
     }
 }

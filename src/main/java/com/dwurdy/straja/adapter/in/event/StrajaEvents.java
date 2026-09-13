@@ -1,15 +1,18 @@
 package com.dwurdy.straja.adapter.in.event;
 
-import com.dwurdy.straja.adapter.in.npc.NpcRoles;
 import com.dwurdy.straja.adapter.in.npc.StrajaNpcEntity;
+import com.dwurdy.straja.adapter.in.item.PhysicalItemSurface;
 import com.dwurdy.straja.adapter.out.minecraft.MinecraftPlayerGateway;
+import com.dwurdy.straja.application.port.out.ItemView;
+import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.bootstrap.StrajaRuntime;
+import com.dwurdy.straja.domain.model.Capability;
 import net.minecraft.network.chat.Component;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
-import net.neoforged.neoforge.server.ServerLifecycleHooks;
+
 
 /**
  * NeoForge event adapter: server lifecycle, per-tick duty timers, and
@@ -24,17 +27,19 @@ public final class StrajaEvents {
         StrajaRuntime runtime = StrajaRuntime.get();
         if (runtime == null) return;
         runtime.serverGateway().tick();
-        runtime.missions().tick();
-        runtime.custody().tick();
-        runtime.prison().tick();
-        runtime.fines().tick();
+        runtime.missionRoleplay().tick();
+        runtime.custodyRoleplay().tick();
+        runtime.prisonRoleplay().tick();
+        runtime.fineRoleplay().tick();
         if (runtime.serverGateway().tickCount() % 20 != 0) return;
+        runtime.formSessions().purgeExpired();
+        com.dwurdy.straja.adapter.in.npc.NpcInteractionService.purgeExpiredTokens();
         for (var player : runtime.serverGateway().onlinePlayers()) {
-            runtime.guards().tickPlayerDuty(player);
+            runtime.guardDuty().tickPlayerDuty(player);
         }
         if (runtime.policies().testCommandsEnabled && runtime.policies().isLocalEnvironment()) {
             for (var virtual : runtime.testPlayers().all()) {
-                runtime.guards().tickPlayerDuty(virtual);
+                runtime.guardDuty().tickPlayerDuty(virtual);
             }
         }
     }
@@ -46,20 +51,21 @@ public final class StrajaEvents {
                 || !(event.getEntity() instanceof StrajaNpcEntity npc)) return;
         StrajaRuntime runtime = StrajaRuntime.get();
         if (runtime == null) return;
-        var record = runtime.context().npcs().read().npcs.get(npc.getStringUUID());
-        if (record == null) {
-            // Re-adopt persisted entities that outlived the registry — but only
-            // when the entity still carries a valid role; otherwise leave it
-            // unregistered rather than creating junk records.
-            if (NpcRoles.isKnown(npc.getRoleId())) {
-                runtime.npcs().register(npc.getStringUUID(), npc.getRoleId());
-            }
+        var registration = runtime.npcRegistry().registration(npc.getStringUUID());
+        if (registration == null) {
+            // Re-adopt persisted entities that outlived the registry; the port
+            // rejects unknown roles rather than creating junk records.
+            runtime.npcRegistry().adopt(npc.getStringUUID(), npc.getRoleId());
             return;
         }
-        if (record.role != null && !record.role.isEmpty()) npc.setRoleId(record.role);
-        if (record.skin != null && !record.skin.isEmpty()) npc.setSkin(record.skin);
-        if (record.displayName != null && !record.displayName.isEmpty()) {
-            npc.setCustomName(Component.literal(record.displayName));
+        if (registration.role() != null && !registration.role().isEmpty()) {
+            npc.setRoleId(registration.role());
+        }
+        if (registration.skin() != null && !registration.skin().isEmpty()) {
+            npc.setSkin(registration.skin());
+        }
+        if (registration.displayName() != null && !registration.displayName().isEmpty()) {
+            npc.setCustomName(Component.literal(registration.displayName()));
         }
     }
 
@@ -68,16 +74,28 @@ public final class StrajaEvents {
         StrajaRuntime runtime = StrajaRuntime.get();
         if (runtime == null || !(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) return;
         var gateway = new MinecraftPlayerGateway(event.getEntity().getServer(), player.getUUID());
-        var state = runtime.players().state(player.getUUID());
-        runtime.guards().closeDutyAfterRestart(gateway, state, runtime.bootId());
-        state.runtimeBootId = runtime.bootId();
-        runtime.players().save(player.getUUID(), state);
-        runtime.custody().deliverPendingKeys(gateway);
-        runtime.custody().deliverPendingItems(gateway);
-        runtime.complaints().claimPendingRewards(gateway);
-        runtime.archive().deliverPending(gateway);
-        runtime.rooms().assignAutomatically(gateway);
-        runtime.rooms().processWaitlist();
+        runtime.guardDuty().recoverOnLogin(gateway);
+        runtime.custodyRoleplay().recoverOnLogin(gateway);
+        runtime.prisonRoleplay().recoverOnLogin(gateway);
+        runtime.complaintRoleplay().claimPendingRewards(gateway);
+        runtime.missionRoleplay().deliverPendingRewards(gateway);
+        runtime.fineRoleplay().recoverOnLogin(gateway);
+        runtime.archiveRoleplay().deliverPending(gateway);
+        runtime.roomRoleplay().assignAutomatically(gateway);
+        runtime.roomRoleplay().processWaitlist();
+        String setupHint = runtime.playerQueries().setupHintFor(gateway);
+        if (setupHint != null) {
+            gateway.tell("[Straja] Configurarea este incompletă. " + setupHint
+                    + " Rulează /straja setup pentru checklist-ul complet.");
+        }
+    }
+
+    @SubscribeEvent
+    public void onLogout(PlayerEvent.PlayerLoggedOutEvent event) {
+        StrajaRuntime runtime = StrajaRuntime.get();
+        if (runtime == null || !(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) return;
+        var gateway = new MinecraftPlayerGateway(event.getEntity().getServer(), player.getUUID());
+        runtime.custodyRoleplay().recoverOnLogout(gateway);
     }
 
     /**
@@ -91,7 +109,7 @@ public final class StrajaEvents {
         if (!(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer target)) return;
         var targetGateway = new MinecraftPlayerGateway(target.getServer(), target.getUUID());
         // Downed targets cannot be harmed further.
-        if (runtime.custody().isDowned(targetGateway)) {
+        if (runtime.custodyRoleplay().isDowned(targetGateway)) {
             event.setCanceled(true);
             return;
         }
@@ -99,15 +117,15 @@ public final class StrajaEvents {
         if (!(attackerEntity instanceof net.minecraft.server.level.ServerPlayer attacker)) return;
         var attackerGateway = new MinecraftPlayerGateway(attacker.getServer(), attacker.getUUID());
         // A restrained attacker cannot deal damage.
-        if (runtime.custody().actionBlocked(attackerGateway, "combat")) {
+        if (runtime.custodyRoleplay().actionBlocked(attackerGateway, "combat")) {
             event.setCanceled(true);
             return;
         }
-        var outcome = runtime.custody().batonStrike(attackerGateway, targetGateway,
+        var outcome = runtime.custodyRoleplay().batonStrike(attackerGateway, targetGateway,
                 target.getHealth(), target.getAbsorptionAmount(), event.getAmount());
         switch (outcome.action()) {
             case CANCEL -> event.setCanceled(true);
-            case ALLOW_NONLETHAL -> event.setAmount((float) runtime.custody()
+            case ALLOW_NONLETHAL -> event.setAmount((float) runtime.custodyRoleplay()
                     .capBatonDamage(target.getHealth(), target.getAbsorptionAmount()));
             default -> {}
         }
@@ -124,29 +142,27 @@ public final class StrajaEvents {
         if (runtime == null || event.getLevel().isClientSide()
                 || !(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) return;
         var gateway = new MinecraftPlayerGateway(player.getServer(), player.getUUID());
-        if (runtime.custody().actionBlocked(gateway, "interact")) {
+        if (runtime.custodyRoleplay().actionBlocked(gateway, "interact")) {
             event.setCanceled(true);
             return;
         }
         if (!(event.getTarget() instanceof net.minecraft.server.level.ServerPlayer target)) return;
         var targetGateway = new MinecraftPlayerGateway(target.getServer(), target.getUUID());
         String held = gateway.mainHand().id();
+        if ("straja:order_book".equals(held) || "straja:mission_carnet".equals(held)) {
+            if (runtime.missionRoleplay().issueDraft(gateway, targetGateway)) event.setCanceled(true);
+            return;
+        }
         if ("straja:fine_book".equals(held)) {
-            if (runtime.fines().issueFromDraft(gateway, targetGateway)) event.setCanceled(true);
+            if (runtime.fineRoleplay().issueFromDraft(gateway, targetGateway)) event.setCanceled(true);
             return;
         }
         boolean handled = switch (held) {
-            case com.dwurdy.straja.application.service.CustodyService.CUFFS ->
-                    runtime.custody().requestCuffs(gateway, targetGateway);
-            case com.dwurdy.straja.application.service.CustodyService.ROPE ->
-                    runtime.custody().applyRope(gateway, targetGateway);
-            case com.dwurdy.straja.application.service.CustodyService.HEAD_SACK ->
-                    runtime.custody().applyHeadSack(gateway, targetGateway);
-            case com.dwurdy.straja.application.service.CustodyService.CUFF_KEY,
-                 com.dwurdy.straja.application.service.CustodyService.CROWBAR,
-                 com.dwurdy.straja.application.service.CustodyService.BOLT_CUTTERS,
-                 com.dwurdy.straja.application.service.CustodyService.KEYCHAIN ->
-                    runtime.custody().release(gateway, targetGateway);
+            case "straja:cuffs" -> runtime.custodyRoleplay().requestCuffs(gateway, targetGateway);
+            case "straja:rope" -> runtime.custodyRoleplay().applyRope(gateway, targetGateway);
+            case "straja:head_sack" -> runtime.custodyRoleplay().applyHeadSack(gateway, targetGateway);
+            case "straja:cuff_key", "straja:crowbar", "straja:bolt_cutters", "straja:keychain" ->
+                    runtime.custodyRoleplay().release(gateway, targetGateway);
             default -> false;
         };
         if (handled) event.setCanceled(true);
@@ -160,7 +176,8 @@ public final class StrajaEvents {
         if (runtime == null || event.getLevel().isClientSide()
                 || !(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) return;
         var gateway = new MinecraftPlayerGateway(player.getServer(), player.getUUID());
-        if (runtime.custody().actionBlocked(gateway, "item_use")) event.setCanceled(true);
+        if (runtime.custodyRoleplay().actionBlocked(gateway, "item_use")) event.setCanceled(true);
+        else if (usePhysicalItem(runtime, gateway)) event.setCanceled(true);
     }
 
     @SubscribeEvent
@@ -170,7 +187,7 @@ public final class StrajaEvents {
         if (runtime == null || event.getLevel().isClientSide()
                 || !(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) return;
         var gateway = new MinecraftPlayerGateway(player.getServer(), player.getUUID());
-        if (runtime.custody().actionBlocked(gateway, "interact")) event.setCanceled(true);
+        if (runtime.custodyRoleplay().actionBlocked(gateway, "interact")) event.setCanceled(true);
     }
 
     @SubscribeEvent
@@ -180,16 +197,126 @@ public final class StrajaEvents {
         if (runtime == null || event.getLevel().isClientSide()
                 || !(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) return;
         var gateway = new MinecraftPlayerGateway(player.getServer(), player.getUUID());
-        if (runtime.custody().actionBlocked(gateway, "interact")) {
+        if (runtime.custodyRoleplay().actionBlocked(gateway, "interact")) {
+            event.setCanceled(true);
+            return;
+        }
+        var pos = event.getPos();
+        String dimension = player.level().dimension().location().toString();
+        if (runtime.roomRoleplay().protectBlock(gateway, dimension, pos.getX(), pos.getY(), pos.getZ())) {
+            event.setCanceled(true);
+            return;
+        }
+        if ("straja:prison_marker".equals(gateway.mainHand().id())) {
+            // Cell geometry is completed only through the permission-gated
+            // setup command; the marker is just a hint, never a geometry tool.
+            if (runtime.playerQueries().isCommissioner(gateway)) {
+                gateway.tell("Geometria celulei se finalizează prin comanda de configurare dedicată Comisarului.");
+            }
             event.setCanceled(true);
             return;
         }
         if ("straja:room_marker".equals(gateway.mainHand().id())) {
-            var pos = event.getPos();
-            String dimension = player.level().dimension().location().toString();
-            runtime.rooms().markerSelect(gateway, dimension, pos.getX(), pos.getY(), pos.getZ());
+            runtime.roomRoleplay().markerSelect(gateway, dimension, pos.getX(), pos.getY(), pos.getZ());
+            event.setCanceled(true);
+            return;
+        }
+        if (usePhysicalItem(runtime, gateway)) event.setCanceled(true);
+    }
+
+    /**
+     * Routes only the already-registered paper items to safe player-facing
+     * service reads.  Item custom data is untrusted input: record IDs are
+     * bounded before they reach a service, which then performs the persisted
+     * existence and access checks.
+     */
+    private boolean usePhysicalItem(StrajaRuntime runtime, PlayerGateway player) {
+        ItemView item = player.mainHand();
+        switch (PhysicalItemSurface.action(item)) {
+            case MISSION_CARNET -> {
+                // A delivered order is visible through the normal mission
+                // projection; an issuer's reusable carnet shows its own draft.
+                if (PhysicalItemSurface.validRecordId(item.data("StrajaMissionId")) != null) {
+                    runtime.missionRoleplay().list(player);
+                } else if (runtime.playerQueries().isCommissioner(player)
+                        || runtime.playerQueries().hasCapability(player, Capability.CREATE_MISSIONS)) {
+                    runtime.missionRoleplay().draftStatus(player);
+                } else {
+                    runtime.missionRoleplay().list(player);
+                }
+                return true;
+            }
+            case ARCHIVE_FOLDER -> {
+                String folderId = PhysicalItemSurface.validRecordId(item.data("ArchiveFolderId"));
+                if (folderId == null) runtime.archiveRoleplay().listFolders(player);
+                else runtime.archiveRoleplay().readFolder(player, folderId);
+                return true;
+            }
+            case ARCHIVE_DOCUMENT -> {
+                String documentId = PhysicalItemSurface.firstValidRecordId(
+                        item.data("ArchiveDocumentId"), item.data("ArchiveCopyOf"));
+                if (documentId == null) {
+                    player.tell("Documentul arhivei nu are o referință validă.");
+                } else {
+                    runtime.archiveRoleplay().readSheet(player, documentId);
+                }
+                return true;
+            }
+            case ARCHIVE_TOOL -> {
+                // Carbon paper, the archive stamp and official envelopes are
+                // consumables/tools: they never act on item metadata. The
+                // archivist's projected actions appear while carrying them.
+                player.tell("Folosește acest obiect la Arhivistă — acțiunile apar în funcție de ce porți la tine.");
+                return true;
+            }
+            case FINE_BOOK -> {
+                if (runtime.playerQueries().hasCapability(player, Capability.ISSUE_FINES)) {
+                    player.tell(runtime.fineRoleplay().draftText(player));
+                } else {
+                    player.tell("Registrul de Amenzi este rezervat Străjii active.");
+                }
+                return true;
+            }
+            case FINE_NOTICE -> {
+                // listFines filters to the holder's own fines or commissioner
+                // visibility; the notice ID is intentionally not trusted as a
+                // payment authorization.
+                runtime.fineRoleplay().listFines(player);
+                return true;
+            }
+            case TRAINING_MANUAL -> {
+                runtime.guardDuty().showRules(player);
+                return true;
+            }
+            default -> {
+                return false;
+            }
+        }
+    }
+
+    /** Occupied room blocks cannot be modified by placed blocks. */
+    @SubscribeEvent
+    public void onBlockPlace(net.neoforged.neoforge.event.level.BlockEvent.EntityPlaceEvent event) {
+        StrajaRuntime runtime = StrajaRuntime.get();
+        if (runtime == null || event.getLevel().isClientSide()
+                || !(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) return;
+        var gateway = new MinecraftPlayerGateway(player.getServer(), player.getUUID());
+        var pos = event.getPos();
+        String dimension = player.level().dimension().location().toString();
+        if (!runtime.playerQueries().isCommissioner(gateway)
+                && runtime.roomRoleplay().protectBlock(gateway, dimension, pos.getX(), pos.getY(), pos.getZ())) {
             event.setCanceled(true);
         }
+    }
+
+    /** Explosions cannot destroy occupied room blocks or their managed signs. */
+    @SubscribeEvent
+    public void onExplosion(net.neoforged.neoforge.event.level.ExplosionEvent.Detonate event) {
+        StrajaRuntime runtime = StrajaRuntime.get();
+        if (runtime == null || event.getLevel().isClientSide()) return;
+        String dimension = event.getLevel().dimension().location().toString();
+        event.getAffectedBlocks().removeIf(pos -> runtime.roomRoleplay().isProtectedBlock(
+                dimension, pos.getX(), pos.getY(), pos.getZ()));
     }
 
     /** Blocks inside a configured cell are protected from non-admin players. */
@@ -199,19 +326,19 @@ public final class StrajaEvents {
         if (runtime == null || event.getLevel().isClientSide()
                 || !(event.getPlayer() instanceof net.minecraft.server.level.ServerPlayer player)) return;
         var gateway = new MinecraftPlayerGateway(player.getServer(), player.getUUID());
-        if (runtime.players().isCommissioner(gateway)) return;
+        if (runtime.playerQueries().isCommissioner(gateway)) return;
         var pos = event.getPos();
         String dimension = player.level().dimension().location().toString();
-        if (runtime.prison().insideCell(dimension, pos.getX(), pos.getY(), pos.getZ())) {
+        if (runtime.prisonRoleplay().insideCell(dimension, pos.getX(), pos.getY(), pos.getZ())) {
             event.setCanceled(true);
             gateway.tell("Celula este protejată. Doar adminii o pot modifica sau deschide.");
             return;
         }
-        if (runtime.rooms().protectBlock(gateway, dimension, pos.getX(), pos.getY(), pos.getZ())) {
+        if (runtime.roomRoleplay().protectBlock(gateway, dimension, pos.getX(), pos.getY(), pos.getZ())) {
             event.setCanceled(true);
             return;
         }
-        if (runtime.rooms().roomAtSign(dimension, pos.getX(), pos.getY(), pos.getZ()) != null) {
+        if (runtime.roomRoleplay().roomAtSign(dimension, pos.getX(), pos.getY(), pos.getZ()) != null) {
             event.setCanceled(true);
             gateway.tell("Semnul camerei este gestionat automat de Straja.");
         }
@@ -227,7 +354,7 @@ public final class StrajaEvents {
         if (!(event.getSource().getEntity() instanceof net.minecraft.server.level.ServerPlayer attacker)) return;
         var gateway = new MinecraftPlayerGateway(attacker.getServer(), attacker.getUUID());
         String outcome = npc.getHealth() <= 0.5f ? "KILLED" : "WOUNDED";
-        runtime.fines().createJailerAssaultMission(gateway, npc.getStringUUID(), outcome);
+        runtime.fineRoleplay().createJailerAssaultMission(gateway, npc.getStringUUID(), outcome);
     }
 
     /**
@@ -238,15 +365,20 @@ public final class StrajaEvents {
     public void onEntityDeath(net.neoforged.neoforge.event.entity.living.LivingDeathEvent event) {
         StrajaRuntime runtime = StrajaRuntime.get();
         if (runtime == null || event.getEntity().level().isClientSide()) return;
+        // Custody always recovers a dying player's restraint state first.
+        if (event.getEntity() instanceof net.minecraft.server.level.ServerPlayer victim) {
+            var victimGateway = new MinecraftPlayerGateway(victim.getServer(), victim.getUUID());
+            runtime.custodyRoleplay().recoverAfterDeath(victimGateway);
+        }
         if (!(event.getSource().getEntity() instanceof net.minecraft.server.level.ServerPlayer attacker)) return;
         var gateway = new MinecraftPlayerGateway(attacker.getServer(), attacker.getUUID());
         if (event.getEntity() instanceof StrajaNpcEntity npc && "jailer".equals(npc.getRoleId())) {
-            runtime.fines().createJailerAssaultMission(gateway, npc.getStringUUID(), "KILLED");
+            runtime.fineRoleplay().createJailerAssaultMission(gateway, npc.getStringUUID(), "KILLED");
             return;
         }
         if (event.getEntity() instanceof net.minecraft.server.level.ServerPlayer victim) {
             var victimGateway = new MinecraftPlayerGateway(victim.getServer(), victim.getUUID());
-            runtime.fines().suspectKilled(gateway, victimGateway);
+            runtime.fineRoleplay().suspectKilled(gateway, victimGateway);
         }
     }
 
@@ -256,7 +388,7 @@ public final class StrajaEvents {
         if (runtime == null || event.getEntity().level().isClientSide()
                 || !(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) return;
         var gateway = new MinecraftPlayerGateway(player.getServer(), player.getUUID());
-        if (runtime.custody().actionBlocked(gateway, "item_use")) {
+        if (runtime.custodyRoleplay().actionBlocked(gateway, "item_use")) {
             event.setCanceled(true);
         }
     }

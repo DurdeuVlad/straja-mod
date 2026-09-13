@@ -1,6 +1,8 @@
 package com.dwurdy.straja.application.service;
 
 import com.dwurdy.straja.application.StrajaContext;
+import com.dwurdy.straja.application.port.in.CustodyRoleplayUseCase;
+import com.dwurdy.straja.application.port.in.PrisonRoleplayUseCase;
 import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.domain.model.Capability;
 import com.dwurdy.straja.domain.model.Cell;
@@ -15,15 +17,15 @@ import java.util.List;
  * Prison: bounded cells, sentences with online-active-only time, waitlist,
  * release points and cell protection. Ported from the reference civic service.
  */
-public class PrisonService {
+public class PrisonService implements PrisonRoleplayUseCase {
     private final StrajaContext ctx;
     private final PlayerService players;
     private final AuditService audit;
-    private final CustodyService custody;
+    private final CustodyRoleplayUseCase custody;
     private long lastTickMs;
 
     public PrisonService(StrajaContext ctx, PlayerService players, AuditService audit,
-                         CustodyService custody) {
+                         CustodyRoleplayUseCase custody) {
         this.ctx = ctx;
         this.players = players;
         this.audit = audit;
@@ -78,6 +80,12 @@ public class PrisonService {
         cell.maxX = Math.max(minX, maxX);
         cell.maxY = Math.max(minY, maxY);
         cell.maxZ = Math.max(minZ, maxZ);
+        var geometryError = validateCellGeometry(cell);
+        if (geometryError != null) {
+            actor.tell(geometryError);
+            audit.record("prison_cell_create", actor.name(), uuidOf(actor), id, "", "REFUSED", "invalid_geometry");
+            return false;
+        }
         cell.createdAt = now();
         data.cells.removeIf(c -> c.id.equalsIgnoreCase(id));
         data.cells.add(cell);
@@ -87,6 +95,60 @@ public class PrisonService {
                 "", "", "SUCCESS", "cellId=" + id);
         processWaitlist();
         return true;
+    }
+
+    /** Validates the same bounded shell and single vertical door contract as rooms. */
+    private String validateCellGeometry(Cell cell) {
+        int interiorX = cell.maxX - cell.minX + 1;
+        int interiorY = cell.maxY - cell.minY + 1;
+        int interiorZ = cell.maxZ - cell.minZ + 1;
+        if (interiorX < ctx.policies().roomMinInteriorX
+                || interiorY < ctx.policies().roomMinInteriorY
+                || interiorZ < ctx.policies().roomMinInteriorZ) {
+            return "Interiorul celulei este prea mic pentru o celulă sigură.";
+        }
+        int minX = cell.minX - 1, minY = cell.minY - 1, minZ = cell.minZ - 1;
+        int maxX = cell.maxX + 1, maxY = cell.maxY + 1, maxZ = cell.maxZ + 1;
+        long volume = (long) maxX - minX + 1;
+        volume *= (long) maxY - minY + 1;
+        volume *= (long) maxZ - minZ + 1;
+        if (maxX - minX + 1 > ctx.policies().roomMaxDimension
+                || maxY - minY + 1 > ctx.policies().roomMaxDimension
+                || maxZ - minZ + 1 > ctx.policies().roomMaxDimension
+                || volume > ctx.policies().roomMaxBlocks) {
+            return "Celula depășește limitele sigure de dimensiune sau volum.";
+        }
+        List<int[]> doors = new ArrayList<>();
+        for (int x = minX; x <= maxX; x++) {
+            for (int y = minY; y <= maxY; y++) {
+                for (int z = minZ; z <= maxZ; z++) {
+                    boolean boundary = x == minX || x == maxX || y == minY || y == maxY || z == minZ || z == maxZ;
+                    if (!boundary) continue;
+                    var block = ctx.world().blockAt(cell.dimension, x, y, z);
+                    if (block == null) return "Un bloc din zona celulei nu poate fi citit; celula nu a fost creată.";
+                    if (block.solid()) continue;
+                    if (block.door()) {
+                        doors.add(new int[]{x, y, z});
+                        continue;
+                    }
+                    return "Pereții celulei nu sunt închiși complet.";
+                }
+            }
+        }
+        if (ctx.policies().roomRequireSingleDoor) {
+            if (doors.size() != 2 || doors.get(0)[0] != doors.get(1)[0]
+                    || doors.get(0)[2] != doors.get(1)[2]
+                    || Math.abs(doors.get(0)[1] - doors.get(1)[1]) != 1) {
+                return "Celula trebuie să aibă exact o ușă standard de două blocuri.";
+            }
+        } else if (doors.isEmpty()) {
+            return "Celula trebuie să aibă o ușă.";
+        }
+        int[] door = doors.stream().min(Comparator.comparingInt(d -> d[1])).orElse(null);
+        if (door != null) {
+            cell.doorX = door[0]; cell.doorY = door[1]; cell.doorZ = door[2];
+        }
+        return null;
     }
 
     public void listCells(PlayerGateway actor) {
@@ -115,8 +177,11 @@ public class PrisonService {
     }
 
     private Cell firstFree(PrisonStore data) {
-        return data.cells.stream().sorted((a, b) -> a.id.compareTo(b.id))
-                .filter(c -> !data.assignments.containsKey(c.id)).findFirst().orElse(null);
+        return data.cells.stream()
+                .filter(c -> c != null && c.id != null && !c.id.isBlank()
+                        && !data.assignments.containsKey(c.id))
+                .sorted((a, b) -> a.id.compareTo(b.id))
+                .findFirst().orElse(null);
     }
 
     private void assignCell(PrisonStore data, Sentence sentence, Cell cell) {
@@ -136,13 +201,16 @@ public class PrisonService {
         var data = store();
         boolean changed = false;
         for (var entry : new java.util.ArrayList<>(data.waitlist)) {
+            if (entry == null || entry.sentenceId == null || entry.sentenceId.isBlank()) continue;
             Sentence found = null;
-            for (Sentence s : data.sentences) if (s.id.equals(entry.sentenceId)) found = s;
+            for (Sentence s : data.sentences) {
+                if (s != null && entry.sentenceId.equals(s.id)) found = s;
+            }
             final Sentence sentence = found;
             Cell cell = firstFree(data);
             if (sentence == null || !"WAITING_CELL".equals(sentence.status) || cell == null) continue;
             assignCell(data, sentence, cell);
-            data.waitlist.removeIf(e -> e.sentenceId.equals(entry.sentenceId));
+            data.waitlist.removeIf(e -> e != null && entry.sentenceId.equals(e.sentenceId));
             changed = true;
             var target = findFor(sentence);
             if (target != null) {
@@ -290,10 +358,108 @@ public class PrisonService {
                 + " | timp activ rămas: " + Math.ceil(sentence.remainingActiveMs / 60000.0) + " minute.");
     }
 
+    /**
+     * Login recovery: waiting sentences retry the waitlist; an active sentence
+     * with a valid assigned cell teleports the player back inside. A missing or
+     * mismatched cell assignment fails closed to WAITING_CELL with exactly one
+     * waitlist entry.
+     */
+    public void recoverOnLogin(PlayerGateway player) {
+        var data = store();
+        var sentence = activeSentenceFrom(data, player);
+        if (sentence == null || !"WAITING_CELL".equals(sentence.status)
+                && !"ACTIVE".equals(sentence.status)) return;
+        if (sentence.id == null || sentence.id.isBlank()
+                || (blank(sentence.targetUuid) && blank(sentence.target))) {
+            // An active sentence without verifiable identity must not drive
+            // teleports or assignments: cancel it and release anything claimed.
+            sentence.status = "CANCELLED";
+            releaseInvalidAssignments(data, sentence, player);
+            ctx.prison().write(data);
+            audit.record("prison_recover", player.name(), uuidOf(player),
+                    sentence.target, sentence.targetUuid, "SUCCESS",
+                    "malformed_sentence_cancelled");
+            return;
+        }
+        if ("WAITING_CELL".equals(sentence.status)) {
+            if (repairWaitlist(data, player, sentence)) ctx.prison().write(data);
+            processWaitlist();
+            data = store();
+            sentence = activeSentenceFrom(data, player);
+        }
+        if (sentence == null || !"ACTIVE".equals(sentence.status)) return;
+        var cell = blank(sentence.cellId) ? null : data.cell(sentence.cellId);
+        var assignment = cell == null || blank(cell.id) ? null : data.assignments.get(cell.id);
+        if (cell != null && !blank(cell.dimension) && assignment != null
+                && sentence.id.equals(assignment.sentenceId)) {
+            custody.resolveDowned(player, "PRISON");
+            teleportToCell(player, cell);
+            return;
+        }
+        // The cell or its assignment is missing/mismatched: release any
+        // dangling claim on this sentence and requeue exactly once.
+        String sentenceId = sentence.id;
+        releaseInvalidAssignments(data, sentence, player);
+        sentence.status = "WAITING_CELL";
+        sentence.cellId = "";
+        repairWaitlist(data, player, sentence);
+        if (data.waitlist.stream().noneMatch(e -> e != null && sentenceId.equals(e.sentenceId))) {
+            var entry = new PrisonStore.WaitlistEntry();
+            entry.sentenceId = sentence.id;
+            entry.target = sentence.target;
+            entry.targetUuid = sentence.targetUuid;
+            entry.requestedAt = now();
+            data.waitlist.add(entry);
+        }
+        ctx.prison().write(data);
+        audit.record("prison_recover", player.name(), uuidOf(player),
+                sentence.target, sentence.targetUuid, "SUCCESS",
+                "missing_cell_assignment sentenceId=" + sentence.id);
+    }
+
+    /** Removes null/identity-less assignments and any that claim this sentence. */
+    private boolean releaseInvalidAssignments(PrisonStore data, Sentence sentence,
+                                              PlayerGateway player) {
+        boolean changed = false;
+        for (var cellId : new ArrayList<>(data.assignments.keySet())) {
+            var a = data.assignments.get(cellId);
+            boolean malformed = a == null
+                    || (blank(a.sentenceId) && blank(a.targetUuid) && blank(a.target));
+            boolean claims = a != null && sentence.id != null && sentence.id.equals(a.sentenceId)
+                    || a != null && sentence.targetUuid != null && !sentence.targetUuid.isEmpty()
+                            && sentence.targetUuid.equals(a.targetUuid);
+            if (malformed || claims) {
+                data.assignments.remove(cellId);
+                changed = true;
+                audit.record("prison_recover", player.name(), uuidOf(player),
+                        sentence.target, sentence.targetUuid, "SUCCESS",
+                        (malformed ? "malformed_assignment_released" : "assignment_released")
+                                + " cellId=" + cellId);
+            }
+        }
+        return changed;
+    }
+
+    /** Drops null or identity-less waitlist entries; returns true when it did. */
+    private boolean repairWaitlist(PrisonStore data, PlayerGateway player, Sentence sentence) {
+        boolean removed = data.waitlist.removeIf(e -> e == null
+                || (blank(e.sentenceId) && blank(e.targetUuid) && blank(e.target)));
+        if (removed) {
+            audit.record("prison_recover", player.name(), uuidOf(player),
+                    sentence.target, sentence.targetUuid, "SUCCESS",
+                    "malformed_waitlist_discarded sentenceId=" + sentence.id);
+        }
+        return removed;
+    }
+
+    private static boolean blank(String value) {
+        return value == null || value.isBlank();
+    }
+
     /** True when the block/position is inside a configured cell (protection). */
     public boolean insideCell(String dimension, double x, double y, double z) {
         for (Cell c : store().cells) {
-            if (!c.dimension.equals(dimension)) continue;
+            if (c == null || c.dimension == null || !c.dimension.equals(dimension)) continue;
             if (x >= c.minX && x <= c.maxX && y >= c.minY && y <= c.maxY
                     && z >= c.minZ && z <= c.maxZ) return true;
         }
@@ -309,13 +475,15 @@ public class PrisonService {
         var data = store();
         boolean changed = false;
         for (Sentence sentence : data.sentences) {
-            if (!"ACTIVE".equals(sentence.status) && !"WAITING_CELL".equals(sentence.status)) continue;
+            if (sentence == null || !"ACTIVE".equals(sentence.status)
+                    && !"WAITING_CELL".equals(sentence.status)) continue;
             var target = findFor(sentence);
             if ("WAITING_CELL".equals(sentence.status)) {
                 var cell = firstFree(data);
                 if (cell == null) continue;
                 assignCell(data, sentence, cell);
-                data.waitlist.removeIf(e -> e.sentenceId.equals(sentence.id));
+                data.waitlist.removeIf(e -> e != null
+                        && sentence.id != null && sentence.id.equals(e.sentenceId));
                 changed = true;
                 if (target != null) {
                     custody.resolveDowned(target, "PRISON");

@@ -1,6 +1,7 @@
 package com.dwurdy.straja.application.service;
 
 import com.dwurdy.straja.application.StrajaContext;
+import com.dwurdy.straja.application.port.in.NpcRegistryUseCase;
 import com.dwurdy.straja.domain.model.NpcRegistry;
 import com.dwurdy.straja.domain.model.Result;
 import java.util.List;
@@ -11,13 +12,20 @@ import java.util.Set;
  * persisted here; the entity adapter only reflects them onto live entities.
  * Authorization lives at the command boundary — every caller is behind
  * {@code /straja npc *}, which requires permission level 2 (op/console).
+ * The {@link NpcRegistryUseCase} view exposes only the read/adopt operations
+ * the entity lifecycle events need.
  */
-public class NpcAdminService {
+public class NpcAdminService implements NpcRegistryUseCase {
     public static final String RECEPTIONIST = "receptionist";
     public static final String SECRETARY = "secretary";
     public static final String JAILER = "jailer";
     public static final String ARCHIVIST = "archivist";
-    public static final Set<String> KNOWN_ROLES = Set.of(RECEPTIONIST, SECRETARY, JAILER, ARCHIVIST);
+    public static final String TRAINER = "trainer";
+    public static final Set<String> KNOWN_ROLES =
+            Set.of(RECEPTIONIST, SECRETARY, JAILER, ARCHIVIST, TRAINER);
+    /** Deterministic order for guided setup (checklist display + batch spawn). */
+    public static final List<String> ROLE_ORDER =
+            List.of(RECEPTIONIST, SECRETARY, TRAINER, JAILER, ARCHIVIST);
 
     private final StrajaContext ctx;
 
@@ -79,5 +87,18 @@ public class NpcAdminService {
 
     public List<NpcRegistry.Record> list() {
         return List.copyOf(ctx.npcs().read().npcs.values());
+    }
+
+    @Override
+    public Registration registration(String entityUuid) {
+        NpcRegistry.Record record = ctx.npcs().read().npcs.get(entityUuid);
+        if (record == null) return null;
+        return new Registration(record.role, record.skin, record.displayName);
+    }
+
+    @Override
+    public void adopt(String entityUuid, String roleId) {
+        if (ctx.npcs().read().npcs.containsKey(entityUuid)) return;
+        register(entityUuid, roleId);
     }
 }

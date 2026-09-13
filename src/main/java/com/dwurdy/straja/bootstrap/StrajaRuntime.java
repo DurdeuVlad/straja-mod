@@ -45,6 +45,7 @@ public final class StrajaRuntime {
     private final com.dwurdy.straja.application.service.RoomService rooms;
     private final com.dwurdy.straja.application.service.ArchiveService archive;
     private final com.dwurdy.straja.application.service.MigrationService migration;
+    private final com.dwurdy.straja.application.service.FormSessionService formSessions;
     private final com.dwurdy.straja.application.port.out.MutableClock clock;
     private final com.dwurdy.straja.adapter.in.test.TestPlayerRegistry testPlayers =
             new com.dwurdy.straja.adapter.in.test.TestPlayerRegistry();
@@ -119,7 +120,7 @@ public final class StrajaRuntime {
         this.players = new PlayerService(ctx);
         this.audit = new AuditService(ctx);
         this.equipment = new EquipmentService(ctx);
-        this.guards = new GuardService(ctx, players, audit, equipment);
+        this.guards = new GuardService(ctx, players, audit, equipment, this::bootId);
         this.npcs = new com.dwurdy.straja.application.service.NpcAdminService(ctx);
         this.missions = new com.dwurdy.straja.application.service.MissionService(ctx, players, audit);
         this.custody = new com.dwurdy.straja.application.service.CustodyService(ctx, players, audit);
@@ -129,6 +130,7 @@ public final class StrajaRuntime {
         this.rooms = new com.dwurdy.straja.application.service.RoomService(ctx, players, audit, ctx.world());
         this.archive = new com.dwurdy.straja.application.service.ArchiveService(ctx, players, audit);
         this.migration = new com.dwurdy.straja.application.service.MigrationService(ctx, audit);
+        this.formSessions = new com.dwurdy.straja.application.service.FormSessionService(clock, ids);
         this.guards.onStatusChange((p, reason) -> this.missions.cancelOpenFor(p, reason));
         this.guards.onStatusChange((p, reason) -> this.rooms.releaseFor(p));
         this.guards.onPromotedToGuard(p -> this.rooms.assignAutomatically(p));
@@ -136,6 +138,11 @@ public final class StrajaRuntime {
 
     public static synchronized StrajaRuntime start(MinecraftServer server) {
         instance = new StrajaRuntime(server);
+        com.dwurdy.straja.adapter.in.form.FormSessionBridge.install(instance.formSessions);
+        com.dwurdy.straja.adapter.in.form.FormPayloads.setSubmissionConsumer(
+                new com.dwurdy.straja.adapter.in.form.FormSubmissionRouter(
+                        instance.guards, instance.missions, instance.complaints, instance.fines,
+                        instance.archive)::submit);
         instance.logDeploymentGates();
         return instance;
     }
@@ -167,6 +174,8 @@ public final class StrajaRuntime {
     }
 
     public static synchronized void stop() {
+        com.dwurdy.straja.adapter.in.form.FormSessionBridge.clear();
+        com.dwurdy.straja.adapter.in.form.FormPayloads.setSubmissionConsumer(null);
         instance = null;
     }
 
@@ -182,6 +191,17 @@ public final class StrajaRuntime {
     public AuditService audit() { return audit; }
     public EquipmentService equipment() { return equipment; }
     public GuardService guards() { return guards; }
+    public com.dwurdy.straja.application.port.in.GuardRecruitmentUseCase guardRecruitment() { return guards; }
+    public com.dwurdy.straja.application.port.in.GuardDutyUseCase guardDuty() { return guards; }
+    public com.dwurdy.straja.application.port.in.MissionRoleplayUseCase missionRoleplay() { return missions; }
+    public com.dwurdy.straja.application.port.in.ComplaintRoleplayUseCase complaintRoleplay() { return complaints; }
+    public com.dwurdy.straja.application.port.in.FineRoleplayUseCase fineRoleplay() { return fines; }
+    public com.dwurdy.straja.application.port.in.CustodyRoleplayUseCase custodyRoleplay() { return custody; }
+    public com.dwurdy.straja.application.port.in.PrisonRoleplayUseCase prisonRoleplay() { return prison; }
+    public com.dwurdy.straja.application.port.in.RoomRoleplayUseCase roomRoleplay() { return rooms; }
+    public com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase archiveRoleplay() { return archive; }
+    public com.dwurdy.straja.application.port.in.PlayerQueryUseCase playerQueries() { return players; }
+    public com.dwurdy.straja.application.port.in.NpcRegistryUseCase npcRegistry() { return npcs; }
     public com.dwurdy.straja.application.service.NpcAdminService npcs() { return npcs; }
     public com.dwurdy.straja.application.service.MissionService missions() { return missions; }
     public com.dwurdy.straja.application.service.CustodyService custody() { return custody; }
@@ -191,6 +211,7 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.service.RoomService rooms() { return rooms; }
     public com.dwurdy.straja.application.service.ArchiveService archive() { return archive; }
     public com.dwurdy.straja.application.service.MigrationService migration() { return migration; }
+    public com.dwurdy.straja.application.port.in.FormSessionUseCase formSessions() { return formSessions; }
     public com.dwurdy.straja.application.port.out.MutableClock clock() { return clock; }
     public com.dwurdy.straja.adapter.in.test.TestPlayerRegistry testPlayers() { return testPlayers; }
     public String bootId() { return bootId; }

@@ -23,8 +23,7 @@ final class NpcCommands {
     private NpcCommands() {}
 
     static LiteralArgumentBuilder<CommandSourceStack> build() {
-        var npc = Commands.literal("npc")
-                .requires(source -> source.hasPermission(2));
+        var npc = StrajaCommands.adminOnly(Commands.literal("npc"));
 
         npc.then(Commands.literal("list").executes(ctx -> {
             var runtime = StrajaRuntime.get();
@@ -132,15 +131,53 @@ final class NpcCommands {
             return 0;
         }
         var level = ctx.getSource().getLevel();
+        var entity = spawnRoleEntity(runtime, level, role, pos);
+        ctx.getSource().sendSystemMessage(Component.literal(
+                "NPC " + role + " creat: " + entity.getStringUUID()
+                        + " la " + (int) pos.x + ", " + (int) pos.y + ", " + (int) pos.z));
+        return 1;
+    }
+
+    /**
+     * Guided setup: spawns every role missing from the registry in a row next
+     * to the executor. Idempotent — roles already registered are skipped, so
+     * re-running only fills gaps. Works from console/RCON (source position).
+     */
+    static int spawnMissing(CommandContext<CommandSourceStack> ctx) {
+        var runtime = StrajaRuntime.get();
+        if (runtime == null) return 0;
+        var missing = com.dwurdy.straja.domain.model.SetupChecklist.missingNpcRoles(
+                runtime.context().npcs().read(),
+                com.dwurdy.straja.application.service.NpcAdminService.ROLE_ORDER);
+        if (missing.isEmpty()) {
+            ctx.getSource().sendSystemMessage(Component.literal("Toate NPC-urile Straja sunt deja înregistrate."));
+            return 1;
+        }
+        var level = ctx.getSource().getLevel();
+        var base = ctx.getSource().getPosition();
+        float facing = ctx.getSource().getRotation().y + 180f;
+        int index = 0;
+        for (String role : missing) {
+            var pos = base.add(index * 2.0, 0, 0);
+            var entity = spawnRoleEntity(runtime, level, role, pos);
+            entity.setYRot(facing);
+            ctx.getSource().sendSystemMessage(Component.literal(
+                    "NPC " + role + " creat la " + (int) pos.x + ", " + (int) pos.y + ", " + (int) pos.z));
+            index++;
+        }
+        ctx.getSource().sendSystemMessage(Component.literal(
+                missing.size() + " NPC-uri spawnate. Mută-le/numește-le cu /straja npc …"));
+        return 1;
+    }
+
+    private static StrajaNpcEntity spawnRoleEntity(StrajaRuntime runtime,
+            net.minecraft.server.level.ServerLevel level, String role, Vec3 pos) {
         var entity = new StrajaNpcEntity(StrajaNpcEntity.NPC.get(), level);
         entity.setPos(pos.x, pos.y, pos.z);
         entity.setRoleId(role);
         level.addFreshEntity(entity);
         runtime.npcs().register(entity.getStringUUID(), role);
-        ctx.getSource().sendSystemMessage(Component.literal(
-                "NPC " + role + " creat: " + entity.getStringUUID()
-                        + " la " + (int) pos.x + ", " + (int) pos.y + ", " + (int) pos.z));
-        return 1;
+        return entity;
     }
 
     /** Resolves the "npc" argument to a registry record (uuid or display name). */

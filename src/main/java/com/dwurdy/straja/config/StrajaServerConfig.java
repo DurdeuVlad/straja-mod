@@ -1,5 +1,6 @@
 package com.dwurdy.straja.config;
 
+import com.dwurdy.straja.domain.model.StrajaPolicies;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.neoforge.common.ModConfigSpec;
 import java.util.List;
@@ -14,6 +15,8 @@ public final class StrajaServerConfig {
 
     public static final ModConfigSpec.ConfigValue<String> COMMISSIONER_NAME;
     public static final ModConfigSpec.ConfigValue<String> COMMISSIONER_UUID;
+    public static final ModConfigSpec.ConfigValue<String> COMMISSIONER_TITLE;
+    public static final ModConfigSpec.IntValue NATIVE_FACTION_MAX_LENGTH;
     public static final ModConfigSpec.BooleanValue REQUIRE_UUID;
     public static final ModConfigSpec.BooleanValue ALLOW_NAME_FALLBACK;
     public static final ModConfigSpec.ConfigValue<String> ENVIRONMENT;
@@ -76,10 +79,32 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.ConfigValue<String> COIN_SILVER_ITEM;
     public static final ModConfigSpec.ConfigValue<String> COIN_GOLD_ITEM;
 
+    public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> SALARY_PER_BLOCK;
     public static final ModConfigSpec.IntValue SALARY_MAX_BLOCKS_PER_DAY;
     public static final ModConfigSpec.IntValue SALARY_WINDOW_MINUTES;
     public static final ModConfigSpec.IntValue SALARY_ACTIVITY_GRACE_SECONDS;
     public static final ModConfigSpec.DoubleValue SALARY_ACTIVITY_MOVE_THRESHOLD;
+    public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> PROMOTION_SERVICE_BLOCKS;
+
+    public static final ModConfigSpec.IntValue FREE_DUTY_MIN_RANK;
+    public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> FREE_DUTY_SALARY_PER_DAY;
+
+    public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> QUIZ_QUESTIONS;
+    public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> TRAINING_QUIZ_QUESTIONS;
+
+    public static final ModConfigSpec.ConfigValue<String> JAILER_NAME;
+    public static final ModConfigSpec.BooleanValue JAILER_GUARD_IMMUNITY;
+    public static final ModConfigSpec.IntValue JAILER_ASSAULT_WOUNDED;
+    public static final ModConfigSpec.IntValue JAILER_ASSAULT_KILLED;
+    public static final ModConfigSpec.IntValue JAILER_ASSAULT_SENTENCE_DAYS;
+    public static final ModConfigSpec.IntValue JAILER_ASSAULT_MISSION_MAX_ASSIGNEES;
+
+    public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> KITS;
+    public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> SERVICE_EQUIPMENT;
+    public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> REGEAR_COST;
+    public static final ModConfigSpec.ConfigValue<String> FOOD_ITEM;
+    public static final ModConfigSpec.IntValue FOOD_AMOUNT;
+    public static final ModConfigSpec.ConfigValue<String> TRAINING_MANUAL_ITEM;
 
     public static final ModConfigSpec.IntValue SERVICE_LEASE_MINUTES;
     public static final ModConfigSpec.BooleanValue REQUIRE_REAL_COIN_PROVIDER_OUTSIDE_LOCAL;
@@ -104,6 +129,11 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.IntValue ROOM_MAX_DIMENSION;
     public static final ModConfigSpec.IntValue ROOM_MAX_BLOCKS;
     public static final ModConfigSpec.IntValue ROOM_WAITLIST_RETENTION_DAYS;
+    public static final ModConfigSpec.IntValue ROOM_MIN_INTERIOR_X;
+    public static final ModConfigSpec.IntValue ROOM_MIN_INTERIOR_Y;
+    public static final ModConfigSpec.IntValue ROOM_MIN_INTERIOR_Z;
+    public static final ModConfigSpec.BooleanValue ROOM_REQUIRE_SINGLE_DOOR;
+    public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> ROOM_ALLOWED_ACCESS_BLOCKS;
 
     public static final ModConfigSpec.BooleanValue FINES_ENABLED;
     public static final ModConfigSpec.BooleanValue APPEALS_ENABLED;
@@ -118,6 +148,8 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.IntValue APPEAL_ABUSE_WINDOW_DAYS;
     public static final ModConfigSpec.IntValue APPEAL_ABUSE_BLOCK_DAYS;
     public static final ModConfigSpec.IntValue FINE_ESCALATION_MISSION_MINUTES;
+    public static final ModConfigSpec.ConfigValue<java.util.List<? extends Integer>> FINE_ALLOWED_AMOUNTS;
+    public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> SENTENCE_DAYS_BY_AMOUNT;
 
     public static final ModConfigSpec.BooleanValue PRISON_ENABLED;
     public static final ModConfigSpec.IntValue PRISON_MAX_CELLS;
@@ -136,8 +168,10 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.IntValue COMPLAINT_MAX_EVIDENCE_LENGTH;
     public static final ModConfigSpec.IntValue COMPLAINT_MAX_ACTIVE_PER_COMPLAINANT;
     public static final ModConfigSpec.IntValue COMPLAINT_MAX_PARTICIPANTS;
+    public static final ModConfigSpec.IntValue COMPLAINT_DEFAULT_SEVERITY;
     public static final ModConfigSpec.IntValue COMPLAINT_MAX_REWARD;
     public static final ModConfigSpec.IntValue COMPLAINT_MAX_REWARD_PER_REVIEWER_PER_DAY;
+    public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> COMPLAINT_REWARD_BY_SEVERITY;
 
     public static final ModConfigSpec.BooleanValue DEBUG_ENABLED;
     public static final ModConfigSpec.BooleanValue DEBUG_LOCAL_ONLY;
@@ -149,11 +183,18 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec SPEC;
 
     static {
+        var defaults = new StrajaPolicies();
+
         B.push("identity");
         COMMISSIONER_NAME = B.comment("Configured commissioner account name (local fallback only).")
                 .define("commissionerName", "dwurdy");
         COMMISSIONER_UUID = B.comment("Canonical commissioner UUID. Required outside local environments.")
                 .define("commissionerUuid", "");
+        COMMISSIONER_TITLE = B.comment("Display title for the commissioner in rules/status text.")
+                .define("commissionerTitle", defaults.commissionerTitle);
+        NATIVE_FACTION_MAX_LENGTH = B.comment(
+                        "Maximum length of a player's self-declared native faction name.")
+                .defineInRange("nativeFactionMaxLength", defaults.nativeFactionMaxLength, 4, 200);
         REQUIRE_UUID = B.define("requireUuid", false);
         ALLOW_NAME_FALLBACK = B.define("allowNameFallback", true);
         ENVIRONMENT = B.comment("local | staging | production").define("environment", "local");
@@ -239,10 +280,101 @@ public final class StrajaServerConfig {
         B.pop();
 
         B.push("salary");
+        SALARY_PER_BLOCK = B.comment(
+                        "Coins paid per completed service block, per rank.",
+                        "Entries: \"rank=coins\" (rank 1=Junior ... 4=Lieutenant).",
+                        "An empty or fully malformed list falls back to the built-in defaults.")
+                .defineListAllowEmpty(List.of("perBlock"),
+                        StrajaPolicies.formatIntMap(defaults.salaryPerBlock),
+                        () -> "1=20", StrajaServerConfig::isIntMapEntry);
         SALARY_MAX_BLOCKS_PER_DAY = B.defineInRange("maxBlocksPerDay", 24, 0, 10000);
         SALARY_WINDOW_MINUTES = B.defineInRange("windowMinutes", 1440, 1, 100000);
         SALARY_ACTIVITY_GRACE_SECONDS = B.defineInRange("activityGraceSeconds", 90, 5, 3600);
         SALARY_ACTIVITY_MOVE_THRESHOLD = B.defineInRange("activityMoveThreshold", 0.15, 0.0, 10.0);
+        B.pop();
+
+        B.push("promotion");
+        PROMOTION_SERVICE_BLOCKS = B.comment(
+                        "Service blocks required for automatic promotion.",
+                        "Entries: \"targetRank=blocks\".")
+                .defineListAllowEmpty(List.of("serviceBlocks"),
+                        StrajaPolicies.formatIntMap(defaults.promotionServiceBlocks),
+                        () -> "2=60", StrajaServerConfig::isIntMapEntry);
+        B.pop();
+
+        B.push("duty");
+        FREE_DUTY_MIN_RANK = B.comment(
+                        "Guards at or above this rank (and the commissioner) start and",
+                        "end shifts at will — no patrol route or checkpoints required.")
+                .defineInRange("freeDutyMinRank", defaults.freeDutyMinRank, 1, 4);
+        FREE_DUTY_SALARY_PER_DAY = B.comment(
+                        "Free-duty salary per Minecraft day of duty, per rank.",
+                        "These ranks are trusted — the anti-AFK movement gate is not applied.",
+                        "Entries: \"rank=coins\".")
+                .defineListAllowEmpty(List.of("freeDutySalaryPerDay"),
+                        StrajaPolicies.formatIntMap(defaults.freeDutySalaryPerDay),
+                        () -> "3=80", StrajaServerConfig::isIntMapEntry);
+        B.pop();
+
+        B.push("quiz");
+        QUIZ_QUESTIONS = B.comment(
+                        "Recruitment quiz questions asked by the trainer.",
+                        "Entries: \"id|minRank|question|answer1;answer2\" — any listed answer accepts.")
+                .defineListAllowEmpty(List.of("questions"),
+                        StrajaPolicies.formatQuiz(defaults.quiz),
+                        () -> "id|0|question|answer", StrajaServerConfig::isQuizEntry);
+        TRAINING_QUIZ_QUESTIONS = B.comment(
+                        "Training questions asked on promotion/kit progression.",
+                        "Same entry format as questions.")
+                .defineListAllowEmpty(List.of("trainingQuestions"),
+                        StrajaPolicies.formatQuiz(defaults.trainingQuiz),
+                        () -> "id|1|question|answer", StrajaServerConfig::isQuizEntry);
+        B.pop();
+
+        B.push("jailer");
+        JAILER_NAME = B.define("name", defaults.jailerName);
+        JAILER_GUARD_IMMUNITY = B.comment(
+                        "When true, on-duty guards cannot damage the jailer.")
+                .define("guardImmunity", defaults.jailerGuardImmunity);
+        JAILER_ASSAULT_WOUNDED = B.defineInRange("assaultWoundedReward",
+                defaults.jailerAssaultWoundedAmount, 0, 1000000);
+        JAILER_ASSAULT_KILLED = B.defineInRange("assaultKilledReward",
+                defaults.jailerAssaultKilledAmount, 0, 1000000);
+        JAILER_ASSAULT_SENTENCE_DAYS = B.defineInRange("assaultSentenceDays",
+                defaults.jailerAssaultSentenceDays, 1, 365);
+        JAILER_ASSAULT_MISSION_MAX_ASSIGNEES = B.defineInRange("assaultMissionMaxAssignees",
+                defaults.jailerAssaultMissionMaxAssignees, 1, 64);
+        B.pop();
+
+        B.push("equipment");
+        KITS = B.comment(
+                        "Duty kits granted per rank.",
+                        "Entries: \"rank=itemId,count\" — one entry per item.",
+                        "An empty or fully malformed list falls back to the built-in defaults.")
+                .defineListAllowEmpty(List.of("kits"),
+                        StrajaPolicies.formatKits(defaults.kits),
+                        () -> "1=minecraft:iron_sword,1", StrajaServerConfig::isKitEntry);
+        SERVICE_EQUIPMENT = B.comment(
+                        "Leased service equipment per rank (reclaimed at duty end).",
+                        "Entries: \"rank=key|itemId|count|replacementCost|label\".")
+                .defineListAllowEmpty(List.of("serviceEquipment"),
+                        StrajaPolicies.formatEquipment(defaults.serviceEquipment),
+                        () -> "2=cuffs|straja:cuffs|1|100|cătușe de serviciu",
+                        StrajaServerConfig::isEquipmentEntry);
+        REGEAR_COST = B.comment(
+                        "Regear approval cost per rank.",
+                        "Entries: \"rank=coins\".")
+                .defineListAllowEmpty(List.of("regearCost"),
+                        StrajaPolicies.formatIntMap(defaults.regearCost),
+                        () -> "1=100", StrajaServerConfig::isIntMapEntry);
+        FOOD_ITEM = B.define("foodItem", defaults.foodItem, StrajaServerConfig::isItemId);
+        FOOD_AMOUNT = B.defineInRange("foodAmount", defaults.foodAmount, 1, 64);
+        B.pop();
+
+        B.push("trainer");
+        TRAINING_MANUAL_ITEM = B.comment(
+                        "Physical theory manual the trainer hands to recruits and guards.")
+                .define("manualItem", defaults.trainingManualItem, StrajaServerConfig::isItemId);
         B.pop();
 
         B.push("security");
@@ -284,6 +416,17 @@ public final class StrajaServerConfig {
         ROOM_MAX_DIMENSION = B.defineInRange("maxDimension", 8, 1, 64);
         ROOM_MAX_BLOCKS = B.defineInRange("maxBlocks", 512, 1, 65536);
         ROOM_WAITLIST_RETENTION_DAYS = B.defineInRange("waitlistRetentionDays", 30, 1, 365);
+        ROOM_MIN_INTERIOR_X = B.defineInRange("minInteriorX", defaults.roomMinInteriorX, 1, 32);
+        ROOM_MIN_INTERIOR_Y = B.defineInRange("minInteriorY", defaults.roomMinInteriorY, 1, 32);
+        ROOM_MIN_INTERIOR_Z = B.defineInRange("minInteriorZ", defaults.roomMinInteriorZ, 1, 32);
+        ROOM_REQUIRE_SINGLE_DOOR = B.comment(
+                        "Rooms and cells must have exactly one standard two-block door.")
+                .define("requireSingleDoor", defaults.roomRequireSingleDoor);
+        ROOM_ALLOWED_ACCESS_BLOCKS = B.comment(
+                        "Extra block IDs treated as allowed openings inside room walls",
+                        "(e.g. barred windows). Empty = solid walls only.")
+                .defineListAllowEmpty(List.of("allowedAccessBlocks"),
+                        defaults.roomAllowedAccessBlocks, () -> "", o -> o instanceof String);
         B.pop();
 
         B.push("fines");
@@ -300,6 +443,17 @@ public final class StrajaServerConfig {
         APPEAL_ABUSE_WINDOW_DAYS = B.defineInRange("appealAbuseWindowRealDays", 30, 1, 365);
         APPEAL_ABUSE_BLOCK_DAYS = B.defineInRange("appealAbuseBlockRealDays", 7, 0, 365);
         FINE_ESCALATION_MISSION_MINUTES = B.defineInRange("escalationMissionMinutes", 30, 1, 10080);
+        FINE_ALLOWED_AMOUNTS = B.comment(
+                        "Fine amounts a draft may select, in coins.")
+                .defineListAllowEmpty(List.of("allowedAmounts"),
+                        defaults.fineAllowedAmounts, () -> 10,
+                        o -> o instanceof Integer i && i > 0);
+        SENTENCE_DAYS_BY_AMOUNT = B.comment(
+                        "Prison sentence days imposed when an unpaid fine escalates,",
+                        "keyed by fine amount. Entries: \"amount=days\".")
+                .defineListAllowEmpty(List.of("sentenceDaysByAmount"),
+                        StrajaPolicies.formatIntMap(defaults.sentenceDaysByAmount),
+                        () -> "10=1", StrajaServerConfig::isIntMapEntry);
         B.pop();
 
         B.push("prison");
@@ -324,8 +478,16 @@ public final class StrajaServerConfig {
         COMPLAINT_MAX_EVIDENCE_LENGTH = B.defineInRange("maxEvidenceLength", 400, 1, 4000);
         COMPLAINT_MAX_ACTIVE_PER_COMPLAINANT = B.defineInRange("maxActivePerComplainant", 3, 1, 100);
         COMPLAINT_MAX_PARTICIPANTS = B.defineInRange("maxParticipants", 4, 1, 100);
+        COMPLAINT_DEFAULT_SEVERITY = B.defineInRange("defaultSeverity",
+                defaults.complaintDefaultSeverity, 1, 4);
         COMPLAINT_MAX_REWARD = B.defineInRange("maxReward", 250, 0, 1000000);
         COMPLAINT_MAX_REWARD_PER_REVIEWER_PER_DAY = B.defineInRange("maxRewardPerReviewerPerDay", 1000, 0, 1000000);
+        COMPLAINT_REWARD_BY_SEVERITY = B.comment(
+                        "Investigator reward per complaint severity.",
+                        "Entries: \"severity=coins\".")
+                .defineListAllowEmpty(List.of("rewardBySeverity"),
+                        StrajaPolicies.formatIntMap(defaults.complaintRewardBySeverity),
+                        () -> "1=25", StrajaServerConfig::isIntMapEntry);
         B.pop();
 
         B.push("debug");
@@ -355,6 +517,8 @@ public final class StrajaServerConfig {
         var p = new com.dwurdy.straja.domain.model.StrajaPolicies();
         p.commissionerName = COMMISSIONER_NAME.get();
         p.commissionerUuid = COMMISSIONER_UUID.get();
+        p.commissionerTitle = COMMISSIONER_TITLE.get();
+        p.nativeFactionMaxLength = NATIVE_FACTION_MAX_LENGTH.get();
         p.requireUuid = REQUIRE_UUID.get();
         p.allowNameFallback = ALLOW_NAME_FALLBACK.get();
         p.environment = ENVIRONMENT.get();
@@ -418,10 +582,34 @@ public final class StrajaServerConfig {
         p.coinItemIds.put(100, COIN_SILVER_ITEM.get());
         p.coinItemIds.put(1000, COIN_GOLD_ITEM.get());
 
+        p.salaryPerBlock = mapOrDefault(StrajaPolicies.parseIntMap(SALARY_PER_BLOCK.get()),
+                defaults().salaryPerBlock);
         p.salaryMaxBlocksPerDay = SALARY_MAX_BLOCKS_PER_DAY.get();
         p.salaryWindowMinutes = SALARY_WINDOW_MINUTES.get();
         p.salaryActivityGraceSeconds = SALARY_ACTIVITY_GRACE_SECONDS.get();
         p.salaryActivityMoveThreshold = SALARY_ACTIVITY_MOVE_THRESHOLD.get();
+        p.promotionServiceBlocks = mapOrDefault(StrajaPolicies.parseIntMap(PROMOTION_SERVICE_BLOCKS.get()),
+                defaults().promotionServiceBlocks);
+        p.freeDutyMinRank = FREE_DUTY_MIN_RANK.get();
+        p.freeDutySalaryPerDay = mapOrDefault(
+                StrajaPolicies.parseIntMap(FREE_DUTY_SALARY_PER_DAY.get()),
+                defaults().freeDutySalaryPerDay);
+        p.quiz = listOrDefault(StrajaPolicies.parseQuiz(QUIZ_QUESTIONS.get()), defaults().quiz);
+        p.trainingQuiz = listOrDefault(StrajaPolicies.parseQuiz(TRAINING_QUIZ_QUESTIONS.get()),
+                defaults().trainingQuiz);
+        p.jailerName = JAILER_NAME.get();
+        p.jailerGuardImmunity = JAILER_GUARD_IMMUNITY.get();
+        p.jailerAssaultWoundedAmount = JAILER_ASSAULT_WOUNDED.get();
+        p.jailerAssaultKilledAmount = JAILER_ASSAULT_KILLED.get();
+        p.jailerAssaultSentenceDays = JAILER_ASSAULT_SENTENCE_DAYS.get();
+        p.jailerAssaultMissionMaxAssignees = JAILER_ASSAULT_MISSION_MAX_ASSIGNEES.get();
+        p.kits = mapOrDefault(StrajaPolicies.parseKits(KITS.get()), defaults().kits);
+        p.serviceEquipment = mapOrDefault(StrajaPolicies.parseEquipment(SERVICE_EQUIPMENT.get()),
+                defaults().serviceEquipment);
+        p.regearCost = mapOrDefault(StrajaPolicies.parseIntMap(REGEAR_COST.get()), defaults().regearCost);
+        p.foodItem = FOOD_ITEM.get();
+        p.foodAmount = FOOD_AMOUNT.get();
+        p.trainingManualItem = TRAINING_MANUAL_ITEM.get();
         p.serviceLeaseMinutes = SERVICE_LEASE_MINUTES.get();
         p.requireRealCoinProviderOutsideLocal = REQUIRE_REAL_COIN_PROVIDER_OUTSIDE_LOCAL.get();
         p.requireCommissionerUuidOutsideLocal = REQUIRE_COMMISSIONER_UUID_OUTSIDE_LOCAL.get();
@@ -445,6 +633,11 @@ public final class StrajaServerConfig {
         p.roomMaxDimension = ROOM_MAX_DIMENSION.get();
         p.roomMaxBlocks = ROOM_MAX_BLOCKS.get();
         p.roomWaitlistRetentionDays = ROOM_WAITLIST_RETENTION_DAYS.get();
+        p.roomMinInteriorX = ROOM_MIN_INTERIOR_X.get();
+        p.roomMinInteriorY = ROOM_MIN_INTERIOR_Y.get();
+        p.roomMinInteriorZ = ROOM_MIN_INTERIOR_Z.get();
+        p.roomRequireSingleDoor = ROOM_REQUIRE_SINGLE_DOOR.get();
+        p.roomAllowedAccessBlocks = new java.util.ArrayList<>(ROOM_ALLOWED_ACCESS_BLOCKS.get());
 
         p.finesEnabled = FINES_ENABLED.get();
         p.appealsEnabled = APPEALS_ENABLED.get();
@@ -459,6 +652,9 @@ public final class StrajaServerConfig {
         p.appealAbuseWindowRealDays = APPEAL_ABUSE_WINDOW_DAYS.get();
         p.appealAbuseBlockRealDays = APPEAL_ABUSE_BLOCK_DAYS.get();
         p.escalationMissionMinutes = FINE_ESCALATION_MISSION_MINUTES.get();
+        p.fineAllowedAmounts = new java.util.ArrayList<>(FINE_ALLOWED_AMOUNTS.get());
+        p.sentenceDaysByAmount = mapOrDefault(StrajaPolicies.parseIntMap(SENTENCE_DAYS_BY_AMOUNT.get()),
+                defaults().sentenceDaysByAmount);
 
         p.prisonEnabled = PRISON_ENABLED.get();
         p.prisonMaxCells = PRISON_MAX_CELLS.get();
@@ -477,8 +673,12 @@ public final class StrajaServerConfig {
         p.complaintMaxEvidenceLength = COMPLAINT_MAX_EVIDENCE_LENGTH.get();
         p.complaintMaxActivePerComplainant = COMPLAINT_MAX_ACTIVE_PER_COMPLAINANT.get();
         p.complaintMaxParticipants = COMPLAINT_MAX_PARTICIPANTS.get();
+        p.complaintDefaultSeverity = COMPLAINT_DEFAULT_SEVERITY.get();
         p.complaintMaxReward = COMPLAINT_MAX_REWARD.get();
         p.complaintMaxRewardPerReviewerPerDay = COMPLAINT_MAX_REWARD_PER_REVIEWER_PER_DAY.get();
+        p.complaintRewardBySeverity = mapOrDefault(
+                StrajaPolicies.parseIntMap(COMPLAINT_REWARD_BY_SEVERITY.get()),
+                defaults().complaintRewardBySeverity);
 
         p.debugEnabled = DEBUG_ENABLED.get();
         p.debugLocalOnly = DEBUG_LOCAL_ONLY.get();
@@ -489,7 +689,54 @@ public final class StrajaServerConfig {
         return p;
     }
 
+    /** Built-in defaults used as fallback when a configured list parses to nothing. */
+    private static StrajaPolicies defaults() {
+        return new StrajaPolicies();
+    }
+
+    /** Keeps the parsed map unless it is empty (cleared or fully malformed input). */
+    private static <K, V> java.util.Map<K, V> mapOrDefault(
+            java.util.Map<K, V> parsed, java.util.Map<K, V> fallback) {
+        return parsed.isEmpty() ? fallback : parsed;
+    }
+
+    private static <T> java.util.List<T> listOrDefault(java.util.List<T> parsed, java.util.List<T> fallback) {
+        return parsed.isEmpty() ? fallback : parsed;
+    }
+
     private static boolean isItemId(Object o) {
         return o instanceof String s && ResourceLocation.tryParse(s) != null;
+    }
+
+    private static boolean isIntMapEntry(Object o) {
+        if (!(o instanceof String s)) return false;
+        int sep = s.indexOf('=');
+        if (sep <= 0) return false;
+        try {
+            Integer.parseInt(s.substring(0, sep).trim());
+            Integer.parseInt(s.substring(sep + 1).trim());
+            return true;
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
+    private static boolean isKitEntry(Object o) {
+        if (!(o instanceof String s)) return false;
+        int sep = s.indexOf('=');
+        return sep > 0 && ResourceLocation.tryParse(
+                s.substring(sep + 1).split(",")[0].trim()) != null;
+    }
+
+    private static boolean isEquipmentEntry(Object o) {
+        if (!(o instanceof String s)) return false;
+        int sep = s.indexOf('=');
+        if (sep <= 0) return false;
+        String[] parts = s.substring(sep + 1).split("\\|", 5);
+        return parts.length >= 4 && ResourceLocation.tryParse(parts[1].trim()) != null;
+    }
+
+    private static boolean isQuizEntry(Object o) {
+        return o instanceof String s && s.split("\\|", 4).length >= 4;
     }
 }

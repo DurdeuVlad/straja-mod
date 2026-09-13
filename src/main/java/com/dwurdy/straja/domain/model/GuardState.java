@@ -22,8 +22,9 @@ public class GuardState {
     public Long trainingQuizCooldownAt = null;
     public boolean suspended = false;
     public boolean fired = false;
+    public String nativeFaction = null;        // self-declared origin faction; Straja applies while on duty
     public boolean duty = false;
-    public String mode = "OFF_DUTY";           // NORMAL | SPECIAL | OFF_DUTY
+    public String mode = "OFF_DUTY";           // NORMAL | SPECIAL | FREE | OFF_DUTY
     public String patrolState = "OFF";         // ACTIVE | WAITING | SUSPENDED | OFF
     public List<String> route = new ArrayList<>();
     public int patrolIndex = 0;

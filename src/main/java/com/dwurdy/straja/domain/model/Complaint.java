@@ -9,6 +9,7 @@ public class Complaint {
     public String complainant = "";
     public String complainantUuid = "";
     public String accused = "";
+    public String accusedUuid = "";
     public String category = "";
     public String description = "";
     public int severity = 1;

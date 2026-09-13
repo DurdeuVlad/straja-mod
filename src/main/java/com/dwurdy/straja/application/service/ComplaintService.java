@@ -1,6 +1,7 @@
 package com.dwurdy.straja.application.service;
 
 import com.dwurdy.straja.application.StrajaContext;
+import com.dwurdy.straja.application.port.in.ComplaintRoleplayUseCase;
 import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.domain.model.Capability;
 import com.dwurdy.straja.domain.model.Complaint;
@@ -12,8 +13,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 /** Citizen complaints: submission, investigation, report, review and rewards. */
-public class ComplaintService {
+public class ComplaintService implements ComplaintRoleplayUseCase {
     private static final long DAY_MS = 24L * 60 * 60 * 1000;
+    private static final int FIELD_LIMIT = 80;
+    private static final int FORM_PROTOCOL_LIMIT = 2000;
+    private static final int WITHDRAW_REASON_LIMIT = 240;
 
     private final StrajaContext ctx;
     private final PlayerService players;
@@ -39,6 +43,7 @@ public class ComplaintService {
 
     private static boolean near(PlayerGateway player, SetupData.Location at, double radius) {
         if (at == null) return false;
+        if (at.dimension != null && !at.dimension.equals(player.dimension())) return false;
         double dx = player.x() - at.x, dy = player.y() - at.y, dz = player.z() - at.z;
         return dx * dx + dy * dy + dz * dz <= radius * radius;
     }
@@ -54,6 +59,80 @@ public class ComplaintService {
 
     private boolean canReview(PlayerGateway player) {
         return players.isCommissioner(player) || players.hasCapability(player, Capability.APPROVE_REWARDS);
+    }
+
+    private static boolean blank(String value) {
+        return value == null || value.isEmpty();
+    }
+
+    private static Complaint.Participant participantOf(Complaint complaint, PlayerGateway player) {
+        if (complaint.participants == null) return null;
+        for (Complaint.Participant participant : complaint.participants) {
+            if (participant != null
+                    && PlayerService.identityMatches(player, participant.uuid, participant.name)) {
+                return participant;
+            }
+        }
+        return null;
+    }
+
+    /** Read-only projection of the complaint actions currently available to the player. */
+    @Override
+    public List<AvailableAction> availableActions(PlayerGateway player) {
+        ComplaintStore data = ctx.complaints().read();
+        List<AvailableAction> actions = new ArrayList<>();
+        boolean atReception = atLocation(player, "receptionist");
+        boolean atSecretary = atLocation(player, "secretary");
+        boolean investigate = canInvestigate(player);
+        boolean review = canReview(player);
+        long active = data.complaints.stream().filter(c -> c != null && c.isOpen()
+                && PlayerService.identityMatches(player, c.complainantUuid, c.complainant)).count();
+        if (p().complaintsEnabled && atReception && active < p().complaintMaxActivePerComplainant) {
+            actions.add(new AvailableAction(Action.SUBMIT, ""));
+        }
+        if ((investigate || review) && atSecretary) {
+            actions.add(new AvailableAction(Action.LIST, ""));
+        }
+        for (Complaint complaint : data.complaints) {
+            if (complaint == null || !complaint.isOpen()) continue;
+            String id = complaint.id == null ? "" : complaint.id;
+            if (investigate && atSecretary && ("SUBMITTED".equals(complaint.status)
+                    || ("CLAIMED".equals(complaint.status) && (blank(complaint.leadUuid)
+                            || PlayerService.identityMatches(player, complaint.leadUuid, complaint.lead))))) {
+                actions.add(new AvailableAction(Action.CLAIM, id));
+            }
+            Complaint.Participant participant = participantOf(complaint, player);
+            if (participant != null && "INVITED".equals(participant.status)
+                    && (atSecretary || atReception)) {
+                actions.add(new AvailableAction(Action.JOIN, id));
+            }
+            if (participant != null && "JOINED".equals(participant.status) && atSecretary) {
+                actions.add(new AvailableAction(Action.LEAVE, id));
+            }
+            if (investigate && atSecretary
+                    && List.of("CLAIMED", "INVESTIGATING").contains(complaint.status)
+                    && PlayerService.identityMatches(player, complaint.leadUuid, complaint.lead)) {
+                actions.add(new AvailableAction(Action.REPORT, id));
+            }
+            boolean actionable = List.of("REPORT_SUBMITTED", "UNDER_REVIEW").contains(complaint.status);
+            boolean own = PlayerService.identityMatches(player, complaint.complainantUuid, complaint.complainant);
+            if (actionable && atReception && own) {
+                actions.add(new AvailableAction(Action.CONFIRM, id));
+                actions.add(new AvailableAction(Action.WITHDRAW, id));
+            }
+            if (actionable && review && atSecretary && !own) {
+                actions.add(new AvailableAction(Action.REVIEW, id));
+            }
+        }
+        return List.copyOf(actions);
+    }
+
+    @Override
+    public Limits limits() {
+        return new Limits(
+                Math.min(p().complaintMaxDescriptionLength, FORM_PROTOCOL_LIMIT),
+                Math.min(p().complaintMaxEvidenceLength, FORM_PROTOCOL_LIMIT),
+                WITHDRAW_REASON_LIMIT);
     }
 
     /**
@@ -100,15 +179,30 @@ public class ComplaintService {
             player.tell("Plângerea se depune la recepționistă.");
             return false;
         }
+        String accusedName = accused == null ? "" : accused.trim();
+        String categoryName = category == null ? "" : category.trim();
         String text = description == null ? "" : description.trim();
-        if (accused == null || accused.isBlank() || category == null || category.isBlank()
+        if (accusedName.isEmpty() || accusedName.length() > FIELD_LIMIT
+                || categoryName.isEmpty() || categoryName.length() > FIELD_LIMIT
                 || text.isEmpty() || text.length() > p().complaintMaxDescriptionLength) {
-            player.tell("Folosește: /straja complaint submit <acuzat> <categorie> <descriere>.");
+            player.tell("Depune la recepționistă un formular complet: acuzat și categorie (maximum "
+                    + FIELD_LIMIT + " caractere) și descriere (maximum "
+                    + p().complaintMaxDescriptionLength + " caractere).");
+            return false;
+        }
+        PlayerGateway target = ctx.server().findPlayer(accusedName);
+        if (target == null || !target.isOnline()) {
+            player.tell("Jucătorul acuzat trebuie să fie conectat pentru a primi o plângere.");
+            return false;
+        }
+        if (PlayerService.identityMatches(player,
+                target.uuid() == null ? "" : target.uuid().toString(), target.name())) {
+            player.tell("Nu poți depune o plângere împotriva ta.");
             return false;
         }
         ComplaintStore data = ctx.complaints().read();
         String key = player.uuid().toString();
-        long active = data.complaints.stream().filter(c -> c.isOpen()
+        long active = data.complaints.stream().filter(c -> c != null && c.isOpen()
                 && PlayerService.identityMatches(player, c.complainantUuid, c.complainant)).count();
         if (active >= p().complaintMaxActivePerComplainant) {
             player.tell("Ai prea multe plângeri deschise. Așteaptă soluționarea lor.");
@@ -118,15 +212,16 @@ public class ComplaintService {
         complaint.id = data.nextComplaintId();
         complaint.complainant = player.name();
         complaint.complainantUuid = key;
-        complaint.accused = accused.substring(0, Math.min(80, accused.length()));
-        complaint.category = category.substring(0, Math.min(80, category.length()));
+        complaint.accused = target.name();
+        complaint.accusedUuid = target.uuid() == null ? "" : target.uuid().toString();
+        complaint.category = categoryName;
         complaint.description = text;
         complaint.severity = Math.max(1, p().complaintDefaultSeverity);
         complaint.status = "SUBMITTED";
         complaint.createdAt = now();
         data.complaints.add(complaint);
         ctx.complaints().write(data);
-        audit.record("complaint_submit", player.name(), key, complaint.accused, null, "SUCCESS", "submitted complaintId=" + complaint.id + " category=" + complaint.category);
+        audit.record("complaint_submit", player.name(), key, complaint.accused, complaint.accusedUuid, "SUCCESS", "submitted complaintId=" + complaint.id + " category=" + complaint.category);
         player.tell("Plângerea " + complaint.id + " a fost înregistrată. Vei putea confirma rezultatul la recepționistă.");
         return true;
     }
@@ -162,6 +257,10 @@ public class ComplaintService {
         }
         if (!complaint.leadUuid.isEmpty() && !complaint.leadUuid.equals(player.uuid().toString())) {
             player.tell("Plângerea este deja preluată de " + complaint.lead + ".");
+            return false;
+        }
+        if (!atLocation(player, "secretary")) {
+            player.tell("Dosarele se preiau la secretară.");
             return false;
         }
         complaint.lead = player.name();
@@ -215,7 +314,7 @@ public class ComplaintService {
         complaint.participants.add(participant);
         ctx.complaints().write(data);
         target.tell("Seniorul " + player.name() + " te-a mobilizat pentru dosarul " + complaint.id
-                + ". Prezintă-te la secretară și folosește /straja complaint join " + complaint.id + ".");
+                + ". Prezintă-te la secretară pentru confirmarea participării la acest dosar.");
         audit.record("complaint_mobilize", player.name(), player.uuid().toString(), target.name(), target.uuid().toString(), "SUCCESS", "invited complaintId=" + complaint.id);
         player.tell(target.name() + " a fost mobilizat pe dosarul " + complaint.id + ".");
         return true;
@@ -264,6 +363,10 @@ public class ComplaintService {
             player.tell("Nu ești participant activ pe acest dosar.");
             return false;
         }
+        if (!atLocation(player, "secretary")) {
+            player.tell("Părăsirea dosarului se face la secretară.");
+            return false;
+        }
         participant.status = "LEFT";
         participant.leftAt = now();
         ctx.complaints().write(data);
@@ -289,6 +392,10 @@ public class ComplaintService {
         if (complaint == null || !PlayerService.identityMatches(player, complaint.leadUuid, complaint.lead)
                 || !List.of("CLAIMED", "INVESTIGATING").contains(complaint.status)) {
             player.tell("Dosarul nu îți este atribuit sau nu mai acceptă raport.");
+            return false;
+        }
+        if (!atLocation(player, "secretary")) {
+            player.tell("Raportul de investigație se depune la secretară.");
             return false;
         }
         complaint.report = text;
@@ -320,17 +427,23 @@ public class ComplaintService {
         }
         String action = decision == null ? "" : decision.toLowerCase();
         if (List.of("retrage", "withdraw", "anuleaza", "anulează").contains(action)) {
+            String trimmed = reason == null ? "" : reason.trim();
+            if (trimmed.isEmpty() || trimmed.length() > WITHDRAW_REASON_LIMIT) {
+                player.tell("Retragerea plângerii cere un motiv de maximum "
+                        + WITHDRAW_REASON_LIMIT + " caractere.");
+                return false;
+            }
             complaint.status = "WITHDRAWN";
             complaint.complainantDecision = "WITHDRAWN";
             complaint.withdrawnAt = now();
-            complaint.withdrawReason = reason == null ? "" : reason.substring(0, Math.min(240, reason.length()));
+            complaint.withdrawReason = trimmed;
             ctx.complaints().write(data);
             audit.record("complaint_withdraw", player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), "SUCCESS", "complainant_withdrew complaintId=" + complaint.id);
             player.tell("Plângerea " + complaint.id + " a fost retrasă și trimisă în istoricul secției.");
             return true;
         }
         if (!List.of("satisfy", "satisfacut", "satisfăcut", "satisfied", "accept", "confirm").contains(action)) {
-            player.tell("Folosește confirm sau retrage.");
+            player.tell("La recepționistă, alege confirmarea soluționării sau retragerea plângerii.");
             return false;
         }
         complaint.status = "UNDER_REVIEW";
@@ -340,6 +453,16 @@ public class ComplaintService {
         audit.record("complaint_satisfied", player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), "SUCCESS", "complainant_confirmed complaintId=" + complaint.id);
         player.tell("Ai confirmat că dosarul " + complaint.id + " a fost soluționat.");
         return true;
+    }
+
+    @Override
+    public boolean confirm(PlayerGateway player, String id) {
+        return complainantDecision(player, id, "confirm", null);
+    }
+
+    @Override
+    public boolean withdraw(PlayerGateway player, String id, String reason) {
+        return complainantDecision(player, id, "withdraw", reason);
     }
 
     // ---------------------------------------------------------------- rewards
@@ -393,6 +516,7 @@ public class ComplaintService {
     }
 
     /** Re-delivers pending rewards to a player that just came online. */
+    @Override
     public void claimPendingRewards(PlayerGateway player) {
         ComplaintStore data = ctx.complaints().read();
         boolean changed = false;
@@ -422,6 +546,10 @@ public class ComplaintService {
             player.tell("Nu îți poți verifica propriul dosar.");
             return false;
         }
+        if (!atLocation(player, "secretary")) {
+            player.tell("Verificarea dosarelor se face la secretară.");
+            return false;
+        }
         String action = decision == null ? "" : decision.toLowerCase();
         if (List.of("return", "trimite-inapoi", "corectie").contains(action)) {
             complaint.status = "INVESTIGATING";
@@ -444,7 +572,7 @@ public class ComplaintService {
             return true;
         }
         if (!List.of("approve", "aproba", "rezolva", "resolve").contains(action)) {
-            player.tell("Folosește approve, return sau dismiss.");
+            player.tell("În registrul de plângeri, alege aprobarea, returnarea pentru completări sau clasarea dosarului.");
             return false;
         }
         if (!"SATISFIED".equals(complaint.complainantDecision) && !players.isCommissioner(player)) {
