@@ -8,7 +8,6 @@ import java.util.Map;
 /**
  * All tunable rules, resolved at bootstrap. Domain/application code reads this
  * object only — never ModConfigSpec — so tests construct it directly.
- * Defaults mirror kubejs/startup_scripts/00_straja_config.js.
  */
 public class StrajaPolicies {
     // identity
@@ -27,11 +26,16 @@ public class StrajaPolicies {
     // timers
     public int checkpointUnlockMinutes = 10;
     public int checkpointDeadlineMinutes = 30;
-    public int salaryBlockMinutes = 10;
+    /** One Minecraft day of paid duty time. */
+    public int salaryBlockMinutes = 20;
     public int foodCooldownMinutes = 30;
     public int quizCooldownMinutes = 10;
     public int resignationCooldownDays = 7;
     public int resignationNoticeMinutes = 15;
+
+    // personnel / reporting
+    public int activityReportIntervalRealDays = 7;
+    public boolean activityReportBlocksDutyWhenDue = true;
 
     // missions
     public int missionMinMinutes = 1;
@@ -96,8 +100,12 @@ public class StrajaPolicies {
         return !jailerGuardImmunity || !attackerOnDutyGuard;
     }
 
-    // salary
-    public Map<Integer, Integer> salaryPerBlock = new LinkedHashMap<>(Map.of(1, 20, 2, 30, 3, 40, 4, 50));
+    // salary (amounts are bronze-equivalent units)
+    public Map<Integer, Integer> salaryPerBlock = new LinkedHashMap<>(Map.of(
+            1, 28,
+            2, 32,
+            3, 48,
+            4, 48)); // Captain defaults to Senior rate until explicitly changed.
     public int salaryMaxBlocksPerDay = 24;
     public int salaryWindowMinutes = 24 * 60;
     public int salaryActivityGraceSeconds = 90;
@@ -106,17 +114,33 @@ public class StrajaPolicies {
     // promotions
     public Map<Integer, Integer> promotionServiceBlocks = new LinkedHashMap<>(Map.of(2, 60, 3, 180));
 
-    // quiz
+    // recruitment quiz: deliberately broader than the old three-question intake.
     public List<QuizQuestion> quiz = new ArrayList<>(List.of(
             new QuizQuestion("juramant", 0,
                     "Care este regula de bază a Străjii? (scrie: disciplina)",
                     List.of("disciplina")),
-            new QuizQuestion("checkpoint", 0,
-                    "Câte minute ai pentru a ajunge la următorul checkpoint? (scrie: 30)",
+            new QuizQuestion("checkpoint_deadline", 0,
+                    "Câte minute ai, implicit, pentru un checkpoint activ? (scrie: 30)",
                     List.of("30", "30 minute", "30 de minute")),
+            new QuizQuestion("checkpoint_wait", 0,
+                    "După un checkpoint, câte minute aștepți implicit până se activează următorul? (scrie: 10)",
+                    List.of("10", "10 minute", "10 de minute")),
+            new QuizQuestion("checkpoint_timeout", 0,
+                    "Ce se întâmplă dacă ratezi termenul checkpoint-ului? (scrie: tura se inchide)",
+                    List.of("tura se inchide", "tura se închide", "se inchide tura", "se închide tura")),
+            new QuizQuestion("offline_salary", 0,
+                    "Primești salariu cât timp ești offline? (scrie: nu)",
+                    List.of("nu")),
             new QuizQuestion("raport", 0,
-                    "Cui trimiți raportul final? (scrie: comisaru)",
-                    List.of("comisaru", "dwurdy"))));
+                    "Cui ajung rapoartele de activitate? (scrie: comisaru)",
+                    List.of("comisaru", "comisarul", "dwurdy")),
+            new QuizQuestion("fines_reception", 0,
+                    "Unde se plătesc amenzile? (scrie: receptionista)",
+                    List.of("receptionista", "recepționista", "receptie", "recepție")),
+            new QuizQuestion("authority", 0,
+                    "Când reprezinți oficial Straja pe teren? (scrie: in tura)",
+                    List.of("in tura", "în tură", "in serviciu", "în serviciu"))));
+
     public List<QuizQuestion> trainingQuiz = new ArrayList<>(List.of(
             new QuizQuestion("junior_fines_standard", 1,
                     "Cum alegi cuantumul unei amenzi? (scrie: tarif standard)",
@@ -134,11 +158,12 @@ public class StrajaPolicies {
                     "Ce face un Străjer Senior într-o plângere? (scrie: investigheaza)",
                     List.of("investigheaza", "investighează", "investigatie", "investigație"))));
 
-    // coins
+    // coins. Exact agreed invariant: 1 silver = 64 bronze. Existing brass/gold
+    // values remain compatibility defaults until their exchange ratios are decided.
     public Map<Integer, String> coinItemIds = new LinkedHashMap<>(Map.of(
             1, "adys_decorations:bronze_coin",
             10, "adys_decorations:brass_coin",
-            100, "adys_decorations:silver_coin",
+            64, "adys_decorations:silver_coin",
             1000, "adys_decorations:gold_coin"));
 
     // food/kits/equipment
