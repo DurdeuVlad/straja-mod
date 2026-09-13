@@ -149,12 +149,13 @@ public class StrajaPolicies {
     // trainer
     public String trainingManualItem = "straja:training_manual";
 
-    // coins
+    // coins — 64:1 ladder per docs/gameplay-decisions.md §10:
+    // Bronze → Brass → Silver → Gold. Values are Bronze-equivalents.
     public Map<Integer, String> coinItemIds = new LinkedHashMap<>(Map.of(
             1, "adys_decorations:bronze_coin",
-            10, "adys_decorations:brass_coin",
-            100, "adys_decorations:silver_coin",
-            1000, "adys_decorations:gold_coin"));
+            64, "adys_decorations:brass_coin",
+            4096, "adys_decorations:silver_coin",
+            262144, "adys_decorations:gold_coin"));
 
     // food/kits/equipment
     public String foodItem = "minecraft:bread";

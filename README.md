@@ -141,8 +141,9 @@ preservation remains a separate internal persistence recovery behavior.
 ## Economy
 
 Salaries, fines and rewards pay out as physical coin items. The four
-denominations (values 1, 10, 100, 1000) are item IDs configured under
-`[economy]` — defaults are Ady's Decorations coins, but any mod's items work
+denominations follow a 64:1 ladder — Bronze (1), Brass (64), Silver (4096),
+Gold (262144) Bronze-equivalents — and are item IDs configured under
+`[economy]`; defaults are Ady's Decorations coins, but any mod's items work
 (vanilla emeralds, custom coins, …). If the configured items aren't in the
 registry the provider reports unavailable and all coin operations fail closed.
 

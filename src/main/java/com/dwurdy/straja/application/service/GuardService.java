@@ -1518,7 +1518,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         player.tell("Sergent: preia plângeri, investighează și mobilizează Stagiari/Străjeri; nu emite misiuni plătite.");
         player.tell("Inspectorul și Comisaru' declară misiuni plătite la secretară și aprobă recompensele.");
         player.tell("Patrulă: 4 checkpoint-uri; 10 minute pauză între puncte; timpul fiecărei misiuni este stabilit de Inspector sau Comisaru'.");
-        player.tell("Salariu: un bloc complet la fiecare 10 minute. Monede: 1 / 10 / 100 / 1000.");
+        player.tell("Salariu: un bloc complet la fiecare 10 minute. Monede: 1 / 64 / 4096 / 262144 Bronz.");
         player.tell("Special Duty suspendă temporar checkpoint-urile și cere autorizare. Rapoartele merg la Comisaru'.");
         player.tell("Semnarea demisiei se face la Comisaru'. Revenirea este posibilă după cooldown și este limitată la Sergent.");
         var training = pendingModules(state);
