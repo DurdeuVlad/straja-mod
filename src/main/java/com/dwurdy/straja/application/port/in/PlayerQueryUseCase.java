@@ -14,7 +14,7 @@ public interface PlayerQueryUseCase {
 
     boolean hasCapability(PlayerGateway player, Capability capability);
 
-    /** On-duty guard (rank at least Junior) — the jailer-assault exemption rule. */
+    /** On-duty guard (rank at least Stagiar) — the jailer-assault exemption rule. */
     boolean isOnDutyGuard(PlayerGateway player);
 
     /** Resolves a player by name or UUID through the server view (includes test virtuals). */

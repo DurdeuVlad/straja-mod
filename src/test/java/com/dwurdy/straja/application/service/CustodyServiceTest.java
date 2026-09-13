@@ -147,7 +147,7 @@ class CustodyServiceTest {
     @Test
     void cuffRequestRequiresCuffsItemAndRank() {
         TestPlayer junior = server.add("jr");
-        setRank(junior, Rank.JUNIOR); // junior lacks useCuffs
+        setRank(junior, Rank.STAGIAR); // junior lacks useCuffs
         giveItem(junior, CustodyService.CUFFS);
         assertFalse(custody.requestCuffs(junior, civilian));
         TestPlayer bare = server.add("g2");

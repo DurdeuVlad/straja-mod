@@ -37,9 +37,9 @@ class MissionServiceTest {
         lt = server.add("lt1");
         g1 = server.add("g1");
         g2 = server.add("g2");
-        setRank(lt, Rank.LIEUTENANT);
+        setRank(lt, Rank.INSPECTOR);
         setRank(g1, Rank.GUARD);
-        setRank(g2, Rank.JUNIOR);
+        setRank(g2, Rank.STAGIAR);
     }
 
     private void setRank(TestPlayer p, Rank rank) {
@@ -89,7 +89,7 @@ class MissionServiceTest {
     @Test
     void createRejectsPeerTarget() {
         TestPlayer lt2 = server.add("lt2");
-        setRank(lt2, Rank.LIEUTENANT);
+        setRank(lt2, Rank.INSPECTOR);
         missions.createMission(lt, lt2, 30, "x", 10);
         assertTrue(lt.told("rang inferior"));
     }
@@ -97,7 +97,7 @@ class MissionServiceTest {
     @Test
     void createRejectsGuardIssuer() {
         missions.createMission(g1, g2, 30, "x", 10);
-        assertTrue(g1.told("Locotenentul sau Comisaru"));
+        assertTrue(g1.told("Inspectorul sau Comisaru"));
     }
 
     @Test
@@ -367,7 +367,7 @@ class MissionServiceTest {
                 new EquipmentService(ctx));
         guards.onStatusChange((p, r) -> missions.cancelOpenFor(p, r));
         var state = players.state(g1.uuid());
-        state.rank = Rank.JUNIOR.level();
+        state.rank = Rank.STAGIAR.level();
         players.save(g1.uuid(), state);
         missions.createMission(commissar, g1, 30, "m", 20);
 

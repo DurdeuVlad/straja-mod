@@ -25,13 +25,13 @@ public enum Capability {
 
     static {
         MATRIX.put(Rank.CIVIL, Set.of());
-        MATRIX.put(Rank.JUNIOR, Set.of(ISSUE_FINES));
+        MATRIX.put(Rank.STAGIAR, Set.of(ISSUE_FINES));
         MATRIX.put(Rank.GUARD, Set.of(
                 ISSUE_FINES, USE_CUFFS, USE_BATON, EXECUTE_ARRESTS, ASSIST_COMPLAINTS));
-        MATRIX.put(Rank.SENIOR, Set.of(
+        MATRIX.put(Rank.SERGENT, Set.of(
                 ISSUE_FINES, USE_CUFFS, USE_BATON, EXECUTE_ARRESTS, ASSIST_COMPLAINTS,
                 INVESTIGATE_COMPLAINTS, MOBILIZE_PLAYERS));
-        MATRIX.put(Rank.LIEUTENANT, Set.of(
+        MATRIX.put(Rank.INSPECTOR, Set.of(
                 ISSUE_FINES, USE_CUFFS, USE_BATON, EXECUTE_ARRESTS, ASSIST_COMPLAINTS,
                 INVESTIGATE_COMPLAINTS, MOBILIZE_PLAYERS, CREATE_MISSIONS,
                 APPROVE_REWARDS, REVIEW_APPEALS));

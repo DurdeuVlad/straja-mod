@@ -169,9 +169,9 @@ public class CustodyService implements CustodyRoleplayUseCase {
         }
         var targetState = players.state(target.uuid());
         var issuerState = players.state(issuer.uuid());
-        if (targetState.rank >= Rank.JUNIOR.level()
+        if (targetState.rank >= Rank.STAGIAR.level()
                 && !players.isCommissioner(issuer)
-                && issuerState.rank < Rank.LIEUTENANT.level()) {
+                && issuerState.rank < Rank.INSPECTOR.level()) {
             return new Policy(false, "guard_target_policy");
         }
         return new Policy(true, "");
@@ -180,7 +180,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
     private void policyDeny(PlayerGateway issuer, Policy policy) {
         issuer.tell("self_target".equals(policy.reason())
                 ? "Alege un alt jucător online."
-                : "Un străjer nu poate încătușa alt membru al Străjii fără override de Locotenent sau Comisaru'.");
+                : "Un străjer nu poate încătușa alt membru al Străjii fără override de Inspector sau Comisaru'.");
     }
 
     // ------------------------------------------------------------ requests

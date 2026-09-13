@@ -103,16 +103,16 @@ public class PlayerService implements com.dwurdy.straja.application.port.in.Play
     public PermissionLevel permissionLevel(PlayerGateway player, GuardState state) {
         if (isCommissioner(player)) return PermissionLevel.COMMISSIONER;
         Rank rank = Rank.of(state.rank);
-        if (rank == Rank.LIEUTENANT) return PermissionLevel.LIEUTENANT;
-        if (rank.atLeast(Rank.JUNIOR)) return PermissionLevel.GUARD;
+        if (rank == Rank.INSPECTOR) return PermissionLevel.LIEUTENANT;
+        if (rank.atLeast(Rank.STAGIAR)) return PermissionLevel.GUARD;
         return PermissionLevel.PUBLIC;
     }
 
-    /** On-duty guard (rank at least Junior) — the jailer-assault exemption rule. */
+    /** On-duty guard (rank at least Stagiar) — the jailer-assault exemption rule. */
     @Override
     public boolean isOnDutyGuard(PlayerGateway player) {
         GuardState state = state(player);
-        return state.duty && state.rank >= Rank.JUNIOR.level();
+        return state.duty && state.rank >= Rank.STAGIAR.level();
     }
 
     @Override
@@ -140,9 +140,9 @@ public class PlayerService implements com.dwurdy.straja.application.port.in.Play
         GuardState actorState = state(actor);
         Rank actorRank = Rank.of(actorState.rank);
         Rank targetRank = Rank.of(target.rank);
-        if (actorRank != Rank.LIEUTENANT) return Result.fail("forbidden");
+        if (actorRank != Rank.INSPECTOR) return Result.fail("forbidden");
         if (canon(actor.name()).equals(canon(targetName))) return Result.fail("self_forbidden");
-        if (targetRank.atLeast(Rank.LIEUTENANT)) return Result.fail("peer_forbidden");
+        if (targetRank.atLeast(Rank.INSPECTOR)) return Result.fail("peer_forbidden");
         return Result.pass();
     }
 }

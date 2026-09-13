@@ -19,7 +19,7 @@ import java.util.Map;
 public final class PolicyRegistry {
     private PolicyRegistry() {}
 
-    public enum Kind { INT, BOOL, DOUBLE, STRING, INT_MAP, COIN_MAP, INT_LIST, STRING_LIST, QUIZ, KITS, EQUIPMENT }
+    public enum Kind { INT, BOOL, DOUBLE, STRING, INT_MAP, INT_STR_MAP, INT_LIST, STRING_LIST, QUIZ, KITS, EQUIPMENT }
 
     public record Key(String path, String field, Kind kind) {}
 
@@ -97,6 +97,8 @@ public final class PolicyRegistry {
         k("salary.activityMoveThreshold", "salaryActivityMoveThreshold", Kind.DOUBLE);
         // promotion
         k("promotion.serviceBlocks", "promotionServiceBlocks", Kind.INT_MAP);
+        // rank display names (§2: Stagiar/Străjer/Sergent/Inspector)
+        k("rank.names", "rankNames", Kind.INT_STR_MAP);
         // duty / faction
         k("duty.freeDutyMinRank", "freeDutyMinRank", Kind.INT);
         k("duty.freeDutySalaryPerDay", "freeDutySalaryPerDay", Kind.INT_MAP);
@@ -106,7 +108,7 @@ public final class PolicyRegistry {
         k("quiz.trainingQuestions", "trainingQuiz", Kind.QUIZ);
         k("trainer.manualItem", "trainingManualItem", Kind.STRING);
         // economy
-        k("economy.coinItems", "coinItemIds", Kind.COIN_MAP);
+        k("economy.coinItems", "coinItemIds", Kind.INT_STR_MAP);
         k("economy.foodItem", "foodItem", Kind.STRING);
         k("economy.foodAmount", "foodAmount", Kind.INT);
         // equipment
@@ -252,7 +254,7 @@ public final class PolicyRegistry {
                 if (parsed.size() != list.size()) throw new IllegalArgumentException("malformed entries");
                 return parsed;
             }
-            case COIN_MAP -> {
+            case INT_STR_MAP -> {
                 var list = entries(raw);
                 var parsed = StrajaPolicies.parseIntStringMap(list);
                 if (parsed.size() != list.size()) throw new IllegalArgumentException("malformed entries");
@@ -300,7 +302,7 @@ public final class PolicyRegistry {
             case INT_LIST, STRING_LIST -> { return ((List<?>) value).stream()
                     .map(String::valueOf).collect(java.util.stream.Collectors.joining(";")); }
             case INT_MAP -> { return String.join(";", StrajaPolicies.formatIntMap(castMap(value))); }
-            case COIN_MAP -> { return String.join(";", StrajaPolicies.formatIntStringMap(castMap(value))); }
+            case INT_STR_MAP -> { return String.join(";", StrajaPolicies.formatIntStringMap(castMap(value))); }
             case QUIZ -> { return String.join(";", StrajaPolicies.formatQuiz(castList(value))); }
             case KITS -> { return String.join(";", StrajaPolicies.formatKits(castMap(value))); }
             case EQUIPMENT -> { return String.join(";", StrajaPolicies.formatEquipment(castMap(value))); }

@@ -433,7 +433,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
         sheet.updatedAt = now();
         ctx.archive().write(store);
         audit.record("archive_sheet_submit", player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), "SUCCESS", "pending_signature sheetId=" + sheet.id);
-        player.tell("Foaia " + sheet.id + " așteaptă semnătura Comisarului sau Locotenentului.");
+        player.tell("Foaia " + sheet.id + " așteaptă semnătura Comisarului sau Inspectorului.");
         return true;
     }
 
@@ -469,7 +469,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
     @Override
     public boolean signSheet(PlayerGateway player, String id, String reason) {
         if (!canSign(player)) {
-            player.tell("Doar un Locotenent sau Comisaru' poate semna acte.");
+            player.tell("Doar un Inspector sau Comisaru' poate semna acte.");
             return false;
         }
         ArchiveStore store = ctx.archive().read();
@@ -505,7 +505,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
     @Override
     public boolean revokeSheet(PlayerGateway player, String id) {
         if (!canSign(player) && !canArchive(player)) {
-            player.tell("Doar Locotenentul, Comisaru' sau Arhivista pot revoca un act.");
+            player.tell("Doar Inspectorul, Comisaru' sau Arhivista pot revoca un act.");
             return false;
         }
         ArchiveStore store = ctx.archive().read();
@@ -528,7 +528,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
     @Override
     public boolean copySheet(PlayerGateway player, String id, Integer rawCount, String rawTargets) {
         if (!canArchive(player) && !canSign(player)) {
-            player.tell("Doar Arhivista autorizată, Locotenentul sau Comisaru' pot genera copii.");
+            player.tell("Doar Arhivista autorizată, Inspectorul sau Comisaru' pot genera copii.");
             return false;
         }
         ArchiveStore store = ctx.archive().read();
@@ -647,7 +647,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
     @Override
     public boolean packEnvelope(PlayerGateway player, String id, String targetName) {
         if (!canArchive(player) && !canSign(player)) {
-            player.tell("Doar Arhivista autorizată, Locotenentul sau Comisaru' pot împacheta acte.");
+            player.tell("Doar Arhivista autorizată, Inspectorul sau Comisaru' pot împacheta acte.");
             return false;
         }
         ArchiveStore store = ctx.archive().read();

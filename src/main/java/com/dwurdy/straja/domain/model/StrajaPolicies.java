@@ -103,6 +103,11 @@ public class StrajaPolicies {
     public int salaryActivityGraceSeconds = 90;
     public double salaryActivityMoveThreshold = 0.15;
 
+    // rank display names (§2 ladder: Stagiar → Străjer → Sergent → Inspector;
+    // Comisar is a personnel flag, not a ladder step)
+    public Map<Integer, String> rankNames = new LinkedHashMap<>(Map.of(
+            1, "Stagiar", 2, "Străjer", 3, "Sergent", 4, "Inspector"));
+
     // promotions
     public Map<Integer, Integer> promotionServiceBlocks = new LinkedHashMap<>(Map.of(2, 60, 3, 180));
 
@@ -138,7 +143,7 @@ public class StrajaPolicies {
                     "Ce condiție trebuie înaintea arestării? (scrie: misiune)",
                     List.of("misiune", "mandat", "misiune sau mandat")),
             new QuizQuestion("senior_orders_lower", 3,
-                    "Ce face un Străjer Senior într-o plângere? (scrie: investigheaza)",
+                    "Ce face un Sergent într-o plângere? (scrie: investigheaza)",
                     List.of("investigheaza", "investighează", "investigatie", "investigație"))));
 
     // trainer
@@ -243,6 +248,12 @@ public class StrajaPolicies {
 
     public int salaryPerBlock(int rank) {
         return salaryPerBlock.getOrDefault(rank, 0);
+    }
+
+    /** Configurable display name for a rank level; falls back to the enum name. */
+    public String rankName(int rank) {
+        String name = rankNames.get(rank);
+        return name != null && !name.isBlank() ? name : Rank.of(rank).displayName();
     }
 
     private static Map<Integer, List<ItemSpec>> defaultKits() {

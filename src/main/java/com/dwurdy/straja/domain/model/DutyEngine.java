@@ -97,7 +97,7 @@ public final class DutyEngine {
         if (state.resignationPending) return Result.fail("resignation_pending");
         if (state.resigned) return Result.fail("resigned");
         if (state.fired) return Result.fail("fired");
-        if (state.rank < Rank.JUNIOR.level()) return Result.fail("rank_required");
+        if (state.rank < Rank.STAGIAR.level()) return Result.fail("rank_required");
         if (state.duty) return Result.fail("already_on_duty");
         if (state.suspended) return Result.fail("suspended");
         if (!uniqueRoute(route)) return Result.fail("route_invalid");
@@ -133,7 +133,7 @@ public final class DutyEngine {
     }
 
     /**
-     * Senior ranks and the commissioner start shifts at will: no patrol route,
+     * Sergent+ ranks and the commissioner start shifts at will: no patrol route,
      * no checkpoint deadlines. Salary still accrues (per Minecraft day) and the
      * same lifecycle guards apply.
      */
@@ -144,7 +144,7 @@ public final class DutyEngine {
         if (state.fired) return Result.fail("fired");
         if (state.duty) return Result.fail("already_on_duty");
         if (state.suspended) return Result.fail("suspended");
-        int minRank = policies != null ? policies.freeDutyMinRank : Rank.SENIOR.level();
+        int minRank = policies != null ? policies.freeDutyMinRank : Rank.SERGENT.level();
         if (!commissioner && state.rank < minRank) return Result.fail("free_duty_rank_required");
 
         state.duty = true;
@@ -272,7 +272,7 @@ public final class DutyEngine {
     }
 
     public static Result beginResignation(GuardState state, long now, int noticeMinutes) {
-        if (state.rank < Rank.JUNIOR.level()) return Result.fail("rank_required");
+        if (state.rank < Rank.STAGIAR.level()) return Result.fail("rank_required");
         if (state.resigned) return Result.fail("already_resigned");
         if (state.resignationPending) return Result.fail("resignation_pending");
         state.resignationPending = true;
@@ -380,9 +380,9 @@ public final class DutyEngine {
         if (commissioner) return true;
         if ("special_duty".equals(action) || "resume_special".equals(action)
                 || "complete_special".equals(action) || "regear".equals(action)) {
-            return actorRank == Rank.LIEUTENANT.level()
+            return actorRank == Rank.INSPECTOR.level()
                     && !canon(targetName).equals(canon(actorName))
-                    && targetRank < Rank.LIEUTENANT.level();
+                    && targetRank < Rank.INSPECTOR.level();
         }
         return false;
     }

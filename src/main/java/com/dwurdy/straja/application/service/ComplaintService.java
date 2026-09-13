@@ -228,7 +228,7 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
 
     public void list(PlayerGateway player) {
         if (!canInvestigate(player) && !canReview(player)) {
-            player.tell("Doar Seniorul sau un rang superior poate vedea dosarele.");
+            player.tell("Doar Sergentul sau un rang superior poate vedea dosarele.");
             return;
         }
         ComplaintStore data = ctx.complaints().read();
@@ -246,7 +246,7 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
 
     public boolean claim(PlayerGateway player, String id) {
         if (!canInvestigate(player)) {
-            player.tell("Doar Străjerul Senior sau un rang superior poate prelua plângeri.");
+            player.tell("Doar Sergentul sau un rang superior poate prelua plângeri.");
             return false;
         }
         ComplaintStore data = ctx.complaints().read();
@@ -275,7 +275,7 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
 
     public boolean mobilize(PlayerGateway player, String id, PlayerGateway target) {
         if (!players.hasCapability(player, Capability.MOBILIZE_PLAYERS)) {
-            player.tell("Doar Străjerul Senior sau un rang superior poate mobiliza participanți.");
+            player.tell("Doar Sergentul sau un rang superior poate mobiliza participanți.");
             return false;
         }
         ComplaintStore data = ctx.complaints().read();
@@ -290,7 +290,7 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
             return false;
         }
         if (!players.isCommissioner(player) && players.state(target).rank >= players.state(player).rank) {
-            player.tell("Poți mobiliza doar Juniori și Străjeri.");
+            player.tell("Poți mobiliza doar Stagiari și Străjeri.");
             return false;
         }
         for (Complaint.Participant participant : complaint.participants) {
@@ -313,7 +313,7 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
         participant.invitedAt = now();
         complaint.participants.add(participant);
         ctx.complaints().write(data);
-        target.tell("Seniorul " + player.name() + " te-a mobilizat pentru dosarul " + complaint.id
+        target.tell("Sergentul " + player.name() + " te-a mobilizat pentru dosarul " + complaint.id
                 + ". Prezintă-te la secretară pentru confirmarea participării la acest dosar.");
         audit.record("complaint_mobilize", player.name(), player.uuid().toString(), target.name(), target.uuid().toString(), "SUCCESS", "invited complaintId=" + complaint.id);
         player.tell(target.name() + " a fost mobilizat pe dosarul " + complaint.id + ".");
@@ -379,7 +379,7 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
 
     public boolean report(PlayerGateway player, String id, String report) {
         if (!canInvestigate(player)) {
-            player.tell("Doar Seniorul sau un rang superior poate depune raportul de investigație.");
+            player.tell("Doar Sergentul sau un rang superior poate depune raportul de investigație.");
             return false;
         }
         String text = report == null ? "" : report.trim();
@@ -474,7 +474,7 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
         String key = window + ":" + player.uuid();
         int used = data.rewardBudgets.getOrDefault(key, 0);
         if (amount < 0 || used + amount > limit) {
-            player.tell("Bugetul zilnic al Locotenentului este insuficient (" + used + "/" + limit + ").");
+            player.tell("Bugetul zilnic al Inspectorului este insuficient (" + used + "/" + limit + ").");
             return false;
         }
         data.rewardBudgets.put(key, used + amount);
@@ -533,7 +533,7 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
 
     public boolean review(PlayerGateway player, String id, String decision, Integer reward) {
         if (!canReview(player)) {
-            player.tell("Doar Locotenentul sau Comisaru' poate verifica și plăti dosare.");
+            player.tell("Doar Inspectorul sau Comisaru' poate verifica și plăti dosare.");
             return false;
         }
         ComplaintStore data = ctx.complaints().read();
