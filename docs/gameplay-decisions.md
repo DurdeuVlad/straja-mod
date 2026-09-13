@@ -158,33 +158,42 @@ The economy uses the same **64-to-1 conversion at every step**:
 
 Implementations should not use the old 1/10/100/1000 denomination assumptions. Currency denomination values/item IDs remain configurable, but the current gameplay default is the 64-based ladder above.
 
-### Base wage
+### Rank-based hourly wage
+
+Salary is intentionally tied to rank: **promotion must increase the hourly wage** because higher rank means more responsibility, authority and expected work.
 
 The current base wage is defined around **one real hour of qualifying, actually-played work**:
 
-- **Base hourly wage = 64 / 4 = 16 Bronze per real hour of qualifying duty.**
+- **Stagiar / base hourly wage = 64 / 4 = 16 Bronze per real hour of qualifying duty.**
+
+The wage ladder must be strictly increasing:
+
+- **Stagiar:** 16 Bronze/hour base.
+- **Străjer:** greater than Stagiar.
+- **Sergent:** greater than Străjer.
+- **Inspector:** greater than Sergent and explicitly paid.
+- **Comisar:** **exactly 2× the Inspector hourly wage** by current design.
+
+The exact Străjer, Sergent and Inspector values/multipliers are still configurable/TBD, but they must preserve this ordering:
+
+`Stagiar < Străjer < Sergent < Inspector < Comisar`
+
+The Comisar rule is relative to Inspector, not to the base wage. Example: if Inspector were configured at 48 Bronze/hour, Comisar would be 96 Bronze/hour.
+
+The fact that the current Comisar account may usually play in Creative does not remove or special-case the salary rule; the organizational rank still has a defined wage.
 
 Only qualifying online work time counts. Offline time never contributes salary progress.
 
-Rank salary should be expressed/configurable as rates or multipliers derived from this base rather than buried as unrelated hard-coded numbers.
-
-Current salary decisions:
-
-- **Stagiar:** paid; exact rank multiplier/rate above or equal to the base remains configurable/TBD.
-- **Străjer:** paid; exact rank multiplier/rate remains configurable/TBD.
-- **Sergent:** paid; exact rank multiplier/rate remains configurable/TBD.
-- **Inspector:** **must have a salary**; it is not an unpaid rank. Exact multiplier/rate remains configurable/TBD.
-- **Comisar:** **2× the base hourly wage by current decision = 32 Bronze per qualifying real hour.** The fact that the current Comisar account may normally play in Creative does not remove the salary rule from the system.
-
-Salary is earned for actual qualifying online duty time and accumulates as an unpaid balance. It is claimed/paid through the Secretary rather than automatically dropping a coin every interval.
+Salary is earned continuously/proportionally from qualifying work time and accumulates as an unpaid balance. It is claimed/paid through the Secretary rather than automatically dropping a coin every interval.
 
 Rules:
 
-- Salary accounting should be based on actual qualifying online work time, with **1 real hour** as the current reference interval for the base wage.
+- Salary accounting is based on actual qualifying online work time, with **1 real hour** as the reference unit for displayed/configured hourly rates.
+- Promotions should take effect on the wage rate from that point forward; already-earned salary must not be retroactively recalculated or lost.
 - Offline time contributes zero salary progress.
 - Partial progress toward the next payable amount is preserved when a voluntary shift ends; a player should not lose legitimate partial progress by clocking out.
 - Earned but unclaimed salary is preserved.
-- Salary rates/multipliers, accounting interval and currency item IDs/denominations must be configurable.
+- Salary rates/multipliers, accounting granularity and currency item IDs/denominations must be configurable.
 - Inventory/payment failure must not silently destroy the player's unpaid balance.
 - Conversion to physical coins should use the 64-based four-denomination ladder and should choose sensible denominations without losing value.
 
@@ -246,7 +255,7 @@ At minimum the system should aim to make these editable without recompiling the 
 
 - rank display names/order and rank permissions;
 - salary rates/multipliers per rank;
-- base hourly wage / salary accounting interval;
+- base hourly wage / salary accounting granularity;
 - coin/item IDs, denomination order and conversion ratios;
 - checkpoint wait/unlock and deadline values;
 - checkpoint locations/routes;
@@ -262,7 +271,7 @@ Commands and config files may remain as operator fallback, emergency recovery an
 ## 16. Explicit non-goals / postponed decisions
 
 - Jailer/item-dependent custody expansion is postponed for now.
-- Exact rank salary multipliers for Stagiar, Străjer, Sergent and Inspector are not finalized; however Inspector is explicitly a paid rank, the base rate is 16 Bronze/hour, and Comisar is currently fixed at 2× base = 32 Bronze/hour.
+- Exact Străjer, Sergent and Inspector salary values/multipliers are not finalized. The fixed salary rules are: Stagiar starts at 16 Bronze/hour, each promotion increases hourly pay, and Comisar earns exactly 2× Inspector.
 - Exact promotion thresholds and exams between Stagiar -> Străjer -> Sergent -> Inspector are not finalized.
 - Anti-AFK salary behavior is not finalized.
 - Exact UI layout and technical persistence architecture are implementation choices, provided the gameplay invariants above are met.
