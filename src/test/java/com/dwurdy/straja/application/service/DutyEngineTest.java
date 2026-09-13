@@ -13,7 +13,8 @@ import org.junit.jupiter.api.Test;
 
 class DutyEngineTest {
     private static final StrajaPolicies POLICY = new StrajaPolicies();
-    private static final List<String> ROUTE = List.of("checkpoint_1", "checkpoint_2", "checkpoint_3", "checkpoint_4");
+    private static final List<String> ROUTE = List.of(
+            "checkpoint_1", "checkpoint_2", "checkpoint_3", "checkpoint_4");
 
     private GuardState juniorOnDuty() {
         GuardState state = new GuardState();
@@ -47,14 +48,16 @@ class DutyEngineTest {
         state.rank = Rank.JUNIOR.level();
         assertEquals("route_invalid", DutyEngine.startDuty(state,
                 List.of("a", "a", "b", "c"), 0, Map.of(), POLICY).code());
-        assertEquals("route_invalid", DutyEngine.startDuty(state, List.of("a", "b", "c"), 0, Map.of(), POLICY).code());
+        assertEquals("route_invalid", DutyEngine.startDuty(state,
+                List.of("a", "b", "c"), 0, Map.of(), POLICY).code());
     }
 
     @Test
     void startDutySetsDeadlineFromMissionMinutes() {
         GuardState state = new GuardState();
         state.rank = Rank.JUNIOR.level();
-        var result = DutyEngine.startDuty(state, ROUTE, 1_000, Map.of("checkpoint_1", 45), POLICY);
+        var result = DutyEngine.startDuty(state, ROUTE, 1_000,
+                Map.of("checkpoint_1", 45), POLICY);
         assertTrue(result.ok());
         assertEquals(1_000 + 45 * DutyEngine.MINUTE_MS, state.deadlineAt);
         assertEquals("ACTIVE", state.patrolState);
@@ -73,9 +76,11 @@ class DutyEngineTest {
         assertTrue(result.ok());
         assertEquals(60 * DutyEngine.MINUTE_MS, state.deadlineAt);
 
-        Result first = DutyEngine.activateCheckpoint(state, "checkpoint_1", 60_000, 20, Map.of(), custom);
+        Result first = DutyEngine.activateCheckpoint(
+                state, "checkpoint_1", 60_000, 20, Map.of(), custom);
         assertTrue(first.ok());
         assertEquals(60_000 + 20 * DutyEngine.MINUTE_MS, state.waitingUntil);
+        assertEquals(state.waitingUntil + 60 * DutyEngine.MINUTE_MS, state.deadlineAt);
     }
 
     @Test
@@ -83,7 +88,6 @@ class DutyEngineTest {
         StrajaPolicies custom = new StrajaPolicies();
         custom.salaryBlockMinutes = 5;
         GuardState state = juniorOnDuty();
-        // 12 minutes -> 2 blocks of 5 (would be 1 block under the default 10)
         DutyEngine.accrue(state, 12 * DutyEngine.MINUTE_MS, 20, custom);
         assertEquals(40, state.unpaidSalary);
         assertEquals(2, state.serviceBlocks);
@@ -92,48 +96,74 @@ class DutyEngineTest {
     // ---------------------------------------------------------------- checkpoints
 
     @Test
-    void checkpointFlowWaitsThenActivatesNext() {
+    void checkpointFlowWaitsThenActivatesNextWithoutResettingDeadline() {
         GuardState state = juniorOnDuty();
-        // Wrong checkpoint rejected.
-        Result wrong = DutyEngine.activateCheckpoint(state, "checkpoint_2", 60_000, 20, Map.of(), POLICY);
+        Result wrong = DutyEngine.activateCheckpoint(
+                state, "checkpoint_2", 60_000, 20, Map.of(), POLICY);
         assertEquals("wrong_checkpoint", wrong.code());
 
-        // First checkpoint at t=60s -> WAITING until t=60s+10min.
-        Result first = DutyEngine.activateCheckpoint(state, "checkpoint_1", 60_000, 20, Map.of(), POLICY);
+        Result first = DutyEngine.activateCheckpoint(
+                state, "checkpoint_1", 60_000, 20, Map.of(), POLICY);
         assertTrue(first.ok());
         assertEquals("WAITING", state.patrolState);
-        assertEquals(60_000 + DutyEngine.DEFAULT_UNLOCK_MINUTES * DutyEngine.MINUTE_MS, state.waitingUntil);
-        assertNull(state.deadlineAt);
+        long waitUntil = 60_000 + POLICY.checkpointUnlockMinutes * DutyEngine.MINUTE_MS;
+        long absoluteDeadline = waitUntil + POLICY.checkpointDeadlineMinutes * DutyEngine.MINUTE_MS;
+        assertEquals(waitUntil, state.waitingUntil);
+        assertEquals(absoluteDeadline, state.deadlineAt);
 
-        // During the wait, ticking is inert for the patrol.
-        var duringWait = DutyEngine.tickDuty(state, 300_000, 20, Map.of(), POLICY, null);
+        DutyEngine.tickDuty(state, 300_000, 20, Map.of(), POLICY, null);
         assertEquals("WAITING", state.patrolState);
 
-        // Wait expires -> next checkpoint ACTIVE with a fresh deadline.
-        var after = DutyEngine.tickDuty(state, 700_000, 20, Map.of(), POLICY, null);
+        DutyEngine.tickDuty(state, waitUntil + 1, 20, Map.of(), POLICY, null);
         assertEquals("ACTIVE", state.patrolState);
-        assertEquals(700_000 + 30 * DutyEngine.MINUTE_MS, state.deadlineAt);
+        assertEquals(absoluteDeadline, state.deadlineAt,
+                "unlock must not create a fresh deadline");
     }
 
     @Test
-    void finalCheckpointCompletesPatrol() {
+    void logoutCannotFreezeWaitingCheckpointDeadline() {
         GuardState state = juniorOnDuty();
-        for (int i = 0; i < 3; i++) {
-            DutyEngine.activateCheckpoint(state, ROUTE.get(i), 60_000, 20, Map.of(), POLICY);
-            DutyEngine.tickDuty(state, 60_000 + DutyEngine.DEFAULT_UNLOCK_MINUTES * DutyEngine.MINUTE_MS + 1, 20, Map.of(), POLICY, null);
-        }
-        Result last = DutyEngine.activateCheckpoint(state, "checkpoint_4", 800_000, 20, Map.of(), POLICY);
-        assertTrue(last.ok());
+        DutyEngine.activateCheckpoint(state, "checkpoint_1", 60_000, 20, Map.of(), POLICY);
+        long deadline = state.deadlineAt;
+        assertEquals("WAITING", state.patrolState);
+
+        // Simulates no ticks at all while the player is offline. The first
+        // state evaluation after the absolute deadline must close the duty.
+        var result = DutyEngine.tickDuty(state, deadline, 20, Map.of(), POLICY, deadline);
         assertFalse(state.duty);
-        assertEquals("OFF", state.patrolState);
-        assertEquals("patrol_complete", state.lastEndReason);
+        assertEquals("checkpoint_timeout", state.lastEndReason);
+        assertTrue(result.events().stream().anyMatch(e -> e.type().equals("duty_ended")));
+    }
+
+    @Test
+    void finalCheckpointCompletesRoundAndLoopsInsteadOfEndingDuty() {
+        GuardState state = juniorOnDuty();
+        long now = 60_000;
+        for (int i = 0; i < 3; i++) {
+            Result reached = DutyEngine.activateCheckpoint(
+                    state, ROUTE.get(i), now, 20, Map.of(), POLICY);
+            assertTrue(reached.ok());
+            now = state.waitingUntil + 1;
+            DutyEngine.tickDuty(state, now, 20, Map.of(), POLICY, now);
+            assertEquals("ACTIVE", state.patrolState);
+            now += 1_000;
+        }
+
+        Result last = DutyEngine.activateCheckpoint(
+                state, "checkpoint_4", now, 20, Map.of(), POLICY);
+        assertTrue(last.ok());
+        assertTrue(state.duty);
+        assertEquals("WAITING", state.patrolState);
+        assertEquals(0, state.patrolIndex);
+        assertEquals(1, state.patrolRoundsCompleted);
+        assertTrue(last.events().stream().anyMatch(e -> e.type().equals("patrol_round_complete")));
     }
 
     @Test
     void deadlineTimeoutEndsDuty() {
         GuardState state = juniorOnDuty();
         long deadline = state.deadlineAt;
-        var result = DutyEngine.tickDuty(state, deadline, 20, Map.of(), POLICY, null);
+        var result = DutyEngine.tickDuty(state, deadline, 20, Map.of(), POLICY, deadline);
         assertFalse(state.duty);
         assertEquals("checkpoint_timeout", state.lastEndReason);
         assertTrue(result.events().stream().anyMatch(e -> e.type().equals("duty_ended")));
@@ -142,25 +172,42 @@ class DutyEngineTest {
     // ---------------------------------------------------------------- salary
 
     @Test
-    void accrualPaysCompleteBlocksOnly() {
+    void accrualPaysCompleteTwentyMinuteDaysOnly() {
         GuardState state = juniorOnDuty();
-        // 9 minutes -> no block
-        DutyEngine.accrue(state, 9 * DutyEngine.MINUTE_MS, 20, POLICY);
+        DutyEngine.accrue(state, 19 * DutyEngine.MINUTE_MS, 20, POLICY);
         assertEquals(0, state.unpaidSalary);
-        // 25 minutes total -> 2 blocks of 10
+
         DutyEngine.accrue(state, 25 * DutyEngine.MINUTE_MS, 20, POLICY);
+        assertEquals(20, state.unpaidSalary);
+        assertEquals(1, state.serviceBlocks);
+
+        DutyEngine.accrue(state, 40 * DutyEngine.MINUTE_MS, 20, POLICY);
         assertEquals(40, state.unpaidSalary);
         assertEquals(2, state.serviceBlocks);
-        // remainder carries over
-        DutyEngine.accrue(state, 30 * DutyEngine.MINUTE_MS, 20, POLICY);
-        assertEquals(3, state.serviceBlocks);
+    }
+
+    @Test
+    void partialPaidDayProgressSurvivesVoluntaryShiftBoundary() {
+        GuardState state = juniorOnDuty();
+        DutyEngine.accrue(state, 12 * DutyEngine.MINUTE_MS, 20, POLICY);
+        assertEquals(12, state.dutyMinutes);
+        assertEquals(0, state.unpaidSalary);
+
+        DutyEngine.endDuty(state, "secretary", 12 * DutyEngine.MINUTE_MS, 20, POLICY);
+        assertTrue(DutyEngine.startDuty(state, ROUTE,
+                20 * DutyEngine.MINUTE_MS, Map.of(), POLICY).ok());
+        DutyEngine.accrue(state, 28 * DutyEngine.MINUTE_MS, 20, POLICY);
+
+        assertEquals(20, state.dutyMinutes);
+        assertEquals(20, state.unpaidSalary);
+        assertEquals(1, state.serviceBlocks);
     }
 
     @Test
     void salaryCapSuppressesPayAboveDailyLimit() {
         GuardState state = juniorOnDuty();
-        // 260 minutes = 26 blocks; cap is 24 blocks/day
-        DutyEngine.accrue(state, 260 * DutyEngine.MINUTE_MS, 20, POLICY);
+        // 520 minutes = 26 x 20-minute paid days; cap is 24 per window.
+        DutyEngine.accrue(state, 520 * DutyEngine.MINUTE_MS, 20, POLICY);
         assertEquals(24 * 20, state.unpaidSalary);
         assertEquals(26, state.serviceBlocks);
     }
@@ -168,8 +215,8 @@ class DutyEngineTest {
     @Test
     void accrualNowClampStopsIdlePay() {
         GuardState state = juniorOnDuty();
-        // accrual timestamp clamped at grace boundary — later wall time doesn't pay
-        DutyEngine.tickDuty(state, 300 * DutyEngine.MINUTE_MS, 20, Map.of(), POLICY, 60_000L);
+        DutyEngine.tickDuty(state, 300 * DutyEngine.MINUTE_MS,
+                20, Map.of(), POLICY, 60_000L);
         assertEquals(0, state.unpaidSalary);
     }
 
@@ -184,9 +231,9 @@ class DutyEngineTest {
         assertTrue(start.ok());
         assertEquals(10_000 + 15 * DutyEngine.MINUTE_MS, state.resignationDeadlineAt);
 
-        // too early to confirm
         assertEquals("resignation_wait",
-                DutyEngine.completeResignation(state, 10_000, 7L * 24 * 3600 * 1000).code());
+                DutyEngine.completeResignation(state, 10_000,
+                        7L * 24 * 3600 * 1000).code());
 
         Result done = DutyEngine.completeResignation(state,
                 10_000 + 16 * DutyEngine.MINUTE_MS, 7L * 24 * 3600 * 1000);
@@ -218,11 +265,12 @@ class DutyEngineTest {
         assertEquals("SPECIAL", state.mode);
         assertNull(state.deadlineAt);
 
-        // ticking during special duty must not time out the patrol
-        DutyEngine.tickDuty(state, 500L * DutyEngine.MINUTE_MS, 20, Map.of(), POLICY, null);
+        DutyEngine.tickDuty(state, 500L * DutyEngine.MINUTE_MS,
+                20, Map.of(), POLICY, null);
         assertTrue(state.duty);
 
-        Result resumed = DutyEngine.resumeSpecial(state, 600L * DutyEngine.MINUTE_MS, 20, POLICY);
+        Result resumed = DutyEngine.resumeSpecial(
+                state, 600L * DutyEngine.MINUTE_MS, 20, POLICY);
         assertTrue(resumed.ok());
         assertEquals("NORMAL", state.mode);
         assertEquals("ACTIVE", state.patrolState);
@@ -231,27 +279,27 @@ class DutyEngineTest {
 
     @Test
     void canAuthorizeRules() {
-        // commissioner flag (computed by PlayerService) bypasses rank rules
-        assertTrue(DutyEngine.canAuthorize(true, "dwurdy", 0, "guard1", 2, "special_duty"));
-        assertTrue(DutyEngine.canAuthorize(true, "someone", 0, "other", 2, "regear"));
-        // lieutenant for a lower-ranked different target
-        assertTrue(DutyEngine.canAuthorize(false, "lt", 4, "guard1", 2, "special_duty"));
-        // lieutenant cannot authorize self
-        assertFalse(DutyEngine.canAuthorize(false, "lt", 4, "lt", 4, "special_duty"));
-        // junior cannot authorize
-        assertFalse(DutyEngine.canAuthorize(false, "jr", 1, "guard1", 1, "regear"));
-        // names alone never confer commissioner authority
-        assertFalse(DutyEngine.canAuthorize(false, "dwurdy", 0, "guard1", 2, "special_duty"));
+        assertTrue(DutyEngine.canAuthorize(true, "dwurdy", 0,
+                "guard1", 2, "special_duty"));
+        assertTrue(DutyEngine.canAuthorize(true, "someone", 0,
+                "other", 2, "regear"));
+        assertTrue(DutyEngine.canAuthorize(false, "captain", 4,
+                "guard1", 2, "special_duty"));
+        assertFalse(DutyEngine.canAuthorize(false, "captain", 4,
+                "captain", 4, "special_duty"));
+        assertFalse(DutyEngine.canAuthorize(false, "jr", 1,
+                "guard1", 1, "regear"));
+        assertFalse(DutyEngine.canAuthorize(false, "dwurdy", 0,
+                "guard1", 2, "special_duty"));
     }
 
     @Test
-    void toCoinsBreaksDownLargestFirst() {
-        var coins = new TreeMap<>(Map.of(1, "b", 10, "r", 100, "s", 1000, "g"));
-        var result = DutyEngine.toCoins(2543, coins);
-        assertEquals(List.of(1000, 2), List.of(result.get(0)[0], result.get(0)[1]));
-        assertEquals(List.of(100, 5), List.of(result.get(1)[0], result.get(1)[1]));
-        assertEquals(List.of(10, 4), List.of(result.get(2)[0], result.get(2)[1]));
-        assertEquals(List.of(1, 3), List.of(result.get(3)[0], result.get(3)[1]));
+    void toCoinsUsesSixtyFourBronzeSilverDenomination() {
+        var coins = new TreeMap<>(Map.of(
+                1, "bronze", 10, "brass", 64, "silver", 1000, "gold"));
+        var result = DutyEngine.toCoins(148, coins);
+        assertEquals(List.of(64, 2), List.of(result.get(0)[0], result.get(0)[1]));
+        assertEquals(List.of(10, 2), List.of(result.get(1)[0], result.get(1)[1]));
         assertTrue(DutyEngine.toCoins(0, coins).isEmpty());
     }
 }
