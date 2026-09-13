@@ -68,4 +68,118 @@ class ArchitectureBoundaryTest {
         assertTrue(violations.isEmpty(),
                 "domain depends outward:\n" + String.join("\n", violations));
     }
+
+    @Test
+    void applicationMustNotDependInwardOnOuterLayers() throws IOException {
+        Path application = SRC.resolve("application");
+        List<String> outward = List.of(
+                "com.dwurdy.straja.adapter.",
+                "com.dwurdy.straja.bootstrap.",
+                "com.dwurdy.straja.config.");
+        List<String> violations = new ArrayList<>();
+        try (Stream<Path> files = Files.walk(application)) {
+            for (Path file : files.filter(p -> p.toString().endsWith(".java")).toList()) {
+                int line = 0;
+                for (String text : Files.readAllLines(file)) {
+                    line++;
+                    if (outward.stream().anyMatch(text::contains)) {
+                        violations.add(file.getFileName() + ":" + line + " -> " + text.trim());
+                    }
+                }
+            }
+        }
+        assertTrue(violations.isEmpty(),
+                "application depends on outer layers:\n" + String.join("\n", violations));
+    }
+
+    @Test
+    void formSubmissionRouterStaysOnInboundPorts() throws IOException {
+        Path router = SRC.resolve("adapter/in/form/FormSubmissionRouter.java");
+        assertTrue(Files.exists(router), "FormSubmissionRouter must exist");
+        List<String> violations = new ArrayList<>();
+        int line = 0;
+        for (String text : Files.readAllLines(router)) {
+            line++;
+            if (text.contains("com.dwurdy.straja.application.service.")
+                    || text.contains("com.dwurdy.straja.adapter.out.persistence")) {
+                violations.add(router.getFileName() + ":" + line + " -> " + text.trim());
+            }
+        }
+        assertTrue(violations.isEmpty(),
+                "FormSubmissionRouter reaches past the inbound port:\n"
+                        + String.join("\n", violations));
+    }
+
+    @Test
+    void strajaEventsStaysOnInboundPorts() throws IOException {
+        Path events = SRC.resolve("adapter/in/event/StrajaEvents.java");
+        assertTrue(Files.exists(events), "StrajaEvents must exist");
+        List<String> violations = new ArrayList<>();
+        int line = 0;
+        for (String text : Files.readAllLines(events)) {
+            line++;
+            if (text.contains("com.dwurdy.straja.application.service.")
+                    || text.contains("com.dwurdy.straja.adapter.out.persistence")) {
+                violations.add(events.getFileName() + ":" + line + " -> " + text.trim());
+            }
+        }
+        assertTrue(violations.isEmpty(),
+                "StrajaEvents reaches past the inbound ports:\n"
+                        + String.join("\n", violations));
+    }
+
+    @Test
+    void playerFacingAdaptersNeverReachConcreteServices() throws IOException {
+        // Concrete runtime accessors and outbound-port context access bypass
+        // the inbound ports; player-facing adapters must go through
+        // runtime.<x>Roleplay()/playerQueries()/npcRegistry() etc.
+        List<String> concreteAccessors = List.of(
+                "runtime.guards()", "runtime.missions()", "runtime.fines()",
+                "runtime.complaints()", "runtime.custody()", "runtime.prison()",
+                "runtime.rooms()", "runtime.archive()", "runtime.players()",
+                "runtime.npcs()", "runtime.audit()", "runtime.equipment()",
+                "runtime.migration()", "runtime.context()");
+        List<Path> surfaces = List.of(
+                SRC.resolve("adapter/in/event/StrajaEvents.java"),
+                SRC.resolve("adapter/in/npc/NpcRoles.java"),
+                SRC.resolve("adapter/in/npc/NpcPlayerSurface.java"),
+                SRC.resolve("adapter/in/item/PhysicalItemSurface.java"),
+                SRC.resolve("adapter/in/form/FormSubmissionRouter.java"),
+                SRC.resolve("adapter/in/form/FormSessionBridge.java"));
+        List<String> violations = new ArrayList<>();
+        for (Path file : surfaces) {
+            if (!Files.exists(file)) continue;
+            int line = 0;
+            for (String text : Files.readAllLines(file)) {
+                line++;
+                for (String accessor : concreteAccessors) {
+                    if (text.contains(accessor)) {
+                        violations.add(file.getFileName() + ":" + line
+                                + " -> " + text.trim());
+                    }
+                }
+            }
+        }
+        assertTrue(violations.isEmpty(),
+                "player-facing adapters reach concrete services:\n"
+                        + String.join("\n", violations));
+    }
+
+    @Test
+    void npcPlayerSurfaceStaysOnPortsAndDomain() throws IOException {
+        Path surface = SRC.resolve("adapter/in/npc/NpcPlayerSurface.java");
+        assertTrue(Files.exists(surface), "NpcPlayerSurface must exist");
+        List<String> violations = new ArrayList<>();
+        int line = 0;
+        for (String text : Files.readAllLines(surface)) {
+            line++;
+            if (text.contains("com.dwurdy.straja.application.service.")
+                    || text.contains("com.dwurdy.straja.adapter.out.persistence")) {
+                violations.add(surface.getFileName() + ":" + line + " -> " + text.trim());
+            }
+        }
+        assertTrue(violations.isEmpty(),
+                "NpcPlayerSurface reaches past the inbound port:\n"
+                        + String.join("\n", violations));
+    }
 }

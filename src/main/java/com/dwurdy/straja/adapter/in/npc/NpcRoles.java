@@ -1,9 +1,17 @@
 package com.dwurdy.straja.adapter.in.npc;
 
-import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
+import com.dwurdy.straja.adapter.in.form.FormSessionBridge;
+import com.dwurdy.straja.application.port.in.FormSessionUseCase;
+import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.ClickEvent;
+import net.minecraft.network.chat.HoverEvent;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.player.Player;
 
@@ -16,8 +24,9 @@ public final class NpcRoles {
     public static final String SECRETARY = "secretary";
     public static final String JAILER = "jailer";
     public static final String ARCHIVIST = "archivist";
+    public static final String TRAINER = "trainer";
 
-    private static final Set<String> KNOWN = Set.of(RECEPTIONIST, SECRETARY, JAILER, ARCHIVIST);
+    private static final Set<String> KNOWN = Set.of(RECEPTIONIST, SECRETARY, JAILER, ARCHIVIST, TRAINER);
 
     private NpcRoles() {}
 
@@ -30,56 +39,586 @@ public final class NpcRoles {
     }
 
     public static void interact(String roleId, StrajaNpcEntity npc, Player player, ServerLevel level) {
-        switch (roleId == null ? "" : roleId) {
-            case RECEPTIONIST -> receptionist(npc, player, level);
-            case SECRETARY -> secretary(npc, player, level);
-            case JAILER -> jailer(npc, player, level);
-            case ARCHIVIST -> archivist(npc, player, level);
-            default -> player.sendSystemMessage(Component.literal("Acest NPC nu are un rol Straja configurat."));
+        NpcPlayerSurface.InteractionPlan plan = NpcPlayerSurface.interactionPlan(roleId);
+        NpcPlayerSurface.RoleSurface surface = plan.surface();
+        surface = NpcPlayerSurface.withAdditionalActions(surface, stateAwareActions(roleId, player, level));
+        sendGuidance(player, surface);
+    }
+
+    /** The NPC interaction itself is deliberately guidance-only; buttons dispatch separately. */
+    static Component guidanceComponent(String roleId) {
+        return guidanceComponent(NpcPlayerSurface.surfaceFor(roleId), null);
+    }
+
+    private static Component guidanceComponent(NpcPlayerSurface.RoleSurface surface, Player player) {
+        MutableComponent message = Component.literal("[Straja] " + surface.title() + ": " + surface.guidance());
+        for (NpcPlayerSurface.ChatAction action : surface.actions()) {
+            MutableComponent label = Component.literal("[" + action.label() + "]").withStyle(style -> style
+                    .withColor(ChatFormatting.AQUA)
+                    .withUnderlined(true)
+                    .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                            Component.literal("Apasă pentru a deschide."))));
+            if (player != null) {
+                label.withStyle(style -> style.withClickEvent(new ClickEvent(
+                        ClickEvent.Action.RUN_COMMAND,
+                        NpcInteractionService.issueActionCommand(player, action))));
+            }
+            message.append(Component.literal(" ")).append(label);
         }
+        return message;
+    }
+
+    private static void sendGuidance(Player player, NpcPlayerSurface.RoleSurface surface) {
+        player.sendSystemMessage(guidanceComponent(surface, player));
+    }
+
+    public static boolean performAction(String actionId, Player player, ServerLevel level) {
+        if (actionId == null || player == null || level == null) return false;
+        var runtime = com.dwurdy.straja.bootstrap.StrajaRuntime.get();
+        if (runtime == null) return false;
+        var gw = gateway(player, level);
+        var parameterized = NpcPlayerSurface.parseActionId(actionId);
+        if (parameterized.isPresent()) {
+            return performParameterizedAction(parameterized.get(), player, level, runtime, gw);
+        }
+        switch (actionId) {
+            case "rules" -> runtime.guardDuty().showRules(gw);
+            case "guard-status" -> runtime.guardDuty().showStatus(gw);
+            case "recruit" -> runtime.guardRecruitment().recruit(gw);
+            case "quiz-answer" -> openQuizForm(player, level, runtime, gw);
+            case "training-progress" -> runtime.guardRecruitment().showProgress(gw);
+            case "training-promote" -> runtime.guardRecruitment().requestPromotion(gw);
+            case "training-manual" -> runtime.guardRecruitment().giveManual(gw);
+            case "faction-declare" -> openFactionForm(player, runtime, gw);
+            case "duty-start" -> runtime.guardDuty().startDuty(gw);
+            case "duty-stop" -> runtime.guardDuty().stopDuty(gw);
+            case "duty-salary" -> runtime.guardDuty().salary(gw);
+            case "duty-coins" -> runtime.guardDuty().coins(gw);
+            case "duty-food" -> runtime.guardDuty().food(gw);
+            case "duty-kit" -> runtime.guardDuty().kit(gw);
+            case "duty-regear" -> runtime.guardDuty().requestRegear(gw);
+            case "resignation-start" -> runtime.guardDuty().beginResignation(gw);
+            case "resignation-confirm" -> runtime.guardDuty().confirmResignation(gw);
+            case "resignation-cancel" -> runtime.guardDuty().cancelResignation(gw);
+            case "rejoin" -> runtime.guardDuty().rejoin(gw);
+            case "mission-list" -> runtime.missionRoleplay().list(gw);
+            case "mission-carnet" -> runtime.missionRoleplay().giveCarnet(gw);
+            case "mission-draft-status" -> runtime.missionRoleplay().draftStatus(gw);
+            case "mission-draft-sign" -> runtime.missionRoleplay().draftSign(gw);
+            case "mission-draft-package" -> runtime.missionRoleplay().draftPackage(gw);
+            case "mission-draft-write" -> openMissionForm(player, runtime, gw,
+                    com.dwurdy.straja.application.port.in.MissionRoleplayUseCase.Action.DRAFT_WRITE, "");
+            case "mission-draft-scope" -> openMissionForm(player, runtime, gw,
+                    com.dwurdy.straja.application.port.in.MissionRoleplayUseCase.Action.DRAFT_SCOPE, "");
+            case "cuffs-status" -> runtime.custodyRoleplay().cuffStatus(gw);
+            case "prison-status" -> runtime.prisonRoleplay().status(gw);
+            case "downed-status" -> runtime.custodyRoleplay().downedStatus(gw);
+            case "custody-remove-head-sack" -> runtime.custodyRoleplay().removeHeadSack(gw);
+            case "custody-wake-downed" -> runtime.custodyRoleplay().wakeDowned(gw, "jailer_npc");
+            case "cuffs-item" -> runtime.custodyRoleplay().giveCuffs(gw);
+            case "fine-list" -> runtime.fineRoleplay().listFines(gw);
+            case "fine-task-list" -> runtime.fineRoleplay().listTasks(gw);
+            case "fine-draft-status" -> gw.tell(runtime.fineRoleplay().draftText(gw));
+            case "fine-appeal-list" -> runtime.fineRoleplay().listAppeals(gw);
+            case "fine-draft-write" -> openFineForm(player, runtime, gw,
+                    com.dwurdy.straja.application.port.in.FineRoleplayUseCase.Action.DRAFT_WRITE, "");
+            case "fine-warrant" -> openFineForm(player, runtime, gw,
+                    com.dwurdy.straja.application.port.in.FineRoleplayUseCase.Action.HEARING_WARRANT, "");
+            case "complaint-list" -> runtime.complaintRoleplay().list(gw);
+            case "complaint-submit" -> openComplaintForm(player, runtime, gw,
+                    com.dwurdy.straja.application.port.in.ComplaintRoleplayUseCase.Action.SUBMIT, "");
+            case "room-status" -> runtime.roomRoleplay().status(gw);
+            case "room-release" -> runtime.roomRoleplay().releaseFor(gw);
+            case "archive-list" -> runtime.archiveRoleplay().listFolders(gw);
+            case "archive-folder-create" -> openArchiveForm(player, runtime, gw,
+                    com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase.Action.CREATE_FOLDER, "");
+            default -> { return false; }
+        }
+        return true;
+    }
+
+    private static boolean performParameterizedAction(NpcPlayerSurface.ActionRef action,
+                                                       Player player, ServerLevel level,
+                                                       com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                                       com.dwurdy.straja.application.port.out.PlayerGateway gw) {
+        String operation = action.operation();
+        String id = action.recordId();
+        if (!isStillValidForPlayer(operation, id, runtime, gw)) {
+            player.sendSystemMessage(Component.literal("[Straja] Acțiunea NPC nu mai este disponibilă: dosarul sau cererea s-a schimbat."));
+            return false;
+        }
+        switch (operation) {
+            case "duty-checkpoint" -> runtime.guardDuty().checkpoint(gw, id);
+            case "mission-join" -> runtime.missionRoleplay().join(gw, id);
+            case "mission-accept" -> runtime.missionRoleplay().accept(gw, id);
+            case "mission-decline" -> runtime.missionRoleplay().decline(gw, id);
+            case "mission-complete" -> runtime.missionRoleplay().complete(gw, id);
+            case "mission-reward" -> runtime.missionRoleplay().claimReward(gw, id);
+            case "mission-reward-recover" -> runtime.missionRoleplay().recoverReward(gw, id);
+            case "mission-report" -> openMissionForm(player, runtime, gw,
+                    com.dwurdy.straja.application.port.in.MissionRoleplayUseCase.Action.REPORT, id);
+            case "mission-fail" -> openMissionForm(player, runtime, gw,
+                    com.dwurdy.straja.application.port.in.MissionRoleplayUseCase.Action.FAIL, id);
+            case "complaint-report" -> openComplaintForm(player, runtime, gw,
+                    com.dwurdy.straja.application.port.in.ComplaintRoleplayUseCase.Action.REPORT, id);
+            case "complaint-review" -> openComplaintForm(player, runtime, gw,
+                    com.dwurdy.straja.application.port.in.ComplaintRoleplayUseCase.Action.REVIEW, id);
+            case "complaint-withdraw" -> openComplaintForm(player, runtime, gw,
+                    com.dwurdy.straja.application.port.in.ComplaintRoleplayUseCase.Action.WITHDRAW, id);
+            case "custody-accept" -> runtime.custodyRoleplay().accept(gw, id);
+            case "custody-refuse" -> runtime.custodyRoleplay().refuse(gw, id);
+            case "custody-release" -> runtime.custodyRoleplay().releaseById(gw, id);
+            case "complaint-claim" -> runtime.complaintRoleplay().claim(gw, id);
+            case "complaint-join" -> runtime.complaintRoleplay().join(gw, id);
+            case "complaint-leave" -> runtime.complaintRoleplay().leave(gw, id);
+            case "complaint-confirm" -> runtime.complaintRoleplay().confirm(gw, id);
+            case "fine-pay" -> runtime.fineRoleplay().pay(gw, id);
+            case "fine-refuse" -> runtime.fineRoleplay().refusePayment(gw, id);
+            case "fine-appeal" -> openFineForm(player, runtime, gw,
+                    com.dwurdy.straja.application.port.in.FineRoleplayUseCase.Action.APPEAL, id);
+            case "fine-appeal-review" -> openFineForm(player, runtime, gw,
+                    com.dwurdy.straja.application.port.in.FineRoleplayUseCase.Action.REVIEW_APPEAL, id);
+            case "fine-task-accept" -> runtime.fineRoleplay().acceptTask(gw, id);
+            case "fine-task-complete" -> runtime.fineRoleplay().completeTask(gw, id);
+            case "fine-task-arrest" -> runtime.fineRoleplay().arrest(gw, id, null);
+            case "fine-task-reward" -> runtime.fineRoleplay().claimTaskReward(gw, id);
+            case "archive-folder-read" -> runtime.archiveRoleplay().readFolder(gw, id);
+            case "archive-sheet-read" -> runtime.archiveRoleplay().readSheet(gw, id);
+            case "archive-sheet-submit" -> runtime.archiveRoleplay().submitSheet(gw, id);
+            case "archive-sheet-revoke" -> runtime.archiveRoleplay().revokeSheet(gw, id);
+            case "archive-folder-issue" -> openArchiveForm(player, runtime, gw,
+                    com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase.Action.ISSUE_FOLDER, id);
+            case "archive-sheet-new" -> openArchiveForm(player, runtime, gw,
+                    com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase.Action.NEW_SHEET, id);
+            case "archive-sheet-edit" -> openArchiveForm(player, runtime, gw,
+                    com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase.Action.EDIT_SHEET, id);
+            case "archive-recipients" -> openArchiveForm(player, runtime, gw,
+                    com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase.Action.SET_RECIPIENTS, id);
+            case "archive-sheet-sign" -> openArchiveForm(player, runtime, gw,
+                    com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase.Action.SIGN_SHEET, id);
+            case "archive-sheet-copy" -> openArchiveForm(player, runtime, gw,
+                    com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase.Action.COPY_SHEET, id);
+            case "archive-sheet-envelope" -> openArchiveForm(player, runtime, gw,
+                    com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase.Action.PACK_ENVELOPE, id);
+            case "archive-sheet-issue" -> openArchiveForm(player, runtime, gw,
+                    com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase.Action.ISSUE_DOCUMENT, id);
+            default -> { return false; }
+        }
+        return true;
+    }
+
+    private static boolean openQuizForm(Player player, ServerLevel level,
+                                        com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                        com.dwurdy.straja.application.port.out.PlayerGateway gw) {
+        if (!(player instanceof ServerPlayer serverPlayer)) return true;
+        var prompt = runtime.guardRecruitment().currentQuizPrompt(gw);
+        if (prompt.isEmpty()) return true;
+        FormSessionBridge.open(serverPlayer, new FormSessionUseCase.Request(
+                FormSessionUseCase.Action.QUIZ_ANSWER,
+                prompt.get().questionId(),
+                prompt.get().title(),
+                prompt.get().question(),
+                java.util.List.of(new FormSessionUseCase.Field(
+                        "answer", "Răspuns", prompt.get().maxLength(), false))));
+        return true;
+    }
+
+    private static boolean openFactionForm(Player player,
+                                           com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                           com.dwurdy.straja.application.port.out.PlayerGateway gw) {
+        if (!(player instanceof ServerPlayer serverPlayer)) return true;
+        int maxLength = runtime.guardRecruitment().nativeFactionMaxLength();
+        FormSessionBridge.open(serverPlayer, new FormSessionUseCase.Request(
+                FormSessionUseCase.Action.FACTION_DECLARE, "",
+                "Facțiune nativă", "Declară facțiunea din care provii. "
+                        + "În timpul turei acționezi ca Străjer al Castelului. Scrie \"niciuna\" pentru a șterge.",
+                java.util.List.of(new FormSessionUseCase.Field(
+                        "faction", "Facțiune", maxLength, false))));
+        return true;
+    }
+
+    private static boolean openMissionForm(Player player,
+                                           com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                           com.dwurdy.straja.application.port.out.PlayerGateway gw,
+                                           com.dwurdy.straja.application.port.in.MissionRoleplayUseCase.Action required,
+                                           String recordId) {
+        String expected = recordId == null ? "" : recordId;
+        boolean stillAvailable = runtime.missionRoleplay().availableActions(gw).stream()
+                .anyMatch(a -> a.action() == required && expected.equals(a.missionId()));
+        if (!stillAvailable) {
+            player.sendSystemMessage(Component.literal(
+                    "[Straja] Acțiunea nu mai este disponibilă; starea misiunii s-a schimbat."));
+            return true;
+        }
+        if (!(player instanceof ServerPlayer serverPlayer)) return true;
+        FormSessionUseCase.Request request = switch (required) {
+            case REPORT -> new FormSessionUseCase.Request(
+                    FormSessionUseCase.Action.MISSION_REPORT, expected,
+                    "Raport de misiune", "Descrie rezultatul misiunii.",
+                    java.util.List.of(new FormSessionUseCase.Field("report", "Raport", 2000, true)));
+            case FAIL -> new FormSessionUseCase.Request(
+                    FormSessionUseCase.Action.MISSION_FAIL, expected,
+                    "Încheiere voluntară", "Explică motivul renunțării.",
+                    java.util.List.of(new FormSessionUseCase.Field("reason", "Motiv", 240, true)));
+            case DRAFT_WRITE -> new FormSessionUseCase.Request(
+                    FormSessionUseCase.Action.MISSION_DRAFT_WRITE, "",
+                    "Ordin nou", "Completează ordinul de misiune.",
+                    java.util.List.of(
+                            new FormSessionUseCase.Field("minutes", "Timp (minute)", 5, false),
+                            new FormSessionUseCase.Field("start", "Începere", 16, false),
+                            new FormSessionUseCase.Field("reward", "Recompensă", 10, false),
+                            new FormSessionUseCase.Field("objective", "Obiectiv", 2000, true)));
+            case DRAFT_SCOPE -> new FormSessionUseCase.Request(
+                    FormSessionUseCase.Action.MISSION_DRAFT_SCOPE, "",
+                    "Participanți ordin", "Configurează rangul minim și numărul maxim de participanți.",
+                    java.util.List.of(
+                            new FormSessionUseCase.Field("minimumRank", "Rang minim", 16, false),
+                            new FormSessionUseCase.Field("maxAssignees", "Max participanți", 3, false)));
+            default -> null;
+        };
+        if (request == null) return true;
+        FormSessionBridge.open(serverPlayer, request);
+        return true;
+    }
+
+    private static boolean openComplaintForm(Player player,
+                                             com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                             com.dwurdy.straja.application.port.out.PlayerGateway gw,
+                                             com.dwurdy.straja.application.port.in.ComplaintRoleplayUseCase.Action required,
+                                             String recordId) {
+        String expected = recordId == null ? "" : recordId;
+        boolean stillAvailable = runtime.complaintRoleplay().availableActions(gw).stream()
+                .anyMatch(a -> a.action() == required && expected.equals(a.complaintId()));
+        if (!stillAvailable) {
+            player.sendSystemMessage(Component.literal(
+                    "[Straja] Acțiunea nu mai este disponibilă; starea dosarului s-a schimbat."));
+            return true;
+        }
+        if (!(player instanceof ServerPlayer serverPlayer)) return true;
+        var limits = runtime.complaintRoleplay().limits();
+        FormSessionUseCase.Request request = switch (required) {
+            case SUBMIT -> new FormSessionUseCase.Request(
+                    FormSessionUseCase.Action.COMPLAINT_SUBMIT, "",
+                    "Plângere nouă", "Completează datele plângerii.",
+                    java.util.List.of(
+                            new FormSessionUseCase.Field("accused", "Acuzat", 80, false),
+                            new FormSessionUseCase.Field("category", "Categorie", 80, false),
+                            new FormSessionUseCase.Field("description", "Descriere",
+                                    limits.description(), true)));
+            case REPORT -> new FormSessionUseCase.Request(
+                    FormSessionUseCase.Action.COMPLAINT_REPORT, expected,
+                    "Raport de investigație", "Descrie constatările dosarului.",
+                    java.util.List.of(new FormSessionUseCase.Field("report", "Raport",
+                            limits.evidence(), true)));
+            case WITHDRAW -> new FormSessionUseCase.Request(
+                    FormSessionUseCase.Action.COMPLAINT_WITHDRAW, expected,
+                    "Retragere plângere", "Explică motivul retragerii.",
+                    java.util.List.of(new FormSessionUseCase.Field("reason", "Motiv",
+                            limits.withdrawalReason(), true)));
+            case REVIEW -> new FormSessionUseCase.Request(
+                    FormSessionUseCase.Action.COMPLAINT_REVIEW, expected,
+                    "Verificare dosar", "Alege approve, return sau dismiss și recompensa.",
+                    java.util.List.of(
+                            new FormSessionUseCase.Field("decision", "Decizie", 16, false),
+                            new FormSessionUseCase.Field("reward", "Recompensă", 10, false)));
+            default -> null;
+        };
+        if (request == null) return true;
+        FormSessionBridge.open(serverPlayer, request);
+        return true;
+    }
+
+    private static boolean openFineForm(Player player,
+                                        com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                        com.dwurdy.straja.application.port.out.PlayerGateway gw,
+                                        com.dwurdy.straja.application.port.in.FineRoleplayUseCase.Action required,
+                                        String recordId) {
+        String expected = recordId == null ? "" : recordId;
+        boolean stillAvailable = runtime.fineRoleplay().availableActions(gw).stream()
+                .anyMatch(a -> a.action() == required && expected.equals(a.recordId()));
+        if (!stillAvailable) {
+            player.sendSystemMessage(Component.literal(
+                    "[Straja] Acțiunea nu mai este disponibilă; starea amenzii s-a schimbat."));
+            return true;
+        }
+        if (!(player instanceof ServerPlayer serverPlayer)) return true;
+        var limits = runtime.fineRoleplay().limits();
+        FormSessionUseCase.Request request = switch (required) {
+            case DRAFT_WRITE -> new FormSessionUseCase.Request(
+                    FormSessionUseCase.Action.FINE_DRAFT, "",
+                    "Amendă nouă", "Completează datele amenzii.",
+                    java.util.List.of(
+                            new FormSessionUseCase.Field("target", "Cetățean", 80, false),
+                            new FormSessionUseCase.Field("amount", "Sumă", 10, false),
+                            new FormSessionUseCase.Field("law", "Lege", limits.law(), false),
+                            new FormSessionUseCase.Field("description", "Descriere",
+                                    limits.description(), true)));
+            case APPEAL -> new FormSessionUseCase.Request(
+                    FormSessionUseCase.Action.FINE_APPEAL, expected,
+                    "Contestație", "Explică motivul contestației.",
+                    java.util.List.of(new FormSessionUseCase.Field("reason", "Motiv",
+                            limits.appealReason(), true)));
+            case REVIEW_APPEAL -> new FormSessionUseCase.Request(
+                    FormSessionUseCase.Action.FINE_APPEAL_REVIEW, expected,
+                    "Decizie contestație", "Alege uphold, reduce sau void.",
+                    java.util.List.of(
+                            new FormSessionUseCase.Field("decision", "Decizie", 16, false),
+                            new FormSessionUseCase.Field("reducedAmount", "Sumă redusă", 10, false),
+                            new FormSessionUseCase.Field("reason", "Motiv",
+                                    limits.reviewReason(), true)));
+            case HEARING_WARRANT -> new FormSessionUseCase.Request(
+                    FormSessionUseCase.Action.FINE_WARRANT, "",
+                    "Mandat de audiere", "Completează ținta și detaliile mandatului.",
+                    java.util.List.of(
+                            new FormSessionUseCase.Field("target", "Țintă", 80, false),
+                            new FormSessionUseCase.Field("details", "Detalii",
+                                    limits.warrantReason(), true)));
+            default -> null;
+        };
+        if (request == null) return true;
+        FormSessionBridge.open(serverPlayer, request);
+        return true;
+    }
+
+    private static boolean openArchiveForm(Player player,
+                                           com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                           com.dwurdy.straja.application.port.out.PlayerGateway gw,
+                                           com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase.Action required,
+                                           String recordId) {
+        String expected = recordId == null ? "" : recordId;
+        boolean stillAvailable = runtime.archiveRoleplay().availableActions(gw).stream()
+                .anyMatch(a -> a.action() == required && expected.equals(a.recordId()));
+        if (!stillAvailable) {
+            player.sendSystemMessage(Component.literal(
+                    "[Straja] Acțiunea nu mai este disponibilă; starea arhivei s-a schimbat."));
+            return true;
+        }
+        if (!(player instanceof ServerPlayer serverPlayer)) return true;
+        var limits = runtime.archiveRoleplay().limits();
+        FormSessionUseCase.Request request = switch (required) {
+            case CREATE_FOLDER -> new FormSessionUseCase.Request(
+                    FormSessionUseCase.Action.ARCHIVE_FOLDER_CREATE, "",
+                    "Dosar nou", "Completează datele dosarului.",
+                    java.util.List.of(
+                            new FormSessionUseCase.Field("title", "Titlu", limits.title(), false),
+                            new FormSessionUseCase.Field("department", "Departament", 80, false)));
+            case ISSUE_FOLDER -> new FormSessionUseCase.Request(
+                    FormSessionUseCase.Action.ARCHIVE_FOLDER_ISSUE, expected,
+                    "Emitere dosar", "Indică jucătorul căruia îi este emis dosarul.",
+                    java.util.List.of(new FormSessionUseCase.Field("target", "Țintă",
+                            limits.target(), false)));
+            case NEW_SHEET -> new FormSessionUseCase.Request(
+                    FormSessionUseCase.Action.ARCHIVE_SHEET_NEW, expected,
+                    "Foaie nouă", "Completează tipul și titlul foii.",
+                    java.util.List.of(
+                            new FormSessionUseCase.Field("type", "Tip", 32, false),
+                            new FormSessionUseCase.Field("title", "Titlu", limits.title(), false)));
+            case EDIT_SHEET -> new FormSessionUseCase.Request(
+                    FormSessionUseCase.Action.ARCHIVE_SHEET_EDIT, expected,
+                    "Editare foaie", "Scrie conținutul actului.",
+                    java.util.List.of(new FormSessionUseCase.Field("content", "Conținut",
+                            limits.content(), true)));
+            case SET_RECIPIENTS -> new FormSessionUseCase.Request(
+                    FormSessionUseCase.Action.ARCHIVE_RECIPIENTS, expected,
+                    "Destinatari", "Listează destinatarii separați prin virgulă.",
+                    java.util.List.of(new FormSessionUseCase.Field("recipients", "Destinatari",
+                            limits.recipients(), true)));
+            case SIGN_SHEET -> new FormSessionUseCase.Request(
+                    FormSessionUseCase.Action.ARCHIVE_SIGN, expected,
+                    "Semnare act", "Notează motivul semnăturii.",
+                    java.util.List.of(new FormSessionUseCase.Field("reason", "Motiv",
+                            limits.signatureReason(), false)));
+            case COPY_SHEET -> new FormSessionUseCase.Request(
+                    FormSessionUseCase.Action.ARCHIVE_COPY, expected,
+                    "Copie indigo", "Alege numărul de copii și destinatarii.",
+                    java.util.List.of(
+                            new FormSessionUseCase.Field("count", "Număr copii", 10, false),
+                            new FormSessionUseCase.Field("targets", "Destinatari",
+                                    limits.recipients(), true)));
+            case PACK_ENVELOPE -> new FormSessionUseCase.Request(
+                    FormSessionUseCase.Action.ARCHIVE_ENVELOPE, expected,
+                    "Plic oficial", "Indică destinatarul plicului.",
+                    java.util.List.of(new FormSessionUseCase.Field("target", "Țintă",
+                            limits.target(), false)));
+            case ISSUE_DOCUMENT -> new FormSessionUseCase.Request(
+                    FormSessionUseCase.Action.ARCHIVE_DOCUMENT_ISSUE, expected,
+                    "Emitere act", "Indică jucătorul căruia îi este emis actul.",
+                    java.util.List.of(new FormSessionUseCase.Field("target", "Țintă",
+                            limits.target(), false)));
+            default -> null;
+        };
+        if (request == null) return true;
+        FormSessionBridge.open(serverPlayer, request);
+        return true;
+    }
+
+    /**
+     * Revalidates the action against the player's fresh available-actions
+     * projection before dispatch, so a stale button reports "no longer
+     * available" instead of reaching the service. Services still re-check
+     * authoritatively at mutation time.
+     */
+    private static boolean isStillValidForPlayer(String operation, String id,
+                                                 com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                                 com.dwurdy.straja.application.port.out.PlayerGateway player) {
+        return switch (operation) {
+            case "duty-checkpoint" -> {
+                var view = runtime.guardDuty().dutyView(player);
+                yield view != null && id.equals(view.checkpointId());
+            }
+            case "mission-join", "mission-accept", "mission-decline", "mission-complete",
+                    "mission-report", "mission-fail", "mission-reward", "mission-reward-recover" -> {
+                var expected = missionActionFor(operation);
+                yield expected != null && runtime.missionRoleplay().availableActions(player)
+                        .stream().anyMatch(a -> a.action() == expected && id.equals(a.missionId()));
+            }
+            case "custody-accept", "custody-refuse", "custody-release" -> {
+                var expected = custodyActionFor(operation);
+                yield expected != null && runtime.custodyRoleplay().availableActions(player)
+                        .stream().anyMatch(a -> a.action() == expected && id.equals(a.recordId()));
+            }
+            case "complaint-claim", "complaint-join", "complaint-leave", "complaint-report",
+                    "complaint-review", "complaint-confirm", "complaint-withdraw" -> {
+                var expected = complaintActionFor(operation);
+                yield expected != null && runtime.complaintRoleplay().availableActions(player)
+                        .stream().anyMatch(a -> a.action() == expected && id.equals(a.complaintId()));
+            }
+            case "fine-pay", "fine-refuse", "fine-appeal", "fine-appeal-review",
+                    "fine-task-accept", "fine-task-complete", "fine-task-arrest",
+                    "fine-task-reward" -> {
+                var expected = fineActionFor(operation);
+                yield expected != null && runtime.fineRoleplay().availableActions(player)
+                        .stream().anyMatch(a -> a.action() == expected && id.equals(a.recordId()));
+            }
+            case "archive-folder-read", "archive-folder-issue", "archive-sheet-new",
+                    "archive-sheet-read", "archive-sheet-edit", "archive-recipients",
+                    "archive-sheet-submit", "archive-sheet-sign", "archive-sheet-copy",
+                    "archive-sheet-envelope", "archive-sheet-issue", "archive-sheet-revoke" -> {
+                var expected = archiveActionFor(operation);
+                yield expected != null && runtime.archiveRoleplay().availableActions(player)
+                        .stream().anyMatch(a -> a.action() == expected && id.equals(a.recordId()));
+            }
+            default -> false;
+        };
+    }
+
+    private static com.dwurdy.straja.application.port.in.MissionRoleplayUseCase.Action
+            missionActionFor(String operation) {
+        return switch (operation) {
+            case "mission-join" -> com.dwurdy.straja.application.port.in.MissionRoleplayUseCase.Action.JOIN;
+            case "mission-accept" -> com.dwurdy.straja.application.port.in.MissionRoleplayUseCase.Action.ACCEPT;
+            case "mission-decline" -> com.dwurdy.straja.application.port.in.MissionRoleplayUseCase.Action.DECLINE;
+            case "mission-complete" -> com.dwurdy.straja.application.port.in.MissionRoleplayUseCase.Action.COMPLETE;
+            case "mission-report" -> com.dwurdy.straja.application.port.in.MissionRoleplayUseCase.Action.REPORT;
+            case "mission-fail" -> com.dwurdy.straja.application.port.in.MissionRoleplayUseCase.Action.FAIL;
+            case "mission-reward" -> com.dwurdy.straja.application.port.in.MissionRoleplayUseCase.Action.CLAIM_REWARD;
+            case "mission-reward-recover" -> com.dwurdy.straja.application.port.in.MissionRoleplayUseCase.Action.RECOVER_REWARD;
+            default -> null;
+        };
+    }
+
+    private static com.dwurdy.straja.application.port.in.CustodyRoleplayUseCase.Action
+            custodyActionFor(String operation) {
+        return switch (operation) {
+            case "custody-accept" -> com.dwurdy.straja.application.port.in.CustodyRoleplayUseCase.Action.ACCEPT_REQUEST;
+            case "custody-refuse" -> com.dwurdy.straja.application.port.in.CustodyRoleplayUseCase.Action.REFUSE_REQUEST;
+            case "custody-release" -> com.dwurdy.straja.application.port.in.CustodyRoleplayUseCase.Action.RELEASE_TARGET;
+            default -> null;
+        };
+    }
+
+    private static com.dwurdy.straja.application.port.in.ComplaintRoleplayUseCase.Action
+            complaintActionFor(String operation) {
+        return switch (operation) {
+            case "complaint-claim" -> com.dwurdy.straja.application.port.in.ComplaintRoleplayUseCase.Action.CLAIM;
+            case "complaint-join" -> com.dwurdy.straja.application.port.in.ComplaintRoleplayUseCase.Action.JOIN;
+            case "complaint-leave" -> com.dwurdy.straja.application.port.in.ComplaintRoleplayUseCase.Action.LEAVE;
+            case "complaint-report" -> com.dwurdy.straja.application.port.in.ComplaintRoleplayUseCase.Action.REPORT;
+            case "complaint-review" -> com.dwurdy.straja.application.port.in.ComplaintRoleplayUseCase.Action.REVIEW;
+            case "complaint-confirm" -> com.dwurdy.straja.application.port.in.ComplaintRoleplayUseCase.Action.CONFIRM;
+            case "complaint-withdraw" -> com.dwurdy.straja.application.port.in.ComplaintRoleplayUseCase.Action.WITHDRAW;
+            default -> null;
+        };
+    }
+
+    private static com.dwurdy.straja.application.port.in.FineRoleplayUseCase.Action
+            fineActionFor(String operation) {
+        return switch (operation) {
+            case "fine-pay" -> com.dwurdy.straja.application.port.in.FineRoleplayUseCase.Action.PAY;
+            case "fine-refuse" -> com.dwurdy.straja.application.port.in.FineRoleplayUseCase.Action.REFUSE;
+            case "fine-appeal" -> com.dwurdy.straja.application.port.in.FineRoleplayUseCase.Action.APPEAL;
+            case "fine-appeal-review" -> com.dwurdy.straja.application.port.in.FineRoleplayUseCase.Action.REVIEW_APPEAL;
+            case "fine-task-accept" -> com.dwurdy.straja.application.port.in.FineRoleplayUseCase.Action.ACCEPT_TASK;
+            case "fine-task-complete" -> com.dwurdy.straja.application.port.in.FineRoleplayUseCase.Action.COMPLETE_TASK;
+            case "fine-task-arrest" -> com.dwurdy.straja.application.port.in.FineRoleplayUseCase.Action.ARREST_TASK;
+            case "fine-task-reward" -> com.dwurdy.straja.application.port.in.FineRoleplayUseCase.Action.CLAIM_TASK_REWARD;
+            default -> null;
+        };
+    }
+
+    private static com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase.Action
+            archiveActionFor(String operation) {
+        return switch (operation) {
+            case "archive-folder-read" -> com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase.Action.READ_FOLDER;
+            case "archive-folder-issue" -> com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase.Action.ISSUE_FOLDER;
+            case "archive-sheet-new" -> com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase.Action.NEW_SHEET;
+            case "archive-sheet-read" -> com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase.Action.READ_SHEET;
+            case "archive-sheet-edit" -> com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase.Action.EDIT_SHEET;
+            case "archive-recipients" -> com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase.Action.SET_RECIPIENTS;
+            case "archive-sheet-submit" -> com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase.Action.SUBMIT_SHEET;
+            case "archive-sheet-sign" -> com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase.Action.SIGN_SHEET;
+            case "archive-sheet-copy" -> com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase.Action.COPY_SHEET;
+            case "archive-sheet-envelope" -> com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase.Action.PACK_ENVELOPE;
+            case "archive-sheet-issue" -> com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase.Action.ISSUE_DOCUMENT;
+            case "archive-sheet-revoke" -> com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase.Action.REVOKE_SHEET;
+            default -> null;
+        };
+    }
+
+    private static List<NpcPlayerSurface.ChatAction> stateAwareActions(
+            String roleId, Player player, ServerLevel level) {
+        var runtime = com.dwurdy.straja.bootstrap.StrajaRuntime.get();
+        if (runtime == null) return List.of();
+        var gateway = gateway(player, level);
+        var actions = new ArrayList<NpcPlayerSurface.ChatAction>();
+        switch (NpcPlayerSurface.routeFor(roleId)) {
+            case SECRETARY -> {
+                actions.addAll(NpcPlayerSurface.dutyActions(
+                        runtime.guardDuty().dutyView(gateway)));
+                actions.addAll(NpcPlayerSurface.missionActions(
+                        runtime.missionRoleplay().availableActions(gateway)));
+                actions.addAll(NpcPlayerSurface.complaintActions(
+                        runtime.complaintRoleplay().availableActions(gateway),
+                        NpcPlayerSurface.RoleRoute.SECRETARY));
+                actions.addAll(NpcPlayerSurface.fineActions(
+                        runtime.fineRoleplay().availableActions(gateway),
+                        NpcPlayerSurface.RoleRoute.SECRETARY));
+            }
+            case JAILER -> actions.addAll(NpcPlayerSurface.custodyActions(
+                    runtime.custodyRoleplay().availableActions(gateway)));
+            case ARCHIVIST -> actions.addAll(NpcPlayerSurface.archiveActions(
+                    runtime.archiveRoleplay().availableActions(gateway)));
+            case TRAINER -> actions.addAll(NpcPlayerSurface.trainingActions(
+                    runtime.guardRecruitment().trainingView(gateway)));
+            case RECEPTIONIST -> {
+                actions.addAll(NpcPlayerSurface.complaintActions(
+                        runtime.complaintRoleplay().availableActions(gateway),
+                        NpcPlayerSurface.RoleRoute.RECEPTIONIST));
+                actions.addAll(NpcPlayerSurface.fineActions(
+                        runtime.fineRoleplay().availableActions(gateway),
+                        NpcPlayerSurface.RoleRoute.RECEPTIONIST));
+                actions.addAll(NpcPlayerSurface.roomActions(
+                        runtime.roomRoleplay().canRelease(gateway)));
+            }
+            default -> {}
+        }
+        return actions;
     }
 
     private static com.dwurdy.straja.application.port.out.PlayerGateway gateway(
             Player player, ServerLevel level) {
         return new com.dwurdy.straja.adapter.out.minecraft.MinecraftPlayerGateway(
                 level.getServer(), player.getUUID());
-    }
-
-    private static void receptionist(StrajaNpcEntity npc, Player player, ServerLevel level) {
-        // Receptionist: rules + recruitment intake through the real service.
-        var runtime = com.dwurdy.straja.bootstrap.StrajaRuntime.get();
-        if (runtime == null) return;
-        var gw = gateway(player, level);
-        runtime.guards().showRules(gw);
-        runtime.guards().recruit(gw);
-    }
-
-    private static void secretary(StrajaNpcEntity npc, Player player, ServerLevel level) {
-        // Secretary: mission intake — lists the player's visible missions.
-        var runtime = com.dwurdy.straja.bootstrap.StrajaRuntime.get();
-        if (runtime == null) return;
-        var gw = gateway(player, level);
-        gw.tell("Secretara Comisarului. Ordinul se scrie cu Carnetul (/straja mission carnet).");
-        runtime.missions().list(gw);
-    }
-
-    private static void jailer(StrajaNpcEntity npc, Player player, ServerLevel level) {
-        var runtime = com.dwurdy.straja.bootstrap.StrajaRuntime.get();
-        if (runtime == null) return;
-        var gw = gateway(player, level);
-        gw.tell("Temnicerul Străjii. Custodia se gestionează prin /straja prison.");
-        var store = runtime.context().custody().read();
-        gw.tell("În custodie: " + store.cuffed.size() + " catușați, "
-                + store.bound.size() + " legați, " + store.downed.size() + " la pământ.");
-    }
-
-    private static void archivist(StrajaNpcEntity npc, Player player, ServerLevel level) {
-        var runtime = com.dwurdy.straja.bootstrap.StrajaRuntime.get();
-        if (runtime == null) return;
-        var gw = gateway(player, level);
-        gw.tell("Arhivista. Documentele se gestionează prin /straja archive.");
-        var archive = runtime.context().archive().read();
-        gw.tell("Dosare: " + archive.folders.size() + " | documente: " + archive.sheets.size() + ".");
     }
 
     public static boolean onHurt(String roleId, StrajaNpcEntity npc, DamageSource source, float amount) {
@@ -100,8 +639,7 @@ public final class NpcRoles {
         if (runtime == null || !(npc.level() instanceof ServerLevel level)) return false;
         boolean onDutyGuard = false;
         if (source.getEntity() instanceof Player player) {
-            var state = runtime.players().state(gateway(player, level));
-            onDutyGuard = state.duty && state.rank >= 1;
+            onDutyGuard = runtime.playerQueries().isOnDutyGuard(gateway(player, level));
         }
         return runtime.policies().jailerDamageAllowed(onDutyGuard);
     }

@@ -31,4 +31,69 @@ class StrajaPoliciesTest {
         assertTrue(p.missionQuickCreateLocalOnly);
         assertFalse(p.testCommandsEnabled, "test commands must default to off");
     }
+
+    // ------------------------------------------------------------ config encoding
+
+    @Test
+    void intMapRoundTripsAndSkipsMalformedEntries() {
+        var defaults = new StrajaPolicies();
+        var parsed = StrajaPolicies.parseIntMap(StrajaPolicies.formatIntMap(defaults.salaryPerBlock));
+        assertEquals(defaults.salaryPerBlock, parsed);
+
+        var tolerant = StrajaPolicies.parseIntMap(java.util.List.of(
+                "1=20", "garbage", "=5", "3=", "x=y", "4=40"));
+        assertEquals(java.util.Map.of(1, 20, 4, 40), tolerant);
+    }
+
+    @Test
+    void kitsRoundTripPreservesRanksAndCounts() {
+        var defaults = new StrajaPolicies();
+        var parsed = StrajaPolicies.parseKits(StrajaPolicies.formatKits(defaults.kits));
+        assertEquals(defaults.kits, parsed);
+        assertTrue(parsed.get(2).stream().anyMatch(i -> i.id().equals("minecraft:iron_sword")));
+    }
+
+    @Test
+    void equipmentRoundTripPreservesLabelsWithSpaces() {
+        var defaults = new StrajaPolicies();
+        var parsed = StrajaPolicies.parseEquipment(StrajaPolicies.formatEquipment(defaults.serviceEquipment));
+        assertEquals(defaults.serviceEquipment, parsed);
+        var cuffs = parsed.get(2).stream().filter(e -> e.key().equals("cuffs")).findFirst().orElseThrow();
+        assertEquals("cătușe de serviciu", cuffs.label());
+        assertEquals(100, cuffs.replacementCost());
+    }
+
+    @Test
+    void quizRoundTripPreservesAllAnswers() {
+        var defaults = new StrajaPolicies();
+        var parsed = StrajaPolicies.parseQuiz(StrajaPolicies.formatQuiz(defaults.quiz));
+        assertEquals(defaults.quiz.size(), parsed.size());
+        var oath = parsed.stream().filter(q -> q.id().equals("juramant")).findFirst().orElseThrow();
+        assertTrue(oath.accepts("disciplina"));
+        assertTrue(oath.accepts("DISCIPLINA"), "answers normalize case");
+        assertFalse(oath.accepts("onoare"));
+
+        // malformed entries are skipped, not fatal
+        var tolerant = StrajaPolicies.parseQuiz(java.util.List.of(
+                "q1|0|intrebare?|da;yes", "broken", "|0||noanswer", "q2|x|q|a"));
+        assertEquals(1, tolerant.size());
+        assertEquals(java.util.List.of("da", "yes"), tolerant.get(0).answers());
+    }
+
+    @Test
+    void formattedDefaultsAreLossless() {
+        // The TOML defaults are serialized through the same format helpers, so
+        // a fresh server must regenerate policies identical to the compiled ones.
+        var defaults = new StrajaPolicies();
+        assertEquals(defaults.promotionServiceBlocks,
+                StrajaPolicies.parseIntMap(StrajaPolicies.formatIntMap(defaults.promotionServiceBlocks)));
+        assertEquals(defaults.regearCost,
+                StrajaPolicies.parseIntMap(StrajaPolicies.formatIntMap(defaults.regearCost)));
+        assertEquals(defaults.sentenceDaysByAmount,
+                StrajaPolicies.parseIntMap(StrajaPolicies.formatIntMap(defaults.sentenceDaysByAmount)));
+        assertEquals(defaults.complaintRewardBySeverity,
+                StrajaPolicies.parseIntMap(StrajaPolicies.formatIntMap(defaults.complaintRewardBySeverity)));
+        assertEquals(defaults.trainingQuiz,
+                StrajaPolicies.parseQuiz(StrajaPolicies.formatQuiz(defaults.trainingQuiz)));
+    }
 }

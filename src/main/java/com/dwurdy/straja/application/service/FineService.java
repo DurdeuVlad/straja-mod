@@ -1,6 +1,8 @@
 package com.dwurdy.straja.application.service;
 
 import com.dwurdy.straja.application.StrajaContext;
+import com.dwurdy.straja.application.port.in.FineRoleplayUseCase;
+import com.dwurdy.straja.application.port.in.PrisonRoleplayUseCase;
 import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.domain.model.Capability;
 import com.dwurdy.straja.domain.model.Fine;
@@ -17,19 +19,23 @@ import java.util.List;
  * Fines, appeals, escalation, recovery tasks, hearing warrants and jailer
  * assault missions. Faithful port of the KubeJS FineService semantics.
  */
-public class FineService {
+public class FineService implements FineRoleplayUseCase {
     private static final long TICK_MS = 1000;
     private static final long PERSIST_MS = 5000;
     private static final long DAY_MS = 24L * 60 * 60 * 1000;
+    private static final int FORM_PROTOCOL_LIMIT = 2000;
+    private static final int REVIEW_REASON_LIMIT = 240;
+    private static final int WARRANT_REASON_LIMIT = 240;
 
     private final StrajaContext ctx;
     private final PlayerService players;
     private final AuditService audit;
-    private final PrisonService prison;
+    private final PrisonRoleplayUseCase prison;
     private long lastTickAt;
     private long lastPersistAt;
 
-    public FineService(StrajaContext ctx, PlayerService players, AuditService audit, PrisonService prison) {
+    public FineService(StrajaContext ctx, PlayerService players, AuditService audit,
+                       PrisonRoleplayUseCase prison) {
         this.ctx = ctx;
         this.players = players;
         this.audit = audit;
@@ -38,6 +44,12 @@ public class FineService {
 
     private StrajaPolicies p() {
         return ctx.policies();
+    }
+
+    private com.dwurdy.straja.domain.model.Sentence findSentence(String id) {
+        if (id == null || id.isEmpty()) return null;
+        for (var s : ctx.prison().read().sentences) if (s != null && id.equals(s.id)) return s;
+        return null;
     }
 
     private long now() {
@@ -58,17 +70,126 @@ public class FineService {
 
     private static boolean near(PlayerGateway player, SetupData.Location at, double radius) {
         if (at == null) return false;
+        if (at.dimension != null && !at.dimension.equals(player.dimension())) return false;
         double dx = player.x() - at.x, dy = player.y() - at.y, dz = player.z() - at.z;
         return dx * dx + dy * dy + dz * dz <= radius * radius;
     }
 
     private static boolean near(PlayerGateway player, PlayerGateway other, double radius) {
+        String dimension = player.dimension();
+        if (dimension == null ? other.dimension() != null : !dimension.equals(other.dimension())) {
+            return false;
+        }
         double dx = player.x() - other.x(), dy = player.y() - other.y(), dz = player.z() - other.z();
         return dx * dx + dy * dy + dz * dz <= radius * radius;
     }
 
     private static String itemId(String name) {
         return "straja:" + name;
+    }
+
+    /** Read-only projection of the fine actions currently available to the player. */
+    @Override
+    public List<AvailableAction> availableActions(PlayerGateway player) {
+        FineStore data = ctx.fines().read();
+        String key = player.uuid() == null ? "" : player.uuid().toString();
+        boolean atReception = near(player, location("receptionist"), 6);
+        boolean issueFines = players.hasCapability(player, Capability.ISSUE_FINES);
+        boolean reviewer = players.isCommissioner(player)
+                || players.hasCapability(player, Capability.REVIEW_APPEALS);
+        boolean onDuty = onDutyGuard(player);
+        boolean commissioner = players.isCommissioner(player);
+        boolean executeArrests = players.hasCapability(player, Capability.EXECUTE_ARRESTS);
+        List<AvailableAction> citizen = new java.util.ArrayList<>();
+        List<AvailableAction> refuse = new java.util.ArrayList<>();
+        List<AvailableAction> review = new java.util.ArrayList<>();
+        List<AvailableAction> tasks = new java.util.ArrayList<>();
+        for (Fine fine : data.fines) {
+            if (fine == null) continue;
+            String id = fine.id == null ? "" : fine.id;
+            boolean own = PlayerService.identityMatches(player, fine.targetUuid, fine.target);
+            if (own && atReception && p().finesEnabled && List.of("ISSUED", "ESCALATED",
+                    "ARREST_PENDING", "IN_SENTENCE", "GRACE_AFTER_SENTENCE").contains(fine.status)) {
+                citizen.add(new AvailableAction(Action.PAY, id));
+            }
+            boolean appealable = List.of("ISSUED", "GRACE_AFTER_SENTENCE").contains(fine.status);
+            boolean activeAppeal = fine.appeal != null && List.of("PENDING", "UPHELD", "REDUCED",
+                    "VOID", "AUTO_WAIVED").contains(fine.appeal.status);
+            if (own && atReception && p().appealsEnabled && appealable && !activeAppeal) {
+                citizen.add(new AvailableAction(Action.APPEAL, id));
+            }
+            if (reviewer && atReception && "APPEAL_PENDING".equals(fine.status)
+                    && fine.appeal != null && "PENDING".equals(fine.appeal.status)
+                    && !key.equals(fine.issuerUuid)) {
+                review.add(new AvailableAction(Action.REVIEW_APPEAL, id));
+            }
+        }
+        for (FineTask task : data.tasks) {
+            if (task == null) continue;
+            String id = task.id == null ? "" : task.id;
+            var assignees = task.assignees == null ? List.<String>of() : task.assignees;
+            boolean assigned = assignees.contains(key);
+            Fine fine = task.fineId != null ? data.find(task.fineId) : null;
+            if (atReception && "PRESENTED".equals(task.status) && fine != null
+                    && "ARREST_PENDING".equals(fine.status)
+                    && PlayerService.identityMatches(player, task.targetUuid, task.target)) {
+                refuse.add(new AvailableAction(Action.REFUSE, id));
+            }
+            if (onDuty && "OPEN".equals(task.status) && !assigned
+                    && assignees.size() < Math.max(1, task.maxAssignees)
+                    && (!"JAILER_ASSAULT".equals(task.kind) || executeArrests)) {
+                tasks.add(new AvailableAction(Action.ACCEPT_TASK, id));
+            }
+            if ("OPEN".equals(task.status) && ((assigned && onDuty) || commissioner)) {
+                tasks.add(new AvailableAction(Action.COMPLETE_TASK, id));
+            }
+            if ("REFUSED".equals(task.status) && !"HEARING_WARRANT".equals(task.kind)
+                    && executeArrests && (assigned || commissioner)) {
+                tasks.add(new AvailableAction(Action.ARREST_TASK, id));
+            }
+            boolean recorded = task.arrestedByUuid != null && task.arrestedByUuid.equals(key);
+            if (List.of("ARRESTED", "SUSPECT_KILLED").contains(task.status)
+                    && (assigned || recorded)
+                    && !ctx.currency().hasReceipt(player, "arrest:" + task.id + ":" + key)) {
+                tasks.add(new AvailableAction(Action.CLAIM_TASK_REWARD, id));
+            }
+        }
+        List<AvailableAction> actions = new java.util.ArrayList<>();
+        if (issueFines && player.inventory().contains(itemId("fine_book"))) {
+            actions.add(new AvailableAction(Action.DRAFT_WRITE, ""));
+        }
+        if (issueFines && data.drafts.get(key) != null) {
+            actions.add(new AvailableAction(Action.DRAFT_STATUS, ""));
+        }
+        if (onDuty || commissioner) {
+            actions.add(new AvailableAction(Action.LIST_TASKS, ""));
+        }
+        for (AvailableAction action : citizen) {
+            if (action.action() == Action.PAY) actions.add(action);
+        }
+        actions.addAll(refuse);
+        for (AvailableAction action : citizen) {
+            if (action.action() == Action.APPEAL) actions.add(action);
+        }
+        if (reviewer && atReception) {
+            actions.add(new AvailableAction(Action.LIST_APPEALS, ""));
+        }
+        actions.addAll(review);
+        actions.addAll(tasks);
+        if (commissioner || (onDuty && players.state(player).rank >= 4)) {
+            actions.add(new AvailableAction(Action.HEARING_WARRANT, ""));
+        }
+        return List.copyOf(actions);
+    }
+
+    @Override
+    public Limits limits() {
+        return new Limits(
+                Math.min(p().fineMaxLawLength, FORM_PROTOCOL_LIMIT),
+                Math.min(p().fineMaxDescriptionLength, FORM_PROTOCOL_LIMIT),
+                Math.min(p().appealMaxReasonLength, FORM_PROTOCOL_LIMIT),
+                REVIEW_REASON_LIMIT,
+                WARRANT_REASON_LIMIT);
     }
 
     private static String joinInts(List<Integer> values) {
@@ -81,6 +202,11 @@ public class FineService {
     }
 
     // ---------------------------------------------------------------- drafts
+
+    @Override
+    public boolean writeDraft(PlayerGateway issuer, String targetName, int amount, String law, String description) {
+        return writeDraft(issuer, ctx.server().findPlayer(targetName), amount, law, description);
+    }
 
     public boolean writeDraft(PlayerGateway issuer, PlayerGateway target, int amount, String law, String description) {
         if (!p().finesEnabled) {
@@ -95,7 +221,9 @@ public class FineService {
             issuer.tell("Cetățeanul trebuie să fie online pentru întocmirea amenzii.");
             return false;
         }
-        if (players.isCommissioner(target) || players.state(target).rank >= players.state(issuer).rank) {
+        if (players.isCommissioner(target)
+                || (!players.isCommissioner(issuer)
+                        && players.state(target).rank >= players.state(issuer).rank)) {
             issuer.tell("Nu poți amenda Comisaru' sau un gardian de același rang/superior.");
             return false;
         }
@@ -140,7 +268,7 @@ public class FineService {
         FineStore data = ctx.fines().read();
         FineStore.FineDraft draft = data.drafts.get(issuer.uuid().toString());
         if (draft == null) {
-            issuer.tell("Nu ai un formular de amendă scris. Folosește /straja fine write.");
+            issuer.tell("Nu ai un formular de amendă scris. Completează Registrul de Amenzi înainte să-l prezinți țintei.");
             return false;
         }
         if (target == null || !target.uuid().toString().equals(draft.targetUuid)) {
@@ -149,7 +277,8 @@ public class FineService {
         }
         if (!players.hasCapability(issuer, Capability.ISSUE_FINES)
                 || players.isCommissioner(target)
-                || players.state(target).rank >= players.state(issuer).rank) {
+                || (!players.isCommissioner(issuer)
+                        && players.state(target).rank >= players.state(issuer).rank)) {
             issuer.tell("Amenda este refuzată de matricea de autoritate.");
             return false;
         }
@@ -417,6 +546,15 @@ public class FineService {
             player.tell("Nu îți poți judeca propria amendă.");
             return false;
         }
+        String trimmedReason = reason == null ? "" : reason.trim();
+        if (trimmedReason.length() > REVIEW_REASON_LIMIT) {
+            player.tell("Motivul deciziei trebuie să aibă maximum " + REVIEW_REASON_LIMIT + " caractere.");
+            return false;
+        }
+        if (!near(player, location("receptionist"), 6)) {
+            player.tell("Decizia contestației se dă la recepționistă.");
+            return false;
+        }
         String action = decision == null ? "" : decision.toLowerCase();
         Fine.Appeal appeal = fine.appeal;
         long reviewAt = now();
@@ -446,7 +584,7 @@ public class FineService {
         appeal.reviewedAt = reviewAt;
         appeal.reviewedBy = player.name();
         appeal.reviewedByUuid = player.uuid().toString();
-        appeal.decisionReason = reason == null ? "" : reason.substring(0, Math.min(240, reason.length()));
+        appeal.decisionReason = trimmedReason;
         ctx.fines().write(data);
         audit.record("fine_appeal_review", player.name(), player.uuid().toString(), fine.target, fine.targetUuid, "SUCCESS", appeal.decision + " fineId=" + fine.id + " appealId=" + appeal.id);
         PlayerGateway target = ctx.server().findPlayer(fine.target);
@@ -551,7 +689,8 @@ public class FineService {
         fine.status = "ARREST_PENDING";
         ctx.fines().write(data);
         audit.record("fine_present", player.name(), player.uuid().toString(), target.name(), target.uuid().toString(), "SUCCESS", "payment_requested taskId=" + task.id + " fineId=" + fine.id);
-        target.tell("Ești la recepționistă pentru plata amenzii " + fine.id + ". Folosește /straja fine pay " + fine.id + " sau /straja fine refuse " + task.id + ".");
+        target.tell("Ești la recepționistă pentru plata amenzii " + fine.id
+                + ". Achită amenda la recepționistă sau declară-i refuzul (dosar " + task.id + ").");
         player.tell("Plata a fost solicitată. Arestarea este permisă doar după refuzul explicit al cetățeanului.");
         return true;
     }
@@ -639,6 +778,10 @@ public class FineService {
             player.tell("Amenda nu mai este în așteptarea unei decizii.");
             return false;
         }
+        if (!near(player, location("receptionist"), 6)) {
+            player.tell("Refuzul plății se declară la recepționistă.");
+            return false;
+        }
         task.status = "REFUSED";
         task.refusalCount++;
         task.refusedAt = now();
@@ -647,7 +790,8 @@ public class FineService {
         audit.record("fine_refuse", player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), "SUCCESS", "payment_refused taskId=" + task.id + " fineId=" + fine.id);
         if (task.assignee != null) {
             PlayerGateway assignee = ctx.server().findPlayer(task.assignee);
-            if (assignee != null) assignee.tell("Cetățeanul a refuzat plata amenzii " + fine.id + ". Poți executa /straja fine arrest " + task.id + " lângă țintă.");
+            if (assignee != null) assignee.tell("Cetățeanul a refuzat plata amenzii " + fine.id
+                    + ". Poți executa arestarea conform dosarului " + task.id + " lângă țintă.");
         }
         player.tell("Refuzul a fost înregistrat. Garda poate executa arestarea conform misiunii.");
         return true;
@@ -667,7 +811,8 @@ public class FineService {
             return false;
         }
         if (!"REFUSED".equals(task.status)) {
-            player.tell("Arestarea este permisă doar după refuzul explicit al cetățeanului: /straja fine refuse " + task.id + ".");
+            player.tell("Arestarea este permisă doar după refuzul explicit al cetățeanului la recepționistă "
+                    + "(dosar " + task.id + ").");
             return false;
         }
         PlayerGateway target = ctx.server().findPlayer(task.target);
@@ -744,9 +889,12 @@ public class FineService {
      * ("arrest:{taskId}:{uuid}") so a crash or duplicate call cannot pay twice;
      * a surviving receipt is treated as already paid.
      */
-    private void payArrestReward(PlayerGateway officer, FineTask task, Fine fine, boolean alive) {
+    private boolean payArrestReward(PlayerGateway officer, FineTask task, Fine fine, boolean alive) {
         String payoutId = "arrest:" + task.id + ":" + officer.uuid();
-        if (ctx.currency().hasReceipt(officer, payoutId)) return;
+        if (ctx.currency().hasReceipt(officer, payoutId)) {
+            officer.tell("Recompensa pentru dosarul " + task.id + " a fost deja plătită.");
+            return true;
+        }
         int reward = arrestRewardAmount(task, fine, alive);
         GuardState state = players.state(officer);
         long day = now() / DAY_MS;
@@ -759,12 +907,13 @@ public class FineService {
             audit.record("arrest_reward", officer.name(), officer.uuid().toString(),
                     task.target, task.targetUuid, "FAILED", "daily_cap taskId=" + task.id);
             officer.tell("Ai atins limita zilnică de recompense pentru arestări.");
-            return;
+            return false;
         }
         if (!ctx.currency().available()) {
             audit.record("arrest_reward", officer.name(), officer.uuid().toString(),
                     task.target, task.targetUuid, "FAILED", "currency_unavailable taskId=" + task.id);
-            return;
+            officer.tell("Recompensa nu a putut fi livrată acum; dosarul rămâne revendicabil.");
+            return false;
         }
         var payout = ctx.currency().deposit(officer, payable, payoutId);
         if (!payout.ok()) {
@@ -772,7 +921,8 @@ public class FineService {
                     task.target, task.targetUuid, "FAILED",
                     "taskId=" + task.id + " delivered=" + payout.delivered()
                             + " error=" + payout.error());
-            return;
+            officer.tell("Recompensa nu a putut fi livrată acum; dosarul rămâne revendicabil.");
+            return false;
         }
         state.arrestRewardDayTotal += payable;
         players.save(officer.uuid(), state);
@@ -782,6 +932,52 @@ public class FineService {
                         + " amount=" + payable);
         officer.tell("Recompensă de arestare: " + payable + " monede"
                 + (payable < reward ? " (plafon zilnic atins)" : "") + ".");
+        return true;
+    }
+
+    /**
+     * Player-facing reward claim for a terminal arrest task. The persisted
+     * task plus the deterministic payout receipt make the claim idempotent:
+     * a failed or interrupted delivery stays recoverable on reconnect.
+     */
+    @Override
+    public boolean claimTaskReward(PlayerGateway player, String id) {
+        FineStore data = ctx.fines().read();
+        FineTask task = data.findTask(id);
+        if (task == null || !List.of("ARRESTED", "SUSPECT_KILLED").contains(task.status)) {
+            player.tell("Nu există o recompensă de arestare pentru acest dosar.");
+            return false;
+        }
+        String key = player.uuid() == null ? "" : player.uuid().toString();
+        boolean assignee = task.assignees != null && task.assignees.contains(key);
+        boolean recorded = task.arrestedByUuid != null && task.arrestedByUuid.equals(key);
+        if (!assignee && !recorded) {
+            player.tell("Doar garda însărcinată cu dosarul poate ridica recompensa.");
+            return false;
+        }
+        Fine fine = task.fineId != null ? data.find(task.fineId) : null;
+        return payArrestReward(player, task, fine, "ARRESTED".equals(task.status));
+    }
+
+    /**
+     * Login recovery: retries arrest bounties whose delivery failed or was
+     * interrupted while the officer was offline. The receipt
+     * ("arrest:{taskId}:{uuid}") makes the retry idempotent — a surviving
+     * receipt is skipped without touching the currency provider.
+     */
+    @Override
+    public void recoverOnLogin(PlayerGateway player) {
+        if (player == null || player.uuid() == null) return;
+        String key = player.uuid().toString();
+        FineStore data = ctx.fines().read();
+        for (FineTask task : data.tasks) {
+            if (task == null || !List.of("ARRESTED", "SUSPECT_KILLED").contains(task.status)) continue;
+            boolean assignee = task.assignees != null && task.assignees.contains(key);
+            if (!assignee && !key.equals(task.arrestedByUuid)) continue;
+            if (ctx.currency().hasReceipt(player, "arrest:" + task.id + ":" + player.uuid())) continue;
+            Fine fine = task.fineId != null ? data.find(task.fineId) : null;
+            payArrestReward(player, task, fine, "ARRESTED".equals(task.status));
+        }
     }
 
     /**
@@ -789,6 +985,7 @@ public class FineService {
      * resolves with the reduced death bounty instead of a live capture. Only a
      * guard empowered for the task (assignee or commissioner) collects.
      */
+    @Override
     public void suspectKilled(PlayerGateway killer, PlayerGateway victim) {
         if (killer == null || victim == null) return;
         if (!players.hasCapability(killer, Capability.EXECUTE_ARRESTS)) return;
@@ -820,6 +1017,11 @@ public class FineService {
             payArrestReward(killer, task, fine, false);
         }
         if (changed) ctx.fines().write(data);
+    }
+
+    @Override
+    public boolean issueHearingWarrant(PlayerGateway player, String targetName, String details) {
+        return issueHearingWarrant(player, ctx.server().findPlayer(targetName), details);
     }
 
     public boolean issueHearingWarrant(PlayerGateway player, PlayerGateway target, String details) {
@@ -871,6 +1073,7 @@ public class FineService {
     }
 
     /** Creates a JAILER_ASSAULT task when a civilian hurts/kills the jailer. */
+    @Override
     public FineTask createJailerAssaultMission(PlayerGateway attacker, String jailerName, String outcome) {
         if (attacker == null || players.isCommissioner(attacker) || onDutyGuard(attacker)) return null;
         FineStore data = ctx.fines().read();
@@ -984,6 +1187,7 @@ public class FineService {
 
     // ---------------------------------------------------------------- tick
 
+    @Override
     public void tick() {
         long current = now();
         if (current - lastTickAt < TICK_MS) return;
@@ -1010,7 +1214,7 @@ public class FineService {
                 continue;
             }
             if ("IN_SENTENCE".equals(fine.status)) {
-                var sentence = prison.findSentence(fine.sentenceId);
+                var sentence = findSentence(fine.sentenceId);
                 if (sentence != null && List.of("SERVED", "FORCED_RELEASE", "CANCELLED").contains(sentence.status)) {
                     fine.status = "GRACE_AFTER_SENTENCE";
                     fine.onlineElapsedMs = 0;

@@ -29,18 +29,21 @@ public class PrisonStore {
     }
 
     public Sentence activeSentenceFor(String key) {
+        if (key == null) return null;
         for (int i = sentences.size() - 1; i >= 0; i--) {
             Sentence s = sentences.get(i);
+            if (s == null) continue;
             boolean matches = s.targetUuid != null && !s.targetUuid.isEmpty()
                     ? s.targetUuid.equals(key)
-                    : s.target.equalsIgnoreCase(key);
+                    : s.target != null && s.target.equalsIgnoreCase(key);
             if (matches && ("WAITING_CELL".equals(s.status) || "ACTIVE".equals(s.status))) return s;
         }
         return null;
     }
 
     public Cell cell(String id) {
-        for (Cell c : cells) if (c.id.equals(id)) return c;
+        if (id == null) return null;
+        for (Cell c : cells) if (c != null && id.equals(c.id)) return c;
         return null;
     }
 }

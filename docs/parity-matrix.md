@@ -12,12 +12,25 @@ Evidence types: `unit:` a JUnit test in `src/test`, `rcon:` exercised live on a
 dedicated dev server over RCON, `code:` implementation exists, not yet
 automatically verified.
 
-Test suite: **162 unit tests** (`gradlew test`, all green) across
+This matrix distinguishes reference behavior from target UX. The target
+player-facing flow is roleplay-first: normal players and officers use native
+Straja NPCs, physical items, and clickable chat. `rcon:` coverage and the
+command inventory below exercise the administrator/reference surface; they do
+not mean that ordinary players should use typed commands. Manually typed
+gameplay roots are permission-2 admin-gated. Typed setup, administration,
+diagnostics, migration, and test surfaces are also permission-2 gated. The
+public typed conveniences are limited to status/rules/help text. `/straja backup`
+is an administrator-only command that writes a bounded durable SavedData snapshot;
+`_corrupt_backup` remains a separate internal persistence recovery record.
+
+Test suite: **331 unit tests** (`gradlew test --rerun-tasks`, all green) across
 `ArchitectureBoundaryTest`, `GuardServiceTest`, `DutyEngineTest`,
 `MissionServiceTest`, `CustodyServiceTest`, `PrisonServiceTest`,
 `CivicServiceTest`, `MigrationServiceTest`, `PersistenceTest`,
 `ItemCoinCurrencyProviderTest`, `StrajaPoliciesTest`,
-`PlayerServiceTest`, `NpcRolesTest`.
+`PlayerServiceTest`, `CommandSurfaceTest`, `NpcInteractionSurfaceTest`,
+`PhysicalItemSurfaceTest`, `FormSessionServiceTest`, `FormPayloadSurfaceTest`,
+`EventSurfaceTest`, `DeliveryBoundaryTest`.
 
 ## Foundation
 
@@ -31,7 +44,9 @@ Test suite: **162 unit tests** (`gradlew test`, all green) across
 | Persistence via SavedData + JSON | PASS | `unit:PersistenceTest`; `rcon:` fines/missions/prison/custody/archive all survived server restarts |
 | Corrupt-state backup + reset | PASS | `unit:PersistenceTest.corruptAggregateStoreIsBackedUp` |
 | Audit log (bounded retention) | PASS | `unit:PersistenceTest`; every service calls `audit.record` |
-| Commands usable from console/RCON | PASS | `rcon:` full M1–M6 flows driven from `tools/rcon.py` |
+| Commands usable from console/RCON | PASS | `rcon:` full M1–M6 flows driven from `tools/rcon.py`; administrator/reference surface, not ordinary-player UX |
+| Administrator backup command | PASS | `code:StrajaCommands` + `code:StrajaDataProvider.createBackup` — permission-2 `/straja backup`, bounded durable SavedData snapshots |
+| Typed gameplay command boundary | PASS | `unit:CommandSurfaceTest` — gameplay roots are permission-2 admin-only; public help does not advertise them; NPC clicks use the separate token boundary |
 | Romanian in-game text + EN canonical commands + RO aliases | PASS | `code:StrajaCommands` (`recruit`/`recrute`, `resign`/`demisie`, `regulament`) |
 | Test-mode command surface (gated) | PASS | `rcon:` `/straja test …` exercised continuously; gated by `testing.enableTestCommands` + permission 2; `debug.allowGrantRank` additionally gates `test set-rank` |
 
@@ -77,16 +92,18 @@ Test suite: **162 unit tests** (`gradlew test`, all green) across
 |---|---|---|
 | Native Straja NPC entity (humanoid, skinned) | PASS | `code:StrajaNpcEntity` + client renderer + generated 64×64 role skins |
 | Persistent UUID + explicit role ID | PASS | `code:NpcRegistry` + `EntityJoinLevelEvent` resync; `rcon:` registry survives restart |
-| Roles: receptionist/secretary/jailer/archivist | PASS | `code:NpcRoles` — each role delegates to real services (rules/recruit, mission list, custody report, archive status) |
+| Roleplay-first NPC player surface | PASS | `unit:NpcInteractionSurfaceTest` + `code:NpcRoles` — native NPC interaction presents clickable chat actions for the full player journey; client live UAT still needed for rendered behavior |
+| Native server-authoritative forms | PASS | `unit:FormSessionServiceTest` + `unit:FormPayloadSurfaceTest` + `code:StrajaFormMenu`/`StrajaFormScreen` — owner-bound, allowlisted, expiring, one-use sessions with bounded fields; quiz, mission report/fail, complaint submit/report/withdraw, appeal/review, archive sheet edit flows |
+| Roles: receptionist/secretary/jailer/archivist/trainer | PASS | `code:NpcRoles` — receptionist: rules, status, fines, rooms, native faction, complaints; trainer: recruiting quiz, training modules, service-block progress, self-service rank-ups, physical theory manual; secretary: duty self-service, missions, Order Carnet, investigation reports; jailer: custody/downed/sentence status, officer tasks, cuffs item; archivist: folders, sheets, copies, envelopes, documents |
 | NPC admin commands | PASS | `rcon:` `npc list/spawn/assign/set-name/set-skin/remove` — registry-targeted, console-safe |
-| NPC interaction → application services | PASS | `code:NpcInteractionService` → `NpcRoles.interact` |
+| NPC interaction → application services | PASS | `code:NpcInteractionService` → `NpcRoles` → inbound `*RoleplayUseCase` ports only; state-aware actions use short-lived, one-use, TTL-expiring, player-bound tokens; text actions open native form sessions. `unit:ArchitectureBoundaryTest` bars concrete services/persistence from player-facing adapters |
 | Jailer damage → assault mission | PASS | `code:` jailer takes real damage (`StrajaNpcEntity.isInvulnerable`/`hurt` → `jailerMayTakeDamage` → `LivingDamageEvent.Post`/`LivingDeathEvent` → `createJailerAssaultMission`); `unit:CivicServiceTest.jailerAssaultCreatesUrgentMissionAndUpgradesSeverity`; `unit:StrajaPoliciesTest.jailerDamageAllowed*` (guard-immunity truth table) |
 
 ## Missions, orders, packages
 
 | Feature | Status | Evidence / notes |
 |---|---|---|
-| Mission create/issue/accept/refuse/complete/fail | PASS | `unit:MissionServiceTest`; `rcon:` issue→persist across restart |
+| Mission create/issue/accept/refuse/complete/fail | PASS | `unit:MissionServiceTest`; `rcon:` issue→persist across restart; NPC actions + native forms cover accept/decline/report/fail/complete end-to-end; `deliverPendingRewards` on login reconciles interrupted payments and retries pending reward deliveries |
 | Order books (`straja:order_book`) | PASS | `code:` registered item; `rcon:` give + mission draft flow |
 | Sealed packages via Envelope | PASS | `code:EnvelopeDeliveryProvider.sendPackage` (real `MailService`); used by mission issue |
 | Deadlines + reward splitting | PASS | `unit:MissionServiceTest` |
@@ -148,8 +165,10 @@ Test suite: **162 unit tests** (`gradlew test`, all green) across
 
 | Item | Status | Notes |
 |---|---|---|
-| Client GUI screens | PARTIAL | Console-first design per requirements: every action reachable via commands/services; NPC interaction is text-driven, no custom screens |
-| Guided UAT harness from reference | BLOCKED (intentional) | KubeJS-only test scaffolding; replaced by the `/straja test` surface |
+| Client GUI screens | PASS | Native server-authoritative form screens shipped (`StrajaFormMenu` + `StrajaFormScreen` using EditBox/MultiLineEditBox); sessions are owner-bound, allowlisted, expiring, one-use. The player flow uses native NPCs, physical items, clickable chat, and these forms |
+| Parameterized player actions | PASS | All text-bearing player decisions run through native forms: quiz answers, mission reports/failure reasons, complaint submissions/withdrawal reasons, investigation reports, appeals/reviews, archive sheet edits; parameterized clicks cover the rest |
+| Client live UAT | BLOCKED | Server-side/unit coverage exists for role routing and token provenance, but a live client still needs to verify rendering, hover/click behavior, item interactions, and the end-to-end player experience |
+| Guided UAT harness from reference | BLOCKED (intentional) | KubeJS-only test scaffolding; `/straja test …` is an administrator/test surface and does not replace client live UAT |
 | CustomNPCs compatibility | BLOCKED (intentional) | Replaced by native `StrajaNpcEntity` per requirements |
 | Special-duty coverage | PARTIAL | Implemented in `DutyEngine`; less test coverage than normal patrols |
 | Envelope delivery to virtual test players | PARTIAL | Real `MailService` call made; virtual players can't hold mailbox items — pending-delivery path exercised instead |

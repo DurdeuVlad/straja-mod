@@ -1,6 +1,7 @@
 package com.dwurdy.straja.application.service;
 
 import com.dwurdy.straja.application.StrajaContext;
+import com.dwurdy.straja.application.port.in.MissionRoleplayUseCase;
 import com.dwurdy.straja.domain.model.ItemSpec;
 import com.dwurdy.straja.domain.model.Mission;
 import com.dwurdy.straja.domain.model.Rank;
@@ -55,6 +56,21 @@ class MissionServiceTest {
     private Mission latest() {
         var ms = ctx.missions().read();
         return ms.missions.get(ms.missions.size() - 1);
+    }
+
+    private boolean hasAction(TestPlayer p, MissionRoleplayUseCase.Action action, String missionId) {
+        return missions.availableActions(p).stream()
+                .anyMatch(a -> a.action() == action && missionId.equals(a.missionId()));
+    }
+
+    private Mission issueTeamMission(int maxAssignees) {
+        holdCarnet(commissar);
+        missions.draftWrite(commissar, 60, "acum", 30, "Escortează transportul");
+        missions.draftScope(commissar, "junior", maxAssignees);
+        missions.draftSign(commissar);
+        missions.draftPackage(commissar);
+        assertTrue(missions.issueDraft(commissar, g1));
+        return latest();
     }
 
     // ------------------------------------------------------------ quick create
@@ -301,7 +317,7 @@ class MissionServiceTest {
         assertTrue(g1.inventory.slots.stream().anyMatch(s -> !s.isEmpty()
                 && s.id().equals(MissionService.ORDER_BOOK)),
                 "the sealed order item must reach the target before the package is attempted");
-        assertTrue(commissar.told("mission resend"));
+        assertTrue(commissar.told("Anunță Comisaru' pentru retrimiterea pachetului."));
         // only the issuer (or commissioner) may retry the package
         assertFalse(missions.resendPackage(g1, m.id));
         // once the provider recovers the resend completes the delivery
@@ -323,6 +339,40 @@ class MissionServiceTest {
         guards.onStatusChange((p, r) -> missions.cancelOpenFor(p, r));
         missions.createMission(commissar, g1, 30, "m", 20);
         guards.suspend(commissar, g1);
+        assertEquals("CANCELLED_ROLE_CHANGE", latest().status);
+    }
+
+    @Test
+    void fireCancelsOpenMissionsAndReleasesReservedBudget() {
+        var guards = new GuardService(ctx, players, audit,
+                new EquipmentService(ctx));
+        guards.onStatusChange((p, r) -> missions.cancelOpenFor(p, r));
+        missions.createMission(commissar, g1, 30, "m", 20);
+        Mission mission = latest();
+
+        guards.fire(commissar, g1);
+
+        Mission cancelled = latest();
+        assertEquals("CANCELLED_ROLE_CHANGE", cancelled.status);
+        assertEquals("RELEASED", cancelled.issuerBudgetStatus);
+        assertEquals(0, ctx.missions().read().rewardBudgets.get(cancelled.issuerBudgetKey));
+        assertEquals(1, audit.tail(100).stream()
+                .filter(entry -> "mission_cancel_role_change".equals(entry.action)).count());
+        assertEquals(20, mission.issuerBudgetAmount);
+    }
+
+    @Test
+    void demotionToCivilCancelsOpenMissions() {
+        var guards = new GuardService(ctx, players, audit,
+                new EquipmentService(ctx));
+        guards.onStatusChange((p, r) -> missions.cancelOpenFor(p, r));
+        var state = players.state(g1.uuid());
+        state.rank = Rank.JUNIOR.level();
+        players.save(g1.uuid(), state);
+        missions.createMission(commissar, g1, 30, "m", 20);
+
+        guards.demote(commissar, g1);
+
         assertEquals("CANCELLED_ROLE_CHANGE", latest().status);
     }
 
@@ -355,6 +405,34 @@ class MissionServiceTest {
     }
 
     @Test
+    void resignationNoticeCancelsOpenMissionsBeforeFinalConfirmation() {
+        var guards = new GuardService(ctx, players, audit,
+                new EquipmentService(ctx));
+        guards.onStatusChange((p, r) -> missions.cancelOpenFor(p, r));
+        missions.createMission(commissar, g1, 30, "m", 20);
+
+        guards.resign(g1, null);
+
+        assertTrue(players.state(g1.uuid()).resignationPending);
+        assertEquals("CANCELLED_ROLE_CHANGE", latest().status,
+                "resignation notice makes the assignee operationally ineligible");
+    }
+
+    @Test
+    void roleChangeCancellationIsIdempotent() {
+        missions.createMission(commissar, g1, 30, "m", 20);
+
+        assertEquals(1, missions.cancelOpenFor(g1, "fired"));
+        int auditCount = (int) audit.tail(100).stream()
+                .filter(entry -> "mission_cancel_role_change".equals(entry.action)).count();
+
+        assertEquals(0, missions.cancelOpenFor(g1, "fired"));
+        assertEquals(auditCount, audit.tail(100).stream()
+                .filter(entry -> "mission_cancel_role_change".equals(entry.action)).count());
+        assertEquals("RELEASED", latest().issuerBudgetStatus);
+    }
+
+    @Test
     void dailyIssuerBudgetIsEnforcedAndReleased() {
         ctx.policies().missionMaxRewardPerIssuerPerDay = 30;
         missions.createMission(commissar, g1, 30, "a", 20);
@@ -380,5 +458,240 @@ class MissionServiceTest {
         g1.online = true;
         assertTrue(missions.claimReward(g1, m.id));
         assertTrue(latest().rewardClaims.values().stream().allMatch(c -> "PAID".equals(c.status)));
+    }
+
+    // ------------------------------------------------------------ login recovery
+
+    private Mission completedWithPendingClaim() {
+        missions.createMission(commissar, g1, 30, "m", 20);
+        Mission m = latest();
+        missions.accept(g1, m.id);
+        missions.report(g1, m.id, "ok");
+        g1.online = false;
+        assertTrue(missions.complete(commissar, m.id));
+        g1.online = true;
+        return m;
+    }
+
+    private Mission.RewardClaim claimOf(String missionId, TestPlayer p) {
+        var mission = ctx.missions().read().find(missionId);
+        return mission.rewardClaims.get(p.uuid().toString());
+    }
+
+    /** Persists a claim entry directly, as claims() would have materialized it. */
+    private Mission.RewardClaim persistedClaim(String missionId, TestPlayer p, String status) {
+        var store = ctx.missions().read();
+        var mission = store.find(missionId);
+        var claim = new Mission.RewardClaim();
+        claim.name = p.name();
+        claim.uuid = p.uuid().toString();
+        claim.amount = 20;
+        claim.status = status;
+        claim.payoutId = "mission:" + missionId + ":" + p.uuid() + ":reward";
+        mission.rewardClaims.put(p.uuid().toString(), claim);
+        ctx.missions().write(store);
+        return claim;
+    }
+
+    @Test
+    void pendingRewardIsDeliveredAutomaticallyOnReconnect() {
+        Mission m = completedWithPendingClaim();
+        var currency = (TestCurrency) ctx.currency();
+        int balance = currency.balance;
+        missions.deliverPendingRewards(g1);
+        assertTrue(currency.balance > balance, "reconnect delivers the pending reward share");
+        assertEquals("PAID", claimOf(m.id, g1).status);
+        int calls = currency.depositCalls;
+        missions.deliverPendingRewards(g1);
+        assertEquals(calls, currency.depositCalls,
+                "a surviving payout receipt prevents a second delivery");
+    }
+
+    @Test
+    void pendingRewardRecoveryOnlyTouchesTheReconnectingPlayer() {
+        Mission m = completedWithPendingClaim();
+        var currency = (TestCurrency) ctx.currency();
+        int calls = currency.depositCalls;
+        missions.deliverPendingRewards(g2);
+        assertEquals(calls, currency.depositCalls, "an unrelated player triggers no payout");
+        assertEquals("PENDING", claimOf(m.id, g1).status);
+    }
+
+    @Test
+    void interruptedMissionPaymentWithoutReceiptRetriesOnReconnect() {
+        Mission m = completedWithPendingClaim();
+        // Simulate a crash between the PAYMENT_IN_PROGRESS write and the deposit.
+        persistedClaim(m.id, g1, "PAYMENT_IN_PROGRESS");
+        var currency = (TestCurrency) ctx.currency();
+        int balance = currency.balance;
+        missions.deliverPendingRewards(g1);
+        assertEquals("PAID", claimOf(m.id, g1).status,
+                "a receiptless interrupted payment must be retried, not stuck forever");
+        assertTrue(currency.balance > balance);
+    }
+
+    @Test
+    void interruptedMissionPaymentWithSurvivingReceiptSettlesAsPaid() {
+        Mission m = completedWithPendingClaim();
+        var claim = persistedClaim(m.id, g1, "PAYMENT_IN_PROGRESS");
+        var currency = (TestCurrency) ctx.currency();
+        // The deposit landed before the crash; only the status write was lost.
+        currency.deposit(g1, claim.amount, claim.payoutId);
+        int calls = currency.depositCalls;
+        missions.deliverPendingRewards(g1);
+        assertEquals("PAID", claimOf(m.id, g1).status);
+        assertEquals(calls, currency.depositCalls,
+                "a surviving receipt settles the claim without a second deposit");
+    }
+
+    @Test
+    void paymentReviewClaimIsLeftForCommissionerRecovery() {
+        Mission m = completedWithPendingClaim();
+        persistedClaim(m.id, g1, "PAYMENT_REVIEW");
+        var currency = (TestCurrency) ctx.currency();
+        int calls = currency.depositCalls;
+        missions.deliverPendingRewards(g1);
+        assertEquals("PAYMENT_REVIEW", claimOf(m.id, g1).status,
+                "a partially delivered payment stays reserved for the commissioner");
+        assertEquals(calls, currency.depositCalls);
+    }
+
+    // ------------------------------------------------------------ availableActions
+
+    @Test
+    void invitedSecondarySeesJoinAndJoins() {
+        Mission m = issueTeamMission(2);
+        assertTrue(missions.invite(commissar, m.id, g2));
+        assertTrue(hasAction(g2, MissionRoleplayUseCase.Action.JOIN, m.id));
+        assertTrue(missions.join(g2, m.id));
+        assertFalse(hasAction(g2, MissionRoleplayUseCase.Action.JOIN, m.id),
+                "joined participants stop seeing join");
+    }
+
+    @Test
+    void secondaryDeclineRemovesOnlyThatParticipant() {
+        Mission m = issueTeamMission(2);
+        assertTrue(missions.invite(commissar, m.id, g2));
+        assertTrue(missions.join(g2, m.id));
+        assertTrue(missions.decline(g2, m.id));
+        Mission after = latest();
+        assertEquals("ISSUED", after.status, "the mission stays open for the rest of the team");
+        assertEquals(1, after.assignees.size());
+        assertFalse(hasAction(g2, MissionRoleplayUseCase.Action.JOIN, m.id));
+        assertFalse(hasAction(g2, MissionRoleplayUseCase.Action.DECLINE, m.id));
+    }
+
+    @Test
+    void assignedIssuedExposesAcceptAndDeclineThenAcceptedExposesReportAndFail() {
+        missions.createMission(lt, g1, 30, "m", 20);
+        Mission m = latest();
+        assertTrue(hasAction(g1, MissionRoleplayUseCase.Action.ACCEPT, m.id));
+        assertTrue(hasAction(g1, MissionRoleplayUseCase.Action.DECLINE, m.id));
+        assertFalse(hasAction(g1, MissionRoleplayUseCase.Action.REPORT, m.id));
+        missions.accept(g1, m.id);
+        assertFalse(hasAction(g1, MissionRoleplayUseCase.Action.ACCEPT, m.id));
+        assertFalse(hasAction(g1, MissionRoleplayUseCase.Action.DECLINE, m.id));
+        assertTrue(hasAction(g1, MissionRoleplayUseCase.Action.REPORT, m.id));
+        assertTrue(hasAction(g1, MissionRoleplayUseCase.Action.FAIL, m.id));
+    }
+
+    @Test
+    void issuerSeesCompleteForReportedMissionAndReportIsVisibleInList() {
+        missions.createMission(lt, g1, 30, "m", 20);
+        Mission m = latest();
+        missions.accept(g1, m.id);
+        missions.report(g1, m.id, "patrula fără incidente");
+        assertTrue(hasAction(lt, MissionRoleplayUseCase.Action.COMPLETE, m.id));
+        assertTrue(hasAction(commissar, MissionRoleplayUseCase.Action.COMPLETE, m.id),
+                "the commissioner can close any reported mission");
+        assertFalse(hasAction(g1, MissionRoleplayUseCase.Action.COMPLETE, m.id),
+                "the participant cannot close their own mission");
+        missions.list(lt);
+        assertTrue(lt.told("patrula fără incidente"),
+                "the issuer must see the submitted report excerpt in the mission list");
+        assertTrue(missions.complete(lt, m.id));
+        assertFalse(hasAction(lt, MissionRoleplayUseCase.Action.COMPLETE, m.id));
+    }
+
+    @Test
+    void offlineParticipantPendingClaimExposesClaimAndRecovery() {
+        missions.createMission(commissar, g1, 30, "m", 20);
+        Mission m = latest();
+        missions.accept(g1, m.id);
+        missions.report(g1, m.id, "ok");
+        g1.online = false;
+        assertTrue(missions.complete(commissar, m.id));
+        g1.online = true;
+        assertTrue(hasAction(g1, MissionRoleplayUseCase.Action.CLAIM_REWARD, m.id));
+        assertTrue(hasAction(commissar, MissionRoleplayUseCase.Action.RECOVER_REWARD, m.id));
+        assertTrue(missions.claimReward(g1, m.id));
+        assertFalse(hasAction(g1, MissionRoleplayUseCase.Action.CLAIM_REWARD, m.id));
+        assertFalse(hasAction(commissar, MissionRoleplayUseCase.Action.RECOVER_REWARD, m.id));
+    }
+
+    @Test
+    void staleStatusRemovesMissionActions() {
+        missions.createMission(lt, g1, 30, "m", 20);
+        Mission m = latest();
+        assertTrue(hasAction(g1, MissionRoleplayUseCase.Action.ACCEPT, m.id));
+        assertTrue(missions.fail(g1, m.id, "renunțare"));
+        assertFalse(hasAction(g1, MissionRoleplayUseCase.Action.ACCEPT, m.id));
+        assertFalse(hasAction(g1, MissionRoleplayUseCase.Action.DECLINE, m.id));
+        assertFalse(hasAction(g1, MissionRoleplayUseCase.Action.REPORT, m.id));
+        assertFalse(hasAction(g1, MissionRoleplayUseCase.Action.FAIL, m.id));
+    }
+
+    @Test
+    void draftProgressionExposesSequentialActions() {
+        assertTrue(hasAction(commissar, MissionRoleplayUseCase.Action.GET_CARNET, ""));
+        assertFalse(hasAction(commissar, MissionRoleplayUseCase.Action.DRAFT_WRITE, ""),
+                "draft writing requires the physical carnet in hand");
+        holdCarnet(commissar);
+        assertTrue(hasAction(commissar, MissionRoleplayUseCase.Action.DRAFT_WRITE, ""));
+        assertFalse(hasAction(commissar, MissionRoleplayUseCase.Action.DRAFT_STATUS, ""));
+        missions.draftWrite(commissar, 60, "acum", 30, "Escortează transportul");
+        assertTrue(hasAction(commissar, MissionRoleplayUseCase.Action.DRAFT_STATUS, ""));
+        assertTrue(hasAction(commissar, MissionRoleplayUseCase.Action.DRAFT_SCOPE, ""));
+        assertTrue(hasAction(commissar, MissionRoleplayUseCase.Action.DRAFT_SIGN, ""));
+        assertFalse(hasAction(commissar, MissionRoleplayUseCase.Action.DRAFT_PACKAGE, ""),
+                "packaging requires a signature first");
+        missions.draftSign(commissar);
+        assertTrue(hasAction(commissar, MissionRoleplayUseCase.Action.DRAFT_PACKAGE, ""));
+        missions.draftPackage(commissar);
+        assertFalse(hasAction(g1, MissionRoleplayUseCase.Action.GET_CARNET, ""),
+                "ordinary guards never see issuer actions");
+        assertFalse(hasAction(g1, MissionRoleplayUseCase.Action.DRAFT_SIGN, ""));
+    }
+
+    @Test
+    void availableActionsToleratesMalformedLegacyDraft() {
+        holdCarnet(commissar);
+        var store = ctx.missions().read();
+        var draft = new com.dwurdy.straja.domain.model.MissionDraft();
+        draft.objective = null;
+        draft.signedBy = null;
+        store.drafts.put(commissar.uuid().toString(), draft);
+        ctx.missions().write(store);
+        assertTrue(hasAction(commissar, MissionRoleplayUseCase.Action.DRAFT_STATUS, ""));
+        assertTrue(hasAction(commissar, MissionRoleplayUseCase.Action.DRAFT_SCOPE, ""));
+        assertFalse(hasAction(commissar, MissionRoleplayUseCase.Action.DRAFT_SIGN, ""),
+                "a null objective must not expose signing");
+        assertFalse(hasAction(commissar, MissionRoleplayUseCase.Action.DRAFT_PACKAGE, ""),
+                "a null signature must not expose packaging");
+    }
+
+    @Test
+    void reportAndFailPersistBoundedText() {
+        missions.createMission(lt, g1, 30, "m", 20);
+        Mission m = latest();
+        missions.accept(g1, m.id);
+        assertTrue(missions.report(g1, m.id, "x".repeat(5000)));
+        assertEquals(ctx.policies().envelopeMaxBodyLength, latest().report.length(),
+                "the stored report is bounded by the envelope body limit");
+        missions.createMission(lt, g2, 30, "m2", 20);
+        Mission m2 = latest();
+        assertTrue(missions.fail(g2, m2.id, "r".repeat(500)));
+        assertEquals(240, latest().failureReason.length(),
+                "the stored failure reason is bounded");
     }
 }

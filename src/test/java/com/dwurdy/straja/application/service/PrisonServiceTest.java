@@ -31,8 +31,18 @@ class PrisonServiceTest {
         prison = new PrisonService(ctx, players, audit, custody);
         boss = server.add("dwurdy");
         inmate = server.add("civ1");
+        ((TestWorld) ctx.world()).room("minecraft:overworld", -1, 59, -1, 6, 66, 6,
+                -1, 61, 2);
         assertTrue(prison.createCell(boss, "celula_1", "minecraft:overworld",
                 0, 60, 0, 5, 65, 5));
+    }
+
+    @Test
+    void cellRejectsOpenOrDoorlessGeometry() {
+        assertFalse(prison.createCell(boss, "open_cell", "minecraft:overworld",
+                20, 60, 20, 25, 65, 25));
+        assertTrue(boss.told("Pereții") || boss.told("ușă"));
+        assertNull(ctx.prison().read().cell("open_cell"));
     }
 
     @Test
@@ -144,6 +154,133 @@ class PrisonServiceTest {
         assertNull(prison.arrest(inmate, null, 1, boss, null));
         assertTrue(ctx.prison().read().sentences.isEmpty());
         assertTrue(boss.told("dezactivat"));
+    }
+
+    // ------------------------------------------------------------ login recovery
+
+    @Test
+    void loginRecoveryTeleportsActiveSentenceBackToCell() {
+        prison.arrest(inmate, null, 1, boss, null);
+        inmate.teleport("minecraft:overworld", 500, 64, 500);
+        prison.recoverOnLogin(inmate);
+        assertTrue(prison.insideCell("minecraft:overworld", inmate.x, inmate.y, inmate.z));
+        // idempotent across repeated calls
+        prison.recoverOnLogin(inmate);
+        assertTrue(prison.insideCell("minecraft:overworld", inmate.x, inmate.y, inmate.z));
+        assertEquals("ACTIVE", ctx.prison().read().sentences.get(0).status);
+    }
+
+    @Test
+    void loginRecoveryWithoutCellFailsClosedToSingleWaitlistEntry() {
+        var s1 = prison.arrest(inmate, null, 1, boss, null);
+        assertEquals("ACTIVE", s1.status);
+        var inmate2 = server.add("civ2");
+        // inject a second cell and sentence without running the world checks
+        var data = ctx.prison().read();
+        var cell2 = new com.dwurdy.straja.domain.model.Cell();
+        cell2.id = "celula_2";
+        cell2.dimension = "minecraft:overworld";
+        cell2.minX = 20; cell2.minY = 60; cell2.minZ = 20;
+        cell2.maxX = 25; cell2.maxY = 65; cell2.maxZ = 25;
+        data.cells.add(cell2);
+        ctx.prison().write(data);
+        var s2 = prison.arrest(inmate2, null, 1, boss, null);
+        assertEquals("celula_2", s2.cellId);
+
+        // corrupt the assignment so the sentence's cell is no longer validly held
+        data = ctx.prison().read();
+        data.assignments.get("celula_2").sentenceId = "S-foreign";
+        ctx.prison().write(data);
+
+        prison.recoverOnLogin(inmate2);
+        var after = ctx.prison().read();
+        var stored = after.sentences.stream().filter(s -> s.id.equals(s2.id)).findFirst().orElseThrow();
+        assertEquals("WAITING_CELL", stored.status);
+        assertEquals("", stored.cellId);
+        assertEquals(1, after.waitlist.stream().filter(e -> s2.id.equals(e.sentenceId)).count(),
+                "exactly one waitlist entry");
+
+        prison.recoverOnLogin(inmate2);
+        after = ctx.prison().read();
+        assertEquals(0, after.waitlist.stream().filter(e -> s2.id.equals(e.sentenceId)).count(),
+                "the dangling foreign claim is released, so the freed cell is reclaimed");
+        var converged = after.sentences.stream().filter(s -> s.id.equals(s2.id))
+                .findFirst().orElseThrow();
+        assertEquals("ACTIVE", converged.status);
+        assertEquals("celula_2", converged.cellId);
+        assertTrue(prison.insideCell("minecraft:overworld", inmate2.x, inmate2.y, inmate2.z));
+    }
+
+    @Test
+    void loginRecoveryPersistsAcrossRestartAndNoOpsOnTerminal() {
+        prison.arrest(inmate, null, 1, boss, null);
+        assertTrue(prison.release(boss, inmate, "test"));
+        assertEquals("FORCED_RELEASE", ctx.prison().read().sentences.get(0).status);
+        // terminal sentence -> recovery is a no-op
+        prison.recoverOnLogin(inmate);
+        assertTrue(ctx.prison().read().waitlist.isEmpty());
+        assertTrue(ctx.prison().read().assignments.isEmpty());
+        // a fresh service instance over the same stores sees the same state
+        var custody = new CustodyService(ctx, players, new AuditService(ctx));
+        var restarted = new PrisonService(ctx, players, new AuditService(ctx), custody);
+        inmate.teleport("minecraft:overworld", 500, 64, 500);
+        restarted.recoverOnLogin(inmate);
+        assertEquals(500, inmate.x, "terminal sentence must not teleport on login");
+    }
+
+    @Test
+    void loginRecoveryCancelsSentenceWithInvalidProvenance() {
+        var data = ctx.prison().read();
+        var broken = new Sentence();
+        broken.id = ""; // invalid sentence identity
+        broken.target = inmate.name();
+        broken.targetUuid = inmate.uuid().toString();
+        broken.status = "ACTIVE";
+        broken.cellId = "celula_1";
+        data.sentences.add(broken);
+        var assignment = new com.dwurdy.straja.domain.model.PrisonStore.Assignment();
+        assignment.sentenceId = "";
+        assignment.target = inmate.name();
+        assignment.targetUuid = inmate.uuid().toString();
+        data.assignments.put("celula_1", assignment);
+        ctx.prison().write(data);
+
+        prison.recoverOnLogin(inmate);
+
+        var after = ctx.prison().read();
+        assertEquals("CANCELLED", after.sentences.get(0).status,
+                "an active sentence without valid identity must be cancelled, not teleported");
+        assertTrue(after.assignments.isEmpty(), "its cell assignment is released");
+        assertEquals(0, inmate.x, "no forced teleport for a cancelled sentence");
+    }
+
+    @Test
+    void loginRecoveryDropsMalformedWaitlistEntriesAndRequeues() {
+        var s = prison.arrest(inmate, null, 1, boss, null);
+        var data = ctx.prison().read();
+        // corrupt the sentence's cell pointer and poison the waitlist
+        data.sentences.get(0).cellId = "ghost_cell";
+        data.waitlist.add(null);
+        var malformed = new com.dwurdy.straja.domain.model.PrisonStore.WaitlistEntry();
+        malformed.sentenceId = "";
+        data.waitlist.add(malformed);
+        ctx.prison().write(data);
+
+        prison.recoverOnLogin(inmate);
+
+        var after = ctx.prison().read();
+        var stored = after.sentences.get(0);
+        assertEquals("WAITING_CELL", stored.status);
+        assertEquals(1, after.waitlist.size(), "only the rebuilt entry remains");
+        assertEquals(s.id, after.waitlist.get(0).sentenceId);
+        assertEquals(1, after.waitlist.stream().filter(e -> s.id.equals(e.sentenceId)).count());
+        // the freed cell is reclaimed on the next pass — recovery converges
+        prison.recoverOnLogin(inmate);
+        after = ctx.prison().read();
+        assertEquals("ACTIVE", after.sentences.get(0).status);
+        assertEquals("celula_1", after.sentences.get(0).cellId);
+        assertTrue(after.waitlist.isEmpty());
+        assertTrue(prison.insideCell("minecraft:overworld", inmate.x, inmate.y, inmate.z));
     }
 
     @Test

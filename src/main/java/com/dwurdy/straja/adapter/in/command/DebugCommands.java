@@ -16,7 +16,9 @@ final class DebugCommands {
     private DebugCommands() {}
 
     static LiteralArgumentBuilder<CommandSourceStack> build() {
-        var debug = Commands.literal("debug");
+        // Permission is part of the tree boundary; config + local checks remain
+        // in debugAllowed so stale clients and direct execution are denied too.
+        var debug = StrajaCommands.adminOnly(Commands.literal("debug"));
 
         debug.then(Commands.literal("readiness").executes(ctx -> {
             var runtime = StrajaRuntime.get();

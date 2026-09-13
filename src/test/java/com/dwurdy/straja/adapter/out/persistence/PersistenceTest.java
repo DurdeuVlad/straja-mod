@@ -96,4 +96,19 @@ class PersistenceTest {
         assertEquals("ACCEPTED", loaded.find("M1").status);
         assertEquals(100, loaded.find("M1").reward);
     }
+
+    @Test
+    void backupManifestCoversEverySourceStoreWithoutRecursion() {
+        var stores = StrajaDataProvider.BackupPolicy.SOURCE_STORES;
+        assertEquals(java.util.Set.of("setup", "audit", "inbox", "missions", "fines",
+                "prisons", "rooms", "complaints", "custody", "archive", "npcs",
+                "test", "players"), java.util.Set.copyOf(stores),
+                "the snapshot must retain every persisted source store");
+        assertFalse(stores.contains("backup"),
+                "the backup store must never snapshot itself");
+        assertEquals(stores.size(), java.util.Set.copyOf(stores).size(),
+                "the manifest must not contain duplicates");
+        assertTrue(StrajaDataProvider.BackupPolicy.RETENTION > 0,
+                "snapshot retention must stay bounded");
+    }
 }

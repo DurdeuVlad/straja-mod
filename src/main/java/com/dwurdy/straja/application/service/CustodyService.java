@@ -1,6 +1,7 @@
 package com.dwurdy.straja.application.service;
 
 import com.dwurdy.straja.application.StrajaContext;
+import com.dwurdy.straja.application.port.in.CustodyRoleplayUseCase;
 import com.dwurdy.straja.application.port.out.ItemView;
 import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.domain.model.Capability;
@@ -10,6 +11,7 @@ import com.dwurdy.straja.domain.model.Rank;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Enforcement mechanics: cuff consent flow, surrender, direct cuffs, cuff keys,
@@ -17,7 +19,7 @@ import java.util.Map;
  * state and release. Ported from the reference runtime; all checks are
  * server-side and every state transition is persisted + audited.
  */
-public class CustodyService {
+public class CustodyService implements CustodyRoleplayUseCase {
     public static final String CUFFS = "straja:cuffs";
     public static final String CUFF_KEY = "straja:cuff_key";
     public static final String CROWBAR = "straja:crowbar";
@@ -70,6 +72,53 @@ public class CustodyService {
 
     public CustodyStore.DownedRecord downedRecord(PlayerGateway p) { return store().downed.get(key(p)); }
 
+    /** Read-only projection of the custody actions this player can take right now. */
+    public List<AvailableAction> availableActions(PlayerGateway player) {
+        var store = store();
+        var actions = new ArrayList<AvailableAction>();
+        String playerKey = key(player);
+        for (var request : store.cuffRequests.values()) {
+            if (request == null || request.expiresAt <= now()
+                    || request.id == null || request.id.isEmpty()
+                    || !matches(player, request.targetUuid, request.target)) continue;
+            actions.add(new AvailableAction(Action.ACCEPT_REQUEST, request.id));
+            actions.add(new AvailableAction(Action.REFUSE_REQUEST, request.id));
+        }
+        if (store.headSacks.containsKey(playerKey) && !store.downed.containsKey(playerKey)) {
+            actions.add(new AvailableAction(Action.REMOVE_HEAD_SACK, ""));
+        }
+        var downed = store.downed.get(playerKey);
+        if (downed != null && now() >= downed.wakesAt) {
+            actions.add(new AvailableAction(Action.WAKE_DOWNED, ""));
+        }
+        if (canIssueCuffs(player)) {
+            actions.add(new AvailableAction(Action.GIVE_CUFFS, ""));
+        }
+        if (!"NONE".equals(releaseToolKind(player.mainHand()))) {
+            var emitted = new java.util.HashSet<String>();
+            for (var record : store.cuffed.values()) {
+                if (record != null) {
+                    addReleaseTarget(actions, emitted, record.targetUuid, record.target, player);
+                }
+            }
+            for (var record : store.bound.values()) {
+                if (record != null) {
+                    addReleaseTarget(actions, emitted, record.targetUuid, record.target, player);
+                }
+            }
+        }
+        return List.copyOf(actions);
+    }
+
+    private void addReleaseTarget(List<AvailableAction> actions, java.util.Set<String> emitted,
+                                  String targetUuid, String targetName, PlayerGateway actor) {
+        var target = findStored(targetUuid, targetName);
+        if (target == null || target.uuid() == null) return;
+        String id = target.uuid().toString();
+        if (id.equals(uuidOf(actor)) || !emitted.add(id)) return;
+        actions.add(new AvailableAction(Action.RELEASE_TARGET, id));
+    }
+
     private static boolean hasItem(PlayerGateway p, String itemId) {
         return p.inventory().contains(itemId);
     }
@@ -101,9 +150,15 @@ public class CustodyService {
      * (see FineService.onDutyGuard).
      */
     private boolean enforcementGuard(PlayerGateway p) {
+        if (p == null) return false;
         var state = players.state(p.uuid());
         return !state.suspended && !state.fired && !state.resigned && !state.resignationPending
                 && state.rank >= Rank.GUARD.level();
+    }
+
+    /** Cuffs may be issued by an active guard or the configured commissioner. */
+    private boolean canIssueCuffs(PlayerGateway p) {
+        return p != null && (players.isCommissioner(p) || enforcementGuard(p));
     }
 
     /** Reference policy: guards may not cuff fellow guards without lt+/commissioner. */
@@ -139,7 +194,7 @@ public class CustodyService {
     }
 
     public boolean requestCuffs(PlayerGateway issuer, PlayerGateway target) {
-        if (!players.hasCapability(issuer, Capability.USE_CUFFS)) {
+        if (!canIssueCuffs(issuer)) {
             issuer.tell("Cătușele se acordă de la rangul Străjer în sus.");
             return false;
         }
@@ -151,7 +206,7 @@ public class CustodyService {
     }
 
     public boolean requestSurrender(PlayerGateway issuer, PlayerGateway target) {
-        if (!players.hasCapability(issuer, Capability.USE_CUFFS)) {
+        if (!canIssueCuffs(issuer)) {
             issuer.tell("Cererea de predare și cătușele se folosesc de la rangul Străjer în sus.");
             return false;
         }
@@ -203,12 +258,12 @@ public class CustodyService {
         store.cuffRequests.put(request.id, request);
         ctx.custody().write(store);
         if ("SURRENDER".equals(kind)) {
-            target.tell("[Straja] " + issuer.name() + " îți cere predarea. Acceptă: /straja cuffs accept "
-                    + request.id + " | Refuză: /straja cuffs refuse " + request.id + ".");
+            target.tell("[Straja] " + issuer.name() + " îți cere predarea. Alege Acceptă sau Refuză "
+                    + "în cererea din chat (" + request.id + ").");
             issuer.tell("Cererea de predare a fost trimisă lui " + target.name() + ".");
         } else {
-            target.tell("[Straja] " + issuer.name() + " vrea să te încătușeze. Acceptă: /straja cuffs accept "
-                    + request.id + " | Refuză: /straja cuffs refuse " + request.id + ".");
+            target.tell("[Straja] " + issuer.name() + " vrea să te încătușeze. Alege Acceptă sau Refuză "
+                    + "în cererea din chat (" + request.id + ").");
             issuer.tell("Cererea de încătușare a fost trimisă lui " + target.name()
                     + ". Așteaptă acceptarea sau refuzul.");
         }
@@ -226,6 +281,29 @@ public class CustodyService {
         return request;
     }
 
+    /**
+     * Persisted issuer authority: the UUID must be present, parseable, and still
+     * belong to an enforcement-capable member (commissioner or active Străjer+).
+     */
+    private boolean issuerEligible(String issuer, String issuerUuid) {
+        if (issuerUuid == null || issuerUuid.isBlank()) return false;
+        UUID uuid;
+        try {
+            uuid = UUID.fromString(issuerUuid);
+        } catch (IllegalArgumentException ex) {
+            return false;
+        }
+        if (players.isCommissioner(issuer, uuid)) return true;
+        var state = players.state(uuid);
+        return !state.suspended && !state.fired && !state.resigned && !state.resignationPending
+                && state.rank >= Rank.GUARD.level();
+    }
+
+    /** Re-checks persisted issuer authority when a request is accepted offline. */
+    private boolean storedIssuerEligible(CustodyStore.CuffRequest request) {
+        return issuerEligible(request.issuer, request.issuerUuid);
+    }
+
     public boolean accept(PlayerGateway player, String requestId) {
         var store = store();
         pruneRequests(store);
@@ -239,8 +317,8 @@ public class CustodyService {
         }
         var issuer = findStored(request.issuerUuid, request.issuer);
         boolean issuerEligible = issuer != null
-                ? players.hasCapability(issuer, Capability.USE_CUFFS) && hasItem(issuer, CUFFS)
-                : request.issuerRank >= Rank.GUARD.level() && "useCuffs".equals(request.issuerCapability);
+                ? canIssueCuffs(issuer) && hasItem(issuer, CUFFS)
+                : storedIssuerEligible(request);
         if (!issuerEligible) {
             store.cuffRequests.remove(request.id);
             ctx.custody().write(store);
@@ -272,7 +350,7 @@ public class CustodyService {
 
     private boolean acceptSurrender(PlayerGateway player, CustodyStore store, CustodyStore.CuffRequest request) {
         var issuer = findStored(request.issuerUuid, request.issuer);
-        if (issuer == null || !players.hasCapability(issuer, Capability.USE_CUFFS) || !hasItem(issuer, CUFFS)) {
+        if (issuer == null || !canIssueCuffs(issuer) || !hasItem(issuer, CUFFS)) {
             store.cuffRequests.remove(request.id);
             ctx.custody().write(store);
             player.tell("Cererea de predare nu mai este validă: gardianul nu este disponibil sau nu mai are Cătușe.");
@@ -325,7 +403,7 @@ public class CustodyService {
     public record ApplyResult(boolean ok, String reason) {}
 
     public ApplyResult applyCuffsDirect(PlayerGateway issuer, PlayerGateway target, String reason) {
-        if (!players.hasCapability(issuer, Capability.USE_CUFFS)) {
+        if (!canIssueCuffs(issuer)) {
             return new ApplyResult(false, "issuer_not_active_guard");
         }
         if (!hasItem(issuer, CUFFS)) {
@@ -456,10 +534,18 @@ public class CustodyService {
     private boolean deliverPendingItems(CustodyStore store, PlayerGateway player) {
         var items = store.pendingItems.get(key(player));
         if (items == null || items.isEmpty()) return false;
+        boolean changed = false;
         int delivered = 0;
         var iterator = items.iterator();
         while (iterator.hasNext()) {
             var item = iterator.next();
+            if (item == null || blank(item.itemId) || item.count <= 0) {
+                iterator.remove();
+                changed = true;
+                audit.record("custody_recovery", null, null,
+                        player.name(), uuidOf(player), "SUCCESS", "malformed_pending_item");
+                continue;
+            }
             var spec = new ItemSpec(item.itemId, item.count,
                     item.data == null ? java.util.Map.of() : item.data,
                     item.name == null || item.name.isEmpty() ? null : item.name);
@@ -467,10 +553,146 @@ public class CustodyService {
             iterator.remove();
             delivered++;
         }
-        if (delivered <= 0) return false;
         if (items.isEmpty()) store.pendingItems.remove(key(player));
-        player.tell("Ai recuperat " + delivered + " obiect(e) reținut(e) în timpul încătușării.");
-        return true;
+        if (delivered > 0) {
+            player.tell("Ai recuperat " + delivered + " obiect(e) reținut(e) în timpul încătușării.");
+            return true;
+        }
+        return changed;
+    }
+
+    // ------------------------------------------------------------ recovery
+
+    private static boolean blank(String value) {
+        return value == null || value.isBlank();
+    }
+
+    /**
+     * Login recovery: revalidates the issuer of any persisted cuff, drops
+     * malformed restraint records, reapplies restraint effects through the
+     * normal helpers and delivers queued keys/items exactly once.
+     */
+    public void recoverOnLogin(PlayerGateway player) {
+        var store = store();
+        String playerKey = key(player);
+        boolean changed = false;
+        var record = store.cuffed.get(playerKey);
+        if (record != null && !issuerStillEligible(record)) {
+            recoverCuff(store, record, player);
+            changed = true;
+        }
+        var bound = store.bound.get(playerKey);
+        if (bound != null) {
+            boolean malformed = blank(bound.targetUuid) && blank(bound.target);
+            if (malformed || !issuerEligible(bound.issuer, bound.issuerUuid)) {
+                store.bound.remove(playerKey);
+                audit.record("custody_recovery", bound.issuer, bound.issuerUuid,
+                        player.name(), uuidOf(player), "SUCCESS",
+                        malformed ? "malformed_record kind=bound" : "ineligible_issuer kind=bound");
+                changed = true;
+            }
+        }
+        var sack = store.headSacks.get(playerKey);
+        if (sack != null) {
+            boolean malformed = blank(sack.targetUuid) && blank(sack.target);
+            boolean badIssuer = !issuerEligible(sack.issuer, sack.issuerUuid);
+            boolean orphan = !store.cuffed.containsKey(playerKey)
+                    && !store.bound.containsKey(playerKey);
+            if (malformed || badIssuer || orphan) {
+                store.headSacks.remove(playerKey);
+                audit.record("custody_recovery", sack.issuer, sack.issuerUuid,
+                        player.name(), uuidOf(player), "SUCCESS",
+                        malformed ? "malformed_record kind=head_sack"
+                                : badIssuer ? "ineligible_issuer kind=head_sack"
+                                : "orphan_head_sack");
+                changed = true;
+            }
+        }
+        var downed = store.downed.get(playerKey);
+        if (malformedDowned(downed)) {
+            store.downed.remove(playerKey);
+            audit.record("custody_recovery", null, null,
+                    player.name(), uuidOf(player), "SUCCESS", "malformed_record kind=downed");
+            changed = true;
+        }
+        if (changed) ctx.custody().write(store);
+        if (store.cuffed.containsKey(playerKey)) applyCuffSlowness(player);
+        if (store.bound.containsKey(playerKey)) {
+            player.applyEffect("minecraft:slowness",
+                    Math.max(20, ctx.policies().ropeSlownessTicks), ctx.policies().ropeSlownessAmplifier);
+        }
+        if (store.headSacks.containsKey(playerKey)) {
+            player.applyEffect("minecraft:blindness",
+                    Math.max(20, ctx.policies().headSackBlindnessTicks), 0);
+        }
+        if (store.downed.containsKey(playerKey)) {
+            player.applyEffect("minecraft:slowness",
+                    Math.max(20, ctx.policies().downedSlownessTicks), ctx.policies().downedSlownessAmplifier);
+        }
+        deliverPendingKeys(player);
+        deliverPendingItems(player);
+    }
+
+    /** Logout recovery: drops only transient cuff/surrender requests. */
+    public void recoverOnLogout(PlayerGateway player) {
+        var store = store();
+        var discarded = new ArrayList<String>();
+        store.cuffRequests.values().removeIf(request -> {
+            if (request == null) return false;
+            boolean mine = matches(player, request.targetUuid, request.target)
+                    || matches(player, request.issuerUuid, request.issuer);
+            if (mine) discarded.add(request.id);
+            return mine;
+        });
+        if (discarded.isEmpty()) return;
+        ctx.custody().write(store);
+        for (String id : discarded) {
+            audit.record("custody_request_discard", player.name(), uuidOf(player),
+                    "", "", "SUCCESS", "logout requestId=" + id);
+        }
+    }
+
+    /**
+     * Death recovery: ends all restraint state for the victim and queues any
+     * hidden item by UUID — nothing is injected into the dying inventory.
+     * Idempotent: a second call finds nothing to change.
+     */
+    public void recoverAfterDeath(PlayerGateway player) {
+        var store = store();
+        String playerKey = key(player);
+        boolean changed = false;
+        var record = store.cuffed.remove(playerKey);
+        if (record != null) {
+            changed = true;
+            if (!blank(record.hiddenItemId)) {
+                var pending = new CustodyStore.PendingItem();
+                pending.itemId = record.hiddenItemId;
+                pending.count = record.hiddenItemCount;
+                pending.data = record.hiddenItemData;
+                pending.name = record.hiddenItemName;
+                store.pendingItems.computeIfAbsent(
+                        !blank(record.targetUuid) ? record.targetUuid : playerKey,
+                        k -> new ArrayList<>()).add(pending);
+            }
+        }
+        if (store.bound.remove(playerKey) != null) changed = true;
+        if (store.headSacks.remove(playerKey) != null) changed = true;
+        if (store.downed.remove(playerKey) != null) changed = true;
+        var discarded = new ArrayList<String>();
+        if (store.cuffRequests.values().removeIf(request -> {
+            if (request == null) return false;
+            boolean mine = matches(player, request.targetUuid, request.target)
+                    || matches(player, request.issuerUuid, request.issuer);
+            if (mine) discarded.add(request.id);
+            return mine;
+        })) {
+            changed = true;
+        }
+        if (!changed) return;
+        ctx.custody().write(store);
+        audit.record("custody_death_recovery", player.name(), uuidOf(player),
+                player.name(), uuidOf(player), "SUCCESS",
+                "restraint_cleared discardedRequests=" + discarded);
     }
 
     // ------------------------------------------------------------ release
@@ -484,6 +706,28 @@ public class CustodyService {
         return false;
     }
 
+    private String releaseToolKind(ItemView held) {
+        if (held == null || held.isEmpty()) return "NONE";
+        if (CUFF_KEY.equals(held.id())) return "KEY";
+        if (CROWBAR.equals(held.id()) || BOLT_CUTTERS.equals(held.id())) return "FANTASY_CUTTERS";
+        if (KEYCHAIN.equals(held.id())) return "KEYCHAIN";
+        if (isGenericKey(held)) return "GENERIC_KEY";
+        return "NONE";
+    }
+
+    public boolean releaseById(PlayerGateway issuer, String targetId) {
+        if (targetId == null || targetId.isBlank()) {
+            issuer.tell("Alege persoana încătușată online.");
+            return false;
+        }
+        var target = ctx.server().findPlayer(targetId);
+        if (target == null) {
+            issuer.tell("Alege persoana încătușată online.");
+            return false;
+        }
+        return release(issuer, target);
+    }
+
     public boolean release(PlayerGateway issuer, PlayerGateway target) {
         if (target == null) {
             issuer.tell("Alege persoana încătușată.");
@@ -493,13 +737,7 @@ public class CustodyService {
             issuer.tell("Cătușele pot fi rupte doar de alt jucător.");
             return false;
         }
-        var held = issuer.mainHand();
-        String kind;
-        if (CUFF_KEY.equals(held.id())) kind = "KEY";
-        else if (CROWBAR.equals(held.id()) || BOLT_CUTTERS.equals(held.id())) kind = "FANTASY_CUTTERS";
-        else if (KEYCHAIN.equals(held.id())) kind = "KEYCHAIN";
-        else if (isGenericKey(held)) kind = "GENERIC_KEY";
-        else kind = "NONE";
+        String kind = releaseToolKind(issuer.mainHand());
         if ("NONE".equals(kind)) {
             issuer.tell("Ține o Cheie, Foarfeca sau Brelocul Temnicerului în mâna principală.");
             return false;
@@ -570,7 +808,7 @@ public class CustodyService {
     }
 
     public boolean giveCuffs(PlayerGateway player) {
-        if (!players.hasCapability(player, Capability.USE_CUFFS)) {
+        if (!canIssueCuffs(player)) {
             player.tell("Cătușele sunt disponibile de la rangul Străjer în sus.");
             return false;
         }
@@ -662,7 +900,7 @@ public class CustodyService {
         ctx.custody().write(store);
         target.applyEffect("minecraft:blindness",
                 Math.max(20, ctx.policies().headSackBlindnessTicks), 0);
-        target.tell("Ți s-a pus Sacul de Captiv. Îl poți da jos cu /straja cuffs sack-remove.");
+        target.tell("Ți s-a pus Sacul de Captiv. Pentru îndepărtare, cere ajutorul temnicerului sau al Comisarului.");
         issuer.tell(target.name() + " poartă acum Sacul de Captiv.");
         audit.record("head_sack_apply", issuer.name(), uuidOf(issuer),
                 target.name(), uuidOf(target), "SUCCESS", "restrained_target");
@@ -758,43 +996,39 @@ public class CustodyService {
      * Baton strike semantics. The event adapter computes whether the incoming
      * damage would be lethal; this returns what the adapter must do.
      */
-    public record BatonOutcome(Action action, String reason) {
-        public enum Action { NOT_BATON, CANCEL, ALLOW_NONLETHAL }
-    }
-
-    public BatonOutcome batonStrike(PlayerGateway issuer, PlayerGateway target,
-                                    double targetHealth, double targetAbsorption, double damage) {
+    public DamageDecision batonStrike(PlayerGateway issuer, PlayerGateway target,
+                                      double targetHealth, double targetAbsorption, double damage) {
         var held = issuer.mainHand();
         if (held.isEmpty() || !BATON.equals(held.id())) {
-            return new BatonOutcome(BatonOutcome.Action.NOT_BATON, "not_baton");
+            return new DamageDecision(DamageAction.NOT_BATON, "not_baton");
         }
         if (!enforcementGuard(issuer)) {
             issuer.tell("Bastonul poate fi folosit doar de un străjer activ.");
-            return new BatonOutcome(BatonOutcome.Action.CANCEL, "issuer_not_active_guard");
+            return new DamageDecision(DamageAction.CANCEL, "issuer_not_active_guard");
         }
         if (!players.hasCapability(issuer, Capability.USE_BATON)) {
             issuer.tell("Bastonul de Poliție se folosește de la rangul Străjer în sus.");
-            return new BatonOutcome(BatonOutcome.Action.CANCEL, "issuer_rank_not_authorized");
+            return new DamageDecision(DamageAction.CANCEL, "issuer_rank_not_authorized");
         }
         if (isCuffed(target)) {
             issuer.tell(target.name() + " este deja încătușat; bastonul nu mai poate porni un al doilea flow.");
-            return new BatonOutcome(BatonOutcome.Action.CANCEL, "already_cuffed");
+            return new DamageDecision(DamageAction.CANCEL, "already_cuffed");
         }
         if (isBound(target)) {
             issuer.tell(target.name() + " este deja legat; bastonul nu mai poate porni un al doilea flow.");
-            return new BatonOutcome(BatonOutcome.Action.CANCEL, "already_bound");
+            return new DamageDecision(DamageAction.CANCEL, "already_bound");
         }
         if (isDowned(target)) {
             issuer.tell(target.name() + " este deja inconștient. Nu mai poate primi lovituri.");
             audit.record("baton_knockout", issuer.name(), uuidOf(issuer),
                     target.name(), uuidOf(target), "REFUSED", "already_downed");
-            return new BatonOutcome(BatonOutcome.Action.CANCEL, "already_downed");
+            return new DamageDecision(DamageAction.CANCEL, "already_downed");
         }
         boolean lethal = targetHealth > 0 && damage >= targetHealth + targetAbsorption;
         if (!lethal) {
             // Non-lethal hit passes through; the adapter caps damage so a baton
             // hit alone can never drop the target below 1 health.
-            return new BatonOutcome(BatonOutcome.Action.ALLOW_NONLETHAL, "nonlethal");
+            return new DamageDecision(DamageAction.ALLOW_NONLETHAL, "nonlethal");
         }
         // Lethal strike is converted into a knockout.
         target.setHealth(1);
@@ -804,10 +1038,10 @@ public class CustodyService {
             target.tell("Bastonul te-a doborât, dar gardianul nu avea Cătușe disponibile.");
             audit.record("baton_knockout", issuer.name(), uuidOf(issuer),
                     target.name(), uuidOf(target), "SUCCESS", "no_cuffs_available");
-            return new BatonOutcome(BatonOutcome.Action.CANCEL, "no_cuffs_available");
+            return new DamageDecision(DamageAction.CANCEL, "no_cuffs_available");
         }
         requestSurrender(issuer, target);
-        return new BatonOutcome(BatonOutcome.Action.CANCEL, "surrender_requested");
+        return new DamageDecision(DamageAction.CANCEL, "surrender_requested");
     }
 
     /** Maximum baton damage so the hit never kills on its own. */
@@ -864,11 +1098,66 @@ public class CustodyService {
                 Math.max(20, ctx.policies().cuffSlownessTicks), ctx.policies().cuffSlownessAmplifier);
     }
 
+    /**
+     * Releases a cuff whose issuer no longer has authority. Hidden items are
+     * restored immediately or queued by UUID, and the transition is audited.
+     */
+    private void recoverCuff(CustodyStore store, CustodyStore.CuffRecord record,
+                             PlayerGateway target) {
+        if (target != null) {
+            restoreCuffedHand(store, target, record);
+            target.tell("Cătușele au fost eliberate: emitentul nu mai este eligibil.");
+        } else if (record.hiddenItemId != null && !record.hiddenItemId.isEmpty()
+                && record.targetUuid != null && !record.targetUuid.isEmpty()) {
+            var pending = new CustodyStore.PendingItem();
+            pending.itemId = record.hiddenItemId;
+            pending.count = record.hiddenItemCount;
+            pending.data = record.hiddenItemData;
+            pending.name = record.hiddenItemName;
+            store.pendingItems.computeIfAbsent(record.targetUuid, k -> new ArrayList<>()).add(pending);
+        }
+        String targetKey = record.targetUuid == null || record.targetUuid.isEmpty()
+                ? PlayerService.canon(record.target) : record.targetUuid;
+        store.cuffed.remove(targetKey);
+        store.bound.remove(targetKey);
+        store.headSacks.remove(targetKey);
+        audit.record("cuff_recovery", record.issuer, record.issuerUuid,
+                record.target, record.targetUuid, "SUCCESS", "issuer_no_longer_eligible");
+    }
+
+    private boolean issuerStillEligible(CustodyStore.CuffRecord record) {
+        // Legacy records without a stable issuer identity cannot be safely
+        // attributed to an eligible guard. Recover them closed rather than
+        // leaving a restraint active indefinitely.
+        return issuerEligible(record.issuer, record.issuerUuid);
+    }
+
+    /** A downed record that cannot be safely applied is discarded closed. */
+    private static boolean malformedDowned(CustodyStore.DownedRecord record) {
+        return record == null
+                || (blank(record.targetUuid) && blank(record.target))
+                || blank(record.dimension)
+                || !Double.isFinite(record.x) || !Double.isFinite(record.y)
+                || !Double.isFinite(record.z)
+                || record.wakesAt <= 0;
+    }
+
     /** Per-tick custody maintenance: expiry, distance break, effects, wake. */
     public void tick() {
         var store = store();
         boolean changed = false;
-        if (store.cuffRequests.values().removeIf(r -> r.expiresAt <= now())) changed = true;
+        for (var entry : new java.util.ArrayList<>(store.cuffRequests.entrySet())) {
+            var request = entry.getValue();
+            if (request == null || blank(request.id)) {
+                store.cuffRequests.remove(entry.getKey());
+                audit.record("custody_recovery", "", "", "", "",
+                        "SUCCESS", "malformed_record kind=request key=" + entry.getKey());
+                changed = true;
+            } else if (request.expiresAt <= now()) {
+                store.cuffRequests.remove(entry.getKey());
+                changed = true;
+            }
+        }
 
         // Withheld release items retry delivery whenever the owner is online.
         if (!store.pendingItems.isEmpty()) {
@@ -880,7 +1169,20 @@ public class CustodyService {
 
         for (var entry : new java.util.ArrayList<>(store.cuffed.entrySet())) {
             var record = entry.getValue();
+            if (record == null || (blank(record.targetUuid) && blank(record.target))) {
+                store.cuffed.remove(entry.getKey());
+                audit.record("custody_recovery", "", "", "", "",
+                        "SUCCESS", "malformed_record kind=cuffed key=" + entry.getKey());
+                changed = true;
+                continue;
+            }
             var target = findStored(record.targetUuid, record.target);
+            if (!issuerStillEligible(record)) {
+                recoverCuff(store, record, target);
+                store.cuffed.remove(entry.getKey());
+                changed = true;
+                continue;
+            }
             if (target == null) continue;
             var issuer = findStored(record.issuerUuid, record.issuer);
             if (issuer != null && issuer.dimension().equals(target.dimension())) {
@@ -916,14 +1218,50 @@ public class CustodyService {
             applyCuffSlowness(target);
         }
 
-        for (var record : store.bound.values()) {
+        for (var entry : new java.util.ArrayList<>(store.bound.entrySet())) {
+            var record = entry.getValue();
+            if (record == null || (blank(record.targetUuid) && blank(record.target))) {
+                store.bound.remove(entry.getKey());
+                audit.record("custody_recovery", "", "", "", "",
+                        "SUCCESS", "malformed_record kind=bound key=" + entry.getKey());
+                changed = true;
+                continue;
+            }
+            if (!issuerEligible(record.issuer, record.issuerUuid)) {
+                store.bound.remove(entry.getKey());
+                audit.record("custody_recovery",
+                        record.issuer, record.issuerUuid,
+                        record.target, record.targetUuid, "SUCCESS",
+                        "ineligible_issuer kind=bound key=" + entry.getKey());
+                changed = true;
+                continue;
+            }
             var target = findStored(record.targetUuid, record.target);
             if (target == null) continue;
             target.closeMenu();
             target.applyEffect("minecraft:slowness",
                     Math.max(20, ctx.policies().ropeSlownessTicks), ctx.policies().ropeSlownessAmplifier);
         }
-        for (var record : store.headSacks.values()) {
+        for (var entry : new java.util.ArrayList<>(store.headSacks.entrySet())) {
+            var record = entry.getValue();
+            boolean malformed = record == null
+                    || (blank(record.targetUuid) && blank(record.target));
+            boolean badIssuer = !malformed
+                    && !issuerEligible(record.issuer, record.issuerUuid);
+            boolean orphan = !store.cuffed.containsKey(entry.getKey())
+                    && !store.bound.containsKey(entry.getKey());
+            if (malformed || badIssuer || orphan) {
+                store.headSacks.remove(entry.getKey());
+                audit.record("custody_recovery",
+                        record == null ? "" : record.issuer,
+                        record == null ? "" : record.issuerUuid, "", "",
+                        "SUCCESS", (malformed ? "malformed_record kind=head_sack"
+                                : badIssuer ? "ineligible_issuer kind=head_sack"
+                                : "orphan_head_sack")
+                                + " key=" + entry.getKey());
+                changed = true;
+                continue;
+            }
             var target = findStored(record.targetUuid, record.target);
             if (target == null) continue;
             target.applyEffect("minecraft:blindness",
@@ -931,8 +1269,10 @@ public class CustodyService {
         }
         for (var entry : new java.util.ArrayList<>(store.downed.entrySet())) {
             var record = entry.getValue();
-            if (record.target.isEmpty() && record.targetUuid.isEmpty()) {
+            if (malformedDowned(record)) {
                 store.downed.remove(entry.getKey());
+                audit.record("custody_recovery", "", "", "", "",
+                        "SUCCESS", "malformed_record kind=downed key=" + entry.getKey());
                 changed = true;
                 continue;
             }
@@ -955,7 +1295,7 @@ public class CustodyService {
             if (ctx.policies().downedFreezeInPlace) {
                 double moved = Math.abs(target.x() - record.x) + Math.abs(target.y() - record.y)
                         + Math.abs(target.z() - record.z);
-                if (moved > 0.05 || !record.dimension.equals(target.dimension())) {
+                if (moved > 0.05 || !target.dimension().equals(record.dimension)) {
                     target.teleport(record.dimension, record.x, record.y, record.z);
                 }
             }

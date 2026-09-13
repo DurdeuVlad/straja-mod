@@ -1,6 +1,7 @@
 package com.dwurdy.straja.application.service;
 
 import com.dwurdy.straja.application.StrajaContext;
+import com.dwurdy.straja.application.port.in.RoomRoleplayUseCase;
 import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.application.port.out.WorldGateway;
 import com.dwurdy.straja.domain.model.Room;
@@ -20,7 +21,7 @@ import java.util.Set;
  * Guard housing: bounded room discovery, ownership, waitlist and protection.
  * Port of the reference room system (flood-fill interior + single-door rule).
  */
-public class RoomService {
+public class RoomService implements RoomRoleplayUseCase {
     private final StrajaContext ctx;
     private final PlayerService players;
     private final AuditService audit;
@@ -106,7 +107,8 @@ public class RoomService {
         selection.selectedAt = now();
         data.selections.put(player.uuid().toString(), selection);
         ctx.rooms().write(data);
-        player.tell("Bloc selectat pentru cameră la " + x + ", " + y + ", " + z + ". Rulează /straja room create [id].");
+        player.tell("Bloc selectat pentru cameră la " + x + ", " + y + ", " + z
+                + ". Confirmă înregistrarea camerei la Comisaru'.");
     }
 
     public Room discover(PlayerGateway player, String requestedId) {
@@ -433,6 +435,16 @@ public class RoomService {
         return released;
     }
 
+    @Override
+    public boolean canRelease(PlayerGateway player) {
+        RoomStore data = ctx.rooms().read();
+        for (Room room : data.rooms) {
+            if (isOwner(player, data.assignments.get(room.id))) return true;
+        }
+        return data.waitlist.stream().anyMatch(
+                e -> PlayerService.identityMatches(player, e.playerUuid, e.player));
+    }
+
     public void status(PlayerGateway player) {
         RoomStore data = ctx.rooms().read();
         Room mine = assignedRoom(player);
@@ -465,11 +477,23 @@ public class RoomService {
     /** Room protection: non-owners may not break/place inside an occupied room. */
     public boolean protectBlock(PlayerGateway player, String dimension, int x, int y, int z) {
         for (Room room : ctx.rooms().read().rooms) {
-            if (!room.dimension.equals(dimension) || !room.contains(x, y, z)) continue;
+            if (!room.dimension.equals(dimension)
+                    || (!room.contains(x, y, z) && !room.isSign(dimension, x, y, z))) continue;
             var owner = ownerOf(room);
             if (owner == null || isOwner(player, owner) || players.isCommissioner(player)) continue;
             player.tell("Camera " + room.id + " este atribuită lui " + owner.player + ".");
             return true;
+        }
+        return false;
+    }
+
+    /** Read-only form used by explosion hooks, which have no player actor. */
+    public boolean isProtectedBlock(String dimension, int x, int y, int z) {
+        var data = ctx.rooms().read();
+        for (Room room : data.rooms) {
+            if (!room.dimension.equals(dimension)
+                    || (!room.contains(x, y, z) && !room.isSign(dimension, x, y, z))) continue;
+            if (data.assignments.get(room.id) != null) return true;
         }
         return false;
     }

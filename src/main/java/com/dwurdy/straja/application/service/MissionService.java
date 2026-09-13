@@ -1,6 +1,7 @@
 package com.dwurdy.straja.application.service;
 
 import com.dwurdy.straja.application.StrajaContext;
+import com.dwurdy.straja.application.port.in.MissionRoleplayUseCase;
 import com.dwurdy.straja.application.port.out.DeliveryProvider;
 import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.domain.model.Capability;
@@ -25,7 +26,7 @@ import java.util.Set;
  * Every external effect is persisted before it runs so a crash or a failed
  * Envelope delivery never loses the mission or pays twice.
  */
-public class MissionService {
+public class MissionService implements MissionRoleplayUseCase {
     public static final String ORDER_BOOK = "straja:order_book";
     public static final String MISSION_CARNET = "straja:mission_carnet";
     private static final long MINUTE_MS = 60_000L;
@@ -310,7 +311,7 @@ public class MissionService {
         draft.issuedCount = 0;
         store.drafts.put(playerKey(player), draft);
         ctx.missions().write(store);
-        player.tell("Ordin scris. Verifică-l cu „draft status”, apoi folosește „draft sign” și „draft package”.");
+        player.tell("Ordin scris. Verifică detaliile la secretară, apoi semnează și sigilează-l în Carnetul de Ordine.");
     }
 
     public void draftScope(PlayerGateway player, String rankName, int maxAssignees) {
@@ -363,7 +364,7 @@ public class MissionService {
         draft.signedAt = now();
         draft.packagedAt = null;
         ctx.missions().write(store);
-        player.tell("Ordin semnat de " + player.name() + ". Împachetează-l cu „draft package”.");
+        player.tell("Ordin semnat de " + player.name() + ". Sigilează-l în Carnetul de Ordine.");
     }
 
     public void draftPackage(PlayerGateway player) {
@@ -376,8 +377,7 @@ public class MissionService {
         }
         draft.packagedAt = now();
         ctx.missions().write(store);
-        player.tell("Ordin împachetat și gata de predare. Dă click dreapta pe subordonat cu carnetul "
-                + "sau folosește „/straja mission give <jucător>”.");
+        player.tell("Ordin împachetat și gata de predare. Dă click dreapta pe subordonat cu carnetul de ordine.");
     }
 
     private boolean draftGate(PlayerGateway player) {
@@ -489,7 +489,7 @@ public class MissionService {
             target.tell("Misiunea #" + mission.id + " nu a putut fi livrată. Anunță Comisaru'.");
         } else {
             target.tell("Ai primit misiunea #" + mission.id + " de la " + mission.issuer
-                    + ". Folosește /straja mission accept " + mission.id + " sau decline " + mission.id + ".");
+                    + ". Deschide ordinul primit și alege Acceptă sau Refuză.");
             if (delivery.mode() == DeliveryProvider.Mode.DELIVERED
                     || delivery.mode() == DeliveryProvider.Mode.PENDING_MAILBOX) {
                 target.tell("Scrisoarea misiunii a fost trimisă prin Envelope.");
@@ -637,9 +637,9 @@ public class MissionService {
                     target.name(), mission.targetUuid, "PARTIAL",
                     "order_delivered_package_pending missionId=" + mission.id);
             target.tell("Ai primit un ordin sigilat de la " + mission.issuer
-                    + ". Folosește /straja mission accept " + mission.id + ".");
+                    + ". Deschide ordinul și alege Acceptă pentru misiunea #" + mission.id + ".");
             issuer.tell("Ordinul #" + mission.id + " a fost predat fizic, dar pachetul Envelope nu a putut fi trimis. "
-                    + "Reîncearcă cu /straja mission resend " + mission.id + ".");
+                    + "Anunță Comisaru' pentru retrimiterea pachetului.");
             return true;
         }
         mission.delivery = "ENVELOPE_PACKAGE";
@@ -648,7 +648,7 @@ public class MissionService {
         audit.record("mission_give", issuer.name(), mission.issuerUuid,
                 target.name(), mission.targetUuid, "SUCCESS", "envelope_package_delivered" + " missionId=" + mission.id);
         target.tell("Ai primit un ordin sigilat prin Envelope, de la " + mission.issuer
-                + ". Deschide pachetul și folosește /straja mission accept " + mission.id + ".");
+                + ". Deschide pachetul și alege Acceptă pentru misiunea #" + mission.id + ".");
         issuer.tell("Ordinul #" + mission.id + " a fost semnat, sigilat și predat lui "
                 + mission.target + ". Carnetul rămâne disponibil pentru următoarea predare.");
         return true;
@@ -736,6 +736,105 @@ public class MissionService {
 
     // ------------------------------------------------------------ participant flow
 
+    /**
+     * Read-only projection for native surfaces. Derives only what the freshly
+     * loaded store already contains — malformed legacy lists degrade to empty
+     * and claim data is never materialized here.
+     */
+    @Override
+    public List<AvailableAction> availableActions(PlayerGateway player) {
+        var store = store();
+        long now = now();
+        List<AvailableAction> actions = new ArrayList<>();
+        if (missionAuthority(player)) {
+            actions.add(new AvailableAction(Action.GET_CARNET, ""));
+            if (hasCarnet(player)) actions.add(new AvailableAction(Action.DRAFT_WRITE, ""));
+            var draft = draft(player, store);
+            if (draft != null) {
+                actions.add(new AvailableAction(Action.DRAFT_STATUS, ""));
+                actions.add(new AvailableAction(Action.DRAFT_SCOPE, ""));
+                if (draft.objective != null && !draft.objective.isEmpty() && timeValid(draft.minutes)
+                        && rewardValid(draft.reward) && draft.startAt > 0) {
+                    actions.add(new AvailableAction(Action.DRAFT_SIGN, ""));
+                }
+                if (draft.signedBy != null && !draft.signedBy.isEmpty()) {
+                    actions.add(new AvailableAction(Action.DRAFT_PACKAGE, ""));
+                }
+            }
+        }
+        boolean commissioner = players.isCommissioner(player);
+        for (Mission mission : store.missions) {
+            if (mission == null) continue;
+            String status = mission.status == null ? "" : mission.status;
+            var assignees = mission.assignees == null ? List.<Mission.Identity>of() : mission.assignees;
+            var invited = mission.invited == null ? List.<Mission.Identity>of() : mission.invited;
+            var declined = mission.declined == null ? List.<Mission.Identity>of() : mission.declined;
+            boolean assigned = assignees.stream().anyMatch(e -> identityMatches(player, e));
+            boolean invitedOnly = !assigned
+                    && invited.stream().anyMatch(e -> identityMatches(player, e));
+            boolean declinedBefore = declined.stream().anyMatch(e -> identityMatches(player, e));
+            boolean beforeDue = mission.dueAt > now;
+            String id = mission.id == null ? "" : mission.id;
+            if (invitedOnly && !declinedBefore
+                    && ("ISSUED".equals(status) || "ACCEPTED".equals(status))
+                    && beforeDue && assignees.size() < mission.maxAssignees) {
+                actions.add(new AvailableAction(Action.JOIN, id));
+            }
+            if ((assigned || invitedOnly) && "ISSUED".equals(status) && beforeDue) {
+                actions.add(new AvailableAction(Action.DECLINE, id));
+            }
+            if (assigned && "ISSUED".equals(status) && mission.startAt <= now && beforeDue) {
+                actions.add(new AvailableAction(Action.ACCEPT, id));
+            }
+            if (assigned && "ACCEPTED".equals(status) && beforeDue) {
+                actions.add(new AvailableAction(Action.REPORT, id));
+                actions.add(new AvailableAction(Action.FAIL, id));
+            }
+            if ("REPORTED".equals(status) && beforeDue
+                    && (commissioner || (missionAuthority(player) && issuerMatches(player, mission)))) {
+                actions.add(new AvailableAction(Action.COMPLETE, id));
+            }
+            if (assigned && "COMPLETED".equals(status) && claimableReward(player, mission)) {
+                actions.add(new AvailableAction(Action.CLAIM_REWARD, id));
+            }
+            if (commissioner && "COMPLETED".equals(status) && recoverableClaims(mission)) {
+                actions.add(new AvailableAction(Action.RECOVER_REWARD, id));
+            }
+        }
+        return List.copyOf(actions);
+    }
+
+    private boolean claimableReward(PlayerGateway player, Mission mission) {
+        if (mission.reward <= 0) return false;
+        var claims = mission.rewardClaims == null
+                ? Map.<String, Mission.RewardClaim>of() : mission.rewardClaims;
+        var claim = claims.get(playerKey(player));
+        if (claim != null) {
+            return claim.amount > 0
+                    && ("PENDING".equals(claim.status) || "PAYMENT_FAILED".equals(claim.status));
+        }
+        // Claims materialize lazily at claim time; fall back to the persisted
+        // mission-level status instead of mutating state for a read.
+        return "PENDING".equals(mission.rewardStatus)
+                || "PAYMENT_FAILED".equals(mission.rewardStatus);
+    }
+
+    private static boolean recoverableClaims(Mission mission) {
+        var claims = mission.rewardClaims == null
+                ? Map.<String, Mission.RewardClaim>of() : mission.rewardClaims;
+        for (var claim : claims.values()) {
+            if (claim != null && ("PENDING".equals(claim.status)
+                    || "PAYMENT_FAILED".equals(claim.status))) return true;
+        }
+        return claims.isEmpty() && ("PENDING".equals(mission.rewardStatus)
+                || "PAYMENT_FAILED".equals(mission.rewardStatus));
+    }
+
+    @Override
+    public boolean issueDraft(PlayerGateway issuer, PlayerGateway target) {
+        return give(issuer, target);
+    }
+
     public void list(PlayerGateway player) {
         var all = store().missions;
         boolean commissioner = players.isCommissioner(player);
@@ -795,7 +894,7 @@ public class MissionService {
         audit.record("mission_invite", issuer.name(), issuer.uuid().toString(),
                 target.name(), mission.targetUuid, "SUCCESS", "invited" + " missionId=" + mission.id);
         target.tell("Ai fost invitat în misiunea #" + mission.id + " de " + mission.issuer
-                + ". Folosește /straja mission join " + mission.id + ".");
+                + ". Prezintă-te la secretară și confirmă participarea la ordinul primit.");
         issuer.tell(target.name() + " a fost invitat în misiunea #" + mission.id + ".");
         return true;
     }
@@ -912,26 +1011,26 @@ public class MissionService {
         return true;
     }
 
-    public void report(PlayerGateway player, String id, String report) {
-        if (!guardActive(player, "raporta o misiune")) return;
+    public boolean report(PlayerGateway player, String id, String report) {
+        if (!guardActive(player, "raporta o misiune")) return false;
         var store = store();
         var mission = store.find(id);
         if (mission == null || !targetMatches(player, mission)) {
             player.tell("Misiunea nu există sau nu îți aparține.");
-            return;
+            return false;
         }
         if (!"ACCEPTED".equals(mission.status)) {
             player.tell("Raportul nu mai poate fi trimis pentru această misiune: " + mission.status + ".");
-            return;
+            return false;
         }
         if (mission.dueAt <= now()) {
             expire(store, mission);
             player.tell("Misiunea a depășit timpul și a fost marcată ca eșuată.");
-            return;
+            return false;
         }
         if (report == null || report.isBlank()) {
             player.tell("Scrie raportul misiunii.");
-            return;
+            return false;
         }
         mission.status = "REPORTED";
         mission.report = report.substring(0, Math.min(report.length(), ctx.policies().envelopeMaxBodyLength));
@@ -941,6 +1040,7 @@ public class MissionService {
                 player.name(), player.uuid().toString(), "SUCCESS", "reported" + " missionId=" + mission.id);
         notify(mission.issuer, "[Straja] Raport primit pentru misiunea #" + mission.id + ": " + mission.report);
         player.tell("Raportul pentru misiunea #" + mission.id + " a fost trimis.");
+        return true;
     }
 
     public boolean fail(PlayerGateway player, String id, String reason) {
@@ -1102,8 +1202,8 @@ public class MissionService {
             return false;
         }
         if ("PAYMENT_REVIEW".equals(claim.status) || "PAYMENT_IN_PROGRESS".equals(claim.status)) {
-            player.tell("Plata cotei tale este în verificare; Comisaru' trebuie să folosească "
-                    + "/straja mission recover " + mission.id + ".");
+            player.tell("Plata cotei tale este în verificare; Comisaru' trebuie să verifice tranzacția "
+                    + "pentru misiunea #" + mission.id + ".");
             return false;
         }
         claim.status = "PAYMENT_IN_PROGRESS";
@@ -1180,6 +1280,76 @@ public class MissionService {
         return attempted;
     }
 
+    /**
+     * Login recovery: reconciles the player's reward claims on completed
+     * missions against payout receipts, then retries pending or interrupted
+     * payments while the recipient is online. A claim under PAYMENT_REVIEW is
+     * left for the commissioner — a partially delivered payment cannot be
+     * resolved automatically.
+     */
+    @Override
+    public void deliverPendingRewards(PlayerGateway player) {
+        if (player == null) return;
+        String uuid = player.uuid() == null ? "" : player.uuid().toString();
+        var store = store();
+        List<String> retry = new ArrayList<>();
+        boolean changed = false;
+        for (Mission mission : store.missions) {
+            if (mission == null || !"COMPLETED".equals(mission.status)) continue;
+            if (mission.rewardClaims == null) mission.rewardClaims = new java.util.LinkedHashMap<>();
+            // claims() materializes the durable per-participant shares on first
+            // access — an offline completer may not have an entry yet; persist
+            // the materialization so the records survive the next restart.
+            int before = mission.rewardClaims.size();
+            var claims = claims(mission);
+            if (mission.rewardClaims.size() != before) changed = true;
+            var claim = claims.get(playerKey(player));
+            if (claim == null) {
+                claim = claims.get(PlayerService.canon(player.name()));
+            }
+            if (claim == null || claim.status == null) continue;
+            boolean receipt = !claim.payoutId.isEmpty()
+                    && ctx.currency().hasReceipt(player, claim.payoutId);
+            switch (claim.status) {
+                case "PAYMENT_IN_PROGRESS" -> {
+                    if (receipt) {
+                        claim.status = "PAID";
+                        claim.recoveredAt = now();
+                        refreshRewardStatus(mission);
+                        changed = true;
+                        audit.record("mission_reward_recover", player.name(), uuid,
+                                player.name(), uuid, "SUCCESS",
+                                "receipt_found missionId=" + mission.id);
+                    } else {
+                        claim.status = "PAYMENT_FAILED";
+                        refreshRewardStatus(mission);
+                        changed = true;
+                        audit.record("mission_reward_recover", player.name(), uuid,
+                                player.name(), uuid, "FAILED",
+                                "interrupted_payment_retryable missionId=" + mission.id);
+                        retry.add(mission.id);
+                    }
+                }
+                case "PENDING", "PAYMENT_FAILED" -> {
+                    if (receipt) {
+                        claim.status = "PAID";
+                        claim.recoveredAt = now();
+                        refreshRewardStatus(mission);
+                        changed = true;
+                        audit.record("mission_reward_recover", player.name(), uuid,
+                                player.name(), uuid, "SUCCESS",
+                                "receipt_found missionId=" + mission.id);
+                    } else {
+                        retry.add(mission.id);
+                    }
+                }
+                default -> {}
+            }
+        }
+        if (changed) ctx.missions().write(store);
+        for (String id : retry) claimReward(player, id);
+    }
+
     // ------------------------------------------------------------ lifecycle
 
     private void expire(MissionStore store, Mission mission) {
@@ -1194,6 +1364,7 @@ public class MissionService {
     }
 
     /** Tick: open missions past their deadline fail (accepted) or expire (issued). */
+    @Override
     public void tick() {
         var store = store();
         boolean changed = false;
@@ -1268,12 +1439,14 @@ public class MissionService {
     public int cancelOpenFor(PlayerGateway player, String reason) {
         var store = store();
         int changed = 0;
+        String cancellationReason = reason == null || reason.isBlank() ? "schimbare de statut" : reason;
         for (Mission mission : store.missions) {
             if (!mission.isOpen()) continue;
             if (!targetMatches(player, mission) && !issuerMatches(player, mission)) continue;
             mission.status = "CANCELLED_ROLE_CHANGE";
             mission.cancelledAt = now();
-            mission.cancellationReason = reason == null || reason.isBlank() ? "schimbare de statut" : reason;
+            mission.cancellationReason = cancellationReason;
+            releaseIssuerBudget(store, mission);
             changed++;
             String other = targetMatches(player, mission) ? mission.issuer : mission.target;
             notify(other, "[Straja] Misiunea #" + mission.id + " a fost anulată: "
@@ -1282,7 +1455,7 @@ public class MissionService {
         if (changed > 0) {
             ctx.missions().write(store);
             audit.record("mission_cancel_role_change", player.name(), player.uuid().toString(),
-                    "", "", "SUCCESS", reason + " count=" + changed);
+                    "", "", "SUCCESS", cancellationReason + " count=" + changed);
         }
         return changed;
     }
@@ -1314,11 +1487,15 @@ public class MissionService {
         var participants = participantNames(mission);
         String participantLabel = participants.size() > 1 ? String.join(", ", participants)
                 : (mission.target.isEmpty() ? (participants.isEmpty() ? "—" : participants.get(0)) : mission.target);
-        return "#" + mission.id + " [" + mission.status + "] pentru " + participantLabel
+        String base = "#" + mission.id + " [" + mission.status + "] pentru " + participantLabel
                 + " — " + mission.minutes + " min — reward " + mission.reward
                 + " — minim " + Rank.of(mission.minimumRank).displayName()
                 + " — " + participants.size() + "/" + mission.maxAssignees + " participanți"
                 + " — începe " + mission.startLabel + " — " + mission.objective;
+        if ("REPORTED".equals(mission.status) && mission.report != null && !mission.report.isEmpty()) {
+            base += " — raport: " + mission.report.substring(0, Math.min(mission.report.length(), 160));
+        }
+        return base;
     }
 
     private String pretty(long timestamp) {

@@ -106,6 +106,13 @@ public class StrajaPolicies {
     // promotions
     public Map<Integer, Integer> promotionServiceBlocks = new LinkedHashMap<>(Map.of(2, 60, 3, 180));
 
+    // free duty: senior ranks and the commissioner run shifts without the
+    // patrol route; salary accrues per minecraftDayMinutes of duty and the
+    // anti-AFK movement gate is intentionally not applied to them.
+    public int freeDutyMinRank = 3;
+    public Map<Integer, Integer> freeDutySalaryPerDay = new LinkedHashMap<>(Map.of(3, 80, 4, 100));
+    public int nativeFactionMaxLength = 40;
+
     // quiz
     public List<QuizQuestion> quiz = new ArrayList<>(List.of(
             new QuizQuestion("juramant", 0,
@@ -133,6 +140,9 @@ public class StrajaPolicies {
             new QuizQuestion("senior_orders_lower", 3,
                     "Ce face un Străjer Senior într-o plângere? (scrie: investigheaza)",
                     List.of("investigheaza", "investighează", "investigatie", "investigație"))));
+
+    // trainer
+    public String trainingManualItem = "straja:training_manual";
 
     // coins
     public Map<Integer, String> coinItemIds = new LinkedHashMap<>(Map.of(
@@ -298,4 +308,110 @@ public class StrajaPolicies {
     }
 
     public record EquipmentEntry(String key, String itemId, int count, int replacementCost, String label) {}
+
+    // ------------------------------------------------------------------
+    // config encoding: StrajaServerConfig serializes the same defaults through
+    // these helpers and parses user entries back with them, so the file format
+    // and the compiled defaults can never drift apart.
+    // ------------------------------------------------------------------
+
+    /** "key=value" integer entries; malformed entries are skipped. */
+    public static Map<Integer, Integer> parseIntMap(List<? extends String> entries) {
+        Map<Integer, Integer> out = new LinkedHashMap<>();
+        for (String entry : entries) {
+            int sep = entry.indexOf('=');
+            if (sep <= 0) continue;
+            try {
+                out.put(Integer.parseInt(entry.substring(0, sep).trim()),
+                        Integer.parseInt(entry.substring(sep + 1).trim()));
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return out;
+    }
+
+    public static List<String> formatIntMap(Map<Integer, Integer> map) {
+        List<String> out = new ArrayList<>();
+        map.forEach((k, v) -> out.add(k + "=" + v));
+        return out;
+    }
+
+    /** "rank=itemId,count" kit entries; malformed entries are skipped. */
+    public static Map<Integer, List<ItemSpec>> parseKits(List<? extends String> entries) {
+        Map<Integer, List<ItemSpec>> out = new LinkedHashMap<>();
+        for (String entry : entries) {
+            int sep = entry.indexOf('=');
+            if (sep <= 0) continue;
+            String[] parts = entry.substring(sep + 1).split(",");
+            if (parts.length < 1 || parts[0].isBlank()) continue;
+            try {
+                int rank = Integer.parseInt(entry.substring(0, sep).trim());
+                int count = parts.length > 1 ? Integer.parseInt(parts[1].trim()) : 1;
+                if (count < 1) continue;
+                out.computeIfAbsent(rank, r -> new ArrayList<>()).add(ItemSpec.of(parts[0].trim(), count));
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return out;
+    }
+
+    public static List<String> formatKits(Map<Integer, List<ItemSpec>> kits) {
+        List<String> out = new ArrayList<>();
+        kits.forEach((rank, items) -> items.forEach(item -> out.add(rank + "=" + item.id() + "," + item.count())));
+        return out;
+    }
+
+    /** "rank=key|itemId|count|replacementCost|label" entries; malformed entries are skipped. */
+    public static Map<Integer, List<EquipmentEntry>> parseEquipment(List<? extends String> entries) {
+        Map<Integer, List<EquipmentEntry>> out = new LinkedHashMap<>();
+        for (String entry : entries) {
+            int sep = entry.indexOf('=');
+            if (sep <= 0) continue;
+            String[] parts = entry.substring(sep + 1).split("\\|", 5);
+            if (parts.length < 4 || parts[0].isBlank() || parts[1].isBlank()) continue;
+            try {
+                int rank = Integer.parseInt(entry.substring(0, sep).trim());
+                int count = Integer.parseInt(parts[2].trim());
+                int cost = Integer.parseInt(parts[3].trim());
+                String label = parts.length > 4 ? parts[4].trim() : parts[0].trim();
+                out.computeIfAbsent(rank, r -> new ArrayList<>())
+                        .add(new EquipmentEntry(parts[0].trim(), parts[1].trim(), count, cost, label));
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return out;
+    }
+
+    public static List<String> formatEquipment(Map<Integer, List<EquipmentEntry>> equipment) {
+        List<String> out = new ArrayList<>();
+        equipment.forEach((rank, entries) -> entries.forEach(e -> out.add(
+                rank + "=" + e.key() + "|" + e.itemId() + "|" + e.count() + "|" + e.replacementCost() + "|" + e.label())));
+        return out;
+    }
+
+    /** "id|minRank|question|answer1;answer2" entries; malformed entries are skipped. */
+    public static List<QuizQuestion> parseQuiz(List<? extends String> entries) {
+        List<QuizQuestion> out = new ArrayList<>();
+        for (String entry : entries) {
+            String[] parts = entry.split("\\|", 4);
+            if (parts.length < 4 || parts[0].isBlank() || parts[2].isBlank()) continue;
+            List<String> answers = new ArrayList<>();
+            for (String a : parts[3].split(";")) if (!a.isBlank()) answers.add(a.trim());
+            if (answers.isEmpty()) continue;
+            try {
+                out.add(new QuizQuestion(parts[0].trim(), Integer.parseInt(parts[1].trim()),
+                        parts[2].trim(), answers));
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return out;
+    }
+
+    public static List<String> formatQuiz(List<QuizQuestion> questions) {
+        List<String> out = new ArrayList<>();
+        for (var q : questions) {
+            out.add(q.id() + "|" + q.minRank() + "|" + q.question() + "|" + String.join(";", q.answers()));
+        }
+        return out;
+    }
 }

@@ -3,9 +3,14 @@ name: Release
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
 
 permissions:
   contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -25,19 +30,35 @@ jobs:
           chmod +x gradlew
           ./gradlew build --no-daemon
 
-      # Set repo variable MODRINTH_PROJECT_ID and secret MODRINTH_TOKEN to enable.
+      - name: Validate publishing configuration
+        env:
+          MODRINTH_PROJECT_ID: ${{ vars.MODRINTH_PROJECT_ID }}
+          CURSEFORGE_PROJECT_ID: ${{ vars.CURSEFORGE_PROJECT_ID }}
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+          CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
+        run: |
+          set -euo pipefail
+          missing=()
+          [[ -n "$MODRINTH_PROJECT_ID" ]] || missing+=(MODRINTH_PROJECT_ID)
+          [[ -n "$CURSEFORGE_PROJECT_ID" ]] || missing+=(CURSEFORGE_PROJECT_ID)
+          [[ -n "$MODRINTH_TOKEN" ]] || missing+=(MODRINTH_TOKEN)
+          [[ -n "$CURSEFORGE_API_KEY" ]] || missing+=(CURSEFORGE_API_KEY)
+          if (( ${#missing[@]} > 0 )); then
+            echo "Missing GitHub Actions configuration: ${missing[*]}" >&2
+            exit 1
+          fi
+
       - name: Publish to Modrinth
-        if: vars.MODRINTH_PROJECT_ID != ''
         env:
           MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
-        run: ./gradlew modrinth -Pmodrinth_project_id=${{ vars.MODRINTH_PROJECT_ID }} --no-daemon
+          MODRINTH_PROJECT_ID: ${{ vars.MODRINTH_PROJECT_ID }}
+        run: ./gradlew modrinth -Pmodrinth_project_id="$MODRINTH_PROJECT_ID" --no-daemon
 
-      # Set repo variable CURSEFORGE_PROJECT_ID and secret CURSEFORGE_API_KEY to enable.
       - name: Publish to CurseForge
-        if: vars.CURSEFORGE_PROJECT_ID != ''
         env:
           CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
-        run: ./gradlew publishCurseForge -Pcurseforge_project_id=${{ vars.CURSEFORGE_PROJECT_ID }} --no-daemon
+          CURSEFORGE_PROJECT_ID: ${{ vars.CURSEFORGE_PROJECT_ID }}
+        run: ./gradlew publishCurseForge -Pcurseforge_project_id="$CURSEFORGE_PROJECT_ID" --no-daemon
 
       - name: GitHub Release
         uses: softprops/action-gh-release@v2

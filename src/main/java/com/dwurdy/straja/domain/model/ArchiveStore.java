@@ -67,6 +67,8 @@ public class ArchiveStore {
         public String ownerUuid = "";
         public String status = "OPEN"; // OPEN | CLOSED (read-only)
         public long createdAt;
+        /** Players the folder was issued to; the only read grant that matters. */
+        public List<Recipient> readers = new ArrayList<>();
         public List<String> sheetIds = new ArrayList<>();
         public List<String> catalogIds = new ArrayList<>();
     }
@@ -97,6 +99,8 @@ public class ArchiveStore {
     public static class Recipient {
         public String name = "";
         public String key = "";
+        /** Pinned when the recipient was resolvable; name is fallback only. */
+        public String uuid = "";
     }
 
     public static class Signer {

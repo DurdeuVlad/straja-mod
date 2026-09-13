@@ -1,10 +1,5 @@
-package com.dwurdy.straja.application.service;
+package com.dwurdy.straja.domain.model;
 
-import com.dwurdy.straja.domain.model.DomainEvent;
-import com.dwurdy.straja.domain.model.GuardState;
-import com.dwurdy.straja.domain.model.Result;
-import com.dwurdy.straja.domain.model.Rank;
-import com.dwurdy.straja.domain.model.StrajaPolicies;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -69,7 +64,9 @@ public final class DutyEngine {
         state.lastAccrualAt = now;
         if (minutes <= 0) return events;
 
-        int block = blockMinutes(policies);
+        // Free-duty shifts are paid per Minecraft day of duty, not per block.
+        int block = "FREE".equals(state.mode) && policies != null && policies.minecraftDayMinutes > 0
+                ? policies.minecraftDayMinutes : blockMinutes(policies);
         long before = state.dutyMinutes / block;
         state.dutyMinutes += minutes;
         long after = state.dutyMinutes / block;
@@ -87,6 +84,7 @@ public final class DutyEngine {
             events.add(DomainEvent.builder("salary_block")
                     .put("blocks", payableBlocks)
                     .put("amount", payableBlocks * salaryPerBlock)
+                    .put("blockMinutes", block)
                     .put("suppressedBlocks", blocks - payableBlocks)
                     .build());
         }
@@ -132,6 +130,44 @@ public final class DutyEngine {
                 .put("deadlineAt", state.deadlineAt)
                 .put("missionMinutes", state.missionMinutes.get(route.get(0)))
                 .build()));
+    }
+
+    /**
+     * Senior ranks and the commissioner start shifts at will: no patrol route,
+     * no checkpoint deadlines. Salary still accrues (per Minecraft day) and the
+     * same lifecycle guards apply.
+     */
+    public static Result startFreeDuty(GuardState state, long now, StrajaPolicies policies,
+                                       boolean commissioner) {
+        if (state.resignationPending) return Result.fail("resignation_pending");
+        if (state.resigned) return Result.fail("resigned");
+        if (state.fired) return Result.fail("fired");
+        if (state.duty) return Result.fail("already_on_duty");
+        if (state.suspended) return Result.fail("suspended");
+        int minRank = policies != null ? policies.freeDutyMinRank : Rank.SENIOR.level();
+        if (!commissioner && state.rank < minRank) return Result.fail("free_duty_rank_required");
+
+        state.duty = true;
+        state.mode = "FREE";
+        state.patrolState = "OFF";
+        state.route = new ArrayList<>();
+        state.patrolIndex = 0;
+        state.waitingUntil = null;
+        state.deadlineAt = null;
+        state.missionMinutes = new java.util.LinkedHashMap<>();
+        state.dutyStartedAt = now;
+        state.lastAccrualAt = now;
+        state.lastDutyActivityAt = now;
+        state.lastDutyActivityX = null;
+        state.lastDutyActivityY = null;
+        state.lastDutyActivityZ = null;
+        state.salaryActivityPaused = false;
+        state.dutyRemainderMs = 0;
+        state.dutyMinutes = 0;
+        state.dutyBlocksCurrent = 0;
+        state.specialAuthorizedBy = null;
+        state.lastEndReason = null;
+        return Result.pass(List.of(DomainEvent.of("duty_started_free")));
     }
 
     public static Result activateCheckpoint(GuardState state, String checkpointId, long now,
@@ -183,7 +219,9 @@ public final class DutyEngine {
         long salaryTimestamp = accrualNow != null ? Math.min(now, accrualNow) : now;
         events.addAll(accrue(state, salaryTimestamp, salaryPerBlock, policies));
 
-        if ("SPECIAL".equals(state.mode)) return new TickResult(events);
+        // Only NORMAL patrols have checkpoint deadlines; SPECIAL and FREE
+        // shifts accrue salary without a route.
+        if (!"NORMAL".equals(state.mode)) return new TickResult(events);
 
         if ("WAITING".equals(state.patrolState) && state.waitingUntil != null && now >= state.waitingUntil) {
             state.patrolState = "ACTIVE";

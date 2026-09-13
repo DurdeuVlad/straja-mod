@@ -1,30 +1,40 @@
 package com.dwurdy.straja.application.service;
 
 import com.dwurdy.straja.application.StrajaContext;
+import com.dwurdy.straja.application.port.in.GuardDutyUseCase;
+import com.dwurdy.straja.application.port.in.GuardRecruitmentUseCase;
 import com.dwurdy.straja.application.port.out.CurrencyProvider;
 import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.domain.model.DomainEvent;
+import com.dwurdy.straja.domain.model.DutyEngine;
 import com.dwurdy.straja.domain.model.GuardState;
 import com.dwurdy.straja.domain.model.InboxMessage;
 import com.dwurdy.straja.domain.model.ItemSpec;
 import com.dwurdy.straja.domain.model.PermissionLevel;
 import com.dwurdy.straja.domain.model.Rank;
 import com.dwurdy.straja.domain.model.Result;
+import com.dwurdy.straja.domain.model.SetupChecklist;
 import com.dwurdy.straja.domain.model.SetupData;
 import com.dwurdy.straja.domain.model.StrajaPolicies;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Player-facing use cases: recruitment, quiz, duty lifecycle, salary, food,
  * kit/regear, resignation/rejoin, inbox and admin rank operations.
  * Ports of the reference flows; all authority checks stay server-side.
  */
-public class GuardService {
+public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
+    private static final int QUIZ_PROMPT_MAX_LENGTH = 120;
+    private static final String STALE_FORM =
+            "Formularul nu mai este valid. Deschide din nou quiz-ul la Instructor.";
+
     private final StrajaContext ctx;
     private final PlayerService players;
     private final AuditService audit;
     private final EquipmentService equipment;
+    private final java.util.function.Supplier<String> bootId;
 
     /** Optional hook for room auto-assignment (wired by M6 RoomService). */
     public interface RankChangeHook { void onPromotedToGuard(PlayerGateway player); }
@@ -43,10 +53,16 @@ public class GuardService {
 
     public GuardService(StrajaContext ctx, PlayerService players, AuditService audit,
                         EquipmentService equipment) {
+        this(ctx, players, audit, equipment, () -> "");
+    }
+
+    public GuardService(StrajaContext ctx, PlayerService players, AuditService audit,
+                        EquipmentService equipment, java.util.function.Supplier<String> bootId) {
         this.ctx = ctx;
         this.players = players;
         this.audit = audit;
         this.equipment = equipment;
+        this.bootId = bootId;
     }
 
     public void onPromotedToGuard(RankChangeHook hook) {
@@ -57,7 +73,25 @@ public class GuardService {
 
     private long now() { return ctx.clock().nowMillis(); }
 
-    private int salaryFor(GuardState state) { return ctx.policies().salaryPerBlock(state.rank); }
+    /** Per-unit salary: free-duty shifts earn the per-Minecraft-day rate. */
+    private int salaryFor(GuardState state) {
+        if ("FREE".equals(state.mode)) {
+            var table = ctx.policies().freeDutySalaryPerDay;
+            Integer rate = table.get(state.rank);
+            // The commissioner (rank 0) and any unlisted senior rank earn the top rate.
+            if (rate == null) {
+                rate = table.values().stream().mapToInt(Integer::intValue).max()
+                        .orElse(ctx.policies().salaryPerBlock(state.rank));
+            }
+            return rate;
+        }
+        return ctx.policies().salaryPerBlock(state.rank);
+    }
+
+    /** Senior ranks and the commissioner run shifts at will, without patrol. */
+    private boolean freeDutyEligible(PlayerGateway player, GuardState state) {
+        return players.isCommissioner(player) || state.rank >= ctx.policies().freeDutyMinRank;
+    }
 
     private boolean canAuthorize(PlayerGateway actor, String action, String targetName, int targetRank) {
         GuardState actorState = players.state(actor);
@@ -74,11 +108,12 @@ public class GuardService {
         for (DomainEvent event : events) {
             switch (event.type()) {
                 case "salary_block" -> player.tell("Ai acumulat +" + event.data().get("amount")
-                        + " monede în sold (" + event.data().get("blocks") + " blocuri de 10 minute).");
+                        + " monede în sold (" + event.data().get("blocks") + " blocuri de "
+                        + event.data().getOrDefault("blockMinutes", 10) + " minute).");
                 case "checkpoint_activated" -> player.tell("Checkpoint atins. Următorul devine disponibil peste 10 minute.");
                 case "checkpoint_available" -> player.tell("Checkpoint disponibil: " + event.data().get("checkpoint")
                         + ". Ai " + event.data().get("missionMinutes") + " minute.");
-                case "patrol_complete" -> player.tell("Patrulă completă. Salariul rămâne în sold; folosește /straja salary.");
+                case "patrol_complete" -> player.tell("Patrulă completă. Salariul rămâne în sold; vorbește cu Comisaru' pentru decontare.");
                 case "duty_ended" -> player.tell("Serviciul s-a încheiat: " + event.data().get("reason")
                         + ". Soldul acumulat a fost păstrat.");
                 case "special_started" -> player.tell("Special Duty activ. Cronometrele checkpoint-urilor sunt suspendate.");
@@ -156,15 +191,16 @@ public class GuardService {
         players.save(target.uuid(), state);
         audit.record("invite", actor.name(), actor.uuid().toString(),
                 target.name(), target.uuid().toString(), "SUCCESS", "invited");
-        target.tell("Ai fost invitat în Straja Castelului. Rulează /straja recrute pentru regulament și quiz.");
+        target.tell("Ai fost invitat în Straja Castelului. Vorbește cu Instructorul pentru quiz și manual.");
         actor.tell("Invitația a fost trimisă lui " + target.name() + ".");
         return true;
     }
 
+    @Override
     public void recruit(PlayerGateway player) {
         GuardState state = players.state(player);
         if (!state.invited || state.fired) {
-            player.tell("Nu ai invitație activă. Vorbește cu recepționera sau cu Comisaru'.");
+            player.tell("Nu ai invitație activă. Vorbește cu Instructorul sau cu Comisaru'.");
             return;
         }
         if (state.rank >= Rank.JUNIOR.level()) {
@@ -173,8 +209,60 @@ public class GuardService {
         }
         var question = ensureQuizOrder(state);
         players.save(player.uuid(), state);
-        player.tell("Recrutarea folosește progressive disclosure. "
-                + (question != null ? question.question() : "Rulează /straja quiz <răspuns>."));
+        player.tell("Recrutarea se face la Instructor, pas cu pas. "
+                + (question != null ? question.question() : "Revino la Instructor pentru următoarea întrebare."));
+    }
+
+    /**
+     * Players natively belong to other factions; while on Straja duty they act
+     * as Străjeri, but the native allegiance stays on record. Self-declared at
+     * the receptionist; "none"/blank clears it.
+     */
+    @Override
+    public boolean declareNativeFaction(PlayerGateway player, String faction) {
+        return applyNativeFaction(player, player, faction);
+    }
+
+    @Override
+    public int nativeFactionMaxLength() {
+        return ctx.policies().nativeFactionMaxLength;
+    }
+
+    /** Commissioner-side native-faction record management. */
+    public boolean setNativeFactionFor(PlayerGateway actor, PlayerGateway target, String faction) {
+        if (!players.isCommissioner(actor)) {
+            actor.tell("Doar Comisaru' poate edita facțiunea nativă a altui jucător.");
+            return false;
+        }
+        return applyNativeFaction(actor, target, faction);
+    }
+
+    private boolean applyNativeFaction(PlayerGateway actor, PlayerGateway target, String faction) {
+        String normalized = faction == null ? "" : faction.trim();
+        if (normalized.isEmpty() || normalized.equalsIgnoreCase("none")
+                || normalized.equalsIgnoreCase("niciuna") || normalized.equalsIgnoreCase("niciună")) {
+            normalized = null;
+        } else if (normalized.length() > ctx.policies().nativeFactionMaxLength) {
+            actor.tell("Facțiunea nativă poate avea maximum "
+                    + ctx.policies().nativeFactionMaxLength + " caractere.");
+            return false;
+        }
+        GuardState state = players.state(target);
+        state.nativeFaction = normalized;
+        players.save(target.uuid(), state);
+        audit.record("native_faction", actor.name(), actor.uuid().toString(),
+                target.name(), target.uuid().toString(), "SUCCESS",
+                normalized == null ? "cleared" : normalized);
+        if (normalized == null) {
+            target.tell("Facțiunea nativă a fost ștearsă din registrul Străjii.");
+        } else {
+            target.tell("Facțiune nativă înregistrată: " + normalized
+                    + ". În timpul turei acționezi ca Străjer al Castelului.");
+        }
+        if (actor != target) {
+            actor.tell("Facțiunea nativă a lui " + target.name() + " a fost actualizată.");
+        }
+        return true;
     }
 
     private StrajaPolicies.QuizQuestion ensureQuizOrder(GuardState state) {
@@ -201,8 +289,16 @@ public class GuardService {
             player.tell("Ai nevoie de o invitație de la Comisaru'.");
             return;
         }
+        if (state.resigned) {
+            player.tell(coreError("resigned"));
+            return;
+        }
+        if (state.suspended) {
+            player.tell(coreError("suspended"));
+            return;
+        }
         if (state.rank >= Rank.JUNIOR.level() || state.quizPassed) {
-            trainingQuiz(player, answer);
+            trainingQuiz(player, state, answer);
             return;
         }
         if (state.quizCooldownAt != null && state.quizCooldownAt > now()) {
@@ -211,13 +307,90 @@ public class GuardService {
         }
         var item = ensureQuizOrder(state);
         if (item == null) {
-            state.quizPassed = true;
-            state.rank = Rank.JUNIOR.level();
-            players.save(player.uuid(), state);
-            roomAutoAssign.onPromotedToGuard(player);
-            player.tell("Quiz promovat. Ai devenit Străjer Junior.");
+            promoteToJunior(player, state);
             return;
         }
+        applyInitialAnswer(player, state, item, answer);
+    }
+
+    @Override
+    public Optional<QuizPrompt> currentQuizPrompt(PlayerGateway player) {
+        GuardState state = players.state(player);
+        if (!state.invited || state.fired) {
+            player.tell("Ai nevoie de o invitație de la Comisaru'.");
+            return Optional.empty();
+        }
+        if (state.resigned) {
+            player.tell(coreError("resigned"));
+            return Optional.empty();
+        }
+        if (state.suspended) {
+            player.tell(coreError("suspended"));
+            return Optional.empty();
+        }
+        if (state.rank >= Rank.JUNIOR.level() || state.quizPassed) {
+            return currentTrainingPrompt(player, state);
+        }
+        if (state.quizCooldownAt != null && state.quizCooldownAt > now()) {
+            player.tell("Mai încearcă peste " + prettyTime(state.quizCooldownAt) + ".");
+            return Optional.empty();
+        }
+        var item = ensureQuizOrder(state);
+        if (item == null) {
+            promoteToJunior(player, state);
+            return Optional.empty();
+        }
+        players.save(player.uuid(), state);
+        return Optional.of(new QuizPrompt(item.id(), "Recrutare Straja",
+                item.question(), QUIZ_PROMPT_MAX_LENGTH));
+    }
+
+    @Override
+    public boolean answerQuiz(PlayerGateway player, String expectedQuestionId, String answer) {
+        GuardState state = players.state(player);
+        if (!state.invited || state.fired) {
+            player.tell("Ai nevoie de o invitație de la Comisaru'.");
+            return false;
+        }
+        if (state.resigned) {
+            player.tell(coreError("resigned"));
+            return false;
+        }
+        if (state.suspended) {
+            player.tell(coreError("suspended"));
+            return false;
+        }
+        if (state.rank >= Rank.JUNIOR.level() || state.quizPassed) {
+            return answerTraining(player, state, expectedQuestionId, answer);
+        }
+        if (state.quizCooldownAt != null && state.quizCooldownAt > now()) {
+            player.tell("Mai încearcă peste " + prettyTime(state.quizCooldownAt) + ".");
+            return false;
+        }
+        var item = ensureQuizOrder(state);
+        if (item == null) {
+            promoteToJunior(player, state);
+            return false;
+        }
+        if (expectedQuestionId == null || expectedQuestionId.isBlank()
+                || !expectedQuestionId.equals(item.id())) {
+            player.tell(STALE_FORM);
+            return false;
+        }
+        applyInitialAnswer(player, state, item, answer);
+        return true;
+    }
+
+    private void promoteToJunior(PlayerGateway player, GuardState state) {
+        state.quizPassed = true;
+        state.rank = Rank.JUNIOR.level();
+        players.save(player.uuid(), state);
+        roomAutoAssign.onPromotedToGuard(player);
+        player.tell("Quiz promovat. Ai devenit Străjer Junior.");
+    }
+
+    private void applyInitialAnswer(PlayerGateway player, GuardState state,
+                                    StrajaPolicies.QuizQuestion item, String answer) {
         if (item.accepts(answer)) {
             state.quizIndex += 1;
             state.quizCooldownAt = null;
@@ -241,8 +414,51 @@ public class GuardService {
         }
     }
 
-    private void trainingQuiz(PlayerGateway player, String answer) {
-        GuardState state = players.state(player);
+    private Optional<QuizPrompt> currentTrainingPrompt(PlayerGateway player, GuardState state) {
+        if (state.rank < Rank.JUNIOR.level()) {
+            player.tell("Quiz-ul de rang se deschide după recrutarea ca Străjer Junior.");
+            return Optional.empty();
+        }
+        if (state.trainingQuizCooldownAt != null && state.trainingQuizCooldownAt > now()) {
+            player.tell("Mai încearcă peste " + prettyTime(state.trainingQuizCooldownAt) + ".");
+            return Optional.empty();
+        }
+        var item = currentTrainingItem(state);
+        players.save(player.uuid(), state);
+        if (item == null) {
+            player.tell("Nu ai încă module de instruire disponibile pentru rangul tău. Consultă Manualul de la Instructor.");
+            return Optional.empty();
+        }
+        return Optional.of(new QuizPrompt(item.id(), "Instruire Straja",
+                item.question(), QUIZ_PROMPT_MAX_LENGTH));
+    }
+
+    private boolean answerTraining(PlayerGateway player, GuardState state,
+                                   String expectedQuestionId, String answer) {
+        if (state.rank < Rank.JUNIOR.level()) {
+            player.tell("Quiz-ul de rang se deschide după recrutarea ca Străjer Junior.");
+            return false;
+        }
+        if (state.trainingQuizCooldownAt != null && state.trainingQuizCooldownAt > now()) {
+            player.tell("Mai încearcă peste " + prettyTime(state.trainingQuizCooldownAt) + ".");
+            return false;
+        }
+        var item = currentTrainingItem(state);
+        players.save(player.uuid(), state);
+        if (item == null) {
+            player.tell("Nu ai încă module de instruire disponibile pentru rangul tău. Consultă Manualul de la Instructor.");
+            return false;
+        }
+        if (expectedQuestionId == null || expectedQuestionId.isBlank()
+                || !expectedQuestionId.equals(item.id())) {
+            player.tell(STALE_FORM);
+            return false;
+        }
+        applyTrainingAnswer(player, state, item, answer);
+        return true;
+    }
+
+    private void trainingQuiz(PlayerGateway player, GuardState state, String answer) {
         if (state.rank < Rank.JUNIOR.level()) {
             player.tell("Quiz-ul de rang se deschide după recrutarea ca Străjer Junior.");
             return;
@@ -254,7 +470,7 @@ public class GuardService {
         var item = currentTrainingItem(state);
         if (item == null) {
             players.save(player.uuid(), state);
-            player.tell("Nu ai încă module de instruire disponibile pentru rangul tău. Verifică /straja regulament.");
+            player.tell("Nu ai încă module de instruire disponibile pentru rangul tău. Consultă Manualul de la Instructor.");
             return;
         }
         if (answer == null || answer.isBlank()) {
@@ -262,6 +478,11 @@ public class GuardService {
             player.tell("Instruire " + item.id() + ": " + item.question());
             return;
         }
+        applyTrainingAnswer(player, state, item, answer);
+    }
+
+    private void applyTrainingAnswer(PlayerGateway player, GuardState state,
+                                     StrajaPolicies.QuizQuestion item, String answer) {
         if (item.accepts(answer)) {
             state.trainingPassed.put(item.id(), true);
             state.trainingQuizId = null;
@@ -282,9 +503,7 @@ public class GuardService {
     }
 
     private StrajaPolicies.QuizQuestion currentTrainingItem(GuardState state) {
-        var available = ctx.policies().trainingQuiz.stream()
-                .filter(q -> q.minRank() <= state.rank && !Boolean.TRUE.equals(state.trainingPassed.get(q.id())))
-                .toList();
+        var available = pendingModules(state);
         if (available.isEmpty()) {
             state.trainingQuizId = null;
             return null;
@@ -294,6 +513,127 @@ public class GuardService {
         var selected = available.get(new java.util.Random().nextInt(available.size()));
         state.trainingQuizId = selected.id();
         return selected;
+    }
+
+    // ------------------------------------------------------------ trainer: progress, promotion, manual
+
+    @Override
+    public TrainingView trainingView(PlayerGateway player) {
+        GuardState state = players.state(player);
+        return buildTrainingView(player, state);
+    }
+
+    private TrainingView buildTrainingView(PlayerGateway player, GuardState state) {
+        Integer nextRank = null;
+        Integer required = null;
+        boolean canPromote = false;
+        if (promotableState(state)) {
+            int candidate = state.rank + 1;
+            if (ctx.policies().promotionServiceBlocks.containsKey(candidate)) {
+                nextRank = candidate;
+                required = ctx.policies().promotionServiceBlocks.get(candidate);
+                canPromote = state.serviceBlocks >= required && pendingModules(state).isEmpty();
+            }
+        }
+        return new TrainingView(state.rank, state.serviceBlocks, nextRank, required, canPromote,
+                hasManual(player));
+    }
+
+    private boolean promotableState(GuardState state) {
+        return state.invited && !state.fired && !state.resigned && !state.suspended
+                && !state.resignationPending
+                && state.rank >= Rank.JUNIOR.level() && state.rank < Rank.LIEUTENANT.level();
+    }
+
+    private List<StrajaPolicies.QuizQuestion> pendingModules(GuardState state) {
+        return ctx.policies().trainingQuiz.stream()
+                .filter(q -> q.minRank() <= state.rank && !Boolean.TRUE.equals(state.trainingPassed.get(q.id())))
+                .toList();
+    }
+
+    private boolean hasManual(PlayerGateway player) {
+        String manual = ctx.policies().trainingManualItem;
+        return manual != null && !manual.isBlank() && player.inventory().countOf(manual) >= 1;
+    }
+
+    @Override
+    public void showProgress(PlayerGateway player) {
+        GuardState state = players.state(player);
+        var view = buildTrainingView(player, state);
+        player.tell("Rang: " + Rank.of(state.rank).displayName()
+                + " | puncte de serviciu: " + state.serviceBlocks);
+        var pending = pendingModules(state);
+        player.tell(pending.isEmpty()
+                ? "Instruire teoretică: completă pentru rangul tău."
+                : "Instruire teoretică: " + pending.size() + " module rămase la rangul tău.");
+        if (view.nextRank() == null) {
+            player.tell(promotableState(state)
+                    ? "Avansarea la " + Rank.of(state.rank + 1).displayName() + " este decizia Comisarului."
+                    : "Nu există o avansare disponibilă pentru starea ta curentă.");
+        } else {
+            player.tell("Avansare la " + Rank.of(view.nextRank()).displayName() + ": necesare "
+                    + view.requiredBlocks() + " puncte (îți lipsesc "
+                    + Math.max(0, view.requiredBlocks() - state.serviceBlocks) + ").");
+        }
+    }
+
+    @Override
+    public void requestPromotion(PlayerGateway player) {
+        GuardState state = players.state(player);
+        if (!promotableState(state)) {
+            player.tell("Nu ești într-o stare care permite avansarea.");
+            return;
+        }
+        int nextRank = state.rank + 1;
+        Integer required = ctx.policies().promotionServiceBlocks.get(nextRank);
+        if (required == null) {
+            player.tell("Avansarea la " + Rank.of(nextRank).displayName() + " este decizia Comisarului.");
+            return;
+        }
+        if (state.serviceBlocks < required) {
+            player.tell("Mai sunt necesare " + (required - state.serviceBlocks) + " puncte de serviciu.");
+            return;
+        }
+        var pending = pendingModules(state);
+        if (!pending.isEmpty()) {
+            player.tell("Mai întâi finalizează instruirea: " + pending.size()
+                    + " module rămase. Întreabă Instructorul pentru următoarea întrebare.");
+            return;
+        }
+        state.rank = nextRank;
+        state.kitClaimedRank = 0;
+        players.save(player.uuid(), state);
+        roomAutoAssign.onPromotedToGuard(player);
+        audit.record("promotion", player.name(), player.uuid().toString(),
+                player.name(), player.uuid().toString(), "SUCCESS",
+                "trainer_rank_up:" + nextRank);
+        player.tell("Avansare: " + Rank.of(nextRank).displayName()
+                + ". Instructorul te-a confirmat; kit-ul nou este disponibil la secretară.");
+    }
+
+    @Override
+    public void giveManual(PlayerGateway player) {
+        GuardState state = players.state(player);
+        if ((!state.invited || state.fired) && state.rank < Rank.JUNIOR.level()) {
+            player.tell("Manualul este pentru recruții invitați și străjeri. Vorbește cu Comisaru'.");
+            return;
+        }
+        if (state.suspended || state.fired || state.resigned) {
+            player.tell("Manualul de instruire nu este disponibil în starea ta curentă.");
+            return;
+        }
+        if (hasManual(player)) {
+            player.tell("Ai deja Manualul de instruire în inventar.");
+            return;
+        }
+        var spec = ItemSpec.of(ctx.policies().trainingManualItem, 1);
+        if (!player.giveVerified(spec)) {
+            player.tell("Inventarul este plin; Manualul nu a putut fi predat.");
+            return;
+        }
+        audit.record("training_manual", player.name(), player.uuid().toString(),
+                player.name(), player.uuid().toString(), "SUCCESS", "manual_issued");
+        player.tell("Ai primit Manualul de instruire. Deschide-l pentru regulament.");
     }
 
     // ------------------------------------------------------------ admin rank ops
@@ -425,6 +765,40 @@ public class GuardService {
 
     // ------------------------------------------------------------ duty
 
+    /** Read-only affordances for native surfaces; mutators revalidate anyway. */
+    @Override
+    public DutyView dutyView(PlayerGateway player) {
+        GuardState state = players.state(player);
+        boolean activeGuard = state.rank >= Rank.JUNIOR.level()
+                && !state.suspended && !state.fired && !state.resigned;
+        String checkpointId = "";
+        if (state.duty && "NORMAL".equals(state.mode) && "ACTIVE".equals(state.patrolState)
+                && state.patrolIndex >= 0 && state.patrolIndex < state.route.size()) {
+            checkpointId = state.route.get(state.patrolIndex);
+        }
+        boolean canClaimSalary = activeGuard && (state.unpaidSalary > 0
+                || "PENDING".equals(state.salaryPaymentStatus)
+                || "IN_PROGRESS".equals(state.salaryPaymentStatus)
+                || "REVIEW".equals(state.salaryPaymentStatus));
+        return new DutyView(
+                activeGuard,
+                activeGuard && !state.duty && !state.resignationPending,
+                checkpointId,
+                activeGuard && state.duty,
+                canClaimSalary,
+                activeGuard,
+                activeGuard && state.duty
+                        && (state.foodReadyAt == null || state.foodReadyAt <= now()),
+                activeGuard && state.kitClaimedRank < state.rank,
+                activeGuard && !state.duty && !state.regearPending,
+                activeGuard && !state.resignationPending,
+                state.resignationPending && state.resignationDeadlineAt != null
+                        && state.resignationDeadlineAt <= now(),
+                state.resignationPending,
+                state.resigned && (state.rejoinAvailableAt == null
+                        || state.rejoinAvailableAt <= now()));
+    }
+
     public void startDuty(PlayerGateway player) {
         GuardState state = players.state(player);
         if (state.rank >= Rank.JUNIOR.level()) {
@@ -436,10 +810,29 @@ public class GuardService {
             player.tell("Doar un străjer activ poate începe serviciul.");
             return;
         }
+        if (freeDutyEligible(player, state)) {
+            Result free = DutyEngine.startFreeDuty(state, now(), ctx.policies(),
+                    players.isCommissioner(player));
+            if (applyCoreResult(player, state, free)) {
+                if (!equipment.issueServiceEquipment(player, state)) {
+                    Result failed = DutyEngine.endDuty(state, "service_equipment_issue_failed",
+                            now(), salaryFor(state), ctx.policies());
+                    applyCoreResult(player, state, failed);
+                    player.tell("Serviciul nu a început: echipamentul de serviciu nu a putut fi predat complet.");
+                    return;
+                }
+                players.save(player.uuid(), state);
+                audit.record("duty_start", player.name(), player.uuid().toString(),
+                        player.name(), player.uuid().toString(), "SUCCESS", "free_shift");
+                player.tell("Tură liberă începută. Ești plătit pe zi de Minecraft; "
+                        + "termini tura când dorești de la secretară sau cu /straja stop.");
+            }
+            return;
+        }
         SetupData setup = ctx.setup().read();
         var route = setup.checkpoints.stream().filter(SetupData.Checkpoint::isPlaced).map(c -> c.id).toList();
         if (setup.checkpoints.size() < 4 || route.size() < 4) {
-            player.tell("Checkpoint-urile nu sunt configurate. Comisaru' trebuie să stea în fiecare punct și să ruleze /straja set-checkpoint checkpoint_1 ... checkpoint_4.");
+            player.tell("Checkpoint-urile nu sunt configurate. Comisaru' trebuie să configureze cele patru puncte de patrulare.");
             return;
         }
         Result result = DutyEngine.startDuty(state, route, now(), setup.missionMinutes, ctx.policies());
@@ -452,6 +845,8 @@ public class GuardService {
             }
             markDutyActivity(player, state, now());
             players.save(player.uuid(), state);
+            audit.record("duty_start", player.name(), player.uuid().toString(),
+                    player.name(), player.uuid().toString(), "SUCCESS", "started");
             player.tell("Serviciu început. Primul checkpoint: " + state.route.get(0) + ". Ai "
                     + state.missionMinutes.get(state.route.get(0)) + " minute.");
         }
@@ -471,7 +866,10 @@ public class GuardService {
         }
         markDutyActivity(player, state, now());
         Result result = DutyEngine.activateCheckpoint(state, id, now(), salaryFor(state), setup.missionMinutes, ctx.policies());
-        applyCoreResult(player, state, result);
+        if (applyCoreResult(player, state, result)) {
+            audit.record("duty_checkpoint", player.name(), player.uuid().toString(),
+                    player.name(), player.uuid().toString(), "SUCCESS", id);
+        }
     }
 
     private boolean atCheckpoint(PlayerGateway player, SetupData.Checkpoint point) {
@@ -496,6 +894,20 @@ public class GuardService {
             audit.record("duty_stop", player.name(), player.uuid().toString(),
                     player.name(), player.uuid().toString(), "SUCCESS", "voluntary_stop");
         }
+    }
+
+    /**
+     * Login recovery: closes a duty left active by a previous runtime boot,
+     * then stamps the current boot id so a relogin inside the same runtime
+     * keeps an active duty.
+     */
+    @Override
+    public void recoverOnLogin(PlayerGateway player) {
+        if (player == null || player.uuid() == null) return;
+        GuardState state = players.state(player.uuid());
+        closeDutyAfterRestart(player, state, bootId.get());
+        state.runtimeBootId = bootId.get();
+        players.save(player.uuid(), state);
     }
 
     /** Ends a stale active duty left over from before a server restart. */
@@ -601,15 +1013,16 @@ public class GuardService {
                 return;
             }
             players.save(player.uuid(), state);
+            fireStatusChange(player, "demisie în preaviz");
             audit.record("resignation_start", player.name(), player.uuid().toString(),
                     player.name(), player.uuid().toString(), "SUCCESS", "notice_started");
             player.tell("Demisia intră în preaviz pentru " + ctx.policies().resignationNoticeMinutes
-                    + " minute. Camera rămâne a ta în acest interval ca să-ți strângi lucrurile. După expirare rulează /straja demisie confirm. Poți anula cu /straja demisie anuleaza.");
+                    + " minute. Camera rămâne a ta în acest interval ca să-ți strângi lucrurile. După expirare semnează la Comisaru' sau cere anularea.");
             return;
         }
         if (!normalized.equals("confirm")) {
             player.tell("Demisia este în așteptare. Mai sunt " + prettyTime(state.resignationDeadlineAt)
-                    + ". Confirmă cu /straja demisie confirm sau anulează cu /straja demisie anuleaza.");
+                    + ". Confirmă la Comisaru' sau cere anularea.");
             return;
         }
         long cooldownMs = ctx.policies().resignationCooldownDays * 24L * 60 * 60 * 1000;
@@ -626,6 +1039,21 @@ public class GuardService {
                 player.name(), player.uuid().toString(), "SUCCESS", "completed");
         player.tell("Demisie semnată. Camera a fost eliberată, iar cooldown-ul este de "
                 + ctx.policies().resignationCooldownDays + " zile. Soldul acumulat rămâne disponibil.");
+    }
+
+    @Override
+    public void beginResignation(PlayerGateway player) {
+        resign(player, null);
+    }
+
+    @Override
+    public void confirmResignation(PlayerGateway player) {
+        resign(player, "confirm");
+    }
+
+    @Override
+    public void cancelResignation(PlayerGateway player) {
+        resign(player, "cancel");
     }
 
     public void rejoin(PlayerGateway player) {
@@ -768,6 +1196,8 @@ public class GuardService {
         }
         state.foodReadyAt = now() + ctx.policies().foodCooldownMinutes * DutyEngine.MINUTE_MS;
         players.save(player.uuid(), state);
+        audit.record("food_claim", player.name(), player.uuid().toString(),
+                player.name(), player.uuid().toString(), "SUCCESS", "claimed");
         player.tell("Ai primit " + ctx.policies().foodAmount + " pâini.");
     }
 
@@ -781,7 +1211,11 @@ public class GuardService {
             player.tell("Kitul pentru rangul curent a fost deja ridicat.");
             return;
         }
-        equipment.giveKit(player, state);
+        if (equipment.giveKit(player, state)) {
+            audit.record("kit_claim", player.name(), player.uuid().toString(),
+                    player.name(), player.uuid().toString(), "SUCCESS",
+                    Rank.of(state.rank).name());
+        }
     }
 
     public void requestRegear(PlayerGateway player) {
@@ -807,6 +1241,8 @@ public class GuardService {
         addInbox("REGEAR", player.name(), "Solicitare regear pentru "
                 + Rank.of(state.rank).displayName() + ". Cost: "
                 + ctx.policies().regearCost.getOrDefault(state.rank, 0) + ".");
+        audit.record("regear_request", player.name(), player.uuid().toString(),
+                player.name(), player.uuid().toString(), "SUCCESS", "requested");
         player.tell("Cererea a fost trimisă. Costul este "
                 + ctx.policies().regearCost.getOrDefault(state.rank, 0) + " monede.");
     }
@@ -896,9 +1332,11 @@ public class GuardService {
         aliases.put("release", "prisonRelease");
         aliases.put("infirmary", "infirmary");
         aliases.put("infirmerie", "infirmary");
+        aliases.put("trainer", "trainer");
+        aliases.put("instructor", "trainer");
         String key = aliases.get(name == null ? "" : name.trim().toLowerCase());
         if (key == null) {
-            player.tell("Locație necunoscută: reports, mailbox, office, receptionist, secretary, prison-release sau infirmary.");
+            player.tell("Locație necunoscută: reports, mailbox, office, receptionist, secretary, prison-release, infirmary sau trainer.");
             return;
         }
         SetupData setup = ctx.setup().read();
@@ -914,16 +1352,94 @@ public class GuardService {
 
     public void showSetup(PlayerGateway player) {
         SetupData setup = ctx.setup().read();
-        for (var point : setup.checkpoints) {
-            player.tell(point.id + ": " + (point.isPlaced()
-                    ? point.x.intValue() + ", " + point.y.intValue() + ", " + point.z.intValue() : "neconfigurat"));
+        var registry = ctx.npcs().read();
+        var missingLocations = SetupChecklist.missingLocations(setup);
+        var missingPoints = SetupChecklist.unplacedCheckpoints(setup);
+        var missingNpcs = SetupChecklist.missingNpcRoles(registry, NpcAdminService.ROLE_ORDER);
+        player.tell("[Straja] Checklist de configurare:");
+        player.tell(check(players.isCommissioner(player))
+                + " Comisar: " + (players.isCommissioner(player)
+                        ? "setat (tu)"
+                        : "nesetat — definește-l în [identity] din straja-server.toml"));
+        player.tell(check(missingLocations.isEmpty())
+                + " Locații administrative: " + (SetupData.LOCATION_KEYS.length - missingLocations.size())
+                + "/" + SetupData.LOCATION_KEYS.length
+                + (missingLocations.isEmpty() ? "" : " — lipsesc: " + String.join(", ", missingLocations)));
+        player.tell(check(missingPoints.isEmpty())
+                + " Checkpoint-uri patrulare: " + (setup.checkpoints.size() - missingPoints.size())
+                + "/" + setup.checkpoints.size()
+                + (missingPoints.isEmpty() ? "" : " — lipsesc: " + String.join(", ", missingPoints)));
+        player.tell(check(missingNpcs.isEmpty())
+                + " NPC-uri: " + (NpcAdminService.ROLE_ORDER.size() - missingNpcs.size())
+                + "/" + NpcAdminService.ROLE_ORDER.size()
+                + (missingNpcs.isEmpty() ? "" : " — lipsesc: " + String.join(", ", missingNpcs)));
+        String next = SetupChecklist.nextStep(setup, registry, NpcAdminService.ROLE_ORDER);
+        player.tell(next == null
+                ? "Configurare completă. Rafinează punctele cu /straja set-location / set-checkpoint."
+                : "Următorul pas: " + next);
+    }
+
+    private static String check(boolean done) {
+        return done ? "✓" : "✗";
+    }
+
+    /** One-shot: stamps every administrative location at the player's position. */
+    public void setupLocationsHere(PlayerGateway player) {
+        if (!players.isCommissioner(player)) {
+            player.tell("Doar Comisaru' poate configura locațiile administrative.");
+            return;
         }
-        setup.locations.forEach((key, loc) ->
-                player.tell(key + ": " + loc.x + ", " + loc.y + ", " + loc.z));
+        SetupData setup = ctx.setup().read();
+        for (String key : SetupData.LOCATION_KEYS) {
+            var location = new SetupData.Location();
+            location.dimension = player.dimension();
+            location.x = Math.floor(player.x());
+            location.y = Math.floor(player.y());
+            location.z = Math.floor(player.z());
+            setup.locations.put(key, location);
+        }
+        ctx.setup().write(setup);
+        player.tell("Toate cele " + SetupData.LOCATION_KEYS.length
+                + " locații administrative au fost salvate aici. Mută-le individual cu /straja set-location <nume>.");
+    }
+
+    /**
+     * One-shot: lays a four-checkpoint patrol square around the player and
+     * seeds a default mission time for each leg. Idempotent — re-running just
+     * re-centers the square on the current position.
+     */
+    public void setupPatrol(PlayerGateway player) {
+        if (!players.isCommissioner(player)) {
+            player.tell("Doar Comisaru' poate configura checkpoint-urile.");
+            return;
+        }
+        int radius = 8;
+        double baseX = Math.floor(player.x());
+        double baseY = Math.floor(player.y());
+        double baseZ = Math.floor(player.z());
+        int[][] offsets = {{radius, -radius}, {radius, radius}, {-radius, radius}, {-radius, -radius}};
+        SetupData setup = ctx.setup().read();
+        for (int i = 0; i < setup.checkpoints.size() && i < offsets.length; i++) {
+            var point = setup.checkpoints.get(i);
+            point.dimension = player.dimension();
+            point.x = baseX + offsets[i][0];
+            point.y = baseY;
+            point.z = baseZ + offsets[i][1];
+            setup.missionMinutes.putIfAbsent(point.id, defaultMissionMinutes());
+        }
+        ctx.setup().write(setup);
+        player.tell("Traseu pătrat de " + (radius * 2) + "x" + (radius * 2)
+                + " blocuri creat în jurul tău (" + setup.checkpoints.size()
+                + " checkpoint-uri). Mută-le cu /straja set-checkpoint <id>.");
+    }
+
+    private int defaultMissionMinutes() {
+        return Math.min(ctx.policies().missionMaxMinutes, Math.max(30, ctx.policies().missionMinMinutes));
     }
 
     // ------------------------------------------------------------ status / rules / inbox
 
+    @Override
     public void showStatus(PlayerGateway player) {
         GuardState state = players.state(player);
         player.tell(Rank.of(state.rank).displayName() + " | lifecycle: " + state.lifecycle
@@ -931,6 +1447,10 @@ public class GuardService {
                 + " | serviciu: " + (state.duty ? "DA (" + state.mode + ")" : "NU")
                 + " | blocuri: " + state.serviceBlocks + " | sold: " + state.unpaidSalary
                 + (state.equipmentDebt > 0 ? " | datorie echipament: " + state.equipmentDebt : ""));
+        if (state.nativeFaction != null && !state.nativeFaction.isBlank()) {
+            player.tell("Facțiune nativă: " + state.nativeFaction
+                    + (state.duty ? " — în timpul turei ești Străjer al Castelului." : "."));
+        }
         if (state.resignationPending) {
             player.tell("Demisie în așteptare. Semnarea este disponibilă peste " + prettyTime(state.resignationDeadlineAt) + ".");
         }
@@ -947,6 +1467,7 @@ public class GuardService {
         if (state.regearPending) player.tell("Regear: cerere în așteptare.");
     }
 
+    @Override
     public void showRules(PlayerGateway player) {
         GuardState state = players.state(player);
         String title = players.isCommissioner(player) ? ctx.policies().commissionerTitle : Rank.of(state.rank).displayName();
@@ -958,12 +1479,10 @@ public class GuardService {
         player.tell("Patrulă: 4 checkpoint-uri; 10 minute pauză între puncte; timpul fiecărei misiuni este stabilit de Locotenent sau Comisaru'.");
         player.tell("Salariu: un bloc complet la fiecare 10 minute. Monede: 1 / 10 / 100 / 1000.");
         player.tell("Special Duty suspendă temporar checkpoint-urile și cere autorizare. Rapoartele merg la Comisaru'.");
-        player.tell("Poți semna /straja demisie confirm. Revenirea este posibilă după cooldown și este limitată la Străjer Senior.");
-        var training = ctx.policies().trainingQuiz.stream()
-                .filter(q -> q.minRank() <= state.rank && !Boolean.TRUE.equals(state.trainingPassed.get(q.id())))
-                .toList();
+        player.tell("Semnarea demisiei se face la Comisaru'. Revenirea este posibilă după cooldown și este limitată la Străjer Senior.");
+        var training = pendingModules(state);
         player.tell(!training.isEmpty()
-                ? "Instruire disponibilă: " + training.size() + " module. Rulează /straja quiz pentru următoarea întrebare."
+                ? "Instruire disponibilă: " + training.size() + " module. Vorbește cu Instructorul pentru următoarea întrebare."
                 : "Instruirea disponibilă pentru rangul tău este finalizată.");
     }
 
@@ -980,7 +1499,7 @@ public class GuardService {
 
     public void report(PlayerGateway player, String text) {
         if (text == null || text.isBlank()) {
-            player.tell("Folosește /straja report <text>.");
+            player.tell("Prezintă raportul complet direct Comisaru'ului.");
             return;
         }
         addInbox("REPORT", player.name(), text.trim());
@@ -989,7 +1508,7 @@ public class GuardService {
 
     public void message(PlayerGateway player, String text) {
         if (text == null || text.isBlank()) {
-            player.tell("Folosește /straja message <text>.");
+            player.tell("Vorbește cu Comisaru' și transmite-i mesajul complet.");
             return;
         }
         addInbox("MESSAGE", player.name(), text.trim());
@@ -998,7 +1517,7 @@ public class GuardService {
 
     public void request(PlayerGateway player, String text) {
         if (text == null || text.isBlank()) {
-            player.tell("Folosește /straja request <text>.");
+            player.tell("Depune cererea direct la Comisaru', cu toate detaliile necesare.");
             return;
         }
         addInbox("REQUEST", player.name(), text.trim());
@@ -1008,11 +1527,15 @@ public class GuardService {
     // ------------------------------------------------------------ activity tracking
 
     /** Anti-AFK: called once per server tick for each online player. */
+    @Override
     public DutyEngine.TickResult tickPlayerDuty(PlayerGateway player) {
         GuardState state = players.state(player);
         if (!state.duty) return new DutyEngine.TickResult(List.of());
         long current = now();
-        var activity = prepareSalaryActivity(player, state, current);
+        // Free-duty ranks are trusted: salary accrues without the movement gate.
+        var activity = "FREE".equals(state.mode)
+                ? new ActivityResult(current, false, false, false)
+                : prepareSalaryActivity(player, state, current);
         var p = ctx.policies();
         // Service equipment lease: expiry ends the duty and the gear is
         // reclaimed below like any other duty termination.

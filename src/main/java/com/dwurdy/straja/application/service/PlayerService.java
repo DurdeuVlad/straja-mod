@@ -14,7 +14,7 @@ import java.util.UUID;
  * place that decides who is commissioner and what an actor may do; rank text,
  * NPC dialogue or item names can never grant authority.
  */
-public class PlayerService {
+public class PlayerService implements com.dwurdy.straja.application.port.in.PlayerQueryUseCase {
     private final StrajaContext ctx;
 
     public PlayerService(StrajaContext ctx) {
@@ -83,8 +83,21 @@ public class PlayerService {
                 && canon(storedName).equals(canon(player.name()));
     }
 
+    @Override
     public boolean isCommissioner(PlayerGateway player) {
         return isCommissioner(player.name(), player.uuid());
+    }
+
+    @Override
+    public PlayerGateway findPlayer(String nameOrUuid) {
+        return ctx.server().findPlayer(nameOrUuid);
+    }
+
+    @Override
+    public String setupHintFor(PlayerGateway player) {
+        if (!isCommissioner(player)) return null;
+        return com.dwurdy.straja.domain.model.SetupChecklist.nextStep(
+                ctx.setup().read(), ctx.npcs().read(), NpcAdminService.ROLE_ORDER);
     }
 
     public PermissionLevel permissionLevel(PlayerGateway player, GuardState state) {
@@ -95,6 +108,14 @@ public class PlayerService {
         return PermissionLevel.PUBLIC;
     }
 
+    /** On-duty guard (rank at least Junior) — the jailer-assault exemption rule. */
+    @Override
+    public boolean isOnDutyGuard(PlayerGateway player) {
+        GuardState state = state(player);
+        return state.duty && state.rank >= Rank.JUNIOR.level();
+    }
+
+    @Override
     public boolean hasCapability(PlayerGateway player, Capability capability) {
         GuardState state = state(player);
         if (isCommissioner(player)) return true;

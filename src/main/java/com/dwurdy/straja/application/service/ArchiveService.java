@@ -1,6 +1,7 @@
 package com.dwurdy.straja.application.service;
 
 import com.dwurdy.straja.application.StrajaContext;
+import com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase;
 import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.domain.model.ArchiveStore;
 import com.dwurdy.straja.domain.model.ItemSpec;
@@ -13,7 +14,7 @@ import java.util.List;
  * Paper archive: folders, sheets, signatures, numbered carbon copies and
  * official-envelope sends. Port of the KubeJS archive system.
  */
-public class ArchiveService {
+public class ArchiveService implements ArchiveRoleplayUseCase {
     private final StrajaContext ctx;
     private final PlayerService players;
     private final AuditService audit;
@@ -51,11 +52,105 @@ public class ArchiveService {
     }
 
     private boolean canReadFolder(PlayerGateway player, ArchiveStore.Folder folder) {
-        return canArchive(player) || canSign(player) || isFolderOwner(player, folder);
+        if (canArchive(player) || canSign(player) || isFolderOwner(player, folder)) return true;
+        for (var reader : folder.readers) {
+            if (reader != null && PlayerService.identityMatches(player, reader.uuid, reader.name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Persisted read authority for a sheet: folder access, an explicit sheet
+     * recipient, or a DELIVERED copy/envelope issued for this original. Item
+     * metadata is never consulted.
+     */
+    private boolean canReadSheet(PlayerGateway player, ArchiveStore store, ArchiveStore.Sheet sheet) {
+        if (sheet == null) return false;
+        var folder = store.folders.get(sheet.folderId);
+        if (folder != null && canReadFolder(player, folder)) return true;
+        for (var recipient : sheet.recipients) {
+            if (recipient != null
+                    && PlayerService.identityMatches(player, recipient.uuid, recipient.name)) {
+                return true;
+            }
+        }
+        for (var copy : store.copies) {
+            if (copy == null || !sheet.id.equals(copy.originalId)
+                    || !"DELIVERED".equals(copy.status)) continue;
+            if (PlayerService.identityMatches(player, copy.recipientUuid, copy.recipientName)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean canEditFolder(PlayerGateway player, ArchiveStore.Folder folder) {
         return "OPEN".equals(folder.status) && canArchive(player);
+    }
+
+    // ------------------------------------------------------------ projection
+
+    @Override
+    public List<AvailableAction> availableActions(PlayerGateway player) {
+        if (player == null) return List.of();
+        var actions = new ArrayList<AvailableAction>();
+        actions.add(new AvailableAction(Action.LIST, ""));
+        ArchiveStore store = ctx.archive().read();
+        boolean archivist = canArchive(player);
+        boolean signer = canSign(player);
+        boolean authority = archivist || signer;
+        if (archivist) actions.add(new AvailableAction(Action.CREATE_FOLDER, ""));
+        for (var folder : store.folders.values()) {
+            if (folder == null || folder.id == null || folder.id.isBlank()
+                    || !canReadFolder(player, folder)) continue;
+            actions.add(new AvailableAction(Action.READ_FOLDER, folder.id));
+            if (archivist) {
+                actions.add(new AvailableAction(Action.ISSUE_FOLDER, folder.id));
+                if ("OPEN".equals(folder.status)) {
+                    actions.add(new AvailableAction(Action.NEW_SHEET, folder.id));
+                }
+            }
+        }
+        boolean stamp = player.inventory().countOf("straja:archive_stamp") >= 1;
+        boolean carbon = player.inventory().countOf("straja:carbon_paper") >= 1;
+        boolean envelope = player.inventory().countOf("straja:official_envelope") >= 1;
+        for (var sheet : store.sheets.values()) {
+            if (sheet == null || sheet.id == null || sheet.id.isBlank()) continue;
+            if (!canReadSheet(player, store, sheet)) continue;
+            actions.add(new AvailableAction(Action.READ_SHEET, sheet.id));
+            var folder = store.folders.get(sheet.folderId);
+            if ("DRAFT".equals(sheet.status) && folder != null
+                    && canEditFolder(player, folder)) {
+                actions.add(new AvailableAction(Action.EDIT_SHEET, sheet.id));
+                actions.add(new AvailableAction(Action.SET_RECIPIENTS, sheet.id));
+                if (sheet.content != null && !sheet.content.isBlank()) {
+                    actions.add(new AvailableAction(Action.SUBMIT_SHEET, sheet.id));
+                }
+            }
+            if ("PENDING_SIGNATURE".equals(sheet.status) && signer && stamp) {
+                actions.add(new AvailableAction(Action.SIGN_SHEET, sheet.id));
+            }
+            if ("SIGNED".equals(sheet.status) && !sheet.revoked && authority) {
+                if (carbon && sheet.originId == null) {
+                    actions.add(new AvailableAction(Action.COPY_SHEET, sheet.id));
+                }
+                if (envelope) actions.add(new AvailableAction(Action.PACK_ENVELOPE, sheet.id));
+                actions.add(new AvailableAction(Action.ISSUE_DOCUMENT, sheet.id));
+                actions.add(new AvailableAction(Action.REVOKE_SHEET, sheet.id));
+            }
+        }
+        return List.copyOf(actions);
+    }
+
+    @Override
+    public Limits limits() {
+        return new Limits(
+                Math.min(2000, Math.max(1, p().archiveMaxTitleLength)),
+                Math.min(2000, Math.max(1, p().archiveMaxContentLength)),
+                Math.min(2000, Math.max(1, p().archiveMaxRecipients * 41)),
+                240, 80);
     }
 
     // ---------------------------------------------------------------- roles
@@ -80,6 +175,7 @@ public class ArchiveService {
 
     // ---------------------------------------------------------------- folders
 
+    @Override
     public boolean createFolder(PlayerGateway player, String title, String department) {
         if (!canArchive(player)) {
             player.tell("Doar Arhivista autorizată sau Comisaru' poate crea dosare.");
@@ -127,6 +223,7 @@ public class ArchiveService {
         return true;
     }
 
+    @Override
     public void listFolders(PlayerGateway player) {
         ArchiveStore store = ctx.archive().read();
         int shown = 0;
@@ -138,6 +235,7 @@ public class ArchiveService {
         if (shown == 0) player.tell("Nu există dosare accesibile.");
     }
 
+    @Override
     public void readFolder(PlayerGateway player, String id) {
         ArchiveStore store = ctx.archive().read();
         ArchiveStore.Folder folder = store.folders.get(id);
@@ -152,8 +250,56 @@ public class ArchiveService {
         }
     }
 
+    /**
+     * Issues a bound copy of the folder item: the physical item is delivered
+     * first, then the recipient is persisted as a reader. A failed delivery
+     * leaves no grant behind.
+     */
+    @Override
+    public boolean issueFolder(PlayerGateway player, String id, String targetName) {
+        ArchiveStore store = ctx.archive().read();
+        ArchiveStore.Folder folder = id == null ? null : store.folders.get(id);
+        if (folder == null || !(canArchive(player) || canReadFolder(player, folder))) {
+            player.tell("Dosarul nu există sau nu ai acces.");
+            return false;
+        }
+        PlayerGateway target = targetName == null ? null : ctx.server().findPlayer(targetName);
+        if (target == null || target.uuid() == null
+                || target.uuid().equals(player.uuid())) {
+            player.tell("Ținta trebuie să fie un alt jucător online.");
+            return false;
+        }
+        var spec = ItemSpec.of("straja:archive_folder", 1)
+                .withData("ArchiveFolderId", folder.id)
+                .named("Dosar — " + folder.title);
+        if (!target.inventory().canReceive(List.of(spec))) {
+            player.tell("Destinatarul nu are loc pentru dosar.");
+            return false;
+        }
+        if (!target.giveVerified(spec)) {
+            player.tell("Dosarul nu a putut fi livrat; niciun acces nu a fost acordat.");
+            return false;
+        }
+        if (folder.readers.stream().noneMatch(r -> r != null
+                && PlayerService.identityMatches(target, r.uuid, r.name))) {
+            var reader = new ArchiveStore.Recipient();
+            reader.name = target.name();
+            reader.key = norm(target.name());
+            reader.uuid = target.uuid().toString();
+            folder.readers.add(reader);
+            ctx.archive().write(store);
+        }
+        audit.record("archive_folder_issue", player.name(), player.uuid().toString(),
+                target.name(), target.uuid().toString(), "SUCCESS",
+                "folderId=" + folder.id);
+        player.tell("Dosarul " + folder.id + " a fost emis pentru " + target.name() + ".");
+        target.tell("Ai primit dosarul " + folder.id + " — " + folder.title + ".");
+        return true;
+    }
+
     // ---------------------------------------------------------------- sheets
 
+    @Override
     public boolean newSheet(PlayerGateway player, String folderId, String type, String title) {
         if (!canArchive(player)) {
             player.tell("Doar Arhivista autorizată sau Comisaru' poate crea foi.");
@@ -193,6 +339,7 @@ public class ArchiveService {
         return true;
     }
 
+    @Override
     public boolean editSheet(PlayerGateway player, String id, String content) {
         if (!canArchive(player)) {
             player.tell("Doar Arhivista autorizată poate edita foaia.");
@@ -221,6 +368,7 @@ public class ArchiveService {
         return true;
     }
 
+    @Override
     public boolean setRecipients(PlayerGateway player, String id, String rawRecipients) {
         if (!canArchive(player)) {
             player.tell("Doar Arhivista autorizată poate modifica destinatarii.");
@@ -237,12 +385,20 @@ public class ArchiveService {
         for (String token : (rawRecipients == null ? "" : rawRecipients).split(",")) {
             String name = token.trim();
             if (name.isEmpty()) continue;
-            if (unique.stream().noneMatch(r -> norm(r.name).equals(norm(name)))) {
-                var recipient = new ArchiveStore.Recipient();
-                recipient.name = name.substring(0, Math.min(40, name.length()));
-                recipient.key = norm(name);
-                unique.add(recipient);
-            }
+            name = name.substring(0, Math.min(40, name.length()));
+            PlayerGateway online = ctx.server().findPlayer(name);
+            String uuid = online == null || online.uuid() == null ? "" : online.uuid().toString();
+            String resolvedName = online == null ? name : online.name();
+            final String pinnedUuid = uuid;
+            boolean duplicate = unique.stream().anyMatch(r ->
+                    (!pinnedUuid.isEmpty() && pinnedUuid.equals(r.uuid))
+                            || norm(r.name).equals(norm(resolvedName)));
+            if (duplicate) continue;
+            var recipient = new ArchiveStore.Recipient();
+            recipient.name = resolvedName.substring(0, Math.min(40, resolvedName.length()));
+            recipient.key = norm(resolvedName);
+            recipient.uuid = pinnedUuid;
+            unique.add(recipient);
         }
         if (unique.size() > p().archiveMaxRecipients) {
             player.tell("Prea mulți destinatari.");
@@ -255,6 +411,7 @@ public class ArchiveService {
         return true;
     }
 
+    @Override
     public boolean submitSheet(PlayerGateway player, String id) {
         if (!canArchive(player)) {
             player.tell("Doar Arhivista autorizată poate trimite foi la semnătură.");
@@ -280,16 +437,17 @@ public class ArchiveService {
         return true;
     }
 
+    @Override
     public void readSheet(PlayerGateway player, String id) {
         ArchiveStore store = ctx.archive().read();
         ArchiveStore.Sheet sheet = store.sheets.get(id);
-        ArchiveStore.Folder folder = sheet == null ? null : store.folders.get(sheet.folderId);
-        if (sheet == null || folder == null || !canReadFolder(player, folder)) {
+        if (sheet == null || !canReadSheet(player, store, sheet)) {
             player.tell("Foaia nu există sau nu ai acces.");
             return;
         }
         player.tell(sheet.id + " — " + sheet.title + " [" + sheet.status + "] tip " + sheet.type + " revizia " + sheet.revision);
-        player.tell("Autor: " + sheet.author + " | Destinatari: " + String.join(", ", sheet.recipients.stream().map(r -> r.name).toList()));
+        player.tell("Autor: " + sheet.author + " | Destinatari: " + String.join(", ",
+                sheet.recipients.stream().filter(r -> r != null).map(r -> r.name).toList()));
         player.tell(sheet.content == null || sheet.content.isEmpty() ? "(draft gol)" : sheet.content);
     }
 
@@ -308,6 +466,7 @@ public class ArchiveService {
         player.tell(lines.isEmpty() ? "Dosarul nu are foi." : String.join(" | ", lines));
     }
 
+    @Override
     public boolean signSheet(PlayerGateway player, String id, String reason) {
         if (!canSign(player)) {
             player.tell("Doar un Locotenent sau Comisaru' poate semna acte.");
@@ -320,6 +479,14 @@ public class ArchiveService {
             player.tell("Foaia nu este pregătită pentru semnătură sau nu ai acces.");
             return false;
         }
+        if (player.inventory().countOf("straja:archive_stamp") < 1) {
+            player.tell("Ai nevoie de Ștampila Arhivei pentru a semna actul.");
+            return false;
+        }
+        if (reason != null && reason.length() > 240) {
+            player.tell("Motivul semnăturii depășește 240 de caractere.");
+            return false;
+        }
         sheet.status = "SIGNED";
         sheet.signedAt = now();
         var signer = new ArchiveStore.Signer();
@@ -327,7 +494,7 @@ public class ArchiveService {
         signer.uuid = player.uuid().toString();
         signer.name = player.name();
         sheet.signedBy = signer;
-        sheet.signatureReason = (reason == null || reason.isBlank() ? "verificat" : reason).substring(0, Math.min(240, reason == null || reason.isBlank() ? 9 : reason.length()));
+        sheet.signatureReason = reason == null || reason.isBlank() ? "verificat" : reason.trim();
         sheet.updatedAt = now();
         ctx.archive().write(store);
         audit.record("archive_sheet_sign", player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), "SUCCESS", "signed sheetId=" + sheet.id + " signer=" + player.name());
@@ -335,6 +502,7 @@ public class ArchiveService {
         return true;
     }
 
+    @Override
     public boolean revokeSheet(PlayerGateway player, String id) {
         if (!canSign(player) && !canArchive(player)) {
             player.tell("Doar Locotenentul, Comisaru' sau Arhivista pot revoca un act.");
@@ -357,6 +525,7 @@ public class ArchiveService {
 
     // ---------------------------------------------------------------- copies
 
+    @Override
     public boolean copySheet(PlayerGateway player, String id, Integer rawCount, String rawTargets) {
         if (!canArchive(player) && !canSign(player)) {
             player.tell("Doar Arhivista autorizată, Locotenentul sau Comisaru' pot genera copii.");
@@ -475,6 +644,7 @@ public class ArchiveService {
 
     // ---------------------------------------------------------------- envelopes
 
+    @Override
     public boolean packEnvelope(PlayerGateway player, String id, String targetName) {
         if (!canArchive(player) && !canSign(player)) {
             player.tell("Doar Arhivista autorizată, Locotenentul sau Comisaru' pot împacheta acte.");
@@ -555,11 +725,101 @@ public class ArchiveService {
         return true;
     }
 
-    /** Retries pending copy deliveries for a player that came online. */
+    /**
+     * Issues the signed document item to a named online player. The persisted
+     * recipient grant and the DELIVERED record — not item metadata — carry the
+     * read authority; a repeat issue for the same sheet/target delivers nothing.
+     */
+    @Override
+    public boolean issueDocument(PlayerGateway player, String id, String targetName) {
+        ArchiveStore store = ctx.archive().read();
+        ArchiveStore.Sheet sheet = id == null ? null : store.sheets.get(id);
+        if (sheet == null || !"SIGNED".equals(sheet.status) || sheet.revoked
+                || sheet.originId != null
+                || !(canArchive(player) || canSign(player))
+                || !canReadSheet(player, store, sheet)) {
+            player.tell("Actul nu există, nu este semnat sau nu ai acces.");
+            return false;
+        }
+        PlayerGateway target = targetName == null ? null : ctx.server().findPlayer(targetName);
+        if (target == null || target.uuid() == null
+                || target.uuid().equals(player.uuid())) {
+            player.tell("Ținta trebuie să fie un alt jucător online.");
+            return false;
+        }
+        String targetUuid = target.uuid().toString();
+        for (var copy : store.copies) {
+            if (copy != null && "DOCUMENT".equals(copy.kind) && "DELIVERED".equals(copy.status)
+                    && sheet.id.equals(copy.originalId)
+                    && PlayerService.identityMatches(target, copy.recipientUuid, copy.recipientName)) {
+                player.tell("Documentul " + sheet.id + " i-a fost deja emis lui " + target.name() + ".");
+                return false;
+            }
+        }
+        var spec = ItemSpec.of("straja:archive_document", 1)
+                .withData("ArchiveDocumentId", sheet.id)
+                .named("Act — " + sheet.title);
+        if (!target.inventory().canReceive(List.of(spec))) {
+            player.tell("Destinatarul nu are loc pentru document.");
+            return false;
+        }
+        if (!target.giveVerified(spec)) {
+            player.tell("Documentul nu a putut fi livrat; niciun acces nu a fost acordat.");
+            return false;
+        }
+        if (sheet.recipients.stream().noneMatch(r -> r != null
+                && PlayerService.identityMatches(target, r.uuid, r.name))) {
+            var recipient = new ArchiveStore.Recipient();
+            recipient.name = target.name();
+            recipient.key = norm(target.name());
+            recipient.uuid = targetUuid;
+            sheet.recipients.add(recipient);
+        }
+        var copy = new ArchiveStore.Copy();
+        copy.id = "CP-" + (store.nextCopyNumber++);
+        copy.originalId = sheet.id;
+        copy.folderId = sheet.folderId;
+        copy.recipientName = target.name();
+        copy.recipientKey = norm(target.name());
+        copy.recipientUuid = targetUuid;
+        copy.issuerName = player.name();
+        copy.issuerKey = player.uuid() == null ? "" : player.uuid().toString();
+        copy.kind = "DOCUMENT";
+        copy.status = "DELIVERED";
+        copy.createdAt = now();
+        copy.deliveredAt = now();
+        store.copies.add(copy);
+        ctx.archive().write(store);
+        audit.record("archive_document_issue", player.name(), player.uuid().toString(),
+                target.name(), targetUuid, "SUCCESS",
+                "sheetId=" + sheet.id + " copyId=" + copy.id);
+        player.tell("Actul " + sheet.id + " a fost emis pentru " + target.name() + ".");
+        target.tell("Ai primit actul oficial " + sheet.id + " — " + sheet.title + ".");
+        return true;
+    }
+
+    /**
+     * Retries pending copy deliveries for a player that came online. Malformed
+     * records are discarded and audited; a revoked or missing source sheet can
+     * never deliver.
+     */
+    @Override
     public void deliverPending(PlayerGateway player) {
         ArchiveStore store = ctx.archive().read();
         boolean changed = false;
-        for (ArchiveStore.Copy copy : store.copies) {
+        var iterator = store.copies.iterator();
+        while (iterator.hasNext()) {
+            ArchiveStore.Copy copy = iterator.next();
+            boolean malformed = copy == null || copy.originalId == null || copy.originalId.isBlank()
+                    || (copy.recipientUuid == null || copy.recipientUuid.isEmpty())
+                            && (copy.recipientKey == null || copy.recipientKey.isEmpty());
+            if (malformed) {
+                iterator.remove();
+                changed = true;
+                audit.record("archive_delivery", player.name(), player.uuid().toString(),
+                        "", "", "SUCCESS", "malformed_copy_discarded");
+                continue;
+            }
             if (!"PENDING".equals(copy.status)) continue;
             // UUID-pinned recipients match by UUID only; name-only records
             // (offline at creation, or legacy) fall back to the name key.
@@ -568,7 +828,15 @@ public class ArchiveService {
                     : norm(player.name()).equals(copy.recipientKey);
             if (!recipient) continue;
             ArchiveStore.Sheet sheet = store.sheets.get(copy.originalId);
-            if (sheet == null) continue;
+            if (sheet == null || sheet.revoked) {
+                copy.status = "FAILED";
+                copy.deliveryError = sheet == null ? "missing_sheet" : "revoked";
+                changed = true;
+                audit.record("archive_delivery", player.name(), player.uuid().toString(),
+                        copy.recipientName, copy.recipientUuid, "SUCCESS",
+                        "copy_discarded reason=" + copy.deliveryError + " copyId=" + copy.id);
+                continue;
+            }
             ItemSpec stack = "ENVELOPE".equals(copy.kind)
                     ? ItemSpec.of("straja:official_envelope", 1)
                             .withData("ArchiveKind", "ENVELOPE").withData("ArchiveDocumentId", sheet.id)
@@ -580,6 +848,12 @@ public class ArchiveService {
                 copy.deliveredAt = now();
                 changed = true;
                 player.tell("Ai primit documentul arhivat " + sheet.id + " — " + sheet.title + ".");
+            } else {
+                copy.deliveryError = "delivery_failed";
+                changed = true;
+                audit.record("archive_delivery", player.name(), player.uuid().toString(),
+                        copy.recipientName, copy.recipientUuid, "FAILED",
+                        "delivery_failed copyId=" + copy.id);
             }
         }
         if (changed) ctx.archive().write(store);
