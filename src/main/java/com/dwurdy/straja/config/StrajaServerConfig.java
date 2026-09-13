@@ -271,7 +271,7 @@ public final class StrajaServerConfig {
 
         B.push("economy");
         COIN_BRONZE_ITEM = B.comment(
-                        "Item IDs for the four coin denominations (values 1, 10, 100, 1000).",
+                        "Item IDs for the four coin denominations (values 1, 64, 4096, 262144).",
                         "Any mod's items work — the coin provider is unavailable until all",
                         "four IDs resolve in the item registry. Defaults use Ady's Decorations.")
                 .define("bronzeCoin", "adys_decorations:bronze_coin", StrajaServerConfig::isItemId);
@@ -589,9 +589,9 @@ public final class StrajaServerConfig {
 
         p.coinItemIds = new java.util.LinkedHashMap<>();
         p.coinItemIds.put(1, COIN_BRONZE_ITEM.get());
-        p.coinItemIds.put(10, COIN_BRASS_ITEM.get());
-        p.coinItemIds.put(100, COIN_SILVER_ITEM.get());
-        p.coinItemIds.put(1000, COIN_GOLD_ITEM.get());
+        p.coinItemIds.put(64, COIN_BRASS_ITEM.get());
+        p.coinItemIds.put(4096, COIN_SILVER_ITEM.get());
+        p.coinItemIds.put(262144, COIN_GOLD_ITEM.get());
 
         p.salaryPerBlock = mapOrDefault(StrajaPolicies.parseIntMap(SALARY_PER_BLOCK.get()),
                 defaults().salaryPerBlock);

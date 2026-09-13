@@ -13,8 +13,9 @@ import net.minecraft.resources.ResourceLocation;
 
 /**
  * Physical coin economy backed by configured item IDs ([economy] config).
- * Default denominations: bronze=1, brass=10, silver=100, gold=1000
- * (Ady's Decorations items), but any registered item IDs work.
+ * Default denominations (64:1 ladder, §10): bronze=1, brass=64,
+ * silver=4096, gold=262144 (Ady's Decorations items), but any
+ * registered item IDs work.
  * Withdrawals are exact-change aware; deposits carry payout receipts.
  */
 public class ItemCoinCurrencyProvider implements CurrencyProvider {
