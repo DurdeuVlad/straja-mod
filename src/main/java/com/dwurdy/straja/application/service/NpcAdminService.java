@@ -14,10 +14,13 @@ import java.util.Set;
  */
 public class NpcAdminService {
     public static final String RECEPTIONIST = "receptionist";
+    public static final String RECRUITER = "recruiter";
+    public static final String TRAINER = "trainer";
     public static final String SECRETARY = "secretary";
     public static final String JAILER = "jailer";
     public static final String ARCHIVIST = "archivist";
-    public static final Set<String> KNOWN_ROLES = Set.of(RECEPTIONIST, SECRETARY, JAILER, ARCHIVIST);
+    public static final Set<String> KNOWN_ROLES = Set.of(
+            RECEPTIONIST, RECRUITER, TRAINER, SECRETARY, JAILER, ARCHIVIST);
 
     private final StrajaContext ctx;
 
