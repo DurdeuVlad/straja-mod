@@ -55,13 +55,12 @@ public final class StrajaRuntime {
     private StrajaRuntime(MinecraftServer server) {
         this.server = server;
         this.policies = StrajaServerConfig.toPolicies();
+        com.dwurdy.straja.config.NativeWorkflowPolicies.apply(this.policies);
         this.serverGateway = new MinecraftServerGateway(server);
         StoreAccess stores = name -> new NbtStore(StrajaDataProvider.get(server, name));
 
         this.clock = new com.dwurdy.straja.application.port.out.MutableClock();
 
-        // In test mode the server view also sees virtual players so console
-        // scenarios exercise the same findPlayer/notify paths as real players.
         boolean testSurface = policies.testCommandsEnabled && policies.isLocalEnvironment();
         com.dwurdy.straja.application.port.out.ServerGateway serverView = testSurface
                 ? new com.dwurdy.straja.application.port.out.ServerGateway() {
