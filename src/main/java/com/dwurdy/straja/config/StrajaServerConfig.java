@@ -84,6 +84,7 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.IntValue SALARY_WINDOW_MINUTES;
     public static final ModConfigSpec.IntValue SALARY_ACTIVITY_GRACE_SECONDS;
     public static final ModConfigSpec.DoubleValue SALARY_ACTIVITY_MOVE_THRESHOLD;
+    public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> RANK_NAMES;
     public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> PROMOTION_SERVICE_BLOCKS;
 
     public static final ModConfigSpec.IntValue FREE_DUTY_MIN_RANK;
@@ -282,7 +283,7 @@ public final class StrajaServerConfig {
         B.push("salary");
         SALARY_PER_BLOCK = B.comment(
                         "Coins paid per completed service block, per rank.",
-                        "Entries: \"rank=coins\" (rank 1=Junior ... 4=Lieutenant).",
+                        "Entries: \"rank=coins\" (rank 1=Stagiar ... 4=Inspector).",
                         "An empty or fully malformed list falls back to the built-in defaults.")
                 .defineListAllowEmpty(List.of("perBlock"),
                         StrajaPolicies.formatIntMap(defaults.salaryPerBlock),
@@ -291,6 +292,16 @@ public final class StrajaServerConfig {
         SALARY_WINDOW_MINUTES = B.defineInRange("windowMinutes", 1440, 1, 100000);
         SALARY_ACTIVITY_GRACE_SECONDS = B.defineInRange("activityGraceSeconds", 90, 5, 3600);
         SALARY_ACTIVITY_MOVE_THRESHOLD = B.defineInRange("activityMoveThreshold", 0.15, 0.0, 10.0);
+        B.pop();
+
+        B.push("ranks");
+        RANK_NAMES = B.comment(
+                        "Display names per rank level (1=Stagiar ... 4=Inspector).",
+                        "Entries: \"rank=nume\". The Comisar title is a separate",
+                        "personnel flag, not a ladder step.")
+                .defineListAllowEmpty(List.of("names"),
+                        StrajaPolicies.formatIntStringMap(defaults.rankNames),
+                        () -> "1=Stagiar", StrajaServerConfig::isIntStringMapEntry);
         B.pop();
 
         B.push("promotion");
@@ -588,6 +599,8 @@ public final class StrajaServerConfig {
         p.salaryWindowMinutes = SALARY_WINDOW_MINUTES.get();
         p.salaryActivityGraceSeconds = SALARY_ACTIVITY_GRACE_SECONDS.get();
         p.salaryActivityMoveThreshold = SALARY_ACTIVITY_MOVE_THRESHOLD.get();
+        p.rankNames = mapOrDefault(StrajaPolicies.parseIntStringMap(RANK_NAMES.get()),
+                defaults().rankNames);
         p.promotionServiceBlocks = mapOrDefault(StrajaPolicies.parseIntMap(PROMOTION_SERVICE_BLOCKS.get()),
                 defaults().promotionServiceBlocks);
         p.freeDutyMinRank = FREE_DUTY_MIN_RANK.get();
@@ -715,6 +728,18 @@ public final class StrajaServerConfig {
         try {
             Integer.parseInt(s.substring(0, sep).trim());
             Integer.parseInt(s.substring(sep + 1).trim());
+            return true;
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
+    private static boolean isIntStringMapEntry(Object o) {
+        if (!(o instanceof String s)) return false;
+        int sep = s.indexOf('=');
+        if (sep <= 0 || sep == s.length() - 1) return false;
+        try {
+            Integer.parseInt(s.substring(0, sep).trim());
             return true;
         } catch (NumberFormatException e) {
             return false;

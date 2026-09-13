@@ -123,4 +123,20 @@ class PolicyServiceTest {
         policies.get(c, "timers.quizCooldownMinutes");
         assertTrue(c.told("suprascris în test-policies.yaml"));
     }
+
+    @Test
+    void rankNamesRoundTripAndApply() {
+        assertEquals("Stagiar", ctx.policies().rankName(1));
+        assertEquals("Inspector", ctx.policies().rankName(4));
+        assertEquals("Civil", ctx.policies().rankName(0), "unlisted levels fall back to the enum name");
+
+        TestPlayer c = commissioner();
+        policies.set(c, "rank.names", "1=Novice;2=Străjer;3=Sergent Major;4=Inspector");
+        assertEquals("Novice", ctx.policies().rankName(1), "display override applied live");
+        assertEquals("Sergent Major", ctx.policies().rankName(3));
+        assertEquals("1=Novice;2=Străjer;3=Sergent Major;4=Inspector", store.map.get("rank.names"));
+
+        policies.reset(c, "rank.names");
+        assertEquals("Stagiar", ctx.policies().rankName(1), "reset restores TOML baseline");
+    }
 }

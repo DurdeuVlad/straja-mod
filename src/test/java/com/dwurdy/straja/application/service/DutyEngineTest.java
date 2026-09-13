@@ -18,7 +18,7 @@ class DutyEngineTest {
 
     private GuardState juniorOnDuty() {
         GuardState state = new GuardState();
-        state.rank = Rank.JUNIOR.level();
+        state.rank = Rank.STAGIAR.level();
         state.invited = true;
         state.quizPassed = true;
         Result result = DutyEngine.startDuty(state, ROUTE, 0, Map.of(), POLICY);
@@ -33,7 +33,7 @@ class DutyEngineTest {
         GuardState state = new GuardState();
         assertEquals("rank_required", DutyEngine.startDuty(state, ROUTE, 0, Map.of(), POLICY).code());
 
-        state.rank = Rank.JUNIOR.level();
+        state.rank = Rank.STAGIAR.level();
         state.suspended = true;
         assertEquals("suspended", DutyEngine.startDuty(state, ROUTE, 0, Map.of(), POLICY).code());
 
@@ -45,7 +45,7 @@ class DutyEngineTest {
     @Test
     void startDutyRejectsDuplicateOrShortRoutes() {
         GuardState state = new GuardState();
-        state.rank = Rank.JUNIOR.level();
+        state.rank = Rank.STAGIAR.level();
         assertEquals("route_invalid", DutyEngine.startDuty(state,
                 List.of("a", "a", "b", "c"), 0, Map.of(), POLICY).code());
         assertEquals("route_invalid", DutyEngine.startDuty(state, List.of("a", "b", "c"), 0, Map.of(), POLICY).code());
@@ -54,7 +54,7 @@ class DutyEngineTest {
     @Test
     void startDutySetsDeadlineFromMissionMinutes() {
         GuardState state = new GuardState();
-        state.rank = Rank.JUNIOR.level();
+        state.rank = Rank.STAGIAR.level();
         var result = DutyEngine.startDuty(state, ROUTE, 1_000, Map.of("checkpoint_1", 45), POLICY);
         assertTrue(result.ok());
         assertEquals(1_000 + 45 * DutyEngine.MINUTE_MS, state.deadlineAt);
@@ -69,7 +69,7 @@ class DutyEngineTest {
         custom.checkpointDeadlineMinutes = 60;
         custom.salaryBlockMinutes = 5;
         GuardState state = new GuardState();
-        state.rank = Rank.JUNIOR.level();
+        state.rank = Rank.STAGIAR.level();
         var result = DutyEngine.startDuty(state, ROUTE, 0, Map.of(), custom);
         assertTrue(result.ok());
         assertEquals(60 * DutyEngine.MINUTE_MS, state.deadlineAt);
@@ -195,7 +195,7 @@ class DutyEngineTest {
         assertTrue(state.resigned);
         assertEquals(0, state.rank);
         assertFalse(state.invited);
-        assertEquals(Rank.JUNIOR.level(), state.formerRank);
+        assertEquals(Rank.STAGIAR.level(), state.formerRank);
     }
 
     @Test

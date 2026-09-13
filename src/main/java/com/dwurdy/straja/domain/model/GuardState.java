@@ -23,6 +23,7 @@ public class GuardState {
     public boolean suspended = false;
     public boolean fired = false;
     public String nativeFaction = null;        // self-declared origin faction; Straja applies while on duty
+    public java.util.Set<String> specializations = new java.util.LinkedHashSet<>(); // independent functions: Instructor, Recrutor, … (§2)
     public boolean duty = false;
     public String mode = "OFF_DUTY";           // NORMAL | SPECIAL | FREE | OFF_DUTY
     public String patrolState = "OFF";         // ACTIVE | WAITING | SUSPENDED | OFF
@@ -102,7 +103,7 @@ public class GuardState {
         if (resigned) return Lifecycle.RESIGNED_COOLDOWN;
         if (suspended) return Lifecycle.SUSPENDED;
         if (resignationPending) return Lifecycle.RESIGNATION_NOTICE;
-        if (rank >= Rank.JUNIOR.level()) return duty ? Lifecycle.ACTIVE_ON_DUTY : Lifecycle.ACTIVE_OFF_DUTY;
+        if (rank >= Rank.STAGIAR.level()) return duty ? Lifecycle.ACTIVE_ON_DUTY : Lifecycle.ACTIVE_OFF_DUTY;
         if (invited) return Lifecycle.INVITED;
         return Lifecycle.CIVIL;
     }

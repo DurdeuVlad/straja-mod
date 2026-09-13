@@ -117,6 +117,18 @@ public final class StrajaCommands {
                                 .executes(c -> StrajaRuntime.get().guards()
                                         .setNativeFactionFor(actor(c), target(c, "player"),
                                                 StringArgumentType.getString(c, "name")) ? 1 : 0)))));
+        root.then(adminOnly(Commands.literal("specialization")
+                .then(Commands.argument("player", EntityArgument.player())
+                        .then(Commands.literal("add")
+                                .then(Commands.argument("name", StringArgumentType.greedyString())
+                                        .executes(c -> StrajaRuntime.get().guards()
+                                                .setSpecialization(actor(c), target(c, "player"),
+                                                        StringArgumentType.getString(c, "name"), true) ? 1 : 0)))
+                        .then(Commands.literal("remove")
+                                .then(Commands.argument("name", StringArgumentType.greedyString())
+                                        .executes(c -> StrajaRuntime.get().guards()
+                                                .setSpecialization(actor(c), target(c, "player"),
+                                                        StringArgumentType.getString(c, "name"), false) ? 1 : 0))))));
 
         // setup
         var setCheckpoint = Commands.literal("set-checkpoint")
@@ -899,7 +911,7 @@ public final class StrajaCommands {
                 // roleplay service lanes
                 "mission", "cuffs", "prison", "fine", "complaint", "room", "archive",
                 // typed setup and administrator operations
-                "promote", "demote", "suspend", "fire", "reinstate", "faction",
+                "promote", "demote", "suspend", "fire", "reinstate", "faction", "specialization",
                 "set-checkpoint", "set-mission-time", "set-location", "setup", "policy",
                 "migrate", "backup", "npc", "debug", "test");
 

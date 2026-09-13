@@ -49,8 +49,8 @@ class CivicServiceTest {
         senior = server.add("senior1");
         guard = server.add("guard1");
         civ = server.add("civ1");
-        setRank(lt, Rank.LIEUTENANT);
-        setRank(senior, Rank.SENIOR);
+        setRank(lt, Rank.INSPECTOR);
+        setRank(senior, Rank.SERGENT);
         setRank(guard, Rank.GUARD);
         setDuty(guard, true);
         setDuty(lt, true);
@@ -253,7 +253,7 @@ class CivicServiceTest {
     @Test
     void hearingWarrantRequiresAuthorityAndDedupes() {
         assertFalse(fines.issueHearingWarrant(guard, civ, "motiv"));      // guard rank too low
-        assertTrue(guard.told("Locotenent"));
+        assertTrue(guard.told("Inspector"));
         assertTrue(fines.issueHearingWarrant(lt, civ, "motiv audiere"));  // active lt ok
         var task = ctx.fines().read().tasks.get(0);
         assertEquals("HEARING_WARRANT", task.kind);
@@ -897,7 +897,7 @@ class CivicServiceTest {
         assertTrue(room.hasDoor);
         assertFalse(world.signs.isEmpty());
         // junior+ eligible gets the room
-        setRank(civ, Rank.JUNIOR);
+        setRank(civ, Rank.STAGIAR);
         String result = rooms.assignAutomatically(civ);
         assertTrue(result.startsWith("ASSIGNED"));
         assertNotNull(rooms.assignedRoom(civ));
@@ -913,7 +913,7 @@ class CivicServiceTest {
         world.room("minecraft:overworld", 10, 60, 10, 14, 64, 14, 10, 61, 12);
         boss.x = 12; boss.y = 61; boss.z = 12;
         assertNotNull(rooms.discover(boss, "camera_protected"));
-        setRank(civ, Rank.JUNIOR);
+        setRank(civ, Rank.STAGIAR);
         assertTrue(rooms.assignAutomatically(civ).startsWith("ASSIGNED"));
 
         var stranger = server.add("container_griefer");
@@ -930,9 +930,9 @@ class CivicServiceTest {
         rooms.discover(boss, "camera_1");
         var civ2 = server.add("civ2");
         var civ3 = server.add("civ3");
-        setRank(civ, Rank.JUNIOR);
-        setRank(civ2, Rank.JUNIOR);
-        setRank(civ3, Rank.JUNIOR);
+        setRank(civ, Rank.STAGIAR);
+        setRank(civ2, Rank.STAGIAR);
+        setRank(civ3, Rank.STAGIAR);
         // civ takes the only room; civ2 and civ3 queue
         assertTrue(rooms.assignAutomatically(civ).startsWith("ASSIGNED"));
         assertTrue(rooms.assignAutomatically(civ2).startsWith("WAITING:1"));
@@ -944,7 +944,7 @@ class CivicServiceTest {
         // FIFO: an offline first entry keeps the next free room reserved
         civ3.online = false;
         var civ4 = server.add("civ4");
-        setRank(civ4, Rank.JUNIOR);
+        setRank(civ4, Rank.STAGIAR);
         assertTrue(rooms.assignAutomatically(civ4).startsWith("WAITING:2"));
         rooms.releaseFor(civ2);
         rooms.processWaitlist();
@@ -962,8 +962,8 @@ class CivicServiceTest {
         boss.x = 12; boss.y = 61; boss.z = 12;
         rooms.discover(boss, "camera_1");
         var civ2 = server.add("civ2");
-        setRank(civ, Rank.JUNIOR);
-        setRank(civ2, Rank.JUNIOR);
+        setRank(civ, Rank.STAGIAR);
+        setRank(civ2, Rank.STAGIAR);
         civ2.online = false;
         // civ takes the only room; offline civ2 queues first
         assertTrue(rooms.assignAutomatically(civ).startsWith("ASSIGNED"));
@@ -985,8 +985,8 @@ class CivicServiceTest {
         boss.x = 12; boss.y = 61; boss.z = 12;
         rooms.discover(boss, "camera_1");
         var civ2 = server.add("civ2");
-        setRank(civ, Rank.JUNIOR);
-        setRank(civ2, Rank.JUNIOR);
+        setRank(civ, Rank.STAGIAR);
+        setRank(civ2, Rank.STAGIAR);
         assertTrue(rooms.assignAutomatically(civ).startsWith("ASSIGNED"));
         // repeated waits stay a single entry
         assertTrue(rooms.assignAutomatically(civ2).startsWith("WAITING:1"));

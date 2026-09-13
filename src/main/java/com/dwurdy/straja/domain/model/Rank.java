@@ -1,12 +1,16 @@
 package com.dwurdy.straja.domain.model;
 
-/** Straja rank ladder. Numeric levels match the reference persistence format. */
+/**
+ * Straja rank ladder per docs/gameplay-decisions.md §2:
+ * Stagiar → Străjer → Sergent → Inspector. Comisar is a personnel flag,
+ * not a ladder step. Numeric levels match the persisted format.
+ */
 public enum Rank {
     CIVIL(0, "Civil"),
-    JUNIOR(1, "Străjer Junior"),
+    STAGIAR(1, "Stagiar"),
     GUARD(2, "Străjer"),
-    SENIOR(3, "Străjer Senior"),
-    LIEUTENANT(4, "Locotenent");
+    SERGENT(3, "Sergent"),
+    INSPECTOR(4, "Inspector");
 
     private final int level;
     private final String displayName;
@@ -20,6 +24,7 @@ public enum Rank {
         return level;
     }
 
+    /** Static fallback name — prefer {@code StrajaPolicies.rankName(level)} for display. */
     public String displayName() {
         return displayName;
     }

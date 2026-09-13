@@ -163,7 +163,7 @@ public class EquipmentService {
         state.kitClaimedRank = state.rank;
         state.regearPending = false;
         ctx.players().write(player.uuid(), state);
-        player.tell("Echipamentul pentru " + com.dwurdy.straja.domain.model.Rank.of(state.rank).displayName()
+        player.tell("Echipamentul pentru " + ctx.policies().rankName(state.rank)
                 + " a fost acordat.");
         return true;
     }

@@ -61,7 +61,7 @@ class GuardServiceTest {
         p.z = 0;
     }
 
-    private TestPlayer recruitToJunior() {
+    private TestPlayer recruitToStagiar() {
         TestPlayer c = commissioner();
         TestPlayer p = server.add("recruit");
         assertTrue(guards.invite(c, p), "commissioner invite failed");
@@ -105,11 +105,11 @@ class GuardServiceTest {
 
     @Test
     void fullQuizPromotesToJunior() {
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         var state = players.state(p.uuid());
-        assertEquals(Rank.JUNIOR.level(), state.rank);
+        assertEquals(Rank.STAGIAR.level(), state.rank);
         assertTrue(state.quizPassed);
-        assertTrue(p.told("Străjer Junior"));
+        assertTrue(p.told("Stagiar"));
     }
 
     @Test
@@ -245,7 +245,7 @@ class GuardServiceTest {
 
     @Test
     void trainingPromptPersistsAndBoundAnswerPasses() {
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         var prompt = guards.currentQuizPrompt(p).orElseThrow();
         assertEquals("Instruire Straja", prompt.title());
         assertEquals(prompt.questionId(), players.state(p.uuid()).trainingQuizId,
@@ -276,7 +276,7 @@ class GuardServiceTest {
     @Test
     void stopDutyReclaimsAllServiceEquipment() {
         placeCheckpoints();
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         guards.startDuty(p);
         assertNotNull(players.state(p.uuid()).serviceEquipment);
         guards.stopDuty(p);
@@ -294,7 +294,7 @@ class GuardServiceTest {
     @Test
     void serviceLeaseExpiryEndsDutyAndReclaims() {
         placeCheckpoints();
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         guards.startDuty(p);
         var state = players.state(p.uuid());
         assertTrue(state.duty);
@@ -314,7 +314,7 @@ class GuardServiceTest {
     @Test
     void serviceLeaseDoesNotExpireEarly() {
         placeCheckpoints();
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         guards.startDuty(p);
         var state = players.state(p.uuid());
         state.serviceEquipment.issuedAt =
@@ -329,7 +329,7 @@ class GuardServiceTest {
     @Test
     void recoverOnLoginClosesDutyLeftOverFromPreviousBoot() {
         placeCheckpoints();
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         var boot1 = new GuardService(ctx, players, new AuditService(ctx),
                 new EquipmentService(ctx), () -> "boot-1");
         boot1.recoverOnLogin(p);
@@ -352,7 +352,7 @@ class GuardServiceTest {
     @Test
     void partialEquipmentIssueChargesNoDebtForUndeliveredItems() {
         placeCheckpoints();
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         // promote to GUARD so the spec has 3 items (sword, baton, cuffs)
         var state = players.state(p.uuid());
         state.rank = Rank.GUARD.level();
@@ -383,7 +383,7 @@ class GuardServiceTest {
     @Test
     void failedEquipmentIssueWithNoFreeSlotsChargesNothing() {
         placeCheckpoints();
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         for (int i = 0; i < p.inventory.slots(); i++) {
             p.inventory.slots.set(i, new com.dwurdy.straja.application.port.out.ItemView(
                     "minecraft:stone", 64, 64, java.util.Map.of()));
@@ -399,7 +399,7 @@ class GuardServiceTest {
     @Test
     void missingEquipmentBecomesDebt() {
         placeCheckpoints();
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         guards.startDuty(p);
         // lose the issued sword: empty the whole inventory before stopping
         for (int i = 0; i < p.inventory.slots(); i++) p.inventory.extract(i, 64);
@@ -414,7 +414,7 @@ class GuardServiceTest {
 
     @Test
     void startDutyRefusesWithoutCheckpoints() {
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         guards.startDuty(p);
         assertFalse(players.state(p.uuid()).duty);
         assertTrue(p.told("Checkpoint-urile nu sunt configurate"));
@@ -423,7 +423,7 @@ class GuardServiceTest {
     @Test
     void startDutyBeginsPatrolAndIssuesEquipment() {
         placeCheckpoints();
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         standAt(p, 1);
         guards.startDuty(p);
         var state = players.state(p.uuid());
@@ -436,7 +436,7 @@ class GuardServiceTest {
     @Test
     void checkpointActivationFollowsRoute() {
         placeCheckpoints();
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         standAt(p, 1);
         guards.startDuty(p);
         // wrong checkpoint refused
@@ -452,7 +452,7 @@ class GuardServiceTest {
     @Test
     void antiAfkStopsAccrualButKeepsPatrolTimers() {
         placeCheckpoints();
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         standAt(p, 1);
         guards.startDuty(p);
         // player idles for 30 minutes of wall time
@@ -468,7 +468,7 @@ class GuardServiceTest {
     @Test
     void movementKeepsAccrual() {
         placeCheckpoints();
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         standAt(p, 1);
         guards.startDuty(p);
         // move every ~30s for 10 minutes -> 1 salary block
@@ -487,7 +487,7 @@ class GuardServiceTest {
     @Test
     void salaryPayoutIsIdempotent() {
         placeCheckpoints();
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         standAt(p, 1);
         guards.startDuty(p);
         for (int i = 0; i < 20; i++) {
@@ -506,7 +506,7 @@ class GuardServiceTest {
 
     @Test
     void salaryInProgressWithoutReceiptLocksForReview() {
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         var state = players.state(p.uuid());
         state.unpaidSalary = 50;
         state.salaryPaymentStatus = "IN_PROGRESS";
@@ -528,7 +528,7 @@ class GuardServiceTest {
 
     @Test
     void salaryInProgressWithReceiptMarksPaid() {
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         String payoutId = "salary:" + p.uuid() + ":50";
         var state = players.state(p.uuid());
         state.unpaidSalary = 50;
@@ -548,7 +548,7 @@ class GuardServiceTest {
 
     @Test
     void salarySettlesEquipmentDebtFirst() {
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         var state = players.state(p.uuid());
         state.unpaidSalary = 100;
         state.equipmentDebt = 40;
@@ -563,14 +563,14 @@ class GuardServiceTest {
 
     @Test
     void foodRequiresActiveDuty() {
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         guards.food(p);
         assertTrue(p.told("numai în timpul unei ture active"));
     }
 
     @Test
     void kitClaimsOncePerRank() {
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         guards.kit(p);
         // junior kit is 6 items, but the iron sword is leased as service equipment instead
         assertEquals(5, p.inventory.slots.stream().filter(s -> !s.isEmpty()).count());
@@ -583,7 +583,7 @@ class GuardServiceTest {
     @Test
     void statusChangeFiresAllRegisteredListeners() {
         TestPlayer c = commissioner();
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         var calls = new java.util.ArrayList<String>();
         guards.onStatusChange((target, reason) -> calls.add("first:" + reason));
         guards.onStatusChange((target, reason) -> calls.add("second:" + reason));
@@ -596,7 +596,7 @@ class GuardServiceTest {
 
     @Test
     void resignRequiresNoticeThenConfirm() {
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         guards.resign(p, null);
         var state = players.state(p.uuid());
         assertTrue(state.resignationPending);
@@ -611,7 +611,7 @@ class GuardServiceTest {
 
     @Test
     void resignationFiresStatusChangeHooks() {
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         var calls = new java.util.ArrayList<String>();
         guards.onStatusChange((target, reason) -> calls.add(target.uuid() + ":" + reason));
         guards.resign(p, null);
@@ -622,10 +622,10 @@ class GuardServiceTest {
     }
 
     @Test
-    void rejoinCapsAtSenior() {
-        TestPlayer p = recruitToJunior();
+    void rejoinCapsAtSergent() {
+        TestPlayer p = recruitToStagiar();
         var state = players.state(p.uuid());
-        state.rank = Rank.LIEUTENANT.level();
+        state.rank = Rank.INSPECTOR.level();
         players.save(p.uuid(), state);
         guards.resign(p, null);
         clock.advance(ctx.policies().resignationNoticeMinutes * 60_000L + 1);
@@ -633,7 +633,7 @@ class GuardServiceTest {
         clock.advance(ctx.policies().resignationCooldownDays * 24L * 3600_000L + 1);
         guards.rejoin(p);
         state = players.state(p.uuid());
-        assertEquals(Rank.SENIOR.level(), state.rank);
+        assertEquals(Rank.SERGENT.level(), state.rank);
         assertFalse(state.resigned);
     }
 
@@ -642,9 +642,9 @@ class GuardServiceTest {
     @Test
     void promoteRequiresServiceBlocks() {
         TestPlayer c = commissioner();
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         guards.promote(c, p); // 60 blocks required for GUARD
-        assertEquals(Rank.JUNIOR.level(), players.state(p.uuid()).rank);
+        assertEquals(Rank.STAGIAR.level(), players.state(p.uuid()).rank);
         assertTrue(c.told("blocuri de serviciu"));
         var state = players.state(p.uuid());
         state.serviceBlocks = 60;
@@ -656,7 +656,7 @@ class GuardServiceTest {
     @Test
     void fireResetsEverything() {
         TestPlayer c = commissioner();
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         guards.fire(c, p);
         var state = players.state(p.uuid());
         assertTrue(state.fired);
@@ -668,7 +668,7 @@ class GuardServiceTest {
     void lieutenantHasElevatedPermissionButNotCommissioner() {
         TestPlayer lt = server.add("locotenent");
         var state = players.state(lt.uuid());
-        state.rank = Rank.LIEUTENANT.level();
+        state.rank = Rank.INSPECTOR.level();
         players.save(lt.uuid(), state);
         assertEquals(PermissionLevel.LIEUTENANT, players.permissionLevel(lt, players.state(lt.uuid())));
         assertFalse(players.isCommissioner(lt));
@@ -701,7 +701,7 @@ class GuardServiceTest {
 
     @Test
     void dutyViewForEligibleOffDutyGuard() {
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         var view = guards.dutyView(p);
         assertTrue(view.activeGuard());
         assertTrue(view.canStart());
@@ -721,7 +721,7 @@ class GuardServiceTest {
     @Test
     void dutyViewOnActiveDutyExposesCheckpointAndStop() {
         placeCheckpoints();
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         standAt(p, 1);
         guards.startDuty(p);
         var view = guards.dutyView(p);
@@ -737,7 +737,7 @@ class GuardServiceTest {
     @Test
     void dutyViewWaitingPatrolHidesCheckpoint() {
         placeCheckpoints();
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         standAt(p, 1);
         guards.startDuty(p);
         guards.checkpoint(p, "checkpoint_1");
@@ -750,7 +750,7 @@ class GuardServiceTest {
     @Test
     void dutyViewSuspendedAndFiredCannotStart() {
         placeCheckpoints();
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         var state = players.state(p.uuid());
         state.suspended = true;
         players.save(p.uuid(), state);
@@ -766,7 +766,7 @@ class GuardServiceTest {
 
     @Test
     void dutyViewResignationPendingLifecycle() {
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         guards.beginResignation(p);
         var view = guards.dutyView(p);
         assertTrue(view.canCancelResignation());
@@ -783,7 +783,7 @@ class GuardServiceTest {
 
     @Test
     void dutyViewCancelResignationRestoresEligibility() {
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         guards.beginResignation(p);
         guards.cancelResignation(p);
         var view = guards.dutyView(p);
@@ -794,7 +794,7 @@ class GuardServiceTest {
 
     @Test
     void dutyViewResignedExposesRejoinOnlyAfterCooldown() {
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         guards.beginResignation(p);
         clock.advance(ctx.policies().resignationNoticeMinutes * 60_000L + 1);
         guards.confirmResignation(p);
@@ -811,7 +811,7 @@ class GuardServiceTest {
     @Test
     void checkpointRejectsWrongLocationAndUnknownId() {
         placeCheckpoints();
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         standAt(p, 1);
         guards.startDuty(p);
         p.x = 100;
@@ -827,7 +827,7 @@ class GuardServiceTest {
 
     @Test
     void setupErrorDoesNotAdvertiseTypedCommand() {
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         guards.startDuty(p);
         assertTrue(p.told("cele patru puncte de patrulare"));
         assertFalse(p.messages.stream().anyMatch(m -> m.contains("/straja")),
@@ -837,7 +837,7 @@ class GuardServiceTest {
     @Test
     void successfulDutyActionsWriteAudit() {
         placeCheckpoints();
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         standAt(p, 1);
         guards.startDuty(p);
         assertTrue(audited("duty_start"));
@@ -859,7 +859,7 @@ class GuardServiceTest {
     // ------------------------------------------------------------ free duty
 
     private TestPlayer guardAtRank(int rank) {
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         var state = players.state(p.uuid());
         state.rank = rank;
         players.save(p.uuid(), state);
@@ -869,7 +869,7 @@ class GuardServiceTest {
     @Test
     void seniorStartsFreeDutyWithoutConfiguredCheckpoints() {
         // No checkpoints placed at all — patrol guards are blocked, seniors are not.
-        TestPlayer senior = guardAtRank(Rank.SENIOR.level());
+        TestPlayer senior = guardAtRank(Rank.SERGENT.level());
         guards.startDuty(senior);
         var state = players.state(senior.uuid());
         assertTrue(state.duty, "senior must start a free shift without checkpoints");
@@ -889,7 +889,7 @@ class GuardServiceTest {
 
     @Test
     void juniorStillRequiresPatrolRoute() {
-        TestPlayer junior = recruitToJunior();
+        TestPlayer junior = recruitToStagiar();
         guards.startDuty(junior);
         assertFalse(players.state(junior.uuid()).duty);
         assertTrue(junior.told("cele patru puncte de patrulare"));
@@ -897,7 +897,7 @@ class GuardServiceTest {
 
     @Test
     void freeDutyAccruesPerMinecraftDayAndIgnoresAfkGate() {
-        TestPlayer senior = guardAtRank(Rank.SENIOR.level());
+        TestPlayer senior = guardAtRank(Rank.SERGENT.level());
         guards.startDuty(senior);
         long dayMs = ctx.policies().minecraftDayMinutes * 60_000L;
         // Well beyond the anti-AFK grace, with zero movement — trusted ranks still accrue.
@@ -905,14 +905,14 @@ class GuardServiceTest {
         guards.tickPlayerDuty(senior);
         var state = players.state(senior.uuid());
         assertTrue(state.duty);
-        assertEquals(ctx.policies().freeDutySalaryPerDay.get(Rank.SENIOR.level()).intValue(),
+        assertEquals(ctx.policies().freeDutySalaryPerDay.get(Rank.SERGENT.level()).intValue(),
                 state.unpaidSalary, "one Minecraft day of free duty pays the daily rate");
         assertFalse(state.salaryActivityPaused, "trusted ranks never hit the AFK salary gate");
     }
 
     @Test
     void freeDutyEndsAtWill() {
-        TestPlayer senior = guardAtRank(Rank.SENIOR.level());
+        TestPlayer senior = guardAtRank(Rank.SERGENT.level());
         guards.startDuty(senior);
         clock.advance(5 * 60_000L);
         guards.stopDuty(senior);
@@ -924,7 +924,7 @@ class GuardServiceTest {
 
     @Test
     void freeDutyEquipmentLeaseStillEndsShift() {
-        TestPlayer senior = guardAtRank(Rank.SENIOR.level());
+        TestPlayer senior = guardAtRank(Rank.SERGENT.level());
         guards.startDuty(senior);
         var state = players.state(senior.uuid());
         state.serviceEquipment.issuedAt =
@@ -989,27 +989,27 @@ class GuardServiceTest {
 
     @Test
     void trainerPromotionRequiresConfiguredBlocks() {
-        TestPlayer p = recruitToJunior();
-        passModulesUpTo(p, Rank.JUNIOR.level());
+        TestPlayer p = recruitToStagiar();
+        passModulesUpTo(p, Rank.STAGIAR.level());
         setBlocks(p, 30);
         guards.requestPromotion(p);
-        assertEquals(Rank.JUNIOR.level(), players.state(p.uuid()).rank);
+        assertEquals(Rank.STAGIAR.level(), players.state(p.uuid()).rank);
         assertTrue(p.told("puncte de serviciu"));
     }
 
     @Test
     void trainerPromotionRequiresFinishedModules() {
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         setBlocks(p, 500);
         guards.requestPromotion(p);
-        assertEquals(Rank.JUNIOR.level(), players.state(p.uuid()).rank);
+        assertEquals(Rank.STAGIAR.level(), players.state(p.uuid()).rank);
         assertTrue(p.told("module rămase"));
     }
 
     @Test
     void trainerPromotesWhenBlocksAndModulesComplete() {
-        TestPlayer p = recruitToJunior();
-        passModulesUpTo(p, Rank.JUNIOR.level());
+        TestPlayer p = recruitToStagiar();
+        passModulesUpTo(p, Rank.STAGIAR.level());
         setBlocks(p, ctx.policies().promotionServiceBlocks.get(2));
         guards.requestPromotion(p);
         var state = players.state(p.uuid());
@@ -1020,11 +1020,11 @@ class GuardServiceTest {
 
     @Test
     void trainerCannotPromoteToUnconfiguredRank() {
-        TestPlayer senior = guardAtRank(Rank.SENIOR.level());
-        passModulesUpTo(senior, Rank.SENIOR.level());
+        TestPlayer senior = guardAtRank(Rank.SERGENT.level());
+        passModulesUpTo(senior, Rank.SERGENT.level());
         setBlocks(senior, 9999);
         guards.requestPromotion(senior);
-        assertEquals(Rank.SENIOR.level(), players.state(senior.uuid()).rank,
+        assertEquals(Rank.SERGENT.level(), players.state(senior.uuid()).rank,
                 "ranks without a configured threshold stay a commissioner decision");
         assertTrue(senior.told("decizia Comisarului"));
     }
@@ -1035,24 +1035,24 @@ class GuardServiceTest {
         guards.requestPromotion(civilian);
         assertTrue(civilian.told("permite avansarea"));
 
-        TestPlayer p = recruitToJunior();
-        passModulesUpTo(p, Rank.JUNIOR.level());
+        TestPlayer p = recruitToStagiar();
+        passModulesUpTo(p, Rank.STAGIAR.level());
         setBlocks(p, 500);
         var state = players.state(p.uuid());
         state.suspended = true;
         players.save(p.uuid(), state);
         guards.requestPromotion(p);
-        assertEquals(Rank.JUNIOR.level(), players.state(p.uuid()).rank);
+        assertEquals(Rank.STAGIAR.level(), players.state(p.uuid()).rank);
     }
 
     @Test
     void trainingViewReflectsEligibility() {
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         var view = guards.trainingView(p);
         assertEquals(2, view.nextRank());
         assertFalse(view.canPromote(), "pending modules block promotion");
 
-        passModulesUpTo(p, Rank.JUNIOR.level());
+        passModulesUpTo(p, Rank.STAGIAR.level());
         setBlocks(p, ctx.policies().promotionServiceBlocks.get(2));
         view = guards.trainingView(p);
         assertTrue(view.canPromote());
@@ -1061,7 +1061,7 @@ class GuardServiceTest {
 
     @Test
     void showProgressReportsPointsAndNextRank() {
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         setBlocks(p, 10);
         guards.showProgress(p);
         assertTrue(p.told("puncte de serviciu: 10"));
@@ -1070,7 +1070,7 @@ class GuardServiceTest {
 
     @Test
     void trainerHandsManualOnce() {
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         guards.giveManual(p);
         assertEquals(1, countItem(p, ctx.policies().trainingManualItem));
         guards.giveManual(p);
@@ -1092,7 +1092,7 @@ class GuardServiceTest {
 
     @Test
     void trainerManualRespectsFullInventory() {
-        TestPlayer p = recruitToJunior();
+        TestPlayer p = recruitToStagiar();
         for (int i = 0; i < p.inventory.slots(); i++) {
             p.inventory.insert(new com.dwurdy.straja.application.port.out.ItemView(
                     "minecraft:stone", 64, 64, java.util.Map.of()));

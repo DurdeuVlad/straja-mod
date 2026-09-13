@@ -191,6 +191,18 @@ final class TestCommands {
                                 .executes(ctx -> run(ctx, runtime -> send(ctx,
                                         "faction=" + runtime.guards().declareNativeFaction(player(ctx, runtime),
                                                 StringArgumentType.getString(ctx, "name"))))))));
+        test.then(Commands.literal("specialization")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("target", StringArgumentType.word())
+                                .then(Commands.argument("op", StringArgumentType.word())
+                                        .then(Commands.argument("name", StringArgumentType.greedyString())
+                                                .executes(ctx -> run(ctx, runtime -> send(ctx,
+                                                        "specialization=" + runtime.guards().setSpecialization(
+                                                                player(ctx, runtime),
+                                                                playerArg(ctx, runtime, "target"),
+                                                                StringArgumentType.getString(ctx, "name"),
+                                                                "add".equalsIgnoreCase(StringArgumentType
+                                                                        .getString(ctx, "op")))))))))));
         test.then(Commands.literal("quiz")
                 .then(Commands.argument("id", StringArgumentType.word())
                         .then(Commands.argument("answer", StringArgumentType.greedyString())
@@ -957,6 +969,8 @@ final class TestCommands {
             case "resigned" -> String.valueOf(state.resigned);
             case "health" -> String.valueOf(player.health());
             case "coins" -> String.valueOf(runtime.context().currency().balanceOf(player));
+            case "specializations" -> state.specializations == null ? "null"
+                    : String.join(",", state.specializations);
             default -> "?";
         };
     }

@@ -116,7 +116,7 @@ public class MissionService implements MissionRoleplayUseCase {
             return "self_or_offline";
         }
         GuardState targetState = players.state(target.uuid());
-        if (targetState.rank < Rank.JUNIOR.level() || targetState.resigned || targetState.fired
+        if (targetState.rank < Rank.STAGIAR.level() || targetState.resigned || targetState.fired
                 || targetState.suspended || targetState.resignationPending) return "inactive_target";
         if (!players.isCommissioner(issuer)) {
             GuardState issuerState = players.state(issuer.uuid());
@@ -140,7 +140,7 @@ public class MissionService implements MissionRoleplayUseCase {
     }
 
     private boolean scopeValid(PlayerGateway issuer, int minimumRank, int maxAssignees) {
-        if (minimumRank < Rank.JUNIOR.level() || minimumRank > Rank.LIEUTENANT.level()) {
+        if (minimumRank < Rank.STAGIAR.level() || minimumRank > Rank.INSPECTOR.level()) {
             issuer.tell("Rangul minim trebuie să fie junior, străjer, senior sau locotenent.");
             return false;
         }
@@ -213,7 +213,7 @@ public class MissionService implements MissionRoleplayUseCase {
 
     public void giveCarnet(PlayerGateway player) {
         if (!missionAuthority(player)) {
-            player.tell("Carnetul de Misiuni este disponibil doar Locotenentului și Comisarului.");
+            player.tell("Carnetul de Misiuni este disponibil doar Inspectorului și Comisarului.");
             return;
         }
         player.give(ItemSpec.of(ORDER_BOOK, 1).named("Carnetul de Ordine"));
@@ -232,7 +232,7 @@ public class MissionService implements MissionRoleplayUseCase {
         }
         player.tell("Ordin: " + draft.minutes + " min, reward " + draft.reward + " monede, începe "
                 + draft.startLabel + " — " + draft.objective
-                + " | rang minim: " + Rank.of(draft.minimumRank).displayName()
+                + " | rang minim: " + ctx.policies().rankName(draft.minimumRank)
                 + " | max participanți: " + draft.maxAssignees
                 + " | semnat: " + (draft.signedBy.isEmpty() ? "nu" : draft.signedBy)
                 + " | împachetat: " + (draft.packagedAt != null ? "da" : "nu")
@@ -331,17 +331,17 @@ public class MissionService implements MissionRoleplayUseCase {
         draft.signedAt = null;
         draft.packagedAt = null;
         ctx.missions().write(store);
-        player.tell("Sfera ordinului: minim " + Rank.of(minimumRank).displayName() + ", maximum "
+        player.tell("Sfera ordinului: minim " + ctx.policies().rankName(minimumRank) + ", maximum "
                 + maxAssignees + " participanți. Semnează și sigilează din nou.");
     }
 
     private int rankValue(String name) {
         if (name == null) return -1;
         return switch (PlayerService.canon(name)) {
-            case "junior", "civil" -> Rank.JUNIOR.level();
+            case "junior", "civil" -> Rank.STAGIAR.level();
             case "guard", "strajer", "străjer" -> Rank.GUARD.level();
-            case "senior" -> Rank.SENIOR.level();
-            case "lieutenant", "locotenent" -> Rank.LIEUTENANT.level();
+            case "senior" -> Rank.SERGENT.level();
+            case "lieutenant", "locotenent" -> Rank.INSPECTOR.level();
             default -> {
                 try {
                     yield Integer.parseInt(name.trim());
@@ -382,7 +382,7 @@ public class MissionService implements MissionRoleplayUseCase {
 
     private boolean draftGate(PlayerGateway player) {
         if (!missionAuthority(player)) {
-            player.tell("Doar Locotenentul sau Comisaru' pot folosi Carnetul de Misiuni.");
+            player.tell("Doar Inspectorul sau Comisaru' pot folosi Carnetul de Misiuni.");
             return false;
         }
         if (!hasCarnet(player)) {
@@ -403,7 +403,7 @@ public class MissionService implements MissionRoleplayUseCase {
             return;
         }
         if (!missionAuthority(issuer)) {
-            issuer.tell("Doar Locotenentul sau Comisaru' pot declara misiuni plătite.");
+            issuer.tell("Doar Inspectorul sau Comisaru' pot declara misiuni plătite.");
             return;
         }
         if (target == null) {
@@ -420,7 +420,7 @@ public class MissionService implements MissionRoleplayUseCase {
         if (!targetAllowed(issuer, target)) return;
         if (players.state(target.uuid()).rank < minimumRank) {
             issuer.tell("Destinatarul nu atinge rangul minim al misiunii ("
-                    + Rank.of(minimumRank).displayName() + ").");
+                    + ctx.policies().rankName(minimumRank) + ").");
             return;
         }
         if (!timeValid(minutes) || objective == null || objective.isBlank()) {
@@ -501,7 +501,7 @@ public class MissionService implements MissionRoleplayUseCase {
     /** Carnet flow: hand the signed+sealed draft to a subordinate. */
     public boolean give(PlayerGateway issuer, PlayerGateway target) {
         if (!missionAuthority(issuer)) {
-            issuer.tell("Doar Locotenentul sau Comisaru' pot declara misiuni plătite.");
+            issuer.tell("Doar Inspectorul sau Comisaru' pot declara misiuni plătite.");
             return false;
         }
         if (!hasCarnet(issuer)) {
@@ -532,7 +532,7 @@ public class MissionService implements MissionRoleplayUseCase {
         if (!scopeValid(issuer, draft.minimumRank, draft.maxAssignees)) return false;
         if (players.state(target.uuid()).rank < draft.minimumRank) {
             issuer.tell("Destinatarul nu atinge rangul minim al misiunii ("
-                    + Rank.of(draft.minimumRank).displayName() + ").");
+                    + ctx.policies().rankName(draft.minimumRank) + ").");
             return false;
         }
         if (openCountFor(target, store) >= ctx.policies().missionMaxActivePerPlayer) {
@@ -726,7 +726,7 @@ public class MissionService implements MissionRoleplayUseCase {
                 + "\n\nDestinatar: " + mission.target + "\nObiectiv: ";
         String suffix = "\nTimp estimativ: " + mission.minutes + " minute"
                 + "\nRecompensă: " + mission.reward + " monede"
-                + "\nRang minim: " + Rank.of(mission.minimumRank).displayName()
+                + "\nRang minim: " + ctx.policies().rankName(mission.minimumRank)
                 + "\nParticipanți: maximum " + mission.maxAssignees
                 + "\nÎncepere: " + mission.startLabel
                 + "\nSemnat de: " + mission.signedBy;
@@ -873,7 +873,7 @@ public class MissionService implements MissionRoleplayUseCase {
         if (!targetAllowed(issuer, target)) return false;
         if (players.state(target.uuid()).rank < mission.minimumRank) {
             issuer.tell("Participantul trebuie să aibă cel puțin rangul "
-                    + Rank.of(mission.minimumRank).displayName() + ".");
+                    + ctx.policies().rankName(mission.minimumRank) + ".");
             return false;
         }
         if (targetMatches(target, mission) || invitedMatches(target, mission)) {
@@ -1489,7 +1489,7 @@ public class MissionService implements MissionRoleplayUseCase {
                 : (mission.target.isEmpty() ? (participants.isEmpty() ? "—" : participants.get(0)) : mission.target);
         String base = "#" + mission.id + " [" + mission.status + "] pentru " + participantLabel
                 + " — " + mission.minutes + " min — reward " + mission.reward
-                + " — minim " + Rank.of(mission.minimumRank).displayName()
+                + " — minim " + ctx.policies().rankName(mission.minimumRank)
                 + " — " + participants.size() + "/" + mission.maxAssignees + " participanți"
                 + " — începe " + mission.startLabel + " — " + mission.objective;
         if ("REPORTED".equals(mission.status) && mission.report != null && !mission.report.isEmpty()) {

@@ -56,7 +56,7 @@ public class FineService implements FineRoleplayUseCase {
         return ctx.clock().nowMillis();
     }
 
-    /** On-duty guard (rank ≥ Junior) — used for fine issuance, notifications
+    /** On-duty guard (rank ≥ Stagiar) — used for fine issuance, notifications
      *  and the jailer-assault exemption. Distinct from custody enforcement,
      *  which is capability-based and duty-independent. */
     private boolean onDutyGuard(PlayerGateway player) {
@@ -533,7 +533,7 @@ public class FineService implements FineRoleplayUseCase {
 
     public boolean reviewAppeal(PlayerGateway player, String id, String decision, Integer reducedAmount, String reason) {
         if (!players.hasCapability(player, Capability.REVIEW_APPEALS) && !players.isCommissioner(player)) {
-            player.tell("Doar Locotenentul sau Comisaru' poate decide contestații.");
+            player.tell("Doar Inspectorul sau Comisaru' poate decide contestații.");
             return false;
         }
         FineStore data = ctx.fines().read();
@@ -1027,7 +1027,7 @@ public class FineService implements FineRoleplayUseCase {
     public boolean issueHearingWarrant(PlayerGateway player, PlayerGateway target, String details) {
         if (!players.isCommissioner(player)
                 && (!onDutyGuard(player) || players.state(player).rank < 4)) {
-            player.tell("Doar Locotenentul activ sau Comisaru' poate emite mandat de audiere.");
+            player.tell("Doar Inspectorul activ sau Comisaru' poate emite mandat de audiere.");
             return false;
         }
         if (target == null) {
@@ -1152,7 +1152,7 @@ public class FineService implements FineRoleplayUseCase {
 
     public void listAppeals(PlayerGateway player) {
         if (!players.hasCapability(player, Capability.REVIEW_APPEALS) && !players.isCommissioner(player)) {
-            player.tell("Doar Locotenentul sau Comisaru' poate vedea contestațiile.");
+            player.tell("Doar Inspectorul sau Comisaru' poate vedea contestațiile.");
             return;
         }
         FineStore data = ctx.fines().read();

@@ -33,6 +33,7 @@ class PersistenceTest {
         state.unpaidSalary = 340;
         state.route.add("checkpoint_1");
         state.trainingPassed.put("guard_cuffs_consent", true);
+        state.specializations.add("Instructor");
         repo.write(id, state);
 
         GuardState loaded = repo.read(id);
@@ -41,6 +42,22 @@ class PersistenceTest {
         assertEquals(340, loaded.unpaidSalary);
         assertEquals("checkpoint_1", loaded.route.get(0));
         assertEquals(Boolean.TRUE, loaded.trainingPassed.get("guard_cuffs_consent"));
+        assertTrue(loaded.specializations.contains("Instructor"), "specializations persist");
+    }
+
+    @Test
+    void legacyPlayerStateWithoutSpecializationsReads() {
+        var repo = new SavedPlayerStateRepository(access);
+        UUID id = UUID.randomUUID();
+        // Serialized before the field existed — Gson leaves it null.
+        access.store("players").put(id.toString(), "{\"rank\":3}");
+
+        GuardState state = repo.read(id);
+        assertEquals(3, state.rank);
+        assertNotNull(state.specializations, "absent field re-inits to an empty set");
+        state.specializations.add("Recrutor"); // must not NPE on first write-back
+        repo.write(id, state);
+        assertTrue(repo.read(id).specializations.contains("Recrutor"));
     }
 
     @Test
