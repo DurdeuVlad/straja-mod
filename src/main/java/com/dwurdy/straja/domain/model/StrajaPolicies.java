@@ -121,6 +121,13 @@ public class StrajaPolicies {
     public int freeDutyMinRank = 3;
     public int nativeFactionMaxLength = 40;
 
+    // §7: normal shifts start and end at the Secretary — the player's
+    // scoreboard team is captured on duty start, the operational Straja team
+    // is applied, and the captured team is restored on duty end.
+    public int secretaryRadiusBlocks = 8;
+    public boolean captureDutyFaction = true;
+    public String strajaTeamName = "Straja";
+
     // quiz
     public List<QuizQuestion> quiz = new ArrayList<>(List.of(
             new QuizQuestion("juramant", 0,

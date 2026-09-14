@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class CommandSurfaceTest {
     private static final Set<String> ROLEPLAY_ONLY = Set.of(
             "invite", "recruit", "recrute", "quiz",
-            "start", "checkpoint", "stop", "special",
+            "start", "checkpoint", "special",
             "resign", "demisie", "rejoin",
             "salary", "coins", "food", "kit", "regear", "approve-regear",
             "report", "message", "request", "inbox",
@@ -47,6 +47,13 @@ class CommandSurfaceTest {
         }
         assertTrue(publicHelp.contains("status"));
         assertTrue(publicHelp.contains("rules"));
+    }
+
+    @Test
+    void stopIsPlayerFacingWithSecretaryGatingInsideTheUseCase() {
+        // §7: free-duty ranks stop at will; patrol guards are directed back to
+        // the Secretary inside GuardService.stopDuty — the command itself is open.
+        assertFalse(StrajaCommands.CommandPolicy.isAdminOnly("stop"));
     }
 
     @Test

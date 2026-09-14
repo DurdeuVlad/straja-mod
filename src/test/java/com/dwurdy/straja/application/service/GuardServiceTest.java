@@ -1202,4 +1202,101 @@ class GuardServiceTest {
         registerAllNpcs();
         assertNull(players.setupHintFor(c), "no nudge once setup is complete");
     }
+
+    // ------------------------------------------------------------ §7 secretary gating + factions
+
+    private void placeSecretary(double x, double y, double z) {
+        SetupData setup = ctx.setup().read();
+        var loc = new SetupData.Location();
+        loc.dimension = "minecraft:overworld";
+        loc.x = x; loc.y = y; loc.z = z;
+        setup.locations.put("secretary", loc);
+        ctx.setup().write(setup);
+    }
+
+    @Test
+    void normalDutyStartsAndStopsOnlyAtTheSecretary() {
+        placeCheckpoints();
+        placeSecretary(0, 0, 0);
+        TestPlayer p = guardAtRank(Rank.STAGIAR.level());
+
+        p.x = 100; p.z = 100;
+        guards.startDuty(p);
+        assertFalse(players.state(p.uuid()).duty, "patrol start away from the secretary is refused");
+        assertTrue(p.told("secretară"));
+
+        p.x = 1; p.z = 1;
+        guards.startDuty(p);
+        assertTrue(players.state(p.uuid()).duty);
+        assertEquals("NORMAL", players.state(p.uuid()).mode);
+
+        p.x = 100; p.z = 100;
+        guards.stopDuty(p);
+        assertTrue(players.state(p.uuid()).duty, "stop away from the secretary is refused");
+        assertTrue(p.told("secretară"));
+
+        p.x = 2; p.z = 2;
+        guards.stopDuty(p);
+        assertFalse(players.state(p.uuid()).duty);
+    }
+
+    @Test
+    void freeDutyStopsAtWillAwayFromSecretary() {
+        placeSecretary(0, 0, 0);
+        TestPlayer senior = guardAtRank(Rank.SERGENT.level());
+        senior.x = 100; senior.z = 100;
+        guards.startDuty(senior);
+        assertEquals("FREE", players.state(senior.uuid()).mode);
+        guards.stopDuty(senior);
+        assertFalse(players.state(senior.uuid()).duty);
+    }
+
+    @Test
+    void dutyCapturesAndRestoresScoreboardFaction() {
+        placeCheckpoints();
+        placeSecretary(0, 0, 0);
+        var factions = (Fakes.TestFactions) ctx.factions();
+        TestPlayer p = guardAtRank(Rank.STAGIAR.level());
+        factions.joinTeam(p, "Vladicani");
+        p.x = 1; p.z = 1;
+
+        guards.startDuty(p);
+        assertEquals("Straja", factions.teamOf(p));
+        assertEquals("Vladicani", players.state(p.uuid()).dutyCapturedFaction);
+
+        guards.stopDuty(p);
+        assertEquals("Vladicani", factions.teamOf(p));
+        assertFalse(players.state(p.uuid()).dutyFactionManaged);
+        assertNull(players.state(p.uuid()).dutyCapturedFaction);
+    }
+
+    @Test
+    void factionlessGuardReturnsToNoTeam() {
+        placeCheckpoints();
+        placeSecretary(0, 0, 0);
+        var factions = (Fakes.TestFactions) ctx.factions();
+        TestPlayer p = guardAtRank(Rank.STAGIAR.level());
+        p.x = 1; p.z = 1;
+
+        guards.startDuty(p);
+        assertEquals("Straja", factions.teamOf(p));
+        guards.stopDuty(p);
+        assertNull(factions.teamOf(p));
+    }
+
+    @Test
+    void dissolvedFactionFailsSafelyOnRestore() {
+        placeCheckpoints();
+        placeSecretary(0, 0, 0);
+        var factions = (Fakes.TestFactions) ctx.factions();
+        TestPlayer p = guardAtRank(Rank.STAGIAR.level());
+        factions.joinTeam(p, "Vladicani");
+        p.x = 1; p.z = 1;
+
+        guards.startDuty(p);
+        factions.teams.remove("Vladicani");
+        guards.stopDuty(p);
+        assertNull(factions.teamOf(p), "a dissolved team is never re-joined");
+        assertTrue(p.told("nu mai există"));
+    }
 }

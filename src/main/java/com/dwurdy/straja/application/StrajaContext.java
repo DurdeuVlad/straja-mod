@@ -28,4 +28,5 @@ public record StrajaContext(
         TestRepository test,
         CurrencyProvider currency,
         DeliveryProvider delivery,
-        WorldGateway world) {}
+        WorldGateway world,
+        FactionGateway factions) {}

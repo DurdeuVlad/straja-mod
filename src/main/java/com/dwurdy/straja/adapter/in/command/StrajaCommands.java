@@ -65,7 +65,9 @@ public final class StrajaCommands {
                 .then(Commands.argument("id", StringArgumentType.word())
                         .executes(c -> player(c, p -> StrajaRuntime.get().guards()
                                 .checkpoint(p, StringArgumentType.getString(c, "id")))))));
-        root.then(adminOnly(Commands.literal("stop").executes(c -> player(c, StrajaRuntime.get().guards()::stopDuty))));
+        // §7: player-facing — free-duty ranks stop at will; patrol guards are
+        // directed back to the Secretary inside the use case.
+        root.then(Commands.literal("stop").executes(c -> player(c, StrajaRuntime.get().guards()::stopDuty)));
 
         var special = adminOnly(Commands.literal("special"));
         special.then(Commands.literal("start").then(Commands.argument("player", EntityArgument.player())
@@ -903,7 +905,7 @@ public final class StrajaCommands {
     static final class CommandPolicy {
         private static final Set<String> ADMIN_ONLY_COMMANDS = Set.of(
                 // recruitment and guard lifecycle
-                "invite", "recruit", "recrute", "quiz", "start", "checkpoint", "stop", "special",
+                "invite", "recruit", "recrute", "quiz", "start", "checkpoint", "special",
                 "resign", "demisie", "rejoin",
                 // economy and communication
                 "salary", "coins", "food", "kit", "regear", "approve-regear",

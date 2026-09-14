@@ -65,6 +65,9 @@ Test suite: **331 unit tests** (`gradlew test --rerun-tasks`, all green) across
 
 | Feature | Status | Evidence / notes |
 |---|---|---|
+| Duty start/stop at the Secretary (§7) | PASS | `unit:GuardServiceTest.normalDutyStartsAndStopsOnlyAtTheSecretary`, `freeDutyStopsAtWillAwayFromSecretary`; `rcon:` far start/stop refused, near allowed; `/straja stop` player-facing, gated inside the use case |
+| Faction capture/restore on duty (§7) | PASS | `unit:GuardServiceTest.dutyCapturesAndRestoresScoreboardFaction`, `factionlessGuardReturnsToNoTeam`, `dissolvedFactionFailsSafelyOnRestore`; `rcon:` Vladicani → Straja → Vladicani observed via `team list` |
+| Patrol route loops in rounds (§8) | PASS | `unit:DutyEngineTest.finalCheckpointLoopsIntoNextRound`; `rcon:` round 1 → checkpoint_1 reactivated in round 2 |
 | Duty start/stop, deadline from mission minutes | PASS | `unit:DutyEngineTest`; `rcon:` start/stop-duty |
 | Patrol routes, duplicate/short-route rejection | PASS | `unit:DutyEngineTest.startDutyRejectsDuplicateOrShortRoutes` |
 | Checkpoint unlock/wait/activate/deadline | PASS | `unit:DutyEngineTest`; `rcon:` `checkpoint_timeout` end observed on live server; `checkpointUnlockMinutes`/`checkpointDeadlineMinutes` honored (`configuredTimersOverrideDefaults`) |
