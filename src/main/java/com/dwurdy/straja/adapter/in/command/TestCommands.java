@@ -922,6 +922,41 @@ final class TestCommands {
                                                                 StringArgumentType.getString(ctx, "request"),
                                                                 StringArgumentType.getString(ctx, "decision"),
                                                                 StringArgumentType.getString(ctx, "note"))))))))));
+        // §25 emergency
+        test.then(Commands.literal("emergency-alert")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("message", StringArgumentType.greedyString())
+                                .executes(ctx -> run(ctx, runtime ->
+                                        runtime.emergencyRoleplay().alert(
+                                                player(ctx, runtime),
+                                                StringArgumentType.getString(ctx, "message")))))));
+        test.then(Commands.literal("emergency-clear")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(ctx -> run(ctx, runtime ->
+                                runtime.emergencyRoleplay().clearUrgency(player(ctx, runtime))))));
+        test.then(Commands.literal("emergency-start")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("multiplier", DoubleArgumentType.doubleArg(1.0))
+                                .then(Commands.argument("rounds", IntegerArgumentType.integer(1))
+                                        .then(Commands.argument("reason", StringArgumentType.greedyString())
+                                                .executes(ctx -> run(ctx, runtime ->
+                                                        runtime.emergencyRoleplay().start(
+                                                                player(ctx, runtime),
+                                                                DoubleArgumentType.getDouble(ctx, "multiplier"),
+                                                                IntegerArgumentType.getInteger(ctx, "rounds"),
+                                                                StringArgumentType.getString(ctx, "reason")))))))));
+        test.then(Commands.literal("emergency-end")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(ctx -> run(ctx, runtime ->
+                                runtime.emergencyRoleplay().end(player(ctx, runtime))))));
+        test.then(Commands.literal("emergency-status")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(ctx -> run(ctx, runtime ->
+                                runtime.emergencyRoleplay().status(player(ctx, runtime))))));
+        test.then(Commands.literal("emergency-deliver")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(ctx -> run(ctx, runtime ->
+                                runtime.emergencyRoleplay().deliverUrgency(player(ctx, runtime))))));
         test.then(Commands.literal("complaint-submit")
                 .then(Commands.argument("id", StringArgumentType.word())
                         .then(Commands.argument("accused", StringArgumentType.word())

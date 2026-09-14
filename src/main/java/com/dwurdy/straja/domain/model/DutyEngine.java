@@ -131,6 +131,7 @@ public final class DutyEngine {
         state.route = new ArrayList<>(route);
         state.patrolIndex = 0;
         state.patrolRounds = 0;
+        state.requiredRounds = 0;
         state.waitingUntil = null;
         state.missionMinutes = new java.util.LinkedHashMap<>();
         for (String checkpointId : route) {
@@ -177,6 +178,7 @@ public final class DutyEngine {
         state.route = new ArrayList<>();
         state.patrolIndex = 0;
         state.patrolRounds = 0;
+        state.requiredRounds = 0;
         state.waitingUntil = null;
         state.deadlineAt = null;
         state.missionMinutes = new java.util.LinkedHashMap<>();
@@ -210,8 +212,16 @@ public final class DutyEngine {
         if (state.patrolIndex >= state.route.size() - 1) {
             // §8: the route loops — a completed round returns to checkpoint 1
             // after the standard unlock pause; duty ends only on stop or a
-            // missed deadline.
+            // missed deadline. §25: an emergency snapshot of requiredRounds
+            // turns the loop into a finite patrol that ends on the last lap.
             state.patrolRounds += 1;
+            if (state.requiredRounds > 0 && state.patrolRounds >= state.requiredRounds) {
+                events.add(DomainEvent.builder("patrol_complete")
+                        .put("rounds", state.patrolRounds)
+                        .build());
+                events.addAll(endDuty(state, "patrol_complete", now, salaryPerHour, policies).events());
+                return Result.pass(events);
+            }
             state.patrolIndex = 0;
             state.patrolState = "WAITING";
             state.waitingUntil = now + unlockMinutes(policies) * MINUTE_MS;
@@ -292,6 +302,7 @@ public final class DutyEngine {
         state.lastDutyActivityY = null;
         state.lastDutyActivityZ = null;
         state.salaryActivityPaused = false;
+        state.requiredRounds = 0;
         state.lastEndReason = reason;
         events.add(DomainEvent.builder("duty_ended").put("reason", reason).build());
         return Result.pass(events);

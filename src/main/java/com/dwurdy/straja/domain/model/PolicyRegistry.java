@@ -117,6 +117,12 @@ public final class PolicyRegistry {
         k("duty.secretaryRadiusBlocks", "secretaryRadiusBlocks", Kind.INT);
         k("duty.captureDutyFaction", "captureDutyFaction", Kind.BOOL);
         k("duty.strajaTeamName", "strajaTeamName", Kind.STRING);
+        // §25 emergency system
+        k("emergency.urgencyTtlMinutes", "emergencyUrgencyTtlMinutes", Kind.INT);
+        k("emergency.payMultiplier", "emergencyPayMultiplier", Kind.DOUBLE);
+        k("emergency.maxPayMultiplier", "emergencyMaxPayMultiplier", Kind.DOUBLE);
+        k("emergency.patrolRounds", "emergencyPatrolRounds", Kind.INT);
+        k("emergency.maxPatrolRounds", "emergencyMaxPatrolRounds", Kind.INT);
         // quiz / trainer
         k("quiz.questions", "quiz", Kind.QUIZ);
         k("quiz.trainingQuestions", "trainingQuiz", Kind.QUIZ);

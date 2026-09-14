@@ -44,6 +44,7 @@ public final class StrajaRuntime {
     private final com.dwurdy.straja.application.service.ComplaintService complaints;
     private final com.dwurdy.straja.application.service.ReportService reports;
     private final com.dwurdy.straja.application.service.AudienceService audiences;
+    private final com.dwurdy.straja.application.service.EmergencyService emergency;
     private final com.dwurdy.straja.application.service.RoomService rooms;
     private final com.dwurdy.straja.application.service.ArchiveService archive;
     private final com.dwurdy.straja.application.service.MigrationService migration;
@@ -114,6 +115,7 @@ public final class StrajaRuntime {
                 new SavedStores.Complaints(stores),
                 new SavedStores.Reports(stores),
                 new SavedStores.Audiences(stores),
+                new SavedStores.Emergency(stores),
                 new SavedStores.MissionTemplates(stores),
                 new SavedStores.Custody(stores),
                 new SavedStores.Archive(stores),
@@ -136,6 +138,7 @@ public final class StrajaRuntime {
         this.complaints = new com.dwurdy.straja.application.service.ComplaintService(ctx, players, audit);
         this.reports = new com.dwurdy.straja.application.service.ReportService(ctx, players, audit);
         this.audiences = new com.dwurdy.straja.application.service.AudienceService(ctx, players, audit);
+        this.emergency = new com.dwurdy.straja.application.service.EmergencyService(ctx, players, audit);
         this.rooms = new com.dwurdy.straja.application.service.RoomService(ctx, players, audit, ctx.world());
         this.archive = new com.dwurdy.straja.application.service.ArchiveService(ctx, players, audit);
         this.migration = new com.dwurdy.straja.application.service.MigrationService(ctx, audit);
@@ -217,6 +220,7 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.port.in.ComplaintRoleplayUseCase complaintRoleplay() { return complaints; }
     public com.dwurdy.straja.application.port.in.ReportUseCase reportRoleplay() { return reports; }
     public com.dwurdy.straja.application.port.in.AudienceUseCase audienceRoleplay() { return audiences; }
+    public com.dwurdy.straja.application.port.in.EmergencyUseCase emergencyRoleplay() { return emergency; }
     public com.dwurdy.straja.application.port.in.FineRoleplayUseCase fineRoleplay() { return fines; }
     public com.dwurdy.straja.application.port.in.CustodyRoleplayUseCase custodyRoleplay() { return custody; }
     public com.dwurdy.straja.application.port.in.PrisonRoleplayUseCase prisonRoleplay() { return prison; }

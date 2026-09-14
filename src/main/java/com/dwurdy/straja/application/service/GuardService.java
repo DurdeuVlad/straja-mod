@@ -73,10 +73,17 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
 
     private long now() { return ctx.clock().nowMillis(); }
 
-    /** Hourly wage (§10): the Comisar rate comes from the personnel flag, not rank. */
+    /** Hourly wage (§10): the Comisar rate comes from the personnel flag, not
+     * rank. §25 hazard pay multiplies every accrual path through this funnel. */
     private int salaryFor(PlayerGateway player, GuardState state) {
-        if (players.isCommissioner(player)) return ctx.policies().salaryCommissionerPerHour;
-        return ctx.policies().salaryPerHour(state.rank);
+        int wage = players.isCommissioner(player)
+                ? ctx.policies().salaryCommissionerPerHour
+                : ctx.policies().salaryPerHour(state.rank);
+        var emergency = ctx.emergency().read();
+        if (emergency.active && emergency.payMultiplier > 1.0) {
+            wage = (int) Math.round(wage * emergency.payMultiplier);
+        }
+        return wage;
     }
 
     /** Sergent+ ranks and the commissioner run shifts at will, without patrol. */
@@ -100,7 +107,9 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             switch (event.type()) {
                 case "salary_accrual" -> player.tell("Ai acumulat +" + event.data().get("amount")
                         + " monede în sold (" + event.data().get("paidMinutes")
-                        + " min plătite, " + event.data().get("hourlyWage") + "/h).");
+                        + " min plătite, " + event.data().get("hourlyWage") + "/h"
+                        + (ctx.emergency().read().active ? ", primă de urgență inclusă" : "")
+                        + ").");
                 case "checkpoint_activated" -> player.tell("Checkpoint atins. Următorul devine disponibil peste 10 minute.");
                 case "checkpoint_available" -> player.tell("Checkpoint disponibil: " + event.data().get("checkpoint")
                         + ". Ai " + event.data().get("missionMinutes") + " minute.");
@@ -108,6 +117,8 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
                         + event.data().get("round") + "). Checkpoint-ul "
                         + event.data().get("checkpoint") + " devine disponibil peste "
                         + ctx.policies().checkpointUnlockMinutes + " minute.");
+                case "patrol_complete" -> player.tell("Patrulare încheiată: "
+                        + event.data().get("rounds") + " runde complete. Serviciul se încheie.");
                 case "duty_ended" -> player.tell("Serviciul s-a încheiat: " + event.data().get("reason")
                         + ". Soldul acumulat a fost păstrat.");
                 case "special_started" -> player.tell("Special Duty activ. Cronometrele checkpoint-urilor sunt suspendate.");
@@ -992,6 +1003,14 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             }
             captureDutyFaction(player, state);
             markDutyActivity(player, state, now());
+            // §25: snapshot required rounds at shift start so ending the
+            // emergency mid-shift does not strand an active patrol.
+            var emergency = ctx.emergency().read();
+            if (emergency.active) {
+                state.requiredRounds = emergency.requiredRounds;
+                player.tell("Stare de urgență activă: această tură cere "
+                        + state.requiredRounds + " runde complete de patrulare.");
+            }
             players.save(player.uuid(), state);
             audit.record("duty_start", player.name(), player.uuid().toString(),
                     player.name(), player.uuid().toString(), "SUCCESS", "started");
@@ -1491,9 +1510,11 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         aliases.put("infirmerie", "infirmary");
         aliases.put("trainer", "trainer");
         aliases.put("instructor", "trainer");
+        aliases.put("hq", "hq");
+        aliases.put("sediu", "hq");
         String key = aliases.get(name == null ? "" : name.trim().toLowerCase());
         if (key == null) {
-            player.tell("Locație necunoscută: reports, mailbox, office, receptionist, secretary, prison-release, infirmary sau trainer.");
+            player.tell("Locație necunoscută: reports, mailbox, office, receptionist, secretary, prison-release, infirmary, trainer sau hq.");
             return;
         }
         SetupData setup = ctx.setup().read();

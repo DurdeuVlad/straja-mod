@@ -146,6 +146,15 @@ public class StrajaPolicies {
     public boolean captureDutyFaction = true;
     public String strajaTeamName = "Straja";
 
+    // §25 emergency system: a TTL-bound urgency call and a sustained
+    // emergency mode that multiplies hourly wages and requires extra
+    // patrol rounds per shift.
+    public int emergencyUrgencyTtlMinutes = 60;
+    public double emergencyPayMultiplier = 2.0;
+    public double emergencyMaxPayMultiplier = 5.0;
+    public int emergencyPatrolRounds = 2;
+    public int emergencyMaxPatrolRounds = 10;
+
     // quiz
     public List<QuizQuestion> quiz = new ArrayList<>(List.of(
             new QuizQuestion("juramant", 0,

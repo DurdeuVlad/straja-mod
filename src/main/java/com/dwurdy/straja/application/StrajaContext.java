@@ -24,6 +24,7 @@ public record StrajaContext(
         ComplaintRepository complaints,
         ReportRepository reports,
         AudienceRepository audiences,
+        EmergencyRepository emergency,
         MissionTemplateRepository missionTemplates,
         CustodyRepository custody,
         ArchiveRepository archive,
