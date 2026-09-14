@@ -82,21 +82,39 @@ public class AdminToolService implements AdminToolsUseCase {
     // ---------------------------------------------------------------- AT-002 NPC Wand
 
     @Override
-    public Menu npcWandMenu(PlayerGateway player, String entityUuid) {
+    public Menu npcWandMenu(PlayerGateway player, String entityUuid,
+                            boolean bindable, boolean strajaNative) {
         if (!gate(player)) return null;
         NpcRegistry.Record record = recordOf(entityUuid);
         if (record == null) {
-            player.tell("Bagheta funcționează doar pe un NPC Straja înregistrat.");
-            return null;
+            // Binding a role onto an existing entity is the whole point of
+            // the wand on foreign NPCs — the record keys on the entity UUID
+            // and never touches appearance. Players stay refused.
+            if (!bindable) {
+                player.tell("Bagheta funcționează doar pe un NPC Straja înregistrat.");
+                return null;
+            }
+            var bind = new ArrayList<MenuAction>();
+            for (String role : NpcAdminService.ROLE_ORDER) {
+                bind.add(new MenuAction("Rol: " + role,
+                        "tool-npc-assign:" + entityUuid + "-" + role));
+            }
+            return new Menu("[Straja] Entitate neînregistrată — atașează un rol "
+                    + "(aspectul rămâne neschimbat):", List.copyOf(bind));
         }
         var actions = new ArrayList<MenuAction>();
         for (String role : NpcAdminService.ROLE_ORDER) {
             actions.add(new MenuAction("Rol: " + role,
                     "tool-npc-assign:" + entityUuid + "-" + role));
         }
-        actions.add(new MenuAction("Redenumește", "tool-npc-rename:" + entityUuid));
-        actions.add(new MenuAction("Skin nou", "tool-npc-skin:" + entityUuid));
-        actions.add(new MenuAction("Elimină NPC", "tool-npc-remove:" + entityUuid));
+        if (strajaNative) {
+            // Name/skin records only reflect onto StrajaNpcEntity on join —
+            // for a bound foreign entity they would be dead options.
+            actions.add(new MenuAction("Redenumește", "tool-npc-rename:" + entityUuid));
+            actions.add(new MenuAction("Skin nou", "tool-npc-skin:" + entityUuid));
+        }
+        actions.add(new MenuAction(strajaNative ? "Elimină NPC" : "Detașează rolul",
+                "tool-npc-remove:" + entityUuid));
         actions.add(new MenuAction("Fișa registrului", "tool-npc-record:" + entityUuid));
         String name = record.displayName == null || record.displayName.isEmpty()
                 ? entityUuid : record.displayName;
@@ -106,7 +124,10 @@ public class AdminToolService implements AdminToolsUseCase {
 
     @Override
     public void npcAssign(PlayerGateway player, String entityUuid, String role) {
-        if (!gate(player) || !requireRecord(player, entityUuid)) return;
+        // Bind and rebind converge: assignRole creates the record when the
+        // entity is not registered yet, so a first wand bind needs no prior
+        // command.
+        if (!gate(player)) return;
         if (npcs.assignRole(entityUuid, role).ok()) {
             player.tell("NPC " + entityUuid + " are acum rolul " + role + ".");
         } else {
@@ -385,6 +406,18 @@ public class AdminToolService implements AdminToolsUseCase {
         if (!gate(player)) return;
         NpcRegistry.Record record = recordOf(entityUuid);
         if (record == null) {
+            // Apply-mode: with a template already captured, clicking an
+            // unregistered entity binds the template's role onto it in
+            // place — the "copy the logic, keep the appearance" gesture.
+            var holder = ctx.adminTools().read().holders.get(key(player));
+            var held = holder == null ? null : holder.cloneTemplate;
+            if (held != null && held.role != null) {
+                if (npcs.assignRole(entityUuid, held.role).ok()) {
+                    player.tell("Rolul " + held.role
+                            + " a fost atașat entității existente — aspectul rămâne neschimbat.");
+                }
+                return;
+            }
             player.tell("Clonatorul capturează doar un NPC Straja înregistrat.");
             return;
         }

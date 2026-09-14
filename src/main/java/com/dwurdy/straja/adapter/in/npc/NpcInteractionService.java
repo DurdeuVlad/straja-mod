@@ -75,7 +75,7 @@ public final class NpcInteractionService {
     private record PendingAction(UUID playerId, String actionId, long expiresAtNanos) {}
 
     public static void interact(StrajaNpcEntity npc, Player player, ServerLevel level) {
-        NpcRoles.interact(npc.getRoleId(), npc, player, level);
+        NpcRoles.interact(npc.getRoleId(), player, level);
     }
 
     /** @return true when the damage is fully handled/denied by the Straja layer. */

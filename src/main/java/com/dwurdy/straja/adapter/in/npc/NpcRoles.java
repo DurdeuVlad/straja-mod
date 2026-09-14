@@ -41,7 +41,7 @@ public final class NpcRoles {
         return KNOWN;
     }
 
-    public static void interact(String roleId, StrajaNpcEntity npc, Player player, ServerLevel level) {
+    public static void interact(String roleId, Player player, ServerLevel level) {
         NpcPlayerSurface.InteractionPlan plan = NpcPlayerSurface.interactionPlan(roleId);
         NpcPlayerSurface.RoleSurface surface = plan.surface();
         surface = NpcPlayerSurface.withAdditionalActions(surface, stateAwareActions(roleId, player, level));
@@ -329,14 +329,22 @@ public final class NpcRoles {
         }
         String token = NpcInteractionService.issueActionToken(player.getUUID(),
                 "tool-npc-remove-confirm:" + entityUuid);
-        MutableComponent confirm = Component.literal("[Confirmă eliminarea]").withStyle(style -> style
+        // A bound foreign entity is never discarded — detach drops only the
+        // registry record; a loaded StrajaNpcEntity is deleted with it.
+        boolean nativeEntity = loadedNpc(player, entityUuid) != null;
+        MutableComponent confirm = Component.literal(
+                nativeEntity ? "[Confirmă eliminarea]" : "[Confirmă detașarea]").withStyle(style -> style
                 .withColor(ChatFormatting.RED)
                 .withUnderlined(true)
                 .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
-                        Component.literal("Acțiunea este permanentă.")))
+                        Component.literal(nativeEntity
+                                ? "Acțiunea este permanentă."
+                                : "Entitatea rămâne în lume; doar rolul Straja este retras.")))
                 .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND,
                         "/straja npc-action " + token)));
-        player.sendSystemMessage(Component.literal("[Straja] Eliminarea este permanentă. ").append(confirm));
+        player.sendSystemMessage(Component.literal(nativeEntity
+                ? "[Straja] Eliminarea este permanentă. "
+                : "[Straja] Detașarea retrage doar rolul Straja. ").append(confirm));
         return true;
     }
 
@@ -805,7 +813,10 @@ public final class NpcRoles {
                 yield expected != null && runtime.adminRoleplay().isStillValid(player, expected, id);
             }
             case "tool-npc-assign" ->
-                    id.length() > 37 && runtime.adminTools().npcStillRegistered(id.substring(0, 36));
+                    // A first-time bind has no record yet — the button stays
+                    // valid while the clicker is still an authorized holder;
+                    // npcAssign re-gates and validates the role anyway.
+                    id.length() > 37 && runtime.adminTools().isToolHolder(player);
             case "tool-npc-rename", "tool-npc-skin", "tool-npc-remove",
                     "tool-npc-remove-confirm", "tool-npc-record" ->
                     runtime.adminTools().npcStillRegistered(id);

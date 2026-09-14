@@ -172,19 +172,31 @@ The items are non-craftable, non-stackable, and have no mob drops.
 
 - **NPC Wand** — click a registered Straja NPC for a clickable menu: assign
   role, rename, set skin (native form), remove (behind a confirm click), or
-  print the registry record.
+  print the registry record. Clicking an *unregistered* entity (e.g. an
+  existing CustomNPCs NPC) offers the same role list and **binds the role in
+  place** — the entity keeps its own model, skin and name; Straja just owns
+  the right-click. On a bound foreign NPC the menu hides rename/skin and
+  removal *detaches* the role record without deleting the entity.
 - **Patrol Wand** — click blocks to record the patrol route (re-click removes
-  a point), sneak + click air to finish. Writes exactly the four checkpoint
-  slots through the same path as `set-checkpoint`; routes cannot cross
-  dimensions.
+  a point), sneak + click air to finish. Writes a variable-length route
+  through the same path as `checkpoint add`/`set-checkpoint`; routes cannot
+  cross dimensions.
 - **Survey Rod** — click a block to choose which administrative location to
   stamp there, or stamp every missing one at once (`setup here` behavior).
 - **Prison Marker** — click two opposite corners, then confirm the chat prompt
   to register the cell through `prison cell` validation.
 - **NPC Cloner** — click a registered NPC to capture its role/name/skin, click
   a block face to spawn a registered copy, sneak + click air to clear the
-  template.
+  template. With a template captured, clicking an *unregistered* entity
+  applies just the role — clone the logic onto an existing NPC, keep its
+  appearance.
 - **Room Marker** — unchanged room corner selection for `room discover`.
+
+Bound foreign NPCs keep their host mod's rules: name/skin options in the
+registry only reflect onto native `StrajaNpcEntity`, and the jailer assault
+lifecycle (damage → arrest mission) requires the bound jailer to be
+damageable in its own mod. Bindings key on entity UUID — if a host mod
+respawns an NPC under a fresh UUID, detach the stale record and rebind.
 
 Commands remain useful as an administrator/reference surface and for console or
 RCON operation. Manually typed gameplay roots are permission-2 admin-gated, so
