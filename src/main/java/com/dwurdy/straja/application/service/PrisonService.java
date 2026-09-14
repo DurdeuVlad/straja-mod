@@ -210,16 +210,16 @@ public class PrisonService implements PrisonRoleplayUseCase {
             Cell cell = firstFree(data);
             if (sentence == null || !"WAITING_CELL".equals(sentence.status) || cell == null) continue;
             assignCell(data, sentence, cell);
-        data.waitlist.removeIf(e -> e != null && entry.sentenceId.equals(e.sentenceId));
-        changed = true;
-        var target = findFor(sentence);
-        if (target != null) {
+            data.waitlist.removeIf(e -> e != null && entry.sentenceId.equals(e.sentenceId));
+            changed = true;
+            var target = findFor(sentence);
+            if (target != null) {
                 if (!deliverToAssignedCell(target, sentence, cell)) {
                     cancelSentence(data, sentence, "custody_delivery_failed");
                     continue;
                 }
                 target.tell("Ai fost repartizat într-o celulă pentru executarea sentinței.");
-        }
+            }
         }
         if (changed) ctx.prison().write(data);
     }

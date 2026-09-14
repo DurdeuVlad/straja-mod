@@ -58,6 +58,13 @@ public interface PlayerGateway {
 
     void teleport(String dimension, double x, double y, double z);
 
+    /** Server-authorized vanilla-style passenger operations for custody carry. */
+    default boolean startRiding(UUID vehicleUuid) { return false; }
+    default void stopRiding() {}
+    default boolean isPassenger() { return false; }
+    default boolean isPassengerOf(UUID vehicleUuid) { return false; }
+    default boolean hasPassenger(UUID passengerUuid) { return false; }
+
     /** Opens a simple button GUI when the client is present; headless-safe. */
     default void openButtonGui(String title, java.util.List<ButtonSpec> buttons) {}
 

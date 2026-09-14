@@ -57,6 +57,44 @@ class CustodyTransitionEngineTest {
     }
 
     @Test
+    void resuscitationBindsARescuerAndCanBeInterruptedOrCompleted() {
+        var state = state("target");
+        var policies = policies();
+        policies.downedDurationSeconds = 10;
+        policies.resuscitationTimeoutSeconds = 5;
+        assertTrue(CustodyTransitionEngine.apply(state,
+                CustodyTransition.of("down-1", CustodyTransition.Action.ENTER_DOWNED, 1_000, "weapon"),
+                policies).ok());
+        assertTrue(CustodyTransitionEngine.apply(state,
+                CustodyTransition.of("resus-1", CustodyTransition.Action.START_RESUSCITATION,
+                        2_000, "medic"), policies).ok());
+        assertEquals("medic", state.resuscitatorId);
+        assertEquals(PlayerCondition.RESUSCITATING, state.condition);
+
+        assertTrue(CustodyTransitionEngine.apply(state,
+                CustodyTransition.of("interrupt-1", CustodyTransition.Action.INTERRUPT_RESUSCITATION,
+                        3_000, "system"), policies).ok());
+        assertEquals(PlayerCondition.DOWNED, state.condition);
+        assertEquals("", state.resuscitatorId);
+        assertEquals(12_000L, state.downedDeadlineAt);
+    }
+
+    @Test
+    void resuscitationRejectsCarryAndSelfRescuer() {
+        var state = state("target");
+        var policies = policies();
+        assertTrue(CustodyTransitionEngine.apply(state,
+                CustodyTransition.of("down-1", CustodyTransition.Action.ENTER_DOWNED, 1_000, "weapon"),
+                policies).ok());
+        assertTrue(CustodyTransitionEngine.apply(state,
+                new CustodyTransition("carry-1", CustodyTransition.Action.START_CARRY, 1_500,
+                        "carrier", "carrier", "", StateProvider.NATIVE, "grab", 0), policies).ok());
+        assertEquals("RESUSCITATION_REQUIRES_DOWNED_FREE", CustodyTransitionEngine.apply(state,
+                CustodyTransition.of("resus-1", CustodyTransition.Action.START_RESUSCITATION,
+                        2_000, "medic"), policies).code());
+    }
+
+    @Test
     void invalidTransitionsFailClosed() {
         var state = state("target");
         assertEquals("RESTRAINT_ACTOR_INVALID", CustodyTransitionEngine.apply(state,

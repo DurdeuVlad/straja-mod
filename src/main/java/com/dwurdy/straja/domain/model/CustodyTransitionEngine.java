@@ -82,6 +82,7 @@ public final class CustodyTransitionEngine {
         state.jailDeliveryDeadlineAt = null;
         state.jailRevivalAt = null;
         state.resuscitationProgress = 0;
+        state.resuscitatorId = "";
         return CustodyTransitionResult.applied();
     }
 
@@ -90,8 +91,12 @@ public final class CustodyTransitionEngine {
                                                                 StrajaPolicies policies) {
         if (state.condition != PlayerCondition.DOWNED
                 || state.custody != CustodyStatus.FREE
-                || state.restraint != RestraintStatus.NONE) {
+                || state.restraint != RestraintStatus.NONE
+                || state.transport != TransportStatus.NONE) {
             return reject("RESUSCITATION_REQUIRES_DOWNED_FREE");
+        }
+        if (blank(transition.actorId()) || samePlayer(state, transition.actorId())) {
+            return reject("RESUSCITATOR_INVALID");
         }
         if (expired(state.downedDeadlineAt, transition.at())) {
             return reject("DOWNED_DEADLINE_EXPIRED");
@@ -103,6 +108,7 @@ public final class CustodyTransitionEngine {
         state.pausedDownedRemainingMs = remaining;
         state.resuscitationDeadlineAt = deadline(transition.at(), policies.resuscitationTimeoutSeconds);
         state.resuscitationProgress = 0;
+        state.resuscitatorId = transition.actorId();
         return CustodyTransitionResult.applied();
     }
 
@@ -111,6 +117,9 @@ public final class CustodyTransitionEngine {
                                                                   StrajaPolicies policies) {
         if (state.condition != PlayerCondition.RESUSCITATING) {
             return reject("RESUSCITATION_NOT_ACTIVE");
+        }
+        if (blank(transition.actorId()) || !transition.actorId().equals(state.resuscitatorId)) {
+            return reject("RESUSCITATOR_MISMATCH");
         }
         if (expired(state.resuscitationDeadlineAt, transition.at())) {
             return reject("RESUSCITATION_DEADLINE_EXPIRED");
@@ -126,6 +135,7 @@ public final class CustodyTransitionEngine {
             state.pausedDownedRemainingMs = 0;
             state.resuscitationDeadlineAt = null;
             state.resuscitationProgress = 0;
+            state.resuscitatorId = "";
         }
         return CustodyTransitionResult.applied();
     }
@@ -145,6 +155,7 @@ public final class CustodyTransitionEngine {
                 ? deadline(transition.at(), policies.jailDeliveryDeadlineSeconds) : null;
         state.resuscitationDeadlineAt = null;
         state.resuscitationProgress = 0;
+        state.resuscitatorId = "";
         state.downedDeadlineAt = null;
         state.pausedDownedRemainingMs = 0;
         return CustodyTransitionResult.applied();
@@ -165,6 +176,7 @@ public final class CustodyTransitionEngine {
         state.pausedDownedRemainingMs = 0;
         state.resuscitationDeadlineAt = null;
         state.resuscitationProgress = 0;
+        state.resuscitatorId = "";
         return CustodyTransitionResult.applied();
     }
 
@@ -180,15 +192,6 @@ public final class CustodyTransitionEngine {
         if (blank(transition.actorId()) || samePlayer(state, transition.actorId())) {
             return reject("RESTRAINT_ACTOR_INVALID");
         }
-        // RP-007 historically allows a rope to be layered over police cuffs.
-        // The canonical aggregate has one primary restraint dimension, so keep
-        // the cuffed police custody as the authoritative projection while still
-        // accepting the explicit canonical rope transition.
-        if (restraint == RestraintStatus.ROPE_BOUND
-                && state.restraint == RestraintStatus.CUFFED
-                && state.custody == CustodyStatus.ARRESTED) {
-            return CustodyTransitionResult.applied();
-        }
         if ((state.condition != PlayerCondition.ALIVE && state.condition != PlayerCondition.DOWNED)
                 || state.custody != CustodyStatus.FREE
                 || state.restraint != RestraintStatus.NONE) {
@@ -201,6 +204,7 @@ public final class CustodyTransitionEngine {
         state.vision = VisionStatus.NORMAL;
         state.resuscitationDeadlineAt = null;
         state.resuscitationProgress = 0;
+        state.resuscitatorId = "";
         state.pausedDownedRemainingMs = 0;
         if (state.condition == PlayerCondition.DOWNED) {
             state.condition = PlayerCondition.UNCONSCIOUS_CUSTODY;
@@ -288,6 +292,7 @@ public final class CustodyTransitionEngine {
             state.custody = CustodyStatus.FREE;
             state.downedDeadlineAt = null;
             state.pausedDownedRemainingMs = 0;
+            state.resuscitatorId = "";
             return CustodyTransitionResult.applied();
         }
         if (state.condition == PlayerCondition.UNCONSCIOUS_CUSTODY) {
@@ -298,6 +303,7 @@ public final class CustodyTransitionEngine {
                     ? PlayerCondition.ALIVE : PlayerCondition.CONSCIOUS_RESTRAINED;
             state.unconsciousCustodyDeadlineAt = null;
             state.pausedDownedRemainingMs = 0;
+            state.resuscitatorId = "";
             return CustodyTransitionResult.applied();
         }
         return reject("WAKE_REQUIRES_CONTROL_LOSS");
@@ -313,6 +319,7 @@ public final class CustodyTransitionEngine {
                 ? PlayerCondition.ALIVE : PlayerCondition.CONSCIOUS_RESTRAINED;
         state.unconsciousCustodyDeadlineAt = null;
         state.pausedDownedRemainingMs = 0;
+        state.resuscitatorId = "";
         return CustodyTransitionResult.applied();
     }
 
@@ -343,8 +350,8 @@ public final class CustodyTransitionEngine {
     }
 
     private static CustodyTransitionResult deliverToJail(CustodyState state,
-                                                           CustodyTransition transition,
-                                                           StrajaPolicies policies) {
+                                                          CustodyTransition transition,
+                                                          StrajaPolicies policies) {
         if (state.custody != CustodyStatus.ARRESTED || blank(transition.destination())) {
             return reject("JAIL_DELIVERY_REQUIRES_ARREST_AND_DESTINATION");
         }
@@ -355,6 +362,7 @@ public final class CustodyTransitionEngine {
         state.transportDeadlineAt = null;
         state.pausedDownedRemainingMs = 0;
         state.jailDeliveryDeadlineAt = null;
+        state.resuscitatorId = "";
         if (state.condition == PlayerCondition.UNCONSCIOUS_CUSTODY) {
             state.unconsciousCustodyDeadlineAt = null;
             state.jailRevivalAt = policies.jailAutomaticRevivalEnabled
@@ -380,6 +388,7 @@ public final class CustodyTransitionEngine {
         state.unconsciousCustodyDeadlineAt = null;
         state.jailRevivalAt = null;
         state.pausedDownedRemainingMs = 0;
+        state.resuscitatorId = "";
         return CustodyTransitionResult.applied();
     }
 
@@ -404,6 +413,7 @@ public final class CustodyTransitionEngine {
         }
         state.custodyActorId = "";
         state.jailDeliveryDeadlineAt = null;
+        state.resuscitatorId = "";
         return CustodyTransitionResult.applied();
     }
 
@@ -430,6 +440,7 @@ public final class CustodyTransitionEngine {
                 state.pausedDownedRemainingMs = 0;
             }
         }
+        state.resuscitatorId = "";
         return CustodyTransitionResult.applied();
     }
 
@@ -502,6 +513,7 @@ public final class CustodyTransitionEngine {
         state.transport = TransportStatus.NONE;
         state.carrierId = "";
         state.destination = "";
+        state.resuscitatorId = "";
         return CustodyTransitionResult.applied();
     }
 
@@ -520,6 +532,7 @@ public final class CustodyTransitionEngine {
         state.carrierId = "";
         state.pausedDownedRemainingMs = 0;
         state.resuscitationProgress = 0;
+        state.resuscitatorId = "";
         switch (policies.recoveryBehavior(RecoveryEvent.DEATH)) {
             case CLEAR_ALL, WAKE -> clearAll(state);
             case RELEASE_RESTRAINTS -> {
@@ -548,6 +561,7 @@ public final class CustodyTransitionEngine {
         state.custodyActorId = "";
         state.destination = "";
         state.pausedDownedRemainingMs = 0;
+        state.resuscitatorId = "";
     }
 
     private static void clearDeadlines(CustodyState state) {
@@ -559,6 +573,7 @@ public final class CustodyTransitionEngine {
         state.jailRevivalAt = null;
         state.resuscitationProgress = 0;
         state.pausedDownedRemainingMs = 0;
+        state.resuscitatorId = "";
     }
 
     private static boolean samePlayer(CustodyState state, String actorId) {

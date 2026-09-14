@@ -62,7 +62,6 @@ public class StrajaPolicies {
     public List<String> genericKeyTokens = new ArrayList<>(List.of("key", "keycard", "lockpick"));
 
     // restraints
-    public boolean ropeRequiresCuffs = true;
     public int ropeSlownessTicks = 40;
     public int ropeSlownessAmplifier = 1;
     public int headSackBlindnessTicks = 40;

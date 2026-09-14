@@ -57,7 +57,6 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.IntValue ROPE_SLOWNESS_TICKS;
     public static final ModConfigSpec.IntValue ROPE_SLOWNESS_AMPLIFIER;
     public static final ModConfigSpec.IntValue HEAD_SACK_BLINDNESS_TICKS;
-    public static final ModConfigSpec.BooleanValue ROPE_REQUIRES_CUFFS;
     public static final ModConfigSpec.BooleanValue RESTRAINT_ACTION_LOCK;
 
     public static final ModConfigSpec.BooleanValue DOWNED_ENABLED;
@@ -295,7 +294,6 @@ public final class StrajaServerConfig {
         ROPE_SLOWNESS_TICKS = B.defineInRange("ropeSlownessTicks", 40, 1, 1200);
         ROPE_SLOWNESS_AMPLIFIER = B.defineInRange("ropeSlownessAmplifier", 1, 0, 255);
         HEAD_SACK_BLINDNESS_TICKS = B.defineInRange("headSackBlindnessTicks", 40, 1, 1200);
-        ROPE_REQUIRES_CUFFS = B.define("ropeRequiresCuffs", true);
         RESTRAINT_ACTION_LOCK = B.define("actionLock", true);
         B.pop();
 
@@ -733,7 +731,6 @@ public final class StrajaServerConfig {
         p.ropeSlownessTicks = ROPE_SLOWNESS_TICKS.get();
         p.ropeSlownessAmplifier = ROPE_SLOWNESS_AMPLIFIER.get();
         p.headSackBlindnessTicks = HEAD_SACK_BLINDNESS_TICKS.get();
-        p.ropeRequiresCuffs = ROPE_REQUIRES_CUFFS.get();
         p.restraintActionLock = RESTRAINT_ACTION_LOCK.get();
 
         p.downedEnabled = DOWNED_ENABLED.get();

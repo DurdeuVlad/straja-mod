@@ -61,6 +61,59 @@ class PrisonServiceTest {
     }
 
     @Test
+    void arrestDeliversAConsciousCuffedTargetIntoJailCustody() {
+        var custody = new CustodyService(ctx, players, new AuditService(ctx));
+        var guard = server.add("guard");
+        var guardState = players.state(guard.uuid());
+        guardState.rank = Rank.GUARD.level();
+        players.save(guard.uuid(), guardState);
+        guard.give(com.dwurdy.straja.domain.model.ItemSpec.of(CustodyService.CUFFS, 1));
+
+        assertTrue(custody.applyCuffsDirect(guard, inmate, "surrender").ok());
+        var before = ctx.custody().read().states.get(inmate.uuid().toString());
+        assertEquals(PlayerCondition.CONSCIOUS_RESTRAINED, before.condition);
+        assertEquals(CustodyStatus.ARRESTED, before.custody);
+
+        prison.arrest(inmate, null, 1, boss, null);
+
+        var after = ctx.custody().read().states.get(inmate.uuid().toString());
+        assertEquals(PlayerCondition.CONSCIOUS_RESTRAINED, after.condition);
+        assertEquals(CustodyStatus.JAILED, after.custody);
+        assertNull(after.jailDeliveryDeadlineAt);
+        assertFalse(ctx.custody().read().downed.containsKey(inmate.uuid().toString()));
+    }
+
+    @Test
+    void arrestDeliversAnUnconsciousCuffedTargetAndJailRevivesIt() {
+        var custody = new CustodyService(ctx, players, new AuditService(ctx));
+        var guard = server.add("guard");
+        var guardState = players.state(guard.uuid());
+        guardState.rank = Rank.GUARD.level();
+        players.save(guard.uuid(), guardState);
+        guard.give(com.dwurdy.straja.domain.model.ItemSpec.of(CustodyService.CUFFS, 1));
+
+        assertNotNull(custody.startDowned(inmate, guard, "weapon"));
+        assertTrue(custody.applyCuffsDirect(guard, inmate, "arrest").ok());
+        prison.arrest(inmate, null, 1, boss, null);
+
+        var delivered = ctx.custody().read().states.get(inmate.uuid().toString());
+        assertEquals(PlayerCondition.UNCONSCIOUS_CUSTODY, delivered.condition);
+        assertEquals(CustodyStatus.JAILED, delivered.custody);
+        assertNotNull(delivered.jailRevivalAt);
+        assertNull(delivered.jailDeliveryDeadlineAt);
+
+        clock.advance(ctx.policies().jailAutomaticRevivalDelaySeconds * 1_000L);
+        custody.tick();
+        var revived = ctx.custody().read().states.get(inmate.uuid().toString());
+        assertEquals(PlayerCondition.CONSCIOUS_RESTRAINED, revived.condition);
+        assertEquals(CustodyStatus.JAILED, revived.custody);
+        assertNull(revived.jailRevivalAt);
+
+        assertTrue(custody.resolveDowned(inmate, "PRISON"),
+                "repeated jail delivery is an idempotent no-op");
+    }
+
+    @Test
     void secondInmateWaitsForFreeCell() {
         var other = server.add("civ2");
         prison.arrest(inmate, null, 1, boss, null);
