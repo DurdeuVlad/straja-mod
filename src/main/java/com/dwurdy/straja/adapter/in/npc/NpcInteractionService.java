@@ -30,6 +30,11 @@ public final class NpcInteractionService {
         return issueActionToken(playerId, actionId, ACTION_TOKEN_TTL_NANOS);
     }
 
+    /** Token mint for the admin-tool menus — same player-bound one-use contract. */
+    public static String issueToolActionToken(UUID playerId, String actionId) {
+        return issueActionToken(playerId, actionId);
+    }
+
     /** Test seam: issues a token with an explicit TTL. */
     static String issueActionToken(UUID playerId, String actionId, long ttlNanos) {
         purgeExpiredTokens();

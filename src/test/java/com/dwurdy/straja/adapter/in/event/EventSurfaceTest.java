@@ -78,6 +78,15 @@ class EventSurfaceTest {
     }
 
     @Test
+    void toolItemUseFollowUpCannotDoubleFireAirGestures() throws IOException {
+        String src = source();
+        assertTrue(src.contains("toolClickHandledAt"),
+                "the item-use packet that trails a tool block/entity click must be deduped");
+        assertTrue(src.contains("getGameTime"),
+                "the dedupe must be tick-scoped");
+    }
+
+    @Test
     void staysOffConcreteServicesAndPersistence() throws IOException {
         String src = source();
         assertFalse(src.contains("com.dwurdy.straja.application.service."),

@@ -36,6 +36,17 @@ public final class StrajaItems {
     public static final DeferredItem<Item> PRISON_MARKER = ITEMS.register("prison_marker",
             () -> new Item(new Item.Properties().stacksTo(1).rarity(Rarity.UNCOMMON)));
 
+    // Physical admin tools (CustomNPCs-style, one item per verb). Creative
+    // inventory / `/straja setup tools` only — no recipes, non-stackable.
+    public static final DeferredItem<Item> NPC_WAND = ITEMS.register("npc_wand",
+            () -> new Item(new Item.Properties().stacksTo(1).rarity(Rarity.RARE)));
+    public static final DeferredItem<Item> PATROL_WAND = ITEMS.register("patrol_wand",
+            () -> new Item(new Item.Properties().stacksTo(1).rarity(Rarity.RARE)));
+    public static final DeferredItem<Item> SURVEY_ROD = ITEMS.register("survey_rod",
+            () -> new Item(new Item.Properties().stacksTo(1).rarity(Rarity.RARE)));
+    public static final DeferredItem<Item> NPC_CLONER = ITEMS.register("npc_cloner",
+            () -> new Item(new Item.Properties().stacksTo(1).rarity(Rarity.RARE)));
+
     public static final DeferredItem<Item> CUFFS = ITEMS.register("cuffs",
             () -> new Item(new Item.Properties().stacksTo(1).rarity(Rarity.UNCOMMON)));
     public static final DeferredItem<Item> CUFF_KEY = ITEMS.register("cuff_key",

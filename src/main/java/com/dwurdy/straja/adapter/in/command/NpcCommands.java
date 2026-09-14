@@ -172,10 +172,7 @@ final class NpcCommands {
 
     private static StrajaNpcEntity spawnRoleEntity(StrajaRuntime runtime,
             net.minecraft.server.level.ServerLevel level, String role, Vec3 pos) {
-        var entity = new StrajaNpcEntity(StrajaNpcEntity.NPC.get(), level);
-        entity.setPos(pos.x, pos.y, pos.z);
-        entity.setRoleId(role);
-        level.addFreshEntity(entity);
+        var entity = StrajaNpcEntity.spawn(level, pos.x, pos.y, pos.z, role, null, null);
         runtime.npcs().register(entity.getStringUUID(), role);
         return entity;
     }

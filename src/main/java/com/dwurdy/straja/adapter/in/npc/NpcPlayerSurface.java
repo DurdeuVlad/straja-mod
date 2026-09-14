@@ -24,6 +24,9 @@ final class NpcPlayerSurface {
             "report-review", "audience-review",
             "admin-dossier", "admin-promote", "admin-demote", "admin-suspend",
             "admin-fire", "admin-reinstate",
+            "tool-npc-assign", "tool-npc-rename", "tool-npc-skin",
+            "tool-npc-remove", "tool-npc-remove-confirm", "tool-npc-record",
+            "tool-survey-stamp",
             "duty-checkpoint");
 
     enum RoleRoute { RECEPTIONIST, SECRETARY, JAILER, ARCHIVIST, TRAINER, RECRUITER, UNKNOWN }

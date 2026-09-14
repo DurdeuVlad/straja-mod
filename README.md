@@ -161,6 +161,31 @@ safely — the checklist always shows what remains. Prison cells and guard rooms
 stay world-built (real geometry: enclosed shell, one door) via
 `/straja prison cell` and `/straja room discover`.
 
+### Admin tools
+
+`/straja setup tools` (Comisar or op) hands out the physical tool kit —
+CustomNPCs-style pointers that converge on the same service calls as the
+commands above. Every use re-checks authority server-side, so a stolen or
+duplicated item is inert in a normal player's hands; pending routes, corners,
+and templates live in a per-holder SavedData store and are dropped on logout.
+The items are non-craftable, non-stackable, and have no mob drops.
+
+- **NPC Wand** — click a registered Straja NPC for a clickable menu: assign
+  role, rename, set skin (native form), remove (behind a confirm click), or
+  print the registry record.
+- **Patrol Wand** — click blocks to record the patrol route (re-click removes
+  a point), sneak + click air to finish. Writes exactly the four checkpoint
+  slots through the same path as `set-checkpoint`; routes cannot cross
+  dimensions.
+- **Survey Rod** — click a block to choose which administrative location to
+  stamp there, or stamp every missing one at once (`setup here` behavior).
+- **Prison Marker** — click two opposite corners, then confirm the chat prompt
+  to register the cell through `prison cell` validation.
+- **NPC Cloner** — click a registered NPC to capture its role/name/skin, click
+  a block face to spawn a registered copy, sneak + click air to clear the
+  template.
+- **Room Marker** — unchanged room corner selection for `room discover`.
+
 Commands remain useful as an administrator/reference surface and for console or
 RCON operation. Manually typed gameplay roots are permission-2 admin-gated, so
 ordinary players should not need to type them. The inventory below is therefore
@@ -180,6 +205,7 @@ not the target player UX:
 - `/straja archive folder|sheet|edit|recipients|submit|sign|revoke|copy|
   envelope|catalog` — archive
 - `/straja npc list|spawn|assign|set-name|set-skin|remove` — native NPCs
+- `/straja setup tools` — hand out the physical admin-tool kit (Comisar/op)
 - `/straja emergency alert|clear|start|end|status` — §25 urgency calls and the
   sustained emergency mode (Comisar or op/console; `status` is public)
 - `/straja migrate <worldPath>` — import legacy `kubejs_persistent_data.nbt`

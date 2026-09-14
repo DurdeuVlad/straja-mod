@@ -19,5 +19,9 @@
   "item.straja.keychain": "Breloc Straja",
   "item.straja.fine_book": "Carnet de amenzi",
   "item.straja.fine_notice": "Înștiințare de amendă",
-  "item.straja.training_manual": "Manual de instruire Straja"
+  "item.straja.training_manual": "Manual de instruire Straja",
+  "item.straja.npc_wand": "Baghetă de registrator",
+  "item.straja.patrol_wand": "Baghetă de patrulare",
+  "item.straja.survey_rod": "Jal de măsurare",
+  "item.straja.npc_cloner": "Clonator de NPC"
 }

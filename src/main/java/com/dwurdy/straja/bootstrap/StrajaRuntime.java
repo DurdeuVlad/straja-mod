@@ -46,6 +46,7 @@ public final class StrajaRuntime {
     private final com.dwurdy.straja.application.service.AudienceService audiences;
     private final com.dwurdy.straja.application.service.EmergencyService emergency;
     private com.dwurdy.straja.application.service.AdminService admin;
+    private com.dwurdy.straja.application.service.AdminToolService adminTools;
     private final com.dwurdy.straja.application.service.RoomService rooms;
     private final com.dwurdy.straja.application.service.ArchiveService archive;
     private final com.dwurdy.straja.application.service.MigrationService migration;
@@ -125,7 +126,8 @@ public final class StrajaRuntime {
                 new ItemCoinCurrencyProvider(() -> policies.coinItemIds),
                 new EnvelopeDeliveryProvider(server, policies),
                 new com.dwurdy.straja.adapter.out.minecraft.MinecraftWorldGateway(server),
-                new com.dwurdy.straja.adapter.out.faction.ScoreboardFactionGateway(server));
+                new com.dwurdy.straja.adapter.out.faction.ScoreboardFactionGateway(server),
+                new SavedStores.AdminTools(stores));
 
         this.players = new PlayerService(ctx);
         this.audit = new AuditService(ctx);
@@ -160,6 +162,8 @@ public final class StrajaRuntime {
         this.guards.onPromotedToGuard(p -> this.rooms.assignAutomatically(p));
         this.admin = new com.dwurdy.straja.application.service.AdminService(
                 ctx, players, guards, policyService, emergency);
+        this.adminTools = new com.dwurdy.straja.application.service.AdminToolService(
+                ctx, players, npcs, guards, prison);
     }
 
     public static synchronized StrajaRuntime start(MinecraftServer server) {
@@ -168,7 +172,8 @@ public final class StrajaRuntime {
         com.dwurdy.straja.adapter.in.form.FormPayloads.setSubmissionConsumer(
                 new com.dwurdy.straja.adapter.in.form.FormSubmissionRouter(
                         instance.guards, instance.missions, instance.complaints, instance.fines,
-                        instance.archive, instance.reports, instance.audiences, instance.admin)::submit);
+                        instance.archive, instance.reports, instance.audiences, instance.admin,
+                        instance.adminTools)::submit);
         instance.logDeploymentGates();
         return instance;
     }
@@ -225,6 +230,7 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.port.in.AudienceUseCase audienceRoleplay() { return audiences; }
     public com.dwurdy.straja.application.port.in.EmergencyUseCase emergencyRoleplay() { return emergency; }
     public com.dwurdy.straja.application.port.in.AdminRoleplayUseCase adminRoleplay() { return admin; }
+    public com.dwurdy.straja.application.port.in.AdminToolsUseCase adminTools() { return adminTools; }
     public com.dwurdy.straja.application.port.in.FineRoleplayUseCase fineRoleplay() { return fines; }
     public com.dwurdy.straja.application.port.in.CustodyRoleplayUseCase custodyRoleplay() { return custody; }
     public com.dwurdy.straja.application.port.in.PrisonRoleplayUseCase prisonRoleplay() { return prison; }

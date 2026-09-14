@@ -1,6 +1,8 @@
 package com.dwurdy.straja.adapter.in.event;
 
+import com.dwurdy.straja.adapter.in.npc.NpcRoles;
 import com.dwurdy.straja.adapter.in.npc.StrajaNpcEntity;
+import com.dwurdy.straja.adapter.in.item.AdminToolSurface;
 import com.dwurdy.straja.adapter.in.item.PhysicalItemSurface;
 import com.dwurdy.straja.adapter.out.minecraft.MinecraftPlayerGateway;
 import com.dwurdy.straja.application.port.out.ItemView;
@@ -20,6 +22,14 @@ import net.neoforged.neoforge.event.tick.ServerTickEvent;
  * delegated to application services.
  */
 public final class StrajaEvents {
+    /**
+     * gameTime of the last admin-tool click handled per player. A non-consuming
+     * block or entity interact makes the client send an item-use packet right
+     * after — that follow-up must not fire the air gesture (patrol finish,
+     * template clear) on top of the action that was just handled.
+     */
+    private final java.util.Map<java.util.UUID, Long> toolClickHandledAt = new java.util.HashMap<>();
+
     public StrajaEvents() {}
 
     @SubscribeEvent
@@ -150,6 +160,9 @@ public final class StrajaEvents {
         if (runtime == null || !(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) return;
         var gateway = new MinecraftPlayerGateway(event.getEntity().getServer(), player.getUUID());
         runtime.custodyRoleplay().recoverOnLogout(gateway);
+        // Pending admin-tool state (routes, corners, templates) never survives logout.
+        runtime.adminTools().clearState(gateway);
+        toolClickHandledAt.remove(player.getUUID());
     }
 
     /**
@@ -200,6 +213,29 @@ public final class StrajaEvents {
             event.setCanceled(true);
             return;
         }
+        // Admin tools claim the entity click before any roleplay routing: the
+        // wand opens the NPC menu, the cloner captures the template. A
+        // non-Straja target (or wrong holder) is denied inside the service.
+        // The interact packet fires once per hand — claim the offhand
+        // follow-up too so a second menu or the roleplay surface cannot leak.
+        var heldTool = AdminToolSurface.tool(gateway.mainHand());
+        if (heldTool == AdminToolSurface.Tool.NPC_WAND
+                || heldTool == AdminToolSurface.Tool.NPC_CLONER) {
+            event.setCanceled(true);
+            if (event.getHand() == net.minecraft.world.InteractionHand.MAIN_HAND) {
+                // The item-use packet trailing this interact must not also
+                // fire the air gesture (patrol finish / template clear).
+                toolClickHandledAt.put(player.getUUID(), player.level().getGameTime());
+                String targetUuid = event.getTarget().getStringUUID();
+                if (heldTool == AdminToolSurface.Tool.NPC_WAND) {
+                    NpcRoles.sendToolMenu(player,
+                            runtime.adminTools().npcWandMenu(gateway, targetUuid));
+                } else {
+                    runtime.adminTools().cloneCapture(gateway, targetUuid);
+                }
+            }
+            return;
+        }
         if (!(event.getTarget() instanceof net.minecraft.server.level.ServerPlayer target)) return;
         var targetGateway = new MinecraftPlayerGateway(target.getServer(), target.getUUID());
         String held = gateway.mainHand().id();
@@ -231,7 +267,37 @@ public final class StrajaEvents {
                 || !(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) return;
         var gateway = new MinecraftPlayerGateway(player.getServer(), player.getUUID());
         if (runtime.custodyRoleplay().actionBlocked(gateway, "item_use")) event.setCanceled(true);
+        else if (useAdminTool(runtime, player, gateway, event.getHand())) event.setCanceled(true);
         else if (usePhysicalItem(runtime, gateway)) event.setCanceled(true);
+    }
+
+    /**
+     * Air clicks with admin tools: sneak + click finishes the patrol route or
+     * clears the cloner template; a plain patrol-wand click reports progress.
+     * Main hand only — the offhand follow-up packet must not fire it twice.
+     */
+    private boolean useAdminTool(StrajaRuntime runtime,
+                                 net.minecraft.server.level.ServerPlayer player,
+                                 PlayerGateway gateway,
+                                 net.minecraft.world.InteractionHand hand) {
+        if (hand != net.minecraft.world.InteractionHand.MAIN_HAND) return false;
+        // The item-use packet also trails every non-consuming block/entity
+        // click with the tool — that follow-up is not an air click.
+        Long handledAt = toolClickHandledAt.get(player.getUUID());
+        if (handledAt != null && player.level().getGameTime() - handledAt <= 1) return false;
+        return switch (AdminToolSurface.tool(gateway.mainHand())) {
+            case PATROL_WAND -> {
+                if (player.isShiftKeyDown()) runtime.adminTools().patrolFinish(gateway);
+                else runtime.adminTools().patrolStatus(gateway);
+                yield true;
+            }
+            case NPC_CLONER -> {
+                if (!player.isShiftKeyDown()) yield false;
+                runtime.adminTools().cloneClear(gateway);
+                yield true;
+            }
+            default -> false;
+        };
     }
 
     @SubscribeEvent
@@ -261,19 +327,51 @@ public final class StrajaEvents {
             event.setCanceled(true);
             return;
         }
-        if ("straja:prison_marker".equals(gateway.mainHand().id())) {
-            // Cell geometry is completed only through the permission-gated
-            // setup command; the marker is just a hint, never a geometry tool.
-            if (runtime.playerQueries().isCommissioner(gateway)) {
-                gateway.tell("Geometria celulei se finalizează prin comanda de configurare dedicată Comisarului.");
+        // The block-interact packet fires once per hand; routing the main-hand
+        // packet only keeps a single click from toggling a waypoint on and
+        // straight back off, while an item in the offhand still works.
+        if (event.getHand() == net.minecraft.world.InteractionHand.MAIN_HAND) {
+            var tool = AdminToolSurface.tool(gateway.mainHand());
+            switch (tool) {
+            case PRISON_MARKER -> {
+                // Two-click corner selection; once both corners exist the
+                // confirm token registers the cell through the normal path.
+                if (runtime.adminTools().cellClick(gateway, dimension,
+                        pos.getX(), pos.getY(), pos.getZ())) {
+                    NpcRoles.sendToolPrompt(player,
+                            "[Straja] Celula este delimitată.",
+                            "Confirmă înregistrarea celulei", "tool-cell-confirm");
+                }
             }
-            event.setCanceled(true);
-            return;
-        }
-        if ("straja:room_marker".equals(gateway.mainHand().id())) {
-            runtime.roomRoleplay().markerSelect(gateway, dimension, pos.getX(), pos.getY(), pos.getZ());
-            event.setCanceled(true);
-            return;
+            case PATROL_WAND -> runtime.adminTools().patrolClick(gateway, dimension,
+                    pos.getX(), pos.getY(), pos.getZ());
+            case SURVEY_ROD -> NpcRoles.sendToolMenu(player, runtime.adminTools().surveyMenu(
+                    gateway, dimension, pos.getX(), pos.getY(), pos.getZ()));
+            case NPC_CLONER -> {
+                // Click a block face: spawn a registered copy of the captured
+                // template one block off the face, like /straja npc spawn.
+                var spawnPos = event.getFace() == null ? pos.above() : pos.relative(event.getFace());
+                var template = runtime.adminTools().cloneSpawnAt(gateway, dimension,
+                        spawnPos.getX(), spawnPos.getY(), spawnPos.getZ());
+                if (template != null) {
+                    var entity = StrajaNpcEntity.spawn(player.serverLevel(),
+                            spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5,
+                            template.role(), template.skin(), template.displayName());
+                    runtime.adminTools().registerClone(gateway, entity.getStringUUID());
+                }
+            }
+            case ROOM_MARKER ->
+                    runtime.roomRoleplay().markerSelect(gateway, dimension,
+                            pos.getX(), pos.getY(), pos.getZ());
+            default -> {}
+            }
+            if (tool != AdminToolSurface.Tool.NONE) {
+                // The client sends an item-use packet after any non-consuming
+                // block result — the air gesture must not double-fire here.
+                toolClickHandledAt.put(player.getUUID(), player.level().getGameTime());
+                event.setCanceled(true);
+                return;
+            }
         }
         if (usePhysicalItem(runtime, gateway)) event.setCanceled(true);
     }

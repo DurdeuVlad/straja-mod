@@ -1168,6 +1168,193 @@ final class TestCommands {
                                             return 0;
                                         })))));
 
+        // ------------------------------------------------------------ admin tools
+        // Drives the same AdminToolsUseCase the physical items reach through
+        // interact events — a click is (player, position/target), which the
+        // test surface supplies directly. Lets RCON exercise the full tool
+        // flow: kit, wand menu/actions, patrol recording, survey stamping,
+        // cell bounding, cloner capture/spawn.
+        test.then(Commands.literal("tool-kit")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(ctx -> run(ctx, runtime ->
+                                runtime.adminTools().giveToolKit(player(ctx, runtime))))));
+        test.then(Commands.literal("tool-clear")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(ctx -> run(ctx, runtime -> {
+                            runtime.adminTools().clearState(player(ctx, runtime));
+                            send(ctx, "tool state cleared");
+                        }))));
+
+        // NPC wand
+        test.then(Commands.literal("tool-wand")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("entity", StringArgumentType.word())
+                                .executes(ctx -> run(ctx, runtime -> {
+                                    var menu = runtime.adminTools().npcWandMenu(player(ctx, runtime),
+                                            StringArgumentType.getString(ctx, "entity"));
+                                    if (menu == null) { send(ctx, "wand menu refused"); return; }
+                                    send(ctx, menu.title());
+                                    for (var a : menu.actions()) send(ctx, "  " + a.label() + " -> " + a.actionId());
+                                })))));
+        test.then(Commands.literal("tool-wand-assign")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("entity", StringArgumentType.word())
+                                .then(Commands.argument("role", StringArgumentType.word())
+                                        .executes(ctx -> run(ctx, runtime ->
+                                                runtime.adminTools().npcAssign(player(ctx, runtime),
+                                                        StringArgumentType.getString(ctx, "entity"),
+                                                        StringArgumentType.getString(ctx, "role"))))))));
+        test.then(Commands.literal("tool-wand-rename")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("entity", StringArgumentType.word())
+                                .then(Commands.argument("name", StringArgumentType.greedyString())
+                                        .executes(ctx -> run(ctx, runtime ->
+                                                runtime.adminTools().npcRename(player(ctx, runtime),
+                                                        StringArgumentType.getString(ctx, "entity"),
+                                                        StringArgumentType.getString(ctx, "name"))))))));
+        test.then(Commands.literal("tool-wand-skin")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("entity", StringArgumentType.word())
+                                .then(Commands.argument("skin", StringArgumentType.word())
+                                        .executes(ctx -> run(ctx, runtime ->
+                                                runtime.adminTools().npcSetSkin(player(ctx, runtime),
+                                                        StringArgumentType.getString(ctx, "entity"),
+                                                        StringArgumentType.getString(ctx, "skin"))))))));
+        test.then(Commands.literal("tool-wand-remove")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("entity", StringArgumentType.word())
+                                .executes(ctx -> run(ctx, runtime ->
+                                        runtime.adminTools().npcRemove(player(ctx, runtime),
+                                                StringArgumentType.getString(ctx, "entity")))))));
+        test.then(Commands.literal("tool-wand-record")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("entity", StringArgumentType.word())
+                                .executes(ctx -> run(ctx, runtime ->
+                                        runtime.adminTools().npcShowRecord(player(ctx, runtime),
+                                                StringArgumentType.getString(ctx, "entity")))))));
+
+        // patrol wand — a block click supplies the clicked position
+        test.then(Commands.literal("tool-patrol")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("x", IntegerArgumentType.integer())
+                                .then(Commands.argument("y", IntegerArgumentType.integer())
+                                        .then(Commands.argument("z", IntegerArgumentType.integer())
+                                                .executes(ctx -> run(ctx, runtime -> {
+                                                    var p = player(ctx, runtime);
+                                                    if (p == null) return;
+                                                    runtime.adminTools().patrolClick(p, p.dimension(),
+                                                            IntegerArgumentType.getInteger(ctx, "x"),
+                                                            IntegerArgumentType.getInteger(ctx, "y"),
+                                                            IntegerArgumentType.getInteger(ctx, "z"));
+                                                })))))));
+        test.then(Commands.literal("tool-patrol-finish")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(ctx -> run(ctx, runtime ->
+                                runtime.adminTools().patrolFinish(player(ctx, runtime))))));
+        test.then(Commands.literal("tool-patrol-status")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(ctx -> run(ctx, runtime ->
+                                runtime.adminTools().patrolStatus(player(ctx, runtime))))));
+
+        // survey rod
+        test.then(Commands.literal("tool-survey")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("x", IntegerArgumentType.integer())
+                                .then(Commands.argument("y", IntegerArgumentType.integer())
+                                        .then(Commands.argument("z", IntegerArgumentType.integer())
+                                                .executes(ctx -> run(ctx, runtime -> {
+                                                    var p = player(ctx, runtime);
+                                                    if (p == null) return;
+                                                    var menu = runtime.adminTools().surveyMenu(p, p.dimension(),
+                                                            IntegerArgumentType.getInteger(ctx, "x"),
+                                                            IntegerArgumentType.getInteger(ctx, "y"),
+                                                            IntegerArgumentType.getInteger(ctx, "z"));
+                                                    if (menu == null) { send(ctx, "survey menu refused"); return; }
+                                                    send(ctx, menu.title());
+                                                    for (var a : menu.actions()) send(ctx, "  " + a.label());
+                                                })))))));
+        test.then(Commands.literal("tool-survey-stamp")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("key", StringArgumentType.word())
+                                .executes(ctx -> run(ctx, runtime ->
+                                        runtime.adminTools().surveyStamp(player(ctx, runtime),
+                                                StringArgumentType.getString(ctx, "key")))))));
+        test.then(Commands.literal("tool-survey-all")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(ctx -> run(ctx, runtime ->
+                                runtime.adminTools().surveyStampAllMissing(player(ctx, runtime))))));
+
+        // prison marker — two block clicks, then the confirm token
+        test.then(Commands.literal("tool-cell")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("x", IntegerArgumentType.integer())
+                                .then(Commands.argument("y", IntegerArgumentType.integer())
+                                        .then(Commands.argument("z", IntegerArgumentType.integer())
+                                                .executes(ctx -> run(ctx, runtime -> {
+                                                    var p = player(ctx, runtime);
+                                                    if (p == null) return;
+                                                    boolean ready = runtime.adminTools().cellClick(p, p.dimension(),
+                                                            IntegerArgumentType.getInteger(ctx, "x"),
+                                                            IntegerArgumentType.getInteger(ctx, "y"),
+                                                            IntegerArgumentType.getInteger(ctx, "z"));
+                                                    if (ready) send(ctx, "both corners set — confirm offered");
+                                                })))))));
+        test.then(Commands.literal("tool-cell-confirm")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(ctx -> run(ctx, runtime ->
+                                runtime.adminTools().cellConfirm(player(ctx, runtime))))));
+
+        // NPC cloner — capture from a registered NPC, spawn a real copy
+        test.then(Commands.literal("tool-clone")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("entity", StringArgumentType.word())
+                                .executes(ctx -> run(ctx, runtime ->
+                                        runtime.adminTools().cloneCapture(player(ctx, runtime),
+                                                StringArgumentType.getString(ctx, "entity")))))));
+        test.then(Commands.literal("tool-clone-spawn")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("x", IntegerArgumentType.integer())
+                                .then(Commands.argument("y", IntegerArgumentType.integer())
+                                        .then(Commands.argument("z", IntegerArgumentType.integer())
+                                                .executes(ctx -> run(ctx, runtime -> {
+                                                    var p = player(ctx, runtime);
+                                                    if (p == null) return;
+                                                    int x = IntegerArgumentType.getInteger(ctx, "x");
+                                                    int y = IntegerArgumentType.getInteger(ctx, "y");
+                                                    int z = IntegerArgumentType.getInteger(ctx, "z");
+                                                    var template = runtime.adminTools()
+                                                            .cloneSpawnAt(p, p.dimension(), x, y, z);
+                                                    if (template == null) return;
+                                                    var level = ctx.getSource().getServer()
+                                                            .getLevel(net.minecraft.resources.ResourceKey
+                                                                    .create(net.minecraft.core.registries.Registries.DIMENSION,
+                                                                            net.minecraft.resources.ResourceLocation
+                                                                                    .parse(p.dimension())));
+                                                    if (level == null) { send(ctx, "unknown dimension"); return; }
+                                                    var entity = com.dwurdy.straja.adapter.in.npc.StrajaNpcEntity
+                                                            .spawn(level, x + 0.5, y, z + 0.5,
+                                                                    template.role(), template.skin(),
+                                                                    template.displayName());
+                                                    runtime.adminTools().registerClone(p, entity.getStringUUID());
+                                                    send(ctx, "clone spawned uuid=" + entity.getStringUUID());
+                                                })))))));
+        test.then(Commands.literal("tool-clone-clear")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(ctx -> run(ctx, runtime ->
+                                runtime.adminTools().cloneClear(player(ctx, runtime))))));
+        test.then(Commands.literal("tool-state")
+                .executes(ctx -> run(ctx, runtime -> {
+                    var store = runtime.context().adminTools().read();
+                    for (var e : store.holders.entrySet()) {
+                        var h = e.getValue();
+                        send(ctx, e.getKey() + " route=" + h.route.size()
+                                + " survey=" + (h.surveyTarget != null)
+                                + " cell=" + (h.cellCornerA != null) + "/" + (h.cellCornerB != null)
+                                + " clone=" + (h.cloneTemplate != null));
+                    }
+                    send(ctx, "holders=" + store.holders.size());
+                })));
+
         return test;
     }
 

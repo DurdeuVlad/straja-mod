@@ -46,6 +46,8 @@ public interface FormSessionUseCase {
         ADMIN_POLICY_SET("admin-policy-set"),
         ADMIN_EMERGENCY_ALERT("admin-emergency-alert"),
         ADMIN_EMERGENCY_START("admin-emergency-start"),
+        TOOL_NPC_NAME("tool-npc-name"),
+        TOOL_NPC_SKIN("tool-npc-skin"),
         OTHER_REQUEST("other-request");
 
         private final String id;

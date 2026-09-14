@@ -23,13 +23,15 @@ public final class FormSubmissionRouter {
     private final com.dwurdy.straja.application.port.in.ReportUseCase reports;
     private final com.dwurdy.straja.application.port.in.AudienceUseCase audiences;
     private final com.dwurdy.straja.application.port.in.AdminRoleplayUseCase admin;
+    private final com.dwurdy.straja.application.port.in.AdminToolsUseCase adminTools;
 
     public FormSubmissionRouter(GuardRecruitmentUseCase guards, MissionRoleplayUseCase missions,
             ComplaintRoleplayUseCase complaints, FineRoleplayUseCase fines,
             ArchiveRoleplayUseCase archive,
             com.dwurdy.straja.application.port.in.ReportUseCase reports,
             com.dwurdy.straja.application.port.in.AudienceUseCase audiences,
-            com.dwurdy.straja.application.port.in.AdminRoleplayUseCase admin) {
+            com.dwurdy.straja.application.port.in.AdminRoleplayUseCase admin,
+            com.dwurdy.straja.application.port.in.AdminToolsUseCase adminTools) {
         this.guards = guards;
         this.missions = missions;
         this.complaints = complaints;
@@ -38,6 +40,7 @@ public final class FormSubmissionRouter {
         this.reports = reports;
         this.audiences = audiences;
         this.admin = admin;
+        this.adminTools = adminTools;
     }
 
     public void submit(ServerPlayer player, FormSessionUseCase.Submission submission) {
@@ -174,8 +177,41 @@ public final class FormSubmissionRouter {
                 Integer rounds = parseInt(values.get("rounds"));
                 admin.emergencyStart(gateway, multiplier, rounds, values.get("reason"));
             }
+            case TOOL_NPC_NAME -> {
+                adminTools.npcRename(gateway, submission.recordId(), values.get("name"));
+                reflectNpc(player, submission.recordId(), true);
+            }
+            case TOOL_NPC_SKIN -> {
+                adminTools.npcSetSkin(gateway, submission.recordId(), values.get("skin"));
+                reflectNpc(player, submission.recordId(), false);
+            }
             default -> {}
         }
+    }
+
+    /** Reflects a persisted registry change onto the live entity when loaded. */
+    private static void reflectNpc(ServerPlayer player, String entityUuid, boolean name) {
+        try {
+            var uuid = java.util.UUID.fromString(entityUuid);
+            for (var level : player.getServer().getAllLevels()) {
+                if (level.getEntity(uuid) instanceof com.dwurdy.straja.adapter.in.npc.StrajaNpcEntity npc) {
+                    var registration = com.dwurdy.straja.bootstrap.StrajaRuntime.get()
+                            .npcRegistry().registration(entityUuid);
+                    if (registration == null) return;
+                    if (name) {
+                        // A null custom name clears the nameplate — an empty
+                        // literal would leave a blank name floating.
+                        String display = registration.displayName();
+                        npc.setCustomName(display == null || display.isEmpty() ? null
+                                : net.minecraft.network.chat.Component.literal(display));
+                    } else {
+                        // setSkin maps null back to the "default" skin.
+                        npc.setSkin(registration.skin());
+                    }
+                    return;
+                }
+            }
+        } catch (IllegalArgumentException ignored) {}
     }
 
     private static Integer parseInt(String raw) {

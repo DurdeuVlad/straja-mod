@@ -23,13 +23,14 @@ public typed conveniences are limited to status/rules/help text. `/straja backup
 is an administrator-only command that writes a bounded durable SavedData snapshot;
 `_corrupt_backup` remains a separate internal persistence recovery record.
 
-Test suite: **331 unit tests** (`gradlew test --rerun-tasks`, all green) across
+Test suite: **474 unit tests** (`gradlew test`, all green) across
 `ArchitectureBoundaryTest`, `GuardServiceTest`, `DutyEngineTest`,
 `MissionServiceTest`, `CustodyServiceTest`, `PrisonServiceTest`,
 `CivicServiceTest`, `MigrationServiceTest`, `PersistenceTest`,
 `ItemCoinCurrencyProviderTest`, `StrajaPoliciesTest`,
 `PlayerServiceTest`, `CommandSurfaceTest`, `NpcInteractionSurfaceTest`,
-`PhysicalItemSurfaceTest`, `FormSessionServiceTest`, `FormPayloadSurfaceTest`,
+`PhysicalItemSurfaceTest`, `AdminToolSurfaceTest`, `AdminToolServiceTest`,
+`FormSessionServiceTest`, `FormPayloadSurfaceTest`,
 `EventSurfaceTest`, `DeliveryBoundaryTest`.
 
 ## Foundation
@@ -106,6 +107,28 @@ Test suite: **331 unit tests** (`gradlew test --rerun-tasks`, all green) across
 | NPC admin commands | PASS | `rcon:` `npc list/spawn/assign/set-name/set-skin/remove` — registry-targeted, console-safe |
 | NPC interaction → application services | PASS | `code:NpcInteractionService` → `NpcRoles` → inbound `*RoleplayUseCase` ports only; state-aware actions use short-lived, one-use, TTL-expiring, player-bound tokens; text actions open native form sessions. `unit:ArchitectureBoundaryTest` bars concrete services/persistence from player-facing adapters |
 | Jailer damage → assault mission | PASS | `code:` jailer takes real damage (`StrajaNpcEntity.isInvulnerable`/`hurt` → `jailerMayTakeDamage` → `LivingDamageEvent.Post`/`LivingDeathEvent` → `createJailerAssaultMission`); `unit:CivicServiceTest.jailerAssaultCreatesUrgentMissionAndUpgradesSeverity`; `unit:StrajaPoliciesTest.jailerDamageAllowed*` (guard-immunity truth table) |
+
+## Physical admin tools (AT-001..006)
+
+CustomNPCs-style pointer items for the Comisar/operator: the item is never a
+credential — every use re-checks authority server-side, pending state lives in
+the per-holder `straja_admin_tools.dat` SavedData store (never in item data)
+and is dropped on logout. All mutations converge on the same application
+services the canonical commands use. Items are non-stackable, non-craftable
+(no recipes), and have no mob drops.
+
+| Feature | Status | Evidence / notes |
+|---|---|---|
+| Tool foundation: items, holder gate, per-holder state store | PASS | `unit:AdminToolServiceTest.wrongHolderIsRefusedEverywhereWithATell`, `opHolderPassesTheGate`, `pendingStateIsPerHolderAndClearsOnLogout`; `code:StrajaItems` (stacksTo(1), no recipes); `unit:AdminToolSurfaceTest` |
+| `/straja setup tools` kit | PASS | `unit:AdminToolServiceTest.kitGivesEveryAdminTool` — six items through the permission-2 `setup` root, gate re-checked in the service; `rcon:` `test tool-kit` gave all six, wrong-holder denied |
+| NPC Wand: registry menu, assign/rename/skin/remove/record | PASS | `unit:AdminToolServiceTest.wandMenu*`/`wandMutations*`; tokens reuse the player-bound one-use boundary; rename/skin via native forms (`tool-npc-name`/`tool-npc-skin`); remove behind a second confirm token; `rcon:` `test tool-wand*` — menu, assign/rename/skin/record, remove + post-remove refusal live |
+| Patrol Wand: waypoint record/remove/finish | PASS | `unit:AdminToolServiceTest.patrol*` — click toggles, exactly the checkpoint-slot count enforced, cross-dimension finish refused, writes through `setCheckpointAt`; `rcon:` `test tool-patrol*` — record/toggle/4-of-4/finish wrote checkpoint_1..4 in order |
+| Survey Rod: location stamping menu | PASS | `unit:AdminToolServiceTest.survey*` — pending target per holder, `SetupChecklist.missingLocations` drives labels + stamp-all, writes through `stampLocation`; `rcon:` `test tool-survey*` — stamp + stamp-all-missing took checklist to 10/10 |
+| Prison Marker: two-click cell bounding | PASS | `unit:AdminToolServiceTest.cell*` — corner normalization, dimension reset, stale-confirm refusal, registration through `createCell`; `rcon:` `test tool-cell*` — real-shell cell registered as `celula_2`, unloaded-area confirm failed closed |
+| NPC Cloner: capture/spawn/clear | PASS | `unit:AdminToolServiceTest.cloner*` — registry-round-trip via `NpcAdminService.register`, empty-slot refusal; `rcon:` `test tool-clone*` — two secretary copies spawned + registered, records survived a server restart |
+| Tool event routing (main-hand, per-hand packet dedupe) | PASS | `code:StrajaEvents` — entity/block/air clicks claim the main-hand packet only; `toolClickHandledAt` also dedupes the item-use packet that trails a non-consuming block/entity click, so the air gesture (route finish, template clear) cannot double-fire |
+| Tool service flow live on dev server | PASS | `rcon:` `/straja test tool-*` drives the same `AdminToolsUseCase` the items reach via interact events — kit, wand edit, patrol finish, survey stamp, cell confirm, clone spawn, wrong-holder and logout-clear all exercised; `straja_admin_tools.dat` persisted |
+| Live client UAT of the tools | BLOCKED | needs a running client: rendered wand menus, click packets, item in hand — the service layer is `rcon:`-verified |
 
 ## Missions, orders, packages
 

@@ -157,6 +157,8 @@ public final class NpcRoles {
             case "admin-emergency-start" -> openAdminForm(player, runtime, gw,
                     com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.Action.EMERGENCY_START, "");
             case "admin-emergency-end" -> runtime.adminRoleplay().emergencyEnd(gw);
+            case "tool-cell-confirm" -> runtime.adminTools().cellConfirm(gw);
+            case "tool-survey-all" -> runtime.adminTools().surveyStampAllMissing(gw);
             default -> { return false; }
         }
         return true;
@@ -236,9 +238,122 @@ public final class NpcRoles {
             case "admin-suspend" -> runtime.adminRoleplay().suspend(gw, id);
             case "admin-fire" -> runtime.adminRoleplay().fire(gw, id);
             case "admin-reinstate" -> runtime.adminRoleplay().reinstate(gw, id);
+            case "tool-npc-assign" -> {
+                // recordId = "<entityUuid>-<role>"; entity UUIDs are fixed-width.
+                String npcUuid = id.length() > 37 ? id.substring(0, 36) : "";
+                String role = id.length() > 37 ? id.substring(37) : "";
+                runtime.adminTools().npcAssign(gw, npcUuid, role);
+                var npc = loadedNpc(player, npcUuid);
+                if (npc != null) {
+                    // Reflect the persisted record, not the raw token input —
+                    // an unknown role must not reach the live entity.
+                    var registration = runtime.npcRegistry().registration(npcUuid);
+                    if (registration != null && registration.role() != null
+                            && !registration.role().isEmpty()) {
+                        npc.setRoleId(registration.role());
+                    }
+                }
+            }
+            case "tool-npc-rename" -> openToolForm(player, runtime, id, true);
+            case "tool-npc-skin" -> openToolForm(player, runtime, id, false);
+            case "tool-npc-remove" -> sendNpcRemoveConfirm(player, runtime, id);
+            case "tool-npc-remove-confirm" -> {
+                runtime.adminTools().npcRemove(gw, id);
+                var npc = loadedNpc(player, id);
+                if (npc != null) npc.discard();
+            }
+            case "tool-npc-record" -> runtime.adminTools().npcShowRecord(gw, id);
+            case "tool-survey-stamp" -> runtime.adminTools().surveyStamp(gw, id);
             default -> { return false; }
         }
         return true;
+    }
+
+    /** The loaded Straja NPC entity across all server levels, or null. */
+    private static StrajaNpcEntity loadedNpc(Player player, String entityUuid) {
+        try {
+            var server = player.getServer();
+            if (server == null) return null;
+            var uuid = java.util.UUID.fromString(entityUuid);
+            for (var lvl : server.getAllLevels()) {
+                if (lvl.getEntity(uuid) instanceof StrajaNpcEntity npc) return npc;
+            }
+        } catch (IllegalArgumentException ignored) {}
+        return null;
+    }
+
+    /** Wand text actions (rename / skin) run through the native form surface. */
+    private static boolean openToolForm(Player player,
+                                        com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                        String entityUuid, boolean name) {
+        if (!runtime.adminTools().npcStillRegistered(entityUuid)) {
+            player.sendSystemMessage(Component.literal("[Straja] NPC-ul nu mai este înregistrat."));
+            return true;
+        }
+        if (!(player instanceof ServerPlayer serverPlayer)) return true;
+        FormSessionBridge.open(serverPlayer, new FormSessionUseCase.Request(
+                name ? FormSessionUseCase.Action.TOOL_NPC_NAME
+                        : FormSessionUseCase.Action.TOOL_NPC_SKIN,
+                entityUuid,
+                name ? "Redenumește NPC" : "Skin nou",
+                name ? "Noul nume afișat al NPC-ului." : "ID-ul skin-ului pentru acest NPC.",
+                java.util.List.of(new FormSessionUseCase.Field(
+                        name ? "name" : "skin", name ? "Nume" : "Skin", 80, false))));
+        return true;
+    }
+
+    /** Removal is destructive — the first click mints a second confirm token. */
+    private static boolean sendNpcRemoveConfirm(Player player,
+                                                com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                                String entityUuid) {
+        if (!runtime.adminTools().npcStillRegistered(entityUuid)) {
+            player.sendSystemMessage(Component.literal("[Straja] NPC-ul nu mai este înregistrat."));
+            return true;
+        }
+        String token = NpcInteractionService.issueActionToken(player.getUUID(),
+                "tool-npc-remove-confirm:" + entityUuid);
+        MutableComponent confirm = Component.literal("[Confirmă eliminarea]").withStyle(style -> style
+                .withColor(ChatFormatting.RED)
+                .withUnderlined(true)
+                .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                        Component.literal("Acțiunea este permanentă.")))
+                .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND,
+                        "/straja npc-action " + token)));
+        player.sendSystemMessage(Component.literal("[Straja] Eliminarea este permanentă. ").append(confirm));
+        return true;
+    }
+
+    /**
+     * Renders an admin-tool menu as one chat line of clickable buttons, each
+     * bound to a fresh short-lived one-use token for this player.
+     */
+    public static void sendToolMenu(ServerPlayer player,
+                                    com.dwurdy.straja.application.port.in.AdminToolsUseCase.Menu menu) {
+        if (player == null || menu == null) return;
+        MutableComponent message = Component.literal(menu.title());
+        for (var action : menu.actions()) {
+            message.append(Component.literal(" "))
+                    .append(toolButton(player, action.label(), action.actionId()));
+        }
+        player.sendSystemMessage(message);
+    }
+
+    /** A single clickable row sent on its own line (e.g. the cell confirm). */
+    public static void sendToolPrompt(ServerPlayer player, String text, String label, String actionId) {
+        if (player == null) return;
+        player.sendSystemMessage(Component.literal(text).append(Component.literal(" "))
+                .append(toolButton(player, label, actionId)));
+    }
+
+    private static MutableComponent toolButton(ServerPlayer player, String label, String actionId) {
+        String token = NpcInteractionService.issueToolActionToken(player.getUUID(), actionId);
+        return Component.literal("[" + label + "]").withStyle(style -> style
+                .withColor(ChatFormatting.AQUA)
+                .withUnderlined(true)
+                .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                        Component.literal("Apasă pentru a executa.")))
+                .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND,
+                        "/straja npc-action " + token)));
     }
 
     private static boolean openQuizForm(Player player, ServerLevel level,
@@ -672,6 +787,12 @@ public final class NpcRoles {
                 var expected = adminActionFor(operation);
                 yield expected != null && runtime.adminRoleplay().isStillValid(player, expected, id);
             }
+            case "tool-npc-assign" ->
+                    id.length() > 37 && runtime.adminTools().npcStillRegistered(id.substring(0, 36));
+            case "tool-npc-rename", "tool-npc-skin", "tool-npc-remove",
+                    "tool-npc-remove-confirm", "tool-npc-record" ->
+                    runtime.adminTools().npcStillRegistered(id);
+            case "tool-survey-stamp" -> runtime.adminTools().surveyPending(player);
             default -> false;
         };
     }

@@ -126,6 +126,12 @@ public final class SavedStores {
         @Override public void write(NpcRegistry registry) { writeJson(registry); }
     }
 
+    public static class AdminTools extends JsonBackedStore implements AdminToolRepository {
+        public AdminTools(StoreAccess access) { super(access, "admin_tools"); }
+        @Override public AdminToolStore read() { return readJson(AdminToolStore.class, AdminToolStore::new); }
+        @Override public void write(AdminToolStore store) { writeJson(store); }
+    }
+
     public static class Test extends JsonBackedStore implements TestRepository {
         public Test(StoreAccess access) { super(access, "test"); }
         @Override public TestStore read() { return readJson(TestStore.class, TestStore::new); }
