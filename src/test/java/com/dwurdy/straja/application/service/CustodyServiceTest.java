@@ -15,6 +15,7 @@ import com.dwurdy.straja.domain.model.ItemSpec;
 import com.dwurdy.straja.domain.model.Rank;
 import com.dwurdy.straja.domain.model.RestraintStatus;
 import com.dwurdy.straja.domain.model.TransportStatus;
+import com.dwurdy.straja.domain.model.VisionStatus;
 import com.dwurdy.straja.support.Fakes;
 import com.dwurdy.straja.support.Fakes.*;
 import org.junit.jupiter.api.BeforeEach;
@@ -66,6 +67,56 @@ class CustodyServiceTest {
         }
         p.give(ItemSpec.of(id, 1));
         hold(p, id);
+    }
+
+    // ------------------------------------------------------------ visual projection
+
+    @Test
+    void visualProjectionUsesPrecedenceAndPreservesRestraintKind() {
+        var store = ctx.custody().read();
+        var state = new CustodyState();
+        state.playerUuid = civilian.uuid().toString();
+        state.playerName = civilian.name();
+        state.condition = PlayerCondition.DOWNED;
+        state.downedDeadlineAt = clock.nowMillis() + 60_000L;
+        store.states.put(civilian.uuid().toString(), state);
+        ctx.custody().write(store);
+
+        var visual = custody.visualStates().stream()
+                .filter(entry -> civilian.uuid().equals(entry.playerId()))
+                .findFirst().orElseThrow();
+        assertEquals(CustodyRoleplayUseCase.VisualMode.FAINT, visual.mode());
+        assertEquals(CustodyRoleplayUseCase.RestraintVisual.NONE, visual.restraint());
+
+        state.transport = TransportStatus.CARRIED;
+        state.carrierId = guard.uuid().toString();
+        state.transportDeadlineAt = clock.nowMillis() + 120_000L;
+        state.downedDeadlineAt = null;
+        state.pausedDownedRemainingMs = 60_000L;
+        ctx.custody().write(store);
+        visual = custody.visualStates().stream()
+                .filter(entry -> civilian.uuid().equals(entry.playerId()))
+                .findFirst().orElseThrow();
+        assertEquals(CustodyRoleplayUseCase.VisualMode.CARRIED, visual.mode(),
+                "carry must override the faint pose");
+
+        state.transport = TransportStatus.NONE;
+        state.carrierId = "";
+        state.transportDeadlineAt = null;
+        state.pausedDownedRemainingMs = 0;
+        state.condition = PlayerCondition.UNCONSCIOUS_CUSTODY;
+        state.custody = CustodyStatus.HOSTAGE;
+        state.restraint = RestraintStatus.ROPE_BOUND;
+        state.vision = VisionStatus.BLINDFOLDED;
+        state.unconsciousCustodyDeadlineAt = clock.nowMillis() + 60_000L;
+        state.restraintActorId = guard.uuid().toString();
+        ctx.custody().write(store);
+        visual = custody.visualStates().stream()
+                .filter(entry -> civilian.uuid().equals(entry.playerId()))
+                .findFirst().orElseThrow();
+        assertEquals(CustodyRoleplayUseCase.VisualMode.RESTRAINED, visual.mode());
+        assertEquals(CustodyRoleplayUseCase.RestraintVisual.ROPE, visual.restraint());
+        assertTrue(visual.blindfolded());
     }
 
     // ------------------------------------------------------------ cuff consent

@@ -164,6 +164,7 @@ public final class StrajaRuntime {
 
     public static synchronized StrajaRuntime start(MinecraftServer server) {
         instance = new StrajaRuntime(server);
+        com.dwurdy.straja.adapter.out.network.CustodyVisualSync.reset();
         com.dwurdy.straja.adapter.in.form.FormSessionBridge.install(instance.formSessions);
         com.dwurdy.straja.adapter.in.form.FormPayloads.setSubmissionConsumer(
                 new com.dwurdy.straja.adapter.in.form.FormSubmissionRouter(
@@ -203,6 +204,7 @@ public final class StrajaRuntime {
     }
 
     public static synchronized void stop() {
+        com.dwurdy.straja.adapter.out.network.CustodyVisualSync.reset();
         com.dwurdy.straja.adapter.in.form.FormSessionBridge.clear();
         com.dwurdy.straja.adapter.in.form.FormPayloads.setSubmissionConsumer(null);
         instance = null;
