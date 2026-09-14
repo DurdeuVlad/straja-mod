@@ -4,9 +4,21 @@ import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.domain.model.DamageCategory;
 import com.dwurdy.straja.domain.model.LethalEventResolver;
 import java.util.List;
+import java.util.UUID;
 
 /** Player-facing custody surface: cuff requests, restraint, downed and recovery. */
 public interface CustodyRoleplayUseCase {
+    /** Server-authoritative visual modes; clients never infer gameplay state. */
+    enum VisualMode { NORMAL, FAINT, CARRIED, RESTRAINED }
+
+    enum RestraintVisual { NONE, ROPE, CUFFS }
+
+    record VisualState(
+            UUID playerId,
+            VisualMode mode,
+            RestraintVisual restraint,
+            boolean blindfolded) {}
+
     enum Action {
         ACCEPT_REQUEST,
         REFUSE_REQUEST,
@@ -31,6 +43,8 @@ public interface CustodyRoleplayUseCase {
     boolean isCuffed(PlayerGateway player);
     boolean isBound(PlayerGateway player);
     boolean isDowned(PlayerGateway player);
+
+    List<VisualState> visualStates();
 
     boolean requestCuffs(PlayerGateway issuer, PlayerGateway target);
     boolean accept(PlayerGateway player, String id);

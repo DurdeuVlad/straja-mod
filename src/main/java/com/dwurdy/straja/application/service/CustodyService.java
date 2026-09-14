@@ -87,6 +87,50 @@ public class CustodyService implements CustodyRoleplayUseCase {
     public boolean isDowned(PlayerGateway p) { return store().downed.containsKey(key(p)); }
     public boolean hasHeadSack(PlayerGateway p) { return store().headSacks.containsKey(key(p)); }
 
+    /**
+     * Builds the server-authoritative visual projection used by the client.
+     * The projection deliberately contains no permissions or gameplay
+     * controls: it only tells the renderer which visual has precedence.
+     */
+    @Override
+    public List<VisualState> visualStates() {
+        var store = store();
+        importLegacyProjections(store);
+        var result = new java.util.LinkedHashMap<String, VisualState>();
+        for (var player : ctx.server().onlinePlayers()) {
+            if (player == null || player.uuid() == null) continue;
+            var state = store.states.get(key(player));
+            result.put(key(player), new VisualState(player.uuid(), visualMode(state), restraintVisual(state),
+                    state != null && state.vision == VisionStatus.BLINDFOLDED));
+        }
+        return List.copyOf(result.values());
+    }
+
+    private static RestraintVisual restraintVisual(CustodyState state) {
+        if (state == null || state.restraint == null) return RestraintVisual.NONE;
+        return switch (state.restraint) {
+            case ROPE_BOUND -> RestraintVisual.ROPE;
+            case CUFFED -> RestraintVisual.CUFFS;
+            case NONE -> RestraintVisual.NONE;
+        };
+    }
+
+    private static VisualMode visualMode(CustodyState state) {
+        if (state == null) return VisualMode.NORMAL;
+        if (state.custody == CustodyStatus.JAILED
+                || state.restraint != RestraintStatus.NONE
+                || state.condition == PlayerCondition.CONSCIOUS_RESTRAINED
+                || state.condition == PlayerCondition.UNCONSCIOUS_CUSTODY) {
+            return VisualMode.RESTRAINED;
+        }
+        if (state.transport == TransportStatus.CARRIED) return VisualMode.CARRIED;
+        if (state.condition == PlayerCondition.DOWNED
+                || state.condition == PlayerCondition.RESUSCITATING) {
+            return VisualMode.FAINT;
+        }
+        return VisualMode.NORMAL;
+    }
+
     public CustodyStore.DownedRecord downedRecord(PlayerGateway p) { return store().downed.get(key(p)); }
 
     /** Read-only projection of the custody actions this player can take right now. */
