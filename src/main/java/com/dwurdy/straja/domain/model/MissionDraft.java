@@ -23,4 +23,13 @@ public class MissionDraft {
     public Long packagedAt;
     public int issuedCount;
     public String lastMissionId = "";
+    // §13 calculated-budget metadata: when set, the draft originated from a
+    // template and reward was derived from the wage table at creation.
+    public String templateId = "";
+    public double estimatedHours;
+    public double risk = 1.0;
+    /** Set when the issuer overrode the calculated reward; audited. */
+    public String overrideReason = "";
+    /** §13 template flag — issued copies substitute patrol duty. */
+    public boolean supersedesPatrol;
 }

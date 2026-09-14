@@ -4,6 +4,7 @@ import com.dwurdy.straja.application.StrajaContext;
 import com.dwurdy.straja.application.port.in.MissionRoleplayUseCase;
 import com.dwurdy.straja.domain.model.ItemSpec;
 import com.dwurdy.straja.domain.model.Mission;
+import com.dwurdy.straja.domain.model.MissionDraft;
 import com.dwurdy.straja.domain.model.Rank;
 import com.dwurdy.straja.support.Fakes;
 import com.dwurdy.straja.support.Fakes.*;
@@ -693,5 +694,133 @@ class MissionServiceTest {
         assertTrue(missions.fail(g2, m2.id, "r".repeat(500)));
         assertEquals(240, latest().failureReason.length(),
                 "the stored failure reason is bounded");
+    }
+
+    // ------------------------------------------------------------ §13 templates + calculated budgets
+
+    private MissionDraft draftOf(TestPlayer p) {
+        return ctx.missions().read().drafts.get(p.uuid().toString());
+    }
+
+    @Test
+    void strajerTemplateTwoHoursRisk15Calculates72PerParticipant() {
+        missions.templateCreate(commissar, "Interventie", 2, 2.0, 1.5, 2, 120, "Obj", true);
+        holdCarnet(lt);
+        missions.draftFromTemplate(lt, "T4");
+        MissionDraft draft = draftOf(lt);
+        assertNotNull(draft);
+        assertEquals(72, draft.reward,
+                "Străjer 24 B/h × 2 h × risc 1.5 = 72 B/participant");
+        assertEquals(144, draft.rewardPool,
+                "two paid participants reserve a 144 B maximum budget");
+        assertEquals("T4", draft.templateId);
+        assertTrue(draft.supersedesPatrol);
+        assertEquals(2, draft.maxCopies);
+    }
+
+    @Test
+    void templateRewardsRederiveFromCurrentWageTable() {
+        missions.templateCreate(commissar, "Runda", 2, 2.0, 1.0, 1, 60, "Obj", false);
+        holdCarnet(lt);
+        missions.draftFromTemplate(lt, "T4");
+        assertEquals(48, draftOf(lt).reward, "24 B/h × 2 h × 1.0");
+        ctx.policies().salaryPerHour.put(2, 36);
+        missions.draftFromTemplate(lt, "T4");
+        assertEquals(72, draftOf(lt).reward,
+                "template rewards re-derive from the live wage table, not a stored value");
+        ctx.policies().salaryPerHour.put(2, 24);
+    }
+
+    @Test
+    void draftFromDisabledOrUnknownTemplateRefused() {
+        missions.templateCreate(commissar, "X", 1, 1.0, 1.0, 1, 60, "Obj", false);
+        missions.templateSetEnabled(commissar, "T4", false);
+        holdCarnet(lt);
+        missions.draftFromTemplate(lt, "T4");
+        assertNull(draftOf(lt));
+        assertTrue(lt.told("dezactivat"));
+    }
+
+    @Test
+    void templateAdminRequiresCommissioner() {
+        missions.templateCreate(lt, "X", 1, 1.0, 1.0, 1, 60, "Obj", false);
+        assertNull(ctx.missionTemplates().read().get("T4"),
+                "a non-commissioner must not create templates");
+        assertTrue(lt.told("Comisaru"));
+    }
+
+    @Test
+    void templateDuplicateCreatesDisabledCopy() {
+        missions.templateDuplicate(commissar, "T1");
+        var copy = ctx.missionTemplates().read().get("T4");
+        assertNotNull(copy);
+        assertFalse(copy.enabled, "duplicates start disabled until reviewed");
+        assertEquals("Patrulare suplimentară (copie)", copy.name);
+    }
+
+    @Test
+    void overMarginOverrideRequiresReason() {
+        missions.templateCreate(commissar, "Interventie", 2, 2.0, 1.5, 1, 120, "Obj", false);
+        holdCarnet(lt);
+        missions.draftFromTemplate(lt, "T4");
+        // calculated 72; margin 25% → limit 90; explicit 100 needs a reason
+        missions.draftAdjust(lt, "2", "1.5", "100", "");
+        assertEquals(72, draftOf(lt).reward,
+                "an over-limit override without a reason must not apply");
+        assertTrue(lt.told("Precizează un motiv"));
+        missions.draftAdjust(lt, "2", "1.5", "100", "amenințare iminentă");
+        assertEquals(100, draftOf(lt).reward);
+        assertEquals("amenințare iminentă", draftOf(lt).overrideReason);
+        assertTrue(audit.tail(30).stream().anyMatch(e ->
+                "mission_reward_override".equals(e.action) && e.details.contains("requested=100")),
+                "the over-limit override must be audited");
+    }
+
+    @Test
+    void underMarginOverrideAppliesWithoutReason() {
+        missions.templateCreate(commissar, "Interventie", 2, 2.0, 1.5, 1, 120, "Obj", false);
+        holdCarnet(lt);
+        missions.draftFromTemplate(lt, "T4");
+        missions.draftAdjust(lt, "2", "1.5", "80", ""); // 80 ≤ 90 limit
+        assertEquals(80, draftOf(lt).reward);
+    }
+
+    @Test
+    void issuedMissionCarriesTemplateAndKeepsRewardIdempotent() {
+        missions.templateCreate(commissar, "Interventie", 2, 2.0, 1.5, 2, 120, "Obj", true);
+        holdCarnet(commissar);
+        missions.draftFromTemplate(commissar, "T4");
+        missions.draftSign(commissar);
+        missions.draftPackage(commissar);
+        assertTrue(missions.issueDraft(commissar, g1), String.join(" | ", commissar.messages));
+        Mission m = latest();
+        assertEquals("T4", m.templateId);
+        assertTrue(m.supersedesPatrol);
+        assertEquals(72, m.reward);
+        assertEquals(72, m.issuerBudgetAmount);
+        missions.accept(g1, m.id);
+        missions.report(g1, m.id, "terminat");
+        var currency = (TestCurrency) ctx.currency();
+        int calls = currency.depositCalls;
+        assertTrue(missions.complete(commissar, m.id));
+        assertTrue(currency.depositCalls > calls,
+                "completion auto-pays the online participant the calculated 72 B");
+        assertEquals(72, currency.lastAmount);
+        calls = currency.depositCalls;
+        assertFalse(missions.claimReward(g1, m.id),
+                "the already-paid claim must refuse a second payout");
+        assertEquals(calls, currency.depositCalls,
+                "claim-token protection must keep template-issued payouts idempotent");
+    }
+
+    @Test
+    void templatesPersistAcrossRepositoryReads() {
+        missions.templateCreate(commissar, "Persistenta", 3, 1.5, 2.0, 3, 90, "Obj", false);
+        var reloaded = ctx.missionTemplates().read().get("T4");
+        assertNotNull(reloaded);
+        assertEquals("Persistenta", reloaded.name);
+        assertEquals(3, reloaded.minRank);
+        assertTrue(ctx.missionTemplates().read().seeded,
+                "the seeded flag prevents re-seeding after a deliberate wipe");
     }
 }

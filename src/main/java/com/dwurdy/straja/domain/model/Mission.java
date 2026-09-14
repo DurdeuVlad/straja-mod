@@ -63,6 +63,10 @@ public class Mission {
     public int rewardDeliveredDenominations;
     /** Origin marker for missions created by other subsystems (fines, warrants). */
     public String origin = "SECRETARY";
+    /** §13: the template this mission was issued from, if any. */
+    public String templateId = "";
+    /** §13: template flag — the mission substitutes patrol duty for assignees. */
+    public boolean supersedesPatrol;
 
     public static class Identity {
         public String uuid = "";

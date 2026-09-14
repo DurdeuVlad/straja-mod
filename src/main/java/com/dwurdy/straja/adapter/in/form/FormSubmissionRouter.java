@@ -69,6 +69,9 @@ public final class FormSubmissionRouter {
                 }
                 missions.draftScope(gateway, values.get("minimumRank"), maxAssignees);
             }
+            case MISSION_BUDGET_ADJUST ->
+                    missions.draftAdjust(gateway, values.get("hours"), values.get("risk"),
+                            values.get("reward"), values.get("reason"));
             case COMPLAINT_SUBMIT ->
                     complaints.submit(gateway, values.get("accused"), values.get("category"),
                             values.get("description"));

@@ -11,7 +11,7 @@ final class NpcPlayerSurface {
     private static final Pattern RECORD_ID = Pattern.compile("[A-Za-z0-9_-]{1,80}");
     private static final Set<String> PARAMETERIZED_ACTIONS = Set.of(
             "mission-join", "mission-accept", "mission-decline", "mission-report", "mission-fail",
-            "mission-complete", "mission-reward", "mission-reward-recover",
+            "mission-complete", "mission-reward", "mission-reward-recover", "mission-template-issue",
             "custody-accept", "custody-refuse", "custody-release",
             "complaint-claim", "complaint-join", "complaint-leave", "complaint-report",
             "complaint-review", "complaint-confirm", "complaint-withdraw",
@@ -219,6 +219,10 @@ final class NpcPlayerSurface {
                 case DRAFT_SCOPE -> actions.add(new ChatAction("Participanți ordin", "mission-draft-scope"));
                 case DRAFT_SIGN -> actions.add(new ChatAction("Semnează ordinul", "mission-draft-sign"));
                 case DRAFT_PACKAGE -> actions.add(new ChatAction("Sigilează ordinul", "mission-draft-package"));
+                case TEMPLATE_LIST -> actions.add(new ChatAction("Șabloane de misiune", "mission-template-list"));
+                case ADJUST_BUDGET -> actions.add(new ChatAction("Ajustează bugetul ordinului", "mission-budget-adjust"));
+                case ISSUE_TEMPLATE -> parameterizedActionId("mission-template-issue", id)
+                        .ifPresent(a -> actions.add(new ChatAction("Ordin din șablonul " + id, a)));
                 case JOIN -> parameterizedActionId("mission-join", id)
                         .ifPresent(a -> actions.add(new ChatAction("Intră în misiunea #" + id, a)));
                 case ACCEPT -> parameterizedActionId("mission-accept", id)

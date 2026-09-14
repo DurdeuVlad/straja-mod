@@ -83,6 +83,18 @@ The NPC roles are:
   team is restored at shift end. Patrol routes loop — after the last
   checkpoint the next round returns to checkpoint 1 and duty ends only on
   stop or a missed deadline.
+  Mission issuing is template-driven (§13): the Secretary lists enabled
+  **mission templates** with the budget computed live from the wage table —
+  `reward = hourlyWage(minRank) × estimatedHours × risk` Bronze per
+  participant, `× maxPaidParticipants` for the draft's maximum budget. One
+  click turns a template into a work order draft; a native form adjusts
+  hours/risk (recomputed) or an explicit reward — anything beyond
+  `mission.rewardOverrideMargin` (default +25% over the calculated value)
+  requires a reason and lands in the audit log. Templates never store coin
+  amounts, so wage changes re-derive every preview and new draft. The
+  Comisar administers templates in-game via `/straja mission template`
+  (create/set/duplicate/enable/disable); issued missions keep their stamped
+  reward, persist the template id, and can mark patrol-substituting work.
 - **Jailer** — custody, downed-state and sentence status, officer task
   accept/complete/arrest, and issues the cuffs item when permitted.
 - **Archivist** — folder read/issue, sheet authoring/edit/submit/sign,

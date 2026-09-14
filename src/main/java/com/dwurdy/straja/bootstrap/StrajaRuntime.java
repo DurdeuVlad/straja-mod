@@ -114,6 +114,7 @@ public final class StrajaRuntime {
                 new SavedStores.Complaints(stores),
                 new SavedStores.Reports(stores),
                 new SavedStores.Audiences(stores),
+                new SavedStores.MissionTemplates(stores),
                 new SavedStores.Custody(stores),
                 new SavedStores.Archive(stores),
                 new SavedStores.Npcs(stores),

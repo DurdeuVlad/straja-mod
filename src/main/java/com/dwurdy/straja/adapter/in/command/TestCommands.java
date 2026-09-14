@@ -6,6 +6,7 @@ import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.bootstrap.StrajaRuntime;
 import com.dwurdy.straja.domain.model.GuardState;
 import com.dwurdy.straja.domain.model.ItemSpec;
+import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -486,6 +487,82 @@ final class TestCommands {
                                                                                 StringArgumentType.getString(ctx, "start"),
                                                                                 IntegerArgumentType.getInteger(ctx, "reward"),
                                                                                 StringArgumentType.getString(ctx, "objective")))))))))));
+
+        // §13 mission templates
+        test.then(Commands.literal("template-list")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(ctx -> run(ctx, runtime ->
+                                runtime.missions().templateList(player(ctx, runtime))))
+                        .then(Commands.literal("all")
+                                .executes(ctx -> run(ctx, runtime ->
+                                        runtime.missions().templateListAll(player(ctx, runtime)))))));
+        test.then(Commands.literal("template-create")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("name", StringArgumentType.word())
+                                .then(Commands.argument("minrank", IntegerArgumentType.integer(1, 4))
+                                        .then(Commands.argument("hours", DoubleArgumentType.doubleArg())
+                                                .then(Commands.argument("risk", DoubleArgumentType.doubleArg())
+                                                        .then(Commands.argument("maxpaid", IntegerArgumentType.integer(1))
+                                                                .then(Commands.argument("deadline", IntegerArgumentType.integer(1))
+                                                                        .then(Commands.argument("patrol", BoolArgumentType.bool())
+                                                                                .then(Commands.argument("objective", StringArgumentType.greedyString())
+                                                                                        .executes(ctx -> run(ctx, runtime ->
+                                                                                                runtime.missions().templateCreate(player(ctx, runtime),
+                                                                                                        StringArgumentType.getString(ctx, "name"),
+                                                                                                        IntegerArgumentType.getInteger(ctx, "minrank"),
+                                                                                                        DoubleArgumentType.getDouble(ctx, "hours"),
+                                                                                                        DoubleArgumentType.getDouble(ctx, "risk"),
+                                                                                                        IntegerArgumentType.getInteger(ctx, "maxpaid"),
+                                                                                                        IntegerArgumentType.getInteger(ctx, "deadline"),
+                                                                                                        StringArgumentType.getString(ctx, "objective"),
+                                                                                                        BoolArgumentType.getBool(ctx, "patrol"))))))))))))));
+        test.then(Commands.literal("template-set")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("tid", StringArgumentType.word())
+                                .then(Commands.argument("field", StringArgumentType.word())
+                                        .then(Commands.argument("value", StringArgumentType.greedyString())
+                                                .executes(ctx -> run(ctx, runtime ->
+                                                        runtime.missions().templateSet(player(ctx, runtime),
+                                                                StringArgumentType.getString(ctx, "tid"),
+                                                                StringArgumentType.getString(ctx, "field"),
+                                                                StringArgumentType.getString(ctx, "value")))))))));
+        test.then(Commands.literal("template-toggle")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("tid", StringArgumentType.word())
+                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                        .executes(ctx -> run(ctx, runtime ->
+                                                runtime.missions().templateSetEnabled(player(ctx, runtime),
+                                                        StringArgumentType.getString(ctx, "tid"),
+                                                        BoolArgumentType.getBool(ctx, "enabled"))))))));
+        test.then(Commands.literal("template-duplicate")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("tid", StringArgumentType.word())
+                                .executes(ctx -> run(ctx, runtime ->
+                                        runtime.missions().templateDuplicate(player(ctx, runtime),
+                                                StringArgumentType.getString(ctx, "tid")))))));
+        test.then(Commands.literal("draft-template")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("tid", StringArgumentType.word())
+                                .executes(ctx -> run(ctx, runtime ->
+                                        runtime.missions().draftFromTemplate(player(ctx, runtime),
+                                                StringArgumentType.getString(ctx, "tid")))))));
+        test.then(Commands.literal("draft-adjust")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("hours", StringArgumentType.word())
+                                .then(Commands.argument("risk", StringArgumentType.word())
+                                        .then(Commands.argument("reward", StringArgumentType.word())
+                                                .then(Commands.argument("reason", StringArgumentType.greedyString())
+                                                        .executes(ctx -> run(ctx, runtime ->
+                                                                runtime.missions().draftAdjust(player(ctx, runtime),
+                                                                        StringArgumentType.getString(ctx, "hours"),
+                                                                        StringArgumentType.getString(ctx, "risk"),
+                                                                        StringArgumentType.getString(ctx, "reward"),
+                                                                        StringArgumentType.getString(ctx, "reason")))))
+                                                .executes(ctx -> run(ctx, runtime ->
+                                                        runtime.missions().draftAdjust(player(ctx, runtime),
+                                                                StringArgumentType.getString(ctx, "hours"),
+                                                                StringArgumentType.getString(ctx, "risk"),
+                                                                StringArgumentType.getString(ctx, "reward"), ""))))))));
 
         for (String op : new String[]{"mission-join", "mission-accept", "mission-decline",
                 "mission-claim", "mission-recover"}) {

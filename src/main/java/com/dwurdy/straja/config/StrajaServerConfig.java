@@ -42,6 +42,7 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.IntValue MISSION_RETENTION_LIMIT;
     public static final ModConfigSpec.BooleanValue MISSION_QUICK_CREATE_ENABLED;
     public static final ModConfigSpec.BooleanValue MISSION_QUICK_CREATE_LOCAL_ONLY;
+    public static final ModConfigSpec.DoubleValue MISSION_REWARD_OVERRIDE_MARGIN;
 
     public static final ModConfigSpec.IntValue CUFF_REQUEST_TIMEOUT_SECONDS;
     public static final ModConfigSpec.IntValue SURRENDER_TIMEOUT_SECONDS;
@@ -242,6 +243,10 @@ public final class StrajaServerConfig {
                 .define("quickCreateEnabled", true);
         MISSION_QUICK_CREATE_LOCAL_ONLY = B.comment("Restricts quick create to the local environment.")
                 .define("quickCreateLocalOnly", true);
+        MISSION_REWARD_OVERRIDE_MARGIN = B.comment(
+                        "Fraction above the §13 calculated reward that triggers",
+                        "the mandatory-reason override gate (0.25 = +25%).")
+                .defineInRange("rewardOverrideMargin", defaults.missionRewardOverrideMargin, 0.0, 10.0);
         B.pop();
 
         B.push("cuffs");
@@ -613,6 +618,7 @@ public final class StrajaServerConfig {
         p.missionRetentionLimit = MISSION_RETENTION_LIMIT.get();
         p.missionQuickCreateEnabled = MISSION_QUICK_CREATE_ENABLED.get();
         p.missionQuickCreateLocalOnly = MISSION_QUICK_CREATE_LOCAL_ONLY.get();
+        p.missionRewardOverrideMargin = MISSION_REWARD_OVERRIDE_MARGIN.get();
 
         p.cuffRequestTimeoutSeconds = CUFF_REQUEST_TIMEOUT_SECONDS.get();
         p.surrenderTimeoutSeconds = SURRENDER_TIMEOUT_SECONDS.get();

@@ -20,6 +20,7 @@ public interface FormSessionUseCase {
         MISSION_FAIL("mission-fail"),
         MISSION_DRAFT_WRITE("mission-draft-write"),
         MISSION_DRAFT_SCOPE("mission-draft-scope"),
+        MISSION_BUDGET_ADJUST("mission-budget-adjust"),
         COMPLAINT_SUBMIT("complaint-submit"),
         COMPLAINT_REPORT("complaint-report"),
         COMPLAINT_WITHDRAW("complaint-withdraw"),

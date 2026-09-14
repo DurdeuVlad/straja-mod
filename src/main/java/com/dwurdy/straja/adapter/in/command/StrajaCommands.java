@@ -7,6 +7,8 @@ import com.dwurdy.straja.adapter.out.persistence.StrajaDataProvider;
 import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.bootstrap.StrajaRuntime;
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.BoolArgumentType;
+import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
@@ -316,7 +318,72 @@ public final class StrajaCommands {
                                                 IntegerArgumentType.getInteger(c, "max")))))));
         draft.then(Commands.literal("sign").executes(c -> player(c, StrajaRuntime.get().missions()::draftSign)));
         draft.then(Commands.literal("package").executes(c -> player(c, StrajaRuntime.get().missions()::draftPackage)));
+        draft.then(Commands.literal("from")
+                .then(Commands.argument("template", StringArgumentType.word())
+                        .executes(c -> player(c, p -> StrajaRuntime.get().missions()
+                                .draftFromTemplate(p, StringArgumentType.getString(c, "template"))))));
+        draft.then(Commands.literal("adjust")
+                .then(Commands.argument("hours", StringArgumentType.word())
+                        .then(Commands.argument("risk", StringArgumentType.word())
+                                .then(Commands.argument("reward", StringArgumentType.word())
+                                        .then(Commands.argument("reason", StringArgumentType.greedyString())
+                                                .executes(c -> player(c, p -> StrajaRuntime.get().missions()
+                                                        .draftAdjust(p, StringArgumentType.getString(c, "hours"),
+                                                                StringArgumentType.getString(c, "risk"),
+                                                                StringArgumentType.getString(c, "reward"),
+                                                                StringArgumentType.getString(c, "reason"))))
+                                        .executes(c -> player(c, p -> StrajaRuntime.get().missions()
+                                                .draftAdjust(p, StringArgumentType.getString(c, "hours"),
+                                                        StringArgumentType.getString(c, "risk"),
+                                                        StringArgumentType.getString(c, "reward"), ""))))))));
         node.then(draft);
+
+        // §13 templates — issuer preview + commissioner administration
+        node.then(Commands.literal("templates")
+                .executes(c -> player(c, StrajaRuntime.get().missions()::templateList)));
+        var template = Commands.literal("template");
+        template.then(Commands.literal("list")
+                .executes(c -> player(c, StrajaRuntime.get().missions()::templateListAll)));
+        template.then(Commands.literal("create")
+                .then(Commands.argument("name", StringArgumentType.word())
+                        .then(Commands.argument("minrank", IntegerArgumentType.integer(1, 4))
+                                .then(Commands.argument("hours", DoubleArgumentType.doubleArg(0.0, 24.0))
+                                        .then(Commands.argument("risk", DoubleArgumentType.doubleArg(0.0, 10.0))
+                                                .then(Commands.argument("maxpaid", IntegerArgumentType.integer(1))
+                                                        .then(Commands.argument("deadline", IntegerArgumentType.integer(1))
+                                                                .then(Commands.argument("patrol", BoolArgumentType.bool())
+                                                                        .then(Commands.argument("objective", StringArgumentType.greedyString())
+                                                                                .executes(c -> player(c, p -> StrajaRuntime.get().missions()
+                                                                                        .templateCreate(p,
+                                                                                                StringArgumentType.getString(c, "name"),
+                                                                                                IntegerArgumentType.getInteger(c, "minrank"),
+                                                                                                DoubleArgumentType.getDouble(c, "hours"),
+                                                                                                DoubleArgumentType.getDouble(c, "risk"),
+                                                                                                IntegerArgumentType.getInteger(c, "maxpaid"),
+                                                                                                IntegerArgumentType.getInteger(c, "deadline"),
+                                                                                                StringArgumentType.getString(c, "objective"),
+                                                                                                BoolArgumentType.getBool(c, "patrol")))))))))))));
+        template.then(Commands.literal("set")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("field", StringArgumentType.word())
+                                .then(Commands.argument("value", StringArgumentType.greedyString())
+                                        .executes(c -> player(c, p -> StrajaRuntime.get().missions()
+                                                .templateSet(p, StringArgumentType.getString(c, "id"),
+                                                        StringArgumentType.getString(c, "field"),
+                                                        StringArgumentType.getString(c, "value"))))))));
+        template.then(Commands.literal("duplicate")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(c -> player(c, p -> StrajaRuntime.get().missions()
+                                .templateDuplicate(p, StringArgumentType.getString(c, "id"))))));
+        template.then(Commands.literal("enable")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(c -> player(c, p -> StrajaRuntime.get().missions()
+                                .templateSetEnabled(p, StringArgumentType.getString(c, "id"), true)))));
+        template.then(Commands.literal("disable")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(c -> player(c, p -> StrajaRuntime.get().missions()
+                                .templateSetEnabled(p, StringArgumentType.getString(c, "id"), false)))));
+        node.then(template);
 
         node.then(Commands.literal("give")
                 .then(Commands.argument("player", EntityArgument.player())
