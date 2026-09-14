@@ -14,7 +14,6 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.MultiLineEditBox;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.FormattedText;
 import net.minecraft.world.entity.player.Inventory;
 import net.neoforged.neoforge.network.PacketDistributor;
 
@@ -30,7 +29,7 @@ public class StrajaFormScreen extends AbstractContainerScreen<StrajaFormMenu> {
     private record Input(Field field, Supplier<String> value) {}
 
     public StrajaFormScreen(StrajaFormMenu menu, Inventory inventory, Component title) {
-        super(menu, inventory, title);
+        super(menu, inventory, StrajaFormMenu.textComponent(menu.view().title()));
         this.imageWidth = 240;
         int fieldsHeight = 0;
         for (Field field : menu.view().fields()) {
@@ -65,9 +64,9 @@ public class StrajaFormScreen extends AbstractContainerScreen<StrajaFormMenu> {
                 y += SINGLE_LINE_HEIGHT + 8;
             }
         }
-        addRenderableWidget(Button.builder(Component.literal("Submit"), b -> submit())
+        addRenderableWidget(Button.builder(Component.translatable("straja.form.submit"), b -> submit())
                 .bounds(x, topPos + imageHeight - 28, 80, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Cancel"), b -> onClose())
+        addRenderableWidget(Button.builder(Component.translatable("straja.form.cancel"), b -> onClose())
                 .bounds(x + 88, topPos + imageHeight - 28, 80, 20).build());
     }
 
@@ -102,7 +101,7 @@ public class StrajaFormScreen extends AbstractContainerScreen<StrajaFormMenu> {
     @Override
     protected void renderLabels(GuiGraphics graphics, int mouseX, int mouseY) {
         graphics.drawString(font, title, 12, 8, 0xFFFFFFFF, false);
-        graphics.drawWordWrap(font, FormattedText.of(getMenu().view().prompt()),
+        graphics.drawWordWrap(font, StrajaFormMenu.textComponent(getMenu().view().prompt()),
                 12, 22, imageWidth - 24, 0xFF9E9E9E);
     }
 }

@@ -6,6 +6,7 @@ import com.dwurdy.straja.bootstrap.StrajaMenus;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
@@ -41,6 +42,14 @@ public class StrajaFormMenu extends AbstractContainerMenu {
         return view;
     }
 
+    /** Resolves the compact server-to-client marker used for localized form text. */
+    public static Component textComponent(String value) {
+        if (value != null && value.startsWith("@")) {
+            return Component.translatable(value.substring(1));
+        }
+        return Component.literal(value == null ? "" : value);
+    }
+
     public static void writeView(RegistryFriendlyByteBuf buf, View view) {
         buf.writeUtf(view.sessionId(), MAX_SESSION_ID);
         buf.writeUtf(view.title(), MAX_TITLE);
@@ -59,7 +68,7 @@ public class StrajaFormMenu extends AbstractContainerMenu {
         String title = buf.readUtf(MAX_TITLE);
         String prompt = buf.readUtf(MAX_PROMPT);
         int count = buf.readVarInt();
-        if (count < 1 || count > MAX_FIELDS) {
+        if (count < 0 || count > MAX_FIELDS) {
             throw new IllegalArgumentException("form field count out of bounds: " + count);
         }
         List<Field> fields = new ArrayList<>(count);

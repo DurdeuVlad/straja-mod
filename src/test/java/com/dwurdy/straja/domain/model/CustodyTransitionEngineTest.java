@@ -162,6 +162,126 @@ class CustodyTransitionEngineTest {
     }
 
     @Test
+    void confirmedGiveUpEndsOrdinaryDownedAndUsesDeathCleanup() {
+        var state = state("target");
+        state.provider = StateProvider.NATIVE;
+        var policies = policies();
+        assertTrue(CustodyTransitionEngine.apply(state,
+                CustodyTransition.of("down-1", CustodyTransition.Action.ENTER_DOWNED,
+                        1_000, "weapon"), policies).ok());
+
+        var giveUp = new CustodyTransition("give-up-1", CustodyTransition.Action.GIVE_UP,
+                2_000, "target", "", "", StateProvider.NATIVE, "give_up", 0);
+        assertEquals("APPLIED", CustodyTransitionEngine.apply(state, giveUp, policies).code());
+        assertEquals(PlayerCondition.DEAD, state.condition);
+        assertEquals(CustodyStatus.FREE, state.custody);
+        assertEquals(TransportStatus.NONE, state.transport);
+        assertEquals(RestraintStatus.NONE, state.restraint);
+        assertEquals(VisionStatus.NORMAL, state.vision);
+        assertNull(state.downedDeadlineAt);
+        assertNull(state.resuscitationDeadlineAt);
+        assertEquals(0, state.resuscitationProgress);
+        assertEquals("", state.resuscitatorId);
+        assertTrue(state.wellFormed());
+
+        var replay = CustodyTransitionEngine.apply(state, giveUp, policies);
+        assertTrue(replay.ok());
+        assertTrue(replay.idempotent());
+        assertEquals("IDEMPOTENT_REPLAY", replay.code());
+    }
+
+    @Test
+    void giveUpEligibilityRejectsConfirmationAndOwnershipGuards() {
+        var state = state("target");
+        var policies = policies();
+        assertTrue(CustodyTransitionEngine.apply(state,
+                CustodyTransition.of("down-1", CustodyTransition.Action.ENTER_DOWNED,
+                        1_000, "weapon"), policies).ok());
+        assertTrue(CustodyTransitionEngine.giveUpEligibility(state, "target").ok());
+        assertEquals("GIVE_UP_ACTOR_INVALID",
+                CustodyTransitionEngine.giveUpEligibility(state, "other").code());
+
+        state.provider = StateProvider.VAMPIRISM;
+        assertEquals("EXTERNAL_PROVIDER_OWNS_STATE",
+                CustodyTransitionEngine.giveUpEligibility(state, "target").code());
+    }
+
+    @Test
+    void giveUpRejectsCarriedResuscitatingCustodyDeadAndMalformedStates() {
+        var policies = policies();
+
+        var carried = state("carried");
+        assertTrue(CustodyTransitionEngine.apply(carried,
+                CustodyTransition.of("down-1", CustodyTransition.Action.ENTER_DOWNED,
+                        1_000, "weapon"), policies).ok());
+        assertTrue(CustodyTransitionEngine.apply(carried,
+                new CustodyTransition("carry-1", CustodyTransition.Action.START_CARRY,
+                        1_100, "carrier", "carrier", "", StateProvider.NATIVE, "carry", 0),
+                policies).ok());
+        assertEquals("GIVE_UP_REQUIRES_ORDINARY_DOWNED",
+                CustodyTransitionEngine.giveUpEligibility(carried, "carried").code());
+
+        var resuscitating = state("resuscitating");
+        assertTrue(CustodyTransitionEngine.apply(resuscitating,
+                CustodyTransition.of("down-1", CustodyTransition.Action.ENTER_DOWNED,
+                        1_000, "weapon"), policies).ok());
+        assertTrue(CustodyTransitionEngine.apply(resuscitating,
+                CustodyTransition.of("resus-1", CustodyTransition.Action.START_RESUSCITATION,
+                        1_100, "medic"), policies).ok());
+        assertEquals("GIVE_UP_REQUIRES_ORDINARY_DOWNED",
+                CustodyTransitionEngine.giveUpEligibility(resuscitating, "resuscitating").code());
+
+        var restrained = state("restrained");
+        assertTrue(CustodyTransitionEngine.apply(restrained,
+                CustodyTransition.of("rope-1", CustodyTransition.Action.APPLY_ROPE,
+                        1_000, "guard"), policies).ok());
+        assertEquals("GIVE_UP_REQUIRES_ORDINARY_DOWNED",
+                CustodyTransitionEngine.giveUpEligibility(restrained, "restrained").code());
+
+        var dead = state("dead");
+        assertTrue(CustodyTransitionEngine.apply(dead,
+                CustodyTransition.of("down-1", CustodyTransition.Action.ENTER_DOWNED,
+                        1_000, "weapon"), policies).ok());
+        assertTrue(CustodyTransitionEngine.apply(dead,
+                CustodyTransition.of("die-1", CustodyTransition.Action.DIE,
+                        1_100, "system"), policies).ok());
+        assertEquals("ALREADY_DEAD",
+                CustodyTransitionEngine.giveUpEligibility(dead, "dead").code());
+
+        var malformed = state("malformed");
+        malformed.condition = PlayerCondition.DOWNED;
+        assertEquals("MALFORMED_STATE",
+                CustodyTransitionEngine.giveUpEligibility(malformed, "malformed").code());
+    }
+
+    @Test
+    void competingTransitionsAreResolvedInServerApplicationOrder() {
+        var policies = policies();
+        var rescueWins = state("rescue-wins");
+        assertTrue(CustodyTransitionEngine.apply(rescueWins,
+                CustodyTransition.of("down-1", CustodyTransition.Action.ENTER_DOWNED,
+                        1_000, "weapon"), policies).ok());
+        assertTrue(CustodyTransitionEngine.apply(rescueWins,
+                CustodyTransition.of("resus-1", CustodyTransition.Action.START_RESUSCITATION,
+                        2_000, "medic"), policies).ok());
+        assertFalse(CustodyTransitionEngine.apply(rescueWins,
+                CustodyTransition.of("give-up-1", CustodyTransition.Action.GIVE_UP,
+                        2_000, "rescue-wins"), policies).ok());
+
+        var giveUpWins = state("give-up-wins");
+        assertTrue(CustodyTransitionEngine.apply(giveUpWins,
+                CustodyTransition.of("down-1", CustodyTransition.Action.ENTER_DOWNED,
+                        1_000, "weapon"), policies).ok());
+        assertTrue(CustodyTransitionEngine.apply(giveUpWins,
+                CustodyTransition.of("give-up-1", CustodyTransition.Action.GIVE_UP,
+                        2_000, "give-up-wins"), policies).ok());
+        assertEquals(PlayerCondition.DEAD, giveUpWins.condition);
+        assertFalse(CustodyTransitionEngine.apply(giveUpWins,
+                CustodyTransition.of("resus-1", CustodyTransition.Action.START_RESUSCITATION,
+                        2_000, "medic"), policies).ok());
+    }
+
+    @Test
     void unconsciousDeadlineRestoresWalkingButKeepsPhysicalRestraint() {
         var state = state("target");
         var p = policies();

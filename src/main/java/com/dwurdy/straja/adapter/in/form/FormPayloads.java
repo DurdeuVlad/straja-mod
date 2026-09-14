@@ -95,6 +95,10 @@ public final class FormPayloads {
             submissionConsumer.accept(player, s);
             player.closeContainer();
         });
+        if (submission.isEmpty()) {
+            player.sendSystemMessage(net.minecraft.network.chat.Component.translatable(
+                    "straja.form.invalid"));
+        }
     }
 
     private static void handleCancel(Cancel payload, IPayloadContext context) {
