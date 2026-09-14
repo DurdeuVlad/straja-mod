@@ -19,7 +19,10 @@ import java.util.Map;
 public final class PolicyRegistry {
     private PolicyRegistry() {}
 
-    public enum Kind { INT, BOOL, DOUBLE, STRING, INT_MAP, INT_STR_MAP, INT_LIST, STRING_LIST, QUIZ, KITS, EQUIPMENT }
+    public enum Kind {
+        INT, BOOL, DOUBLE, STRING, INT_MAP, INT_STR_MAP, INT_LIST, STRING_LIST, QUIZ, KITS, EQUIPMENT,
+        DAMAGE_BEHAVIOR, RECOVERY_BEHAVIOR
+    }
 
     public record Key(String path, String field, Kind kind) {}
 
@@ -76,6 +79,30 @@ public final class PolicyRegistry {
         k("downed.slownessTicks", "downedSlownessTicks", Kind.INT);
         k("downed.slownessAmplifier", "downedSlownessAmplifier", Kind.INT);
         k("downed.wakeHealthRatio", "downedWakeHealthRatio", Kind.DOUBLE);
+        // DC-001 custody domain contract
+        k("custody.carryTransportDeadlineSeconds", "carryTransportDeadlineSeconds", Kind.INT);
+        k("custody.resuscitationTimeoutSeconds", "resuscitationTimeoutSeconds", Kind.INT);
+        k("custody.resuscitationProgressPercent", "resuscitationProgressPercent", Kind.INT);
+        k("custody.unconsciousCustodyDurationSeconds", "unconsciousCustodyDurationSeconds", Kind.INT);
+        k("custody.jailDeliveryDeadlineSeconds", "jailDeliveryDeadlineSeconds", Kind.INT);
+        k("custody.jailAutomaticRevivalEnabled", "jailAutomaticRevivalEnabled", Kind.BOOL);
+        k("custody.jailAutomaticRevivalDelaySeconds", "jailAutomaticRevivalDelaySeconds", Kind.INT);
+        k("custody.secondWeaponHitBehavior", "secondWeaponHitBehavior", Kind.DAMAGE_BEHAVIOR);
+        k("custody.ordinaryDamageBehavior", "ordinaryDamageBehavior", Kind.DAMAGE_BEHAVIOR);
+        k("custody.nonWeaponDamageBehavior", "nonWeaponDamageBehavior", Kind.DAMAGE_BEHAVIOR);
+        k("custody.exceptionalDamageBehavior", "exceptionalDamageBehavior", Kind.DAMAGE_BEHAVIOR);
+        k("custody.criminalRopeEnabled", "criminalRopeEnabled", Kind.BOOL);
+        k("custody.criminalCutterEnabled", "criminalCutterEnabled", Kind.BOOL);
+        k("custody.policeCuffsEnabled", "policeCuffsEnabled", Kind.BOOL);
+        k("custody.universalKeyEnabled", "universalKeyEnabled", Kind.BOOL);
+        k("custody.blackSackApplicationEnabled", "blackSackApplicationEnabled", Kind.BOOL);
+        k("custody.blackSackRemovalEnabled", "blackSackRemovalEnabled", Kind.BOOL);
+        k("custody.blackSackSelfRemoval", "blackSackSelfRemoval", Kind.BOOL);
+        k("recovery.logout", "logoutRecoveryBehavior", Kind.RECOVERY_BEHAVIOR);
+        k("recovery.restart", "restartRecoveryBehavior", Kind.RECOVERY_BEHAVIOR);
+        k("recovery.death", "deathRecoveryBehavior", Kind.RECOVERY_BEHAVIOR);
+        k("recovery.dimensionChange", "dimensionChangeRecoveryBehavior", Kind.RECOVERY_BEHAVIOR);
+        k("recovery.missingDestination", "missingDestinationRecoveryBehavior", Kind.RECOVERY_BEHAVIOR);
         // arrestRewards
         k("arrestRewards.minimum", "arrestRewardMinimum", Kind.INT);
         k("arrestRewards.maximum", "arrestRewardMaximum", Kind.INT);
@@ -262,6 +289,8 @@ public final class PolicyRegistry {
                 throw new IllegalArgumentException("not a boolean");
             }
             case STRING -> { return raw; }
+            case DAMAGE_BEHAVIOR -> { return enumName(DamageBehavior.class, raw); }
+            case RECOVERY_BEHAVIOR -> { return enumName(RecoveryBehavior.class, raw); }
             case INT_LIST -> {
                 List<Integer> out = new ArrayList<>();
                 for (String e : entries(raw)) out.add(Integer.parseInt(e));
@@ -316,9 +345,18 @@ public final class PolicyRegistry {
         return total;
     }
 
+    private static String enumName(Class<? extends Enum<?>> type, String raw) {
+        for (var value : type.getEnumConstants()) {
+            if (value.name().equalsIgnoreCase(raw)) return value.name();
+        }
+        throw new IllegalArgumentException("unknown enum value");
+    }
+
     private static String format(Kind kind, Object value) {
         switch (kind) {
-            case INT, DOUBLE, BOOL, STRING -> { return String.valueOf(value); }
+            case INT, DOUBLE, BOOL, STRING, DAMAGE_BEHAVIOR, RECOVERY_BEHAVIOR -> {
+                return String.valueOf(value);
+            }
             case INT_LIST, STRING_LIST -> { return ((List<?>) value).stream()
                     .map(String::valueOf).collect(java.util.stream.Collectors.joining(";")); }
             case INT_MAP -> { return String.join(";", StrajaPolicies.formatIntMap(castMap(value))); }
