@@ -77,6 +77,7 @@ Test suite: **331 unit tests** (`gradlew test --rerun-tasks`, all green) across
 | Special Duty mode | PARTIAL | `code:DutyEngine` — implemented, thinner coverage |
 | Salary payment in real Ady's coins | PASS | `rcon:` salary paid as 6× `adys_decorations:brass_coin` (60 base units); `unit:GuardServiceTest.salaryInProgress*` — crashed attempts lock for review / recover via receipt, never double-pay |
 | Food cooldown (30 min) | PASS | `unit:GuardServiceTest` |
+| Weekly activity reports via Secretary (§11) | PASS | `unit:ReportServiceTest` — submit/idempotent refile, return-with-note → resubmit revision, call-in, self-anchoring interval, overdue duty gate opt-in; `rcon:` R1 filed → returned → rev2 → accepted; overdue refused duty, filing cleared |
 
 ## Economy & equipment
 

@@ -66,13 +66,19 @@ The NPC roles are:
   (`straja:training_manual`) — right-click it to read the rules.
 - **Secretary** — duty self-service (start/checkpoint/stop, salary, coins,
   food, kit, resignation/rejoin), mission browsing/accept/report/fail, order
-  carnet, complaint investigation reports, archive catalog. Patrol shifts
-  **must** start and end here — `/straja stop` away from the Secretary is
-  refused for normal duty (free-duty ranks keep at-will stop). On duty start
-  the guard's scoreboard team is captured and the `Straja` team is applied;
-  the captured team is restored at shift end. Patrol routes loop — after the
-  last checkpoint the next round returns to checkpoint 1 and duty ends only
-  on stop or a missed deadline.
+  carnet, complaint investigation reports, archive catalog, and **weekly
+  activity reports** (§11): every member files a report per interval
+  (`reports.intervalDays`, default 7) through a native form — activity,
+  missions, incidents, notes for the Comisar. The Comisar reviews them at the
+  same surface: accept, return-with-note (reopens submission), or call the
+  author in. An overdue report can refuse duty start when
+  `reports.blockDutyWhenOverdue` is enabled. Patrol shifts **must** start and
+  end here — `/straja stop` away from the Secretary is refused for normal
+  duty (free-duty ranks keep at-will stop). On duty start the guard's
+  scoreboard team is captured and the `Straja` team is applied; the captured
+  team is restored at shift end. Patrol routes loop — after the last
+  checkpoint the next round returns to checkpoint 1 and duty ends only on
+  stop or a missed deadline.
 - **Jailer** — custody, downed-state and sentence status, officer task
   accept/complete/arrest, and issues the cuffs item when permitted.
 - **Archivist** — folder read/issue, sheet authoring/edit/submit/sign,
@@ -82,7 +88,8 @@ NPC actions are rendered as clickable chat. Each click uses a short-lived,
 one-use token bound to the clicking player; it is not a typed gameplay command
 and cannot be reused by another player. Text-bearing decisions (quiz answers,
 mission reports and failure reasons, complaint submissions and withdrawal
-reasons, investigation reports, appeals, archive sheet edits) open a native
+reasons, investigation reports, appeals, archive sheet edits, activity
+reports and their review decisions) open a native
 form screen — a server-authoritative session that is owner-bound, allowlisted,
 expiring, and one-use; the payload carries only an opaque session ID and
 bounded field values.
@@ -163,7 +170,8 @@ through the in-game config screen (mod list → Straja → Config). Changes appl
 on the next server start. Sections include `identity`, `timers`, `mission`,
 `cuffs`, `restraints`, `downed`, `arrestRewards`, `economy`, `salary`,
 `promotion`, `quiz`, `jailer`, `equipment`, `trainer`, `security`, `envelope`, `archive`,
-`rooms`, `fines`, `prison`, `audit`, `complaints`, `ranks`, `debug`, and `testing`.
+`rooms`, `fines`, `prison`, `audit`, `complaints`, `ranks`, `reports`,
+`debug`, and `testing`.
 
 The `ranks` section also controls the §4 display prefix: every authorized
 member (including off-duty) shows `[Rank] Name` in chat and the TAB list,
