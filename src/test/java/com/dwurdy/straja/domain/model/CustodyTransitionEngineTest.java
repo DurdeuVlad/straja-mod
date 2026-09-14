@@ -91,6 +91,27 @@ class CustodyTransitionEngineTest {
     }
 
     @Test
+    void unstablePersistedStatesRequireTheirOwnDeadline() {
+        var state = state("target");
+        state.condition = PlayerCondition.DOWNED;
+        assertTrue(state.violations().contains("downed_deadline_missing"));
+
+        state.condition = PlayerCondition.RESUSCITATING;
+        assertTrue(state.violations().contains("resuscitation_deadline_missing"));
+
+        state.condition = PlayerCondition.UNCONSCIOUS_CUSTODY;
+        state.custody = CustodyStatus.ARRESTED;
+        state.restraint = RestraintStatus.CUFFED;
+        assertTrue(state.violations().contains("unconscious_custody_deadline_missing"));
+
+        state.condition = PlayerCondition.DOWNED;
+        state.downedDeadlineAt = 2_000L;
+        state.transport = TransportStatus.CARRIED;
+        state.carrierId = "carrier";
+        assertTrue(state.violations().contains("transport_deadline_missing"));
+    }
+
+    @Test
     void transitionIdentityMakesRetriesIdempotent() {
         var state = state("target");
         var transition = CustodyTransition.of("down-1", CustodyTransition.Action.ENTER_DOWNED, 1_000, "weapon");

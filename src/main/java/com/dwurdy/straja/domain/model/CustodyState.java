@@ -92,6 +92,20 @@ public class CustodyState {
                 && (restraint == RestraintStatus.NONE || custody == CustodyStatus.FREE)) {
             result.add("conscious_restrained_without_valid_control_context");
         }
+        if (condition == PlayerCondition.DOWNED && !positive(downedDeadlineAt)) {
+            result.add("downed_deadline_missing");
+        }
+        if (condition == PlayerCondition.RESUSCITATING && !positive(resuscitationDeadlineAt)) {
+            result.add("resuscitation_deadline_missing");
+        }
+        if (condition == PlayerCondition.UNCONSCIOUS_CUSTODY
+                && custody != CustodyStatus.JAILED
+                && !positive(unconsciousCustodyDeadlineAt)) {
+            result.add("unconscious_custody_deadline_missing");
+        }
+        if (transport == TransportStatus.CARRIED && !positive(transportDeadlineAt)) {
+            result.add("transport_deadline_missing");
+        }
         if (resuscitationProgress < 0 || resuscitationProgress > 100) {
             result.add("resuscitation_progress_out_of_range");
         }
@@ -104,5 +118,9 @@ public class CustodyState {
 
     private static boolean blank(String value) {
         return value == null || value.isBlank();
+    }
+
+    private static boolean positive(Long value) {
+        return value != null && value > 0;
     }
 }
