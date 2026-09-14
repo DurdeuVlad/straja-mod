@@ -54,13 +54,22 @@ class StrajaPoliciesTest {
     }
 
     @Test
-    void equipmentRoundTripPreservesLabelsWithSpaces() {
+    void armoryRoundTripPreservesEntries() {
         var defaults = new StrajaPolicies();
-        var parsed = StrajaPolicies.parseEquipment(StrajaPolicies.formatEquipment(defaults.serviceEquipment));
-        assertEquals(defaults.serviceEquipment, parsed);
-        var cuffs = parsed.get(2).stream().filter(e -> e.key().equals("cuffs")).findFirst().orElseThrow();
-        assertEquals("cătușe de serviciu", cuffs.label());
-        assertEquals(100, cuffs.replacementCost());
+        var stock = StrajaPolicies.parseArmoryItems(StrajaPolicies.formatArmoryItems(defaults.armoryStock));
+        assertEquals(defaults.armoryStock, stock);
+        var reserves = StrajaPolicies.parseArmoryItems(StrajaPolicies.formatArmoryItems(defaults.armoryReserves));
+        assertEquals(defaults.armoryReserves, reserves);
+        var cuffs = reserves.stream().filter(e -> e.key().equals("cuffs")).findFirst().orElseThrow();
+        assertEquals("straja:cuffs", cuffs.itemId());
+        assertEquals(5, cuffs.cost());
+        assertEquals(2, cuffs.minRank());
+        // malformed entries are skipped, not fatal
+        var tolerant = StrajaPolicies.parseArmoryItems(java.util.List.of(
+                "sword|minecraft:iron_sword|1|3|1", "broken", "x||1|1|1",
+                "y|minecraft:apple|0|1|1", "z|minecraft:apple|1|-5|1",
+                "w|minecraft:apple|x|1|1"));
+        assertEquals(1, tolerant.size());
     }
 
     @Test
@@ -87,8 +96,8 @@ class StrajaPoliciesTest {
         var defaults = new StrajaPolicies();
         assertEquals(defaults.promotionServiceBlocks,
                 StrajaPolicies.parseIntMap(StrajaPolicies.formatIntMap(defaults.promotionServiceBlocks)));
-        assertEquals(defaults.regearCost,
-                StrajaPolicies.parseIntMap(StrajaPolicies.formatIntMap(defaults.regearCost)));
+        assertEquals(defaults.armoryStock,
+                StrajaPolicies.parseArmoryItems(StrajaPolicies.formatArmoryItems(defaults.armoryStock)));
         assertEquals(defaults.sentenceDaysByAmount,
                 StrajaPolicies.parseIntMap(StrajaPolicies.formatIntMap(defaults.sentenceDaysByAmount)));
         assertEquals(defaults.complaintRewardBySeverity,

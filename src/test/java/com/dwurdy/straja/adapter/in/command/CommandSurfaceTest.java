@@ -12,7 +12,7 @@ class CommandSurfaceTest {
             "invite", "recruit", "recrute", "quiz",
             "start", "checkpoint", "special",
             "resign", "demisie", "rejoin",
-            "salary", "coins", "food", "kit", "regear", "approve-regear",
+            "salary", "coins", "food", "kit", "merit",
             "report", "message", "request", "inbox",
             "mission", "cuffs", "prison", "fine", "complaint", "room", "archive");
 

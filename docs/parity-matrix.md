@@ -88,10 +88,11 @@ Test suite: **474 unit tests** (`gradlew test`, all green) across
 | Feature | Status | Evidence / notes |
 |---|---|---|
 | Configurable item currency provider | PASS | `code:ItemCoinCurrencyProvider` resolves `[economy]` item IDs (defaults `adys_decorations:*_coin`); `unit:ItemCoinCurrencyProviderTest` — atomic withdraw (plan → preflight → execute → rollback); `rcon:` real withdrawal during fine payment |
-| Equipment issue (service lease, serials) | PASS | `unit:GuardServiceTest`; `rcon:` lease serials issued on duty start |
-| Equipment reclaim on duty end / timeout | PASS | `unit:GuardServiceTest`; `rcon:` reclaim verified, incl. reclaim-on-timeout fix |
-| Service-lease expiry (`security.serviceLeaseMinutes`) ends duty + reclaims | PASS | `unit:GuardServiceTest.serviceLeaseExpiryEndsDutyAndReclaims`, `serviceLeaseDoesNotExpireEarly` |
-| Equipment debt for missing items | PASS | `unit:GuardServiceTest` |
+| Permanent rank kits at rank-up (+salary bonus) | PASS | `unit:GuardServiceTest.kitIsGrantedAtRankUpAndClaimsOncePerRank`, `kitStaysClaimableWhenInventoryIsFullAtRankUp`; kit contents configurable via `kits` policy |
+| Duty start/stop never leases or reclaims gear | PASS | `unit:GuardServiceTest.startDutyBeginsPatrolWithoutIssuingGear`, `stopDutyKeepsAllPermanentGear`, `dutyStartNeverIssuesOrRequiresGear` |
+| Patrol real-time cap (`patrolMaxMinutes`, default 60) ends duty gracefully | PASS | `unit:GuardServiceTest.patrolTimeCapEndsDutyGracefully`, `patrolTimeCapDoesNotEndEarly`; `unit:DutyEngineTest.patrolTimeCapEndsNormalDuty`, `patrolTimeCapIgnoresFreeDuty` |
+| Armorer NPC shop (coins + requisition reserves) | PASS | `unit:ArmoryServiceTest` — rank-gated offers, atomic coin withdraw with delivery-failure refund, requisition spends restore on failure |
+| Requisition ledger separate from promotion blocks | PASS | `unit:DutyEngineTest.requisitionAccruesPerServiceBlock`; `unit:GuardServiceTest.suspensionDocksRequisitionPoints`, `demotionDocksServiceBlocks`, `meritDockClampsAtZeroAndAudits` |
 | Coin denomination breakdown | PASS | `unit:DutyEngineTest` |
 | Economy idempotency / receipts | PASS | `unit:` receipt-scoped deposits in `MissionService`/`ComplaintService`; payment boundary review state in `FineService` |
 

@@ -178,19 +178,19 @@ public class AdminToolService implements AdminToolsUseCase {
         if (!gate(player)) return;
         AdminToolStore store = ctx.adminTools().read();
         var holder = state(store, player);
-        int slots = ctx.setup().read().checkpoints.size();
+        int max = Math.max(1, ctx.policies().patrolMaxCheckpoints);
         for (int i = 0; i < holder.route.size(); i++) {
             if (holder.route.get(i).samePlace(dimension, x, y, z)) {
                 holder.route.remove(i);
                 ctx.adminTools().write(store);
-                player.tell("Punct eliminat. Traseu: " + holder.route.size() + "/" + slots
-                        + " puncte înregistrate.");
+                player.tell("Punct eliminat. Traseu: " + holder.route.size()
+                        + " puncte înregistrate (max " + max + ").");
                 return;
             }
         }
-        if (holder.route.size() >= slots) {
-            player.tell("Traseul este complet (" + slots + "/" + slots
-                    + "). Sneak + click pe aer pentru finalizare.");
+        if (holder.route.size() >= max) {
+            player.tell("Traseul a atins limita de " + max
+                    + " puncte. Sneak + click pe aer pentru finalizare.");
             return;
         }
         var point = new AdminToolStore.Waypoint();
@@ -201,7 +201,8 @@ public class AdminToolService implements AdminToolsUseCase {
         holder.route.add(point);
         ctx.adminTools().write(store);
         player.tell("Punct înregistrat la " + x + ", " + y + ", " + z
-                + ". Traseu: " + holder.route.size() + "/" + slots + ".");
+                + ". Traseu: " + holder.route.size() + " puncte (min "
+                + Math.max(1, ctx.policies().patrolMinCheckpoints) + ", max " + max + ").");
     }
 
     @Override
@@ -209,13 +210,6 @@ public class AdminToolService implements AdminToolsUseCase {
         if (!gate(player)) return;
         AdminToolStore store = ctx.adminTools().read();
         var holder = state(store, player);
-        SetupData setup = ctx.setup().read();
-        int slots = setup.checkpoints.size();
-        if (holder.route.size() != slots) {
-            player.tell("Traseul cere exact " + slots + " puncte distincte — "
-                    + holder.route.size() + "/" + slots + " înregistrate.");
-            return;
-        }
         for (var point : holder.route) {
             if (!player.dimension().equals(point.dimension)) {
                 player.tell("Traseul traversează dimensiuni — finalizează din "
@@ -223,18 +217,12 @@ public class AdminToolService implements AdminToolsUseCase {
                 return;
             }
         }
-        if (!players.isCommissioner(player)) {
-            player.tell("Doar Comisaru' poate configura checkpoint-urile.");
-            return;
+        var points = new ArrayList<double[]>();
+        for (var point : holder.route) points.add(new double[]{point.x, point.y, point.z});
+        if (guards.definePatrolRoute(player, player.dimension(), points)) {
+            holder.route.clear();
+            ctx.adminTools().write(store);
         }
-        for (int i = 0; i < holder.route.size(); i++) {
-            var point = holder.route.get(i);
-            guards.setCheckpointAt(player, setup.checkpoints.get(i).id,
-                    point.dimension, point.x, point.y, point.z);
-        }
-        holder.route.clear();
-        ctx.adminTools().write(store);
-        player.tell("Traseul de patrulare a fost salvat (" + slots + " checkpoint-uri).");
     }
 
     @Override
@@ -242,8 +230,10 @@ public class AdminToolService implements AdminToolsUseCase {
         if (!gate(player)) return;
         var holder = ctx.adminTools().read().holders.get(key(player));
         int recorded = holder == null ? 0 : holder.route.size();
-        player.tell("Traseu în lucru: " + recorded + "/" + ctx.setup().read().checkpoints.size()
-                + " puncte. Sneak + click pe aer pentru finalizare.");
+        player.tell("Traseu în lucru: " + recorded + " puncte (min "
+                + Math.max(1, ctx.policies().patrolMinCheckpoints) + ", max "
+                + Math.max(1, ctx.policies().patrolMaxCheckpoints)
+                + "). Sneak + click pe aer pentru finalizare.");
     }
 
     // ---------------------------------------------------------------- AT-004 Survey Rod

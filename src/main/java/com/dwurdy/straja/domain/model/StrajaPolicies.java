@@ -25,8 +25,16 @@ public class StrajaPolicies {
     public boolean requireDebugDisabledOutsideLocal = true;
 
     // timers
-    public int checkpointUnlockMinutes = 10;
+    public int checkpointUnlockMinutes = 5;
     public int checkpointDeadlineMinutes = 30;
+    /** Minimum placed checkpoints required to start a NORMAL patrol. */
+    public int patrolMinCheckpoints = 2;
+    /** Laps of the route that complete a patrol (0 = endless loop). */
+    public int patrolRounds = 1;
+    /** Hard real-time ceiling for a NORMAL patrol; <=0 disables. */
+    public int patrolMaxMinutes = 60;
+    /** Upper bound on admin-defined checkpoint slots. */
+    public int patrolMaxCheckpoints = 16;
     public int foodCooldownMinutes = 30;
     public int quizCooldownMinutes = 10;
     public int resignationCooldownDays = 7;
@@ -117,6 +125,16 @@ public class StrajaPolicies {
 
     // promotions
     public Map<Integer, Integer> promotionServiceBlocks = new LinkedHashMap<>(Map.of(2, 60, 3, 180));
+    /** Rank-up bonus in hours of the new rank's hourly wage, credited to
+     * unpaidSalary on every effective promotion. */
+    public int promotionBonusHours = 5;
+
+    // requisition — spendable merit earned per service block, spent on armory
+    // reserves and docked by punishments. Distinct from serviceBlocks, which
+    // remain promotion-only.
+    public int requisitionPointsPerBlock = 1;
+    public int demotionServiceBlockCost = 30;
+    public int suspensionRequisitionCost = 20;
 
     // free duty: senior ranks and the commissioner run shifts without the
     // patrol route; they earn the same hourly wage and the anti-AFK movement
@@ -194,13 +212,26 @@ public class StrajaPolicies {
             4096, "adys_decorations:silver_coin",
             262144, "adys_decorations:gold_coin"));
 
-    // food/kits/equipment
+    // food/kits/equipment — kits are permanent owned gear granted at rank-up;
+    // the former per-shift lease was removed (see docs/guard-gear-*).
     public String foodItem = "minecraft:bread";
     public int foodAmount = 8;
     public Map<Integer, List<ItemSpec>> kits = defaultKits();
-    public Map<Integer, List<EquipmentEntry>> serviceEquipment = defaultServiceEquipment();
-    public int serviceLeaseMinutes = 240;
-    public Map<Integer, Integer> regearCost = new LinkedHashMap<>(Map.of(1, 100, 2, 250, 3, 500, 4, 1000));
+
+    // armory — the Armorer NPC shopkeeper. `armoryStock` sells rank-gated
+    // gear for physical coins; `armoryReserves` prices replacement gear in
+    // requisition points. Entries: {key, itemId, count, cost, minRank}.
+    public List<ArmoryItem> armoryStock = new ArrayList<>(List.of(
+            new ArmoryItem("baton", "straja:baton", 1, 200, 2),
+            new ArmoryItem("cuffs", "straja:cuffs", 1, 200, 2),
+            new ArmoryItem("sword_diamond", "minecraft:diamond_sword", 1, 500, 3),
+            new ArmoryItem("armor_diamond", "minecraft:diamond_chestplate", 1, 800, 4)));
+    public List<ArmoryItem> armoryReserves = new ArrayList<>(List.of(
+            new ArmoryItem("sword", "minecraft:iron_sword", 1, 3, 1),
+            new ArmoryItem("shield", "minecraft:shield", 1, 3, 1),
+            new ArmoryItem("baton", "straja:baton", 1, 5, 2),
+            new ArmoryItem("cuffs", "straja:cuffs", 1, 5, 2),
+            new ArmoryItem("sword_diamond", "minecraft:diamond_sword", 1, 10, 3)));
 
     // envelope
     public boolean envelopeEnabled = true;
@@ -309,41 +340,28 @@ public class StrajaPolicies {
                 ItemSpec.of("minecraft:iron_leggings", 1),
                 ItemSpec.of("minecraft:iron_boots", 1),
                 ItemSpec.of("minecraft:iron_sword", 1),
-                ItemSpec.of("minecraft:shield", 1)));
+                ItemSpec.of("minecraft:shield", 1),
+                ItemSpec.of("straja:baton", 1),
+                ItemSpec.of("straja:cuffs", 1)));
         kits.put(3, List.of(
                 ItemSpec.of("minecraft:iron_helmet", 1),
                 ItemSpec.of("minecraft:iron_chestplate", 1),
                 ItemSpec.of("minecraft:iron_leggings", 1),
                 ItemSpec.of("minecraft:iron_boots", 1),
                 ItemSpec.of("minecraft:diamond_sword", 1),
-                ItemSpec.of("minecraft:shield", 1)));
+                ItemSpec.of("minecraft:shield", 1),
+                ItemSpec.of("straja:baton", 1),
+                ItemSpec.of("straja:cuffs", 1)));
         kits.put(4, List.of(
                 ItemSpec.of("minecraft:diamond_helmet", 1),
                 ItemSpec.of("minecraft:diamond_chestplate", 1),
                 ItemSpec.of("minecraft:diamond_leggings", 1),
                 ItemSpec.of("minecraft:diamond_boots", 1),
                 ItemSpec.of("minecraft:diamond_sword", 1),
-                ItemSpec.of("minecraft:shield", 1)));
+                ItemSpec.of("minecraft:shield", 1),
+                ItemSpec.of("straja:baton", 1),
+                ItemSpec.of("straja:cuffs", 1)));
         return kits;
-    }
-
-    private static Map<Integer, List<EquipmentEntry>> defaultServiceEquipment() {
-        Map<Integer, List<EquipmentEntry>> equipment = new LinkedHashMap<>();
-        equipment.put(1, List.of(
-                new EquipmentEntry("sword", "minecraft:iron_sword", 1, 100, "sabie de serviciu")));
-        equipment.put(2, List.of(
-                new EquipmentEntry("sword", "minecraft:iron_sword", 1, 100, "sabie de serviciu"),
-                new EquipmentEntry("baton", "straja:baton", 1, 100, "baston de serviciu"),
-                new EquipmentEntry("cuffs", "straja:cuffs", 1, 100, "cătușe de serviciu")));
-        equipment.put(3, List.of(
-                new EquipmentEntry("sword", "minecraft:diamond_sword", 1, 500, "sabie de serviciu"),
-                new EquipmentEntry("baton", "straja:baton", 1, 100, "baston de serviciu"),
-                new EquipmentEntry("cuffs", "straja:cuffs", 1, 100, "cătușe de serviciu")));
-        equipment.put(4, List.of(
-                new EquipmentEntry("sword", "minecraft:diamond_sword", 1, 500, "sabie de serviciu"),
-                new EquipmentEntry("baton", "straja:baton", 1, 100, "baston de serviciu"),
-                new EquipmentEntry("cuffs", "straja:cuffs", 1, 100, "cătușe de serviciu")));
-        return equipment;
     }
 
     public record QuizQuestion(String id, int minRank, String question, List<String> answers) {
@@ -356,7 +374,8 @@ public class StrajaPolicies {
         }
     }
 
-    public record EquipmentEntry(String key, String itemId, int count, int replacementCost, String label) {}
+    /** Armory offer: cost is Bronze coins in armoryStock, requisition points in armoryReserves. */
+    public record ArmoryItem(String key, String itemId, int count, int cost, int minRank) {}
 
     // ------------------------------------------------------------------
     // config encoding: StrajaServerConfig serializes the same defaults through
@@ -431,31 +450,29 @@ public class StrajaPolicies {
         return out;
     }
 
-    /** "rank=key|itemId|count|replacementCost|label" entries; malformed entries are skipped. */
-    public static Map<Integer, List<EquipmentEntry>> parseEquipment(List<? extends String> entries) {
-        Map<Integer, List<EquipmentEntry>> out = new LinkedHashMap<>();
+    /** "key|itemId|count|cost|minRank" entries; malformed entries are skipped. */
+    public static List<ArmoryItem> parseArmoryItems(List<? extends String> entries) {
+        List<ArmoryItem> out = new ArrayList<>();
         for (String entry : entries) {
-            int sep = entry.indexOf('=');
-            if (sep <= 0) continue;
-            String[] parts = entry.substring(sep + 1).split("\\|", 5);
-            if (parts.length < 4 || parts[0].isBlank() || parts[1].isBlank()) continue;
+            String[] parts = entry.split("\\|", 5);
+            if (parts.length < 5 || parts[0].isBlank() || parts[1].isBlank()) continue;
             try {
-                int rank = Integer.parseInt(entry.substring(0, sep).trim());
                 int count = Integer.parseInt(parts[2].trim());
                 int cost = Integer.parseInt(parts[3].trim());
-                String label = parts.length > 4 ? parts[4].trim() : parts[0].trim();
-                out.computeIfAbsent(rank, r -> new ArrayList<>())
-                        .add(new EquipmentEntry(parts[0].trim(), parts[1].trim(), count, cost, label));
+                int minRank = Integer.parseInt(parts[4].trim());
+                if (count < 1 || cost < 0) continue;
+                out.add(new ArmoryItem(parts[0].trim(), parts[1].trim(), count, cost, minRank));
             } catch (NumberFormatException ignored) {
             }
         }
         return out;
     }
 
-    public static List<String> formatEquipment(Map<Integer, List<EquipmentEntry>> equipment) {
+    public static List<String> formatArmoryItems(List<ArmoryItem> items) {
         List<String> out = new ArrayList<>();
-        equipment.forEach((rank, entries) -> entries.forEach(e -> out.add(
-                rank + "=" + e.key() + "|" + e.itemId() + "|" + e.count() + "|" + e.replacementCost() + "|" + e.label())));
+        for (ArmoryItem item : items) {
+            out.add(item.key() + "|" + item.itemId() + "|" + item.count() + "|" + item.cost() + "|" + item.minRank());
+        }
         return out;
     }
 

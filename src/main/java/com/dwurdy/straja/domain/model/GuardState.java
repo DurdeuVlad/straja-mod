@@ -52,14 +52,15 @@ public class GuardState {
     public long salaryPaidSecondsWindow = 0; // paid seconds consumed in the current window
     public long salaryCarryWork = 0;         // fractional wage: second·bronze/hour units, 3600 = 1 coin
     public int unpaidSalary = 0;
-    public int equipmentDebt = 0;
+    /** Spendable merit balance (armory reserves); accrues per service block,
+     *  docked by punishments. Distinct from serviceBlocks, which stay the
+     *  promotion counter and are never spent. */
+    public long requisitionPoints = 0;
     public String salaryPayoutId = null;
     public String salaryPaymentStatus = "NONE"; // NONE | IN_PROGRESS | PENDING | REVIEW | PAID
     public String salaryPaymentError = null;
     public int salaryDeliveredDenominations = 0;
-    public ServiceEquipment serviceEquipment = null;
     public int kitClaimedRank = 0;
-    public boolean regearPending = false;
     public String specialAuthorizedBy = null;
     public String lastEndReason = null;
     public boolean dutyFactionManaged = false;   // we moved the player to the Straja team this shift
@@ -77,35 +78,6 @@ public class GuardState {
     public String lifecycle = "CIVIL";
     public String lastKnownName = null;        // stamped by PlayerService on read (§14 roster display)
     public String runtimeBootId = null;
-
-    /** Issued service equipment that must be returned at end of duty. */
-    public static class ServiceEquipment {
-        public long issuedAt;
-        public int rank;
-        public List<Item> items = new ArrayList<>();
-
-        public static class Item {
-            public String key;
-            public String id;
-            public int count;
-            public int replacementCost;
-            public String label;
-            public String serial;
-            /** True once the stack was actually handed to the player. Defaults
-             *  true so leases written before this flag existed still reclaim. */
-            public boolean delivered = true;
-
-            public Item() {}
-
-            public Item(String key, String id, int count, int replacementCost, String label) {
-                this.key = key;
-                this.id = id;
-                this.count = count;
-                this.replacementCost = replacementCost;
-                this.label = label;
-            }
-        }
-    }
 
     public Lifecycle lifecycle() {
         if (fired) return Lifecycle.FIRED;

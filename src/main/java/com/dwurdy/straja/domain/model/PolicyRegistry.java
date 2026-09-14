@@ -19,7 +19,7 @@ import java.util.Map;
 public final class PolicyRegistry {
     private PolicyRegistry() {}
 
-    public enum Kind { INT, BOOL, DOUBLE, STRING, INT_MAP, INT_STR_MAP, INT_LIST, STRING_LIST, QUIZ, KITS, EQUIPMENT }
+    public enum Kind { INT, BOOL, DOUBLE, STRING, INT_MAP, INT_STR_MAP, INT_LIST, STRING_LIST, QUIZ, KITS, ARMORY }
 
     public record Key(String path, String field, Kind kind) {}
 
@@ -34,6 +34,10 @@ public final class PolicyRegistry {
         k("timers.checkpointUnlockMinutes", "checkpointUnlockMinutes", Kind.INT);
         k("timers.checkpointDeadlineMinutes", "checkpointDeadlineMinutes", Kind.INT);
         k("timers.serviceBlockMinutes", "serviceBlockMinutes", Kind.INT);
+        k("timers.patrolMinCheckpoints", "patrolMinCheckpoints", Kind.INT);
+        k("timers.patrolRounds", "patrolRounds", Kind.INT);
+        k("timers.patrolMaxMinutes", "patrolMaxMinutes", Kind.INT);
+        k("timers.patrolMaxCheckpoints", "patrolMaxCheckpoints", Kind.INT);
         k("timers.foodCooldownMinutes", "foodCooldownMinutes", Kind.INT);
         k("timers.quizCooldownMinutes", "quizCooldownMinutes", Kind.INT);
         k("timers.resignationCooldownDays", "resignationCooldownDays", Kind.INT);
@@ -100,6 +104,11 @@ public final class PolicyRegistry {
         k("salary.activityMoveThreshold", "salaryActivityMoveThreshold", Kind.DOUBLE);
         // promotion
         k("promotion.serviceBlocks", "promotionServiceBlocks", Kind.INT_MAP);
+        k("promotion.bonusHours", "promotionBonusHours", Kind.INT);
+        // merit — spendable requisition ledger (distinct from serviceBlocks)
+        k("merit.requisitionPerBlock", "requisitionPointsPerBlock", Kind.INT);
+        k("merit.demotionServiceBlockCost", "demotionServiceBlockCost", Kind.INT);
+        k("merit.suspensionRequisitionCost", "suspensionRequisitionCost", Kind.INT);
         // rank display names (§2: Stagiar/Străjer/Sergent/Inspector)
         k("rank.names", "rankNames", Kind.INT_STR_MAP);
         // §11 activity reports
@@ -133,9 +142,8 @@ public final class PolicyRegistry {
         k("economy.foodAmount", "foodAmount", Kind.INT);
         // equipment
         k("equipment.kits", "kits", Kind.KITS);
-        k("equipment.serviceEquipment", "serviceEquipment", Kind.EQUIPMENT);
-        k("equipment.serviceLeaseMinutes", "serviceLeaseMinutes", Kind.INT);
-        k("equipment.regearCost", "regearCost", Kind.INT_MAP);
+        k("armory.stock", "armoryStock", Kind.ARMORY);
+        k("armory.reserves", "armoryReserves", Kind.ARMORY);
         // envelope
         k("envelope.enabled", "envelopeEnabled", Kind.BOOL);
         k("envelope.fallbackToChat", "envelopeFallbackToChat", Kind.BOOL);
@@ -300,10 +308,10 @@ public final class PolicyRegistry {
                 if (countItems(parsed) != list.size()) throw new IllegalArgumentException("malformed entries");
                 return parsed;
             }
-            case EQUIPMENT -> {
+            case ARMORY -> {
                 var list = entries(raw);
-                var parsed = StrajaPolicies.parseEquipment(list);
-                if (countItems(parsed) != list.size()) throw new IllegalArgumentException("malformed entries");
+                var parsed = StrajaPolicies.parseArmoryItems(list);
+                if (parsed.size() != list.size()) throw new IllegalArgumentException("malformed entries");
                 return parsed;
             }
             default -> throw new IllegalArgumentException("unknown kind");
@@ -325,7 +333,7 @@ public final class PolicyRegistry {
             case INT_STR_MAP -> { return String.join(";", StrajaPolicies.formatIntStringMap(castMap(value))); }
             case QUIZ -> { return String.join(";", StrajaPolicies.formatQuiz(castList(value))); }
             case KITS -> { return String.join(";", StrajaPolicies.formatKits(castMap(value))); }
-            case EQUIPMENT -> { return String.join(";", StrajaPolicies.formatEquipment(castMap(value))); }
+            case ARMORY -> { return String.join(";", StrajaPolicies.formatArmoryItems(castList(value))); }
             default -> { return ""; }
         }
     }

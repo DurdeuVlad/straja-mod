@@ -205,14 +205,11 @@ class AdminToolServiceTest {
         tools.patrolClick(comisar, dim, 4, 64, 4);
         assertEquals(4, state(comisar).route.size());
 
-        tools.patrolClick(comisar, dim, 5, 64, 5); // full — refused
-        assertTrue(comisar.told("Traseul este complet"));
-        assertEquals(4, state(comisar).route.size());
-
         tools.patrolFinish(comisar);
         var setup = ctx.setup().read();
         assertTrue(state(comisar) == null || state(comisar).route.isEmpty(),
                 "finish clears the pending route");
+        assertEquals(4, setup.checkpoints.size(), "the saved route has exactly N points");
         for (int i = 0; i < 4; i++) {
             var point = setup.checkpoints.get(i);
             assertTrue(point.isPlaced(), "checkpoint " + i + " written");
@@ -224,14 +221,37 @@ class AdminToolServiceTest {
     }
 
     @Test
-    void patrolFinishRequiresExactlyTheCheckpointSlots() {
+    void patrolFinishAcceptsVariableLengthRoutes() {
+        String dim = "minecraft:overworld";
+        // a 6-point route exceeds the legacy fixed four — now legal
+        for (int i = 1; i <= 6; i++) tools.patrolClick(comisar, dim, i, 64, i);
+        tools.patrolFinish(comisar);
+        var setup = ctx.setup().read();
+        assertEquals(6, setup.checkpoints.size());
+        assertEquals("checkpoint_6", setup.checkpoints.get(5).id);
+        assertEquals(6, setup.checkpoints.get(5).x.intValue());
+    }
+
+    @Test
+    void patrolWandCapsAtTheConfiguredMaximum() {
+        String dim = "minecraft:overworld";
+        int max = Math.max(1, ctx.policies().patrolMaxCheckpoints);
+        for (int i = 0; i < max; i++) tools.patrolClick(comisar, dim, i, 64, i);
+        tools.patrolClick(comisar, dim, 999, 64, 999); // over the cap — refused
+        assertTrue(comisar.told("limita"));
+        assertEquals(max, state(comisar).route.size());
+    }
+
+    @Test
+    void patrolFinishRequiresTheConfiguredMinimum() {
         String dim = "minecraft:overworld";
         tools.patrolClick(comisar, dim, 1, 64, 1);
         tools.patrolFinish(comisar);
-        assertTrue(comisar.told("exact 4 puncte"),
-                "short routes are refused");
-        assertFalse(ctx.setup().read().checkpoints.get(0).isPlaced(),
+        assertTrue(comisar.told("Traseul cere"),
+                "routes under patrolMinCheckpoints are refused");
+        assertTrue(ctx.setup().read().checkpoints.stream().noneMatch(SetupData.Checkpoint::isPlaced),
                 "a refused finish writes nothing");
+        assertEquals(1, state(comisar).route.size(), "the route survives a refused finish");
     }
 
     @Test

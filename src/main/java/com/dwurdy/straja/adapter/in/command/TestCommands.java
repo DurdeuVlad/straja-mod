@@ -295,7 +295,7 @@ final class TestCommands {
                                     + " patrol=" + state.patrolState
                                     + " blocks=" + state.serviceBlocks
                                     + " salary=" + state.unpaidSalary
-                                    + " debt=" + state.equipmentDebt
+                                    + " requisition=" + state.requisitionPoints
                                     + " suspended=" + state.suspended
                                     + " fired=" + state.fired
                                     + " resigned=" + state.resigned);
@@ -1365,7 +1365,7 @@ final class TestCommands {
             case "mode" -> state.mode;
             case "patrol" -> state.patrolState;
             case "salary" -> String.valueOf(state.unpaidSalary);
-            case "debt" -> String.valueOf(state.equipmentDebt);
+            case "requisition" -> String.valueOf(state.requisitionPoints);
             case "lifecycle" -> state.lifecycle;
             case "suspended" -> String.valueOf(state.suspended);
             case "fired" -> String.valueOf(state.fired);

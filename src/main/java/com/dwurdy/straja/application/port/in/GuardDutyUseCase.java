@@ -11,7 +11,7 @@ import com.dwurdy.straja.application.port.out.PlayerGateway;
 public interface GuardDutyUseCase {
     record DutyView(boolean activeGuard, boolean canStart, String checkpointId, boolean canStop,
                     boolean canClaimSalary, boolean canViewCoins, boolean canClaimFood,
-                    boolean canClaimKit, boolean canRequestRegear, boolean canBeginResignation,
+                    boolean canClaimKit, boolean canBeginResignation,
                     boolean canConfirmResignation, boolean canCancelResignation, boolean canRejoin) {}
 
     DutyView dutyView(PlayerGateway player);
@@ -22,7 +22,6 @@ public interface GuardDutyUseCase {
     void coins(PlayerGateway player);
     void food(PlayerGateway player);
     void kit(PlayerGateway player);
-    void requestRegear(PlayerGateway player);
     void beginResignation(PlayerGateway player);
     void confirmResignation(PlayerGateway player);
     void cancelResignation(PlayerGateway player);
@@ -32,7 +31,7 @@ public interface GuardDutyUseCase {
      * stamps the current boot id so relogins inside one runtime keep the duty.
      */
     void recoverOnLogin(PlayerGateway player);
-    /** Per-tick duty maintenance for one player (lease expiry, salary accrual). */
+    /** Per-tick duty maintenance for one player (patrol cap, salary accrual). */
     com.dwurdy.straja.domain.model.DutyEngine.TickResult tickPlayerDuty(PlayerGateway player);
     void showRules(PlayerGateway player);
     void showStatus(PlayerGateway player);

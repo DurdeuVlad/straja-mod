@@ -11,16 +11,33 @@ public class SetupData {
     public Map<String, Location> locations = new LinkedHashMap<>();
     public Map<String, Integer> missionMinutes = new LinkedHashMap<>();
 
-    /** Fresh setup with the four reference checkpoint slots, all unplaced. */
+    /**
+     * Fresh setup seeds the four reference checkpoint slots, all unplaced.
+     * Admins grow or shrink the route with add/remove — the list is not
+     * fixed at four.
+     */
     public static SetupData defaults() {
         SetupData data = new SetupData();
         for (int i = 1; i <= 4; i++) {
-            var point = new Checkpoint();
-            point.id = "checkpoint_" + i;
-            point.name = "Checkpoint " + i;
-            data.checkpoints.add(point);
+            data.checkpoints.add(newCheckpoint("checkpoint_" + i));
         }
         return data;
+    }
+
+    public static Checkpoint newCheckpoint(String id) {
+        var point = new Checkpoint();
+        point.id = id;
+        point.name = "Checkpoint " + id.substring(id.lastIndexOf('_') + 1);
+        return point;
+    }
+
+    /** Next free {@code checkpoint_N} id — lowest unused index keeps ids stable. */
+    public String nextCheckpointId() {
+        java.util.Set<String> ids = new java.util.HashSet<>();
+        for (Checkpoint c : checkpoints) ids.add(c.id);
+        int i = 1;
+        while (ids.contains("checkpoint_" + i)) i++;
+        return "checkpoint_" + i;
     }
 
     public static final String HQ = "hq";

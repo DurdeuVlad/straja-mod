@@ -27,9 +27,10 @@ final class NpcPlayerSurface {
             "tool-npc-assign", "tool-npc-rename", "tool-npc-skin",
             "tool-npc-remove", "tool-npc-remove-confirm", "tool-npc-record",
             "tool-survey-stamp",
+            "armory-buy", "armory-reserve",
             "duty-checkpoint");
 
-    enum RoleRoute { RECEPTIONIST, SECRETARY, JAILER, ARCHIVIST, TRAINER, RECRUITER, UNKNOWN }
+    enum RoleRoute { RECEPTIONIST, SECRETARY, JAILER, ARCHIVIST, TRAINER, RECRUITER, ARMORER, UNKNOWN }
 
     record ChatAction(String label, String actionId) {
         /** Command shape used by the surface; the actual token is player-bound. */
@@ -63,6 +64,7 @@ final class NpcPlayerSurface {
             case NpcRoles.ARCHIVIST -> RoleRoute.ARCHIVIST;
             case NpcRoles.TRAINER -> RoleRoute.TRAINER;
             case NpcRoles.RECRUITER -> RoleRoute.RECRUITER;
+            case NpcRoles.ARMORER -> RoleRoute.ARMORER;
             default -> RoleRoute.UNKNOWN;
         };
     }
@@ -116,6 +118,13 @@ final class NpcPlayerSurface {
                     "Arhivă",
                     "Îți arăt dosarele pe care ai voie să le citești.",
                     List.of(new ChatAction("Vezi dosarele", "archive-list")));
+            case ARMORER -> new RoleSurface(
+                    RoleRoute.ARMORER,
+                    "Armurier",
+                    "Vând echipament de rang pe monede și rezerve pe puncte de rechiziție; ofertele depind de rangul tău.",
+                    List.of(
+                            new ChatAction("Vezi ofertele", "armory-status"),
+                            new ChatAction("Kit de serviciu", "duty-kit")));
             case UNKNOWN -> new RoleSurface(
                     RoleRoute.UNKNOWN,
                     "Straja",
@@ -177,9 +186,6 @@ final class NpcPlayerSurface {
         if (view.canClaimKit()) {
             actions.add(new ChatAction("Kit de serviciu", "duty-kit"));
         }
-        if (view.canRequestRegear()) {
-            actions.add(new ChatAction("Cere regear", "duty-regear"));
-        }
         if (view.canBeginResignation()) {
             actions.add(new ChatAction("Începe demisia", "resignation-start"));
         }
@@ -191,6 +197,22 @@ final class NpcPlayerSurface {
         }
         if (view.canRejoin()) {
             actions.add(new ChatAction("Reîntoarcere în Strajă", "rejoin"));
+        }
+        return List.copyOf(actions);
+    }
+
+    /** Maps the armory offer list to per-item buy actions; pure and state-free. */
+    static List<ChatAction> armoryActions(
+            List<com.dwurdy.straja.application.port.in.ArmoryUseCase.Offer> offers) {
+        if (offers == null || offers.isEmpty()) return List.of();
+        var actions = new java.util.ArrayList<ChatAction>();
+        for (var offer : offers) {
+            if (offer == null || offer.key() == null) continue;
+            String label = offer.reserve()
+                    ? offer.count() + "× " + offer.itemId() + " — " + offer.cost() + " pct rechiziție"
+                    : offer.count() + "× " + offer.itemId() + " — " + offer.cost() + " monede";
+            parameterizedActionId(offer.reserve() ? "armory-reserve" : "armory-buy", offer.key())
+                    .ifPresent(id -> actions.add(new ChatAction(label, id)));
         }
         return List.copyOf(actions);
     }
