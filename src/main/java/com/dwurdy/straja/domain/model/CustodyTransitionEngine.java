@@ -45,8 +45,10 @@ public final class CustodyTransitionEngine {
             case RESOLVE_UNCONSCIOUS_DEADLINE -> resolveUnconsciousDeadline(state, transition);
             case RESOLVE_JAIL_DELIVERY_DEADLINE ->
                     resolveJailDeliveryDeadline(state, transition);
+            case ENTER_JAIL -> enterJail(state, transition);
             case DELIVER_TO_JAIL -> deliverToJail(state, transition, policies);
             case REVIVE_IN_JAIL -> reviveInJail(state, transition, policies);
+            case RELEASE_JAIL -> releaseJail(state, transition);
             case RELEASE_RESTRAINT -> releaseRestraint(state, transition);
             case RELEASE_CUSTODY -> releaseCustody(state, transition, policies);
             case RECOVER_CLEAR_ALL -> recoverClearAll(state);
@@ -373,6 +375,35 @@ public final class CustodyTransitionEngine {
         return CustodyTransitionResult.applied();
     }
 
+    /** Enters a conscious, otherwise free player into ordinary prison custody. */
+    private static CustodyTransitionResult enterJail(CustodyState state,
+                                                       CustodyTransition transition) {
+        if (blank(transition.destination())) {
+            return reject("JAIL_ENTRY_REQUIRES_DESTINATION");
+        }
+        if (state.condition != PlayerCondition.ALIVE
+                || state.custody != CustodyStatus.FREE
+                || state.restraint != RestraintStatus.NONE
+                || state.transport != TransportStatus.NONE) {
+            return reject("JAIL_ENTRY_REQUIRES_FREE_ALIVE");
+        }
+        state.custody = CustodyStatus.JAILED;
+        state.custodyActorId = blank(transition.actorId()) ? "system" : transition.actorId();
+        state.destination = transition.destination();
+        state.transport = TransportStatus.NONE;
+        state.carrierId = "";
+        state.transportDeadlineAt = null;
+        state.downedDeadlineAt = null;
+        state.pausedDownedRemainingMs = 0;
+        state.resuscitationDeadlineAt = null;
+        state.resuscitationProgress = 0;
+        state.resuscitatorId = "";
+        state.unconsciousCustodyDeadlineAt = null;
+        state.jailDeliveryDeadlineAt = null;
+        state.jailRevivalAt = null;
+        return CustodyTransitionResult.applied();
+    }
+
     private static CustodyTransitionResult reviveInJail(CustodyState state,
                                                          CustodyTransition transition,
                                                          StrajaPolicies policies) {
@@ -389,6 +420,16 @@ public final class CustodyTransitionEngine {
         state.jailRevivalAt = null;
         state.pausedDownedRemainingMs = 0;
         state.resuscitatorId = "";
+        return CustodyTransitionResult.applied();
+    }
+
+    /** Releases prison custody and clears any transport restraint projection. */
+    private static CustodyTransitionResult releaseJail(CustodyState state,
+                                                         CustodyTransition transition) {
+        if (state.custody != CustodyStatus.JAILED) return reject("NOT_JAILED");
+        state.condition = PlayerCondition.ALIVE;
+        clearDeadlines(state);
+        clearAll(state);
         return CustodyTransitionResult.applied();
     }
 

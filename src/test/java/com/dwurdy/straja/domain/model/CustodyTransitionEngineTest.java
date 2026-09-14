@@ -255,6 +255,35 @@ class CustodyTransitionEngineTest {
     }
 
     @Test
+    void ordinaryJailEntryAndReleaseAreCanonicalAndIdempotent() {
+        var state = state("jail");
+        var policies = policies();
+
+        assertTrue(CustodyTransitionEngine.apply(state,
+                new CustodyTransition("jail-enter", CustodyTransition.Action.ENTER_JAIL,
+                        1_000, "system", "", "prison", StateProvider.SYSTEM,
+                        "prison", 0), policies).ok());
+        assertEquals(PlayerCondition.ALIVE, state.condition);
+        assertEquals(CustodyStatus.JAILED, state.custody);
+        assertEquals(RestraintStatus.NONE, state.restraint);
+
+        var replay = CustodyTransitionEngine.apply(state,
+                new CustodyTransition("jail-enter", CustodyTransition.Action.ENTER_JAIL,
+                        1_000, "system", "", "prison", StateProvider.SYSTEM,
+                        "prison", 0), policies);
+        assertTrue(replay.idempotent());
+
+        assertTrue(CustodyTransitionEngine.apply(state,
+                new CustodyTransition("jail-release", CustodyTransition.Action.RELEASE_JAIL,
+                        2_000, "system", "", "", StateProvider.SYSTEM,
+                        "prison", 0), policies).ok());
+        assertEquals(PlayerCondition.ALIVE, state.condition);
+        assertEquals(CustodyStatus.FREE, state.custody);
+        assertEquals(RestraintStatus.NONE, state.restraint);
+        assertTrue(state.wellFormed());
+    }
+
+    @Test
     void competingTransitionsAreResolvedInServerApplicationOrder() {
         var policies = policies();
         var rescueWins = state("rescue-wins");

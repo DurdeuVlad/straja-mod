@@ -767,6 +767,18 @@ public class CustodyService implements CustodyRoleplayUseCase {
             store.states.put(entry.getKey(), state);
             changed = true;
         }
+        for (var entry : new ArrayList<>(store.headSacks.entrySet())) {
+            var record = entry.getValue();
+            var state = store.states.get(entry.getKey());
+            if (record == null || state == null || state.restraint == RestraintStatus.NONE
+                    || !validRestraintIdentity(record.issuer, record.issuerUuid)) continue;
+            if (state.vision != VisionStatus.BLINDFOLDED) {
+                state.vision = VisionStatus.BLINDFOLDED;
+                state.transitionId = "legacy:sack:" + entry.getKey() + ":" + record.appliedAt;
+                state.enteredAt = Math.max(state.enteredAt, record.appliedAt);
+                changed = true;
+            }
+        }
         return changed;
     }
 
@@ -1240,7 +1252,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
         if (state == null || state.restraint == RestraintStatus.NONE) return;
         long at = now();
         CustodyTransitionEngine.apply(state,
-                new CustodyTransition("rp007:recover-restraint:" + playerKey + ":" + at,
+                new CustodyTransition("rp007:recover-restraint:" + playerKey + ":"
+                        + (source == null ? "recovery" : source),
                         CustodyTransition.Action.RECOVER_RELEASE_RESTRAINTS, at,
                         "system", "", "", StateProvider.SYSTEM,
                         source == null ? "recovery" : source, 0),
@@ -1693,6 +1706,19 @@ public class CustodyService implements CustodyRoleplayUseCase {
         String playerKey = key(player);
         var record = store.downed.get(playerKey);
         if (record == null) return false;
+        var canonical = store.states.get(playerKey);
+        if (canonical != null) {
+            if (canonical.condition != PlayerCondition.DOWNED
+                    || canonical.transport != TransportStatus.NONE) return false;
+            long at = now();
+            var recovered = CustodyTransitionEngine.apply(canonical,
+                    new CustodyTransition("legacy:wake:" + playerKey,
+                            CustodyTransition.Action.RECOVER_WAKE, at, "system", "", "",
+                            StateProvider.SYSTEM, "legacy_wake", 0),
+                    ctx.policies());
+            if (!recovered.ok() && !recovered.idempotent()) return false;
+            store.states.put(playerKey, canonical);
+        }
         player.teleport(record.dimension, record.x, record.y, record.z);
         double ratio = Math.max(0.1, Math.min(1, ctx.policies().downedWakeHealthRatio));
         player.setHealth(Math.max(1, player.maxHealth() * ratio));
@@ -1707,10 +1733,85 @@ public class CustodyService implements CustodyRoleplayUseCase {
     }
 
     /**
+     * Establishes canonical prison custody for a conscious or already
+     * arrested player. Prison delivery uses canonical custody because
+     * applying cuffs intentionally removes the legacy downed projection.
+     */
+    @Override
+    public boolean enterJail(PlayerGateway player, String destination) {
+        if (player == null || player.uuid() == null || destination == null || destination.isBlank()) {
+            return false;
+        }
+        var store = store();
+        importLegacyProjections(store);
+        String playerKey = key(player);
+        CustodyState state = store.states.get(playerKey);
+        if (state == null) state = newCanonicalState(player);
+        if (state.custody == CustodyStatus.JAILED) return true;
+
+        long at = now();
+        boolean arrested = state.custody == CustodyStatus.ARRESTED;
+        CustodyTransition.Action action = arrested
+                ? CustodyTransition.Action.DELIVER_TO_JAIL
+                : CustodyTransition.Action.ENTER_JAIL;
+        String transitionId = arrested
+                ? "jail:deliver:" + playerKey
+                : "jail:enter:" + playerKey;
+        var result = CustodyTransitionEngine.apply(state,
+                new CustodyTransition(transitionId, action, at, "system", "",
+                        destination, StateProvider.SYSTEM, "prison", 0),
+                ctx.policies());
+        if (!result.ok() && !result.idempotent()) return false;
+
+        store.states.put(playerKey, state);
+        store.downed.remove(playerKey);
+        if (player.isOnline()) {
+            player.stopRiding();
+            player.closeMenu();
+        }
+        ctx.custody().write(store);
+        audit.record("jail_enter", "system", "", player.name(), uuidOf(player),
+                "SUCCESS", "destination=" + destination + " action=" + action);
+        return true;
+    }
+
+    @Override
+    public boolean releaseFromJail(PlayerGateway player) {
+        if (player == null || player.uuid() == null) return false;
+        var store = store();
+        importLegacyProjections(store);
+        String playerKey = key(player);
+        CustodyState state = store.states.get(playerKey);
+        if (state == null || state.custody != CustodyStatus.JAILED) return true;
+
+        long at = now();
+        var result = CustodyTransitionEngine.apply(state,
+                new CustodyTransition("jail:release:" + playerKey,
+                        CustodyTransition.Action.RELEASE_JAIL, at, "system", "", "",
+                        StateProvider.SYSTEM, "prison", 0),
+                ctx.policies());
+        if (!result.ok() && !result.idempotent()) return false;
+
+        store.states.put(playerKey, state);
+        if (store.cuffed.containsKey(playerKey)) clearLegacyCuff(store, playerKey, player);
+        store.bound.remove(playerKey);
+        store.headSacks.remove(playerKey);
+        store.downed.remove(playerKey);
+        if (player.isOnline()) {
+            player.stopRiding();
+            player.closeMenu();
+            double ratio = Math.max(0.1, Math.min(1, ctx.policies().downedWakeHealthRatio));
+            player.setHealth(Math.max(1, player.maxHealth() * ratio));
+        }
+        ctx.custody().write(store);
+        audit.record("jail_release", "system", "", player.name(), uuidOf(player),
+                "SUCCESS", "canonical_jail_cleared");
+        return true;
+    }
+
+    /**
      * Resolves an incapacitated or temporarily arrested state when an
-     * authorized transport happens. Prison delivery uses canonical custody
-     * state because applying cuffs intentionally removes the legacy downed
-     * projection.
+     * authorized transport happens.
      */
     public boolean resolveDowned(PlayerGateway player, String destination) {
         var store = store();
@@ -1727,7 +1828,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
         if (canonicalArrest) {
             long at = now();
             var transition = new CustodyTransition(
-                    "rp007:resolve:" + playerKey + ":" + at,
+                    "rp007:resolve:" + playerKey + ":PRISON",
                     CustodyTransition.Action.DELIVER_TO_JAIL, at,
                     "system", "", "prison",
                     StateProvider.SYSTEM, "prison", 0);
@@ -2380,16 +2481,30 @@ public class CustodyService implements CustodyRoleplayUseCase {
             var target = findStored(record.targetUuid, record.target);
             if (target == null) continue;
             var canonical = store.states.get(entry.getKey());
-            if (canonical != null && (canonical.transport == TransportStatus.CARRIED
-                    || canonical.condition == PlayerCondition.RESUSCITATING)) {
-                // The canonical transport deadline owns carried timing. The
-                // resuscitation deadline owns active rescue timing. The legacy
-                // wakesAt projection must not resolve either state early.
-                continue;
+            if (canonical != null) {
+                if (canonical.condition != PlayerCondition.DOWNED) {
+                    store.downed.remove(entry.getKey());
+                    changed = true;
+                    continue;
+                }
+                if (canonical.transport != TransportStatus.NONE) {
+                    // A carried ordinary downed state keeps its canonical
+                    // paused timer; the legacy projection must not resolve it.
+                    continue;
+                }
             }
             if (now() >= record.wakesAt) {
                 // Inline wake on the same store instance: a nested read/write
                 // here would be clobbered by the outer store write at the end.
+                if (canonical != null) {
+                    var recovered = CustodyTransitionEngine.apply(canonical,
+                            new CustodyTransition("legacy:wake:" + entry.getKey(),
+                                    CustodyTransition.Action.RECOVER_WAKE, now(), "system", "", "",
+                                    StateProvider.SYSTEM, "legacy_wake", 0),
+                            ctx.policies());
+                    if (!recovered.ok() && !recovered.idempotent()) continue;
+                    store.states.put(entry.getKey(), canonical);
+                }
                 target.teleport(record.dimension, record.x, record.y, record.z);
                 double ratio = Math.max(0.1, Math.min(1, ctx.policies().downedWakeHealthRatio));
                 target.setHealth(Math.max(1, target.maxHealth() * ratio));

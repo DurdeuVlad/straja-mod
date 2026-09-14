@@ -120,6 +120,45 @@ class CustodyServiceTest {
     }
 
     @Test
+    void canonicalCustodySuppressesLegacyWakeAndImportsHeadSackVision() {
+        var store = ctx.custody().read();
+        var state = new CustodyState();
+        state.playerId = civilian.uuid().toString();
+        state.playerUuid = civilian.uuid().toString();
+        state.playerName = civilian.name();
+        state.condition = PlayerCondition.UNCONSCIOUS_CUSTODY;
+        state.custody = CustodyStatus.HOSTAGE;
+        state.restraint = RestraintStatus.ROPE_BOUND;
+        state.restraintActorId = guard.uuid().toString();
+        state.custodyActorId = guard.uuid().toString();
+        state.unconsciousCustodyDeadlineAt = clock.nowMillis() + 60_000L;
+        store.states.put(state.playerId, state);
+
+        var downed = new CustodyStore.DownedRecord();
+        downed.target = civilian.name();
+        downed.targetUuid = civilian.uuid().toString();
+        downed.dimension = "minecraft:overworld";
+        downed.wakesAt = clock.nowMillis();
+        store.downed.put(state.playerId, downed);
+
+        var sack = new CustodyStore.HeadSackRecord();
+        sack.target = civilian.name();
+        sack.targetUuid = civilian.uuid().toString();
+        sack.issuer = guard.name();
+        sack.issuerUuid = guard.uuid().toString();
+        sack.appliedAt = clock.nowMillis();
+        store.headSacks.put(state.playerId, sack);
+        ctx.custody().write(store);
+
+        custody.tick();
+
+        var after = ctx.custody().read().states.get(state.playerId);
+        assertEquals(PlayerCondition.UNCONSCIOUS_CUSTODY, after.condition);
+        assertEquals(VisionStatus.BLINDFOLDED, after.vision);
+        assertFalse(ctx.custody().read().downed.containsKey(state.playerId));
+    }
+
+    @Test
     void custodyStatusUsesActionbarAndEmitsEachTimerWarningOnce() {
         assertNotNull(custody.startDowned(civilian, guard, "test"));
         custody.tick();
