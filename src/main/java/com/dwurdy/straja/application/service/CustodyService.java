@@ -316,6 +316,17 @@ public class CustodyService implements CustodyRoleplayUseCase {
                 && state.rank >= Rank.GUARD.level();
     }
 
+    /** Criminal restraint provenance needs a stable actor identity, not police rank. */
+    private static boolean validRestraintIdentity(String issuer, String issuerUuid) {
+        if (blank(issuer) || blank(issuerUuid)) return false;
+        try {
+            UUID.fromString(issuerUuid);
+            return true;
+        } catch (IllegalArgumentException ex) {
+            return false;
+        }
+    }
+
     /** Re-checks persisted issuer authority when a request is accepted offline. */
     private boolean storedIssuerEligible(CustodyStore.CuffRequest request) {
         return issuerEligible(request.issuer, request.issuerUuid);
@@ -948,7 +959,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
         var bound = store.bound.get(playerKey);
         if (bound != null) {
             boolean malformed = blank(bound.targetUuid) && blank(bound.target);
-            if (malformed || !issuerEligible(bound.issuer, bound.issuerUuid)) {
+            if (malformed || !validRestraintIdentity(bound.issuer, bound.issuerUuid)) {
                 store.bound.remove(playerKey);
                 audit.record("custody_recovery", bound.issuer, bound.issuerUuid,
                         player.name(), uuidOf(player), "SUCCESS",
@@ -959,7 +970,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
         var sack = store.headSacks.get(playerKey);
         if (sack != null) {
             boolean malformed = blank(sack.targetUuid) && blank(sack.target);
-            boolean badIssuer = !issuerEligible(sack.issuer, sack.issuerUuid);
+            boolean badIssuer = !validRestraintIdentity(sack.issuer, sack.issuerUuid);
             boolean orphan = !store.cuffed.containsKey(playerKey)
                     && !store.bound.containsKey(playerKey);
             if (malformed || badIssuer || orphan) {
@@ -1184,6 +1195,14 @@ public class CustodyService implements CustodyRoleplayUseCase {
             issuer.tell(target.name() + " nu este încătușat.");
             return false;
         }
+        if ("FANTASY_CUTTERS".equals(kind) && boundRecord == null) {
+            issuer.tell("Foarfeca poate tăia frânghia, nu poate desface cătușele.");
+            return false;
+        }
+        if ("FANTASY_CUTTERS".equals(kind) && record != null) {
+            issuer.tell("Cătușele și frânghia nu pot fi eliberate simultan.");
+            return false;
+        }
         if (("KEY".equals(kind) || "GENERIC_KEY".equals(kind) || "KEYCHAIN".equals(kind)) && record == null) {
             issuer.tell("Cheia poate desface cătușele, dar nu poate tăia frânghia.");
             return false;
@@ -1192,7 +1211,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
             issuer.tell("Cheia nu a putut fi consumată; eliberarea a fost anulată.");
             return false;
         }
-        boolean openedCuffs = record != null;
+        boolean openedCuffs = record != null && !"FANTASY_CUTTERS".equals(kind);
         boolean cutRope = boundRecord != null && "FANTASY_CUTTERS".equals(kind);
         if (!releaseCanonicalRestraint(store, issuer, target, boundRecord != null && !cutRope)) {
             issuer.tell("Eliberarea a fost refuzată: starea de custodie nu este validă.");
@@ -1266,27 +1285,55 @@ public class CustodyService implements CustodyRoleplayUseCase {
     // ------------------------------------------------------------ rope & sack
 
     public boolean applyRope(PlayerGateway issuer, PlayerGateway target) {
-        if (!enforcementGuard(issuer)) {
-            issuer.tell("Doar un străjer activ poate folosi frânghia de imobilizare.");
+        if (issuer == null || target == null || !issuer.isOnline() || !target.isOnline()) {
+            if (issuer != null) issuer.tell("Legarea cere doi jucători online.");
             return false;
         }
-        var policy = cuffTargetPolicy(issuer, target);
-        if (!policy.ok()) {
-            policyDeny(issuer, policy);
+        if (key(issuer).equals(key(target))) {
+            issuer.tell("Nu te poți lega singur.");
             return false;
         }
-        var store = store();
-        if (ctx.policies().ropeRequiresCuffs && !store.cuffed.containsKey(key(target))) {
-            issuer.tell("Frânghia se aplică doar unui suspect deja încătușat.");
+        if (actionBlocked(issuer, "rope")) return false;
+        if (!nearby(issuer, target)) {
+            issuer.tell("Trebuie să fii lângă țintă pentru a folosi frânghia.");
             return false;
         }
         if (!issuer.mainHand().id().equals(ROPE)) {
-            issuer.tell("Ține Frânghia de Imobilizare în mâna principală.");
+            issuer.tell("Ține Frânghia în mâna principală.");
             return false;
         }
-        if (store.bound.containsKey(key(target))) {
+        var store = store();
+        importLegacyProjections(store);
+        String targetKey = key(target);
+        CustodyState state = store.states.get(targetKey);
+        if (store.bound.containsKey(targetKey)) {
             issuer.tell(target.name() + " este deja legat.");
             return true;
+        }
+        if (state == null) state = newCanonicalState(target);
+        if (state == null || (state.condition != PlayerCondition.ALIVE
+                && state.condition != PlayerCondition.DOWNED
+                && state.condition != PlayerCondition.RESUSCITATING)
+                || state.custody != CustodyStatus.FREE
+                || state.restraint != RestraintStatus.NONE) {
+            issuer.tell("Frânghia poate fi folosită doar pe o țintă liberă, vie sau leșinată.");
+            return false;
+        }
+        if (state.condition == PlayerCondition.RESUSCITATING
+                && !interruptResuscitation(store, state, target,
+                findStored(state.resuscitatorId, ""), "restraint_applied")) {
+            issuer.tell("Legarea nu a putut întrerupe resuscitarea.");
+            return false;
+        }
+        long at = now();
+        var canonicalResult = CustodyTransitionEngine.apply(state,
+                new CustodyTransition("rp007:rope:" + targetKey + ":" + at,
+                        CustodyTransition.Action.APPLY_ROPE, at, uuidOf(issuer),
+                        "", "", StateProvider.NATIVE, "criminal_rope", 0),
+                ctx.policies());
+        if (!canonicalResult.ok() && !canonicalResult.idempotent()) {
+            issuer.tell("Legarea a fost refuzată: " + canonicalResult.code());
+            return false;
         }
         if (consumeMainHand(issuer).isEmpty()) {
             issuer.tell("Frânghia nu a putut fi consumată; legarea a fost anulată.");
@@ -1297,31 +1344,44 @@ public class CustodyService implements CustodyRoleplayUseCase {
         record.targetUuid = uuidOf(target);
         record.issuer = issuer.name();
         record.issuerUuid = uuidOf(issuer);
-        record.boundAt = now();
-        store.bound.put(key(target), record);
+        record.boundAt = at;
+        store.states.put(targetKey, state);
+        store.bound.put(targetKey, record);
+        if (state.condition == PlayerCondition.UNCONSCIOUS_CUSTODY) {
+            store.downed.remove(targetKey);
+            target.setHealth(1);
+        }
         ctx.custody().write(store);
         target.applyEffect("minecraft:slowness",
                 Math.max(20, ctx.policies().ropeSlownessTicks), ctx.policies().ropeSlownessAmplifier);
-        target.tell("Ai fost legat cu Frânghia de Imobilizare. Nu poți folosi inventarul sau obiectele.");
-        issuer.tell(target.name() + " a fost legat. Frânghia nu oferă cheie și poate fi tăiată doar cu foarfeca.");
+        target.tell("Ai fost legat cu Frânghia. Nu poți folosi inventarul sau obiectele. Doar alt jucător o poate tăia.");
+        issuer.tell(target.name() + " a fost legat. Frânghia poate fi tăiată doar de alt jucător cu Foarfeca.");
         audit.record("rope_apply", issuer.name(), uuidOf(issuer),
                 target.name(), uuidOf(target), "SUCCESS", record.reason);
         return true;
     }
 
     public boolean applyHeadSack(PlayerGateway issuer, PlayerGateway target) {
-        if (!enforcementGuard(issuer)) {
-            issuer.tell("Doar un străjer activ poate pune Sacul de Captiv.");
+        if (issuer == null || target == null || !issuer.isOnline() || !target.isOnline()) {
+            if (issuer != null) issuer.tell("Sacul cere doi jucători online.");
             return false;
         }
-        var policy = cuffTargetPolicy(issuer, target);
-        if (!policy.ok()) {
-            policyDeny(issuer, policy);
+        if (key(issuer).equals(key(target))) {
+            issuer.tell("Nu îți poți pune singur Sacul de Captiv.");
+            return false;
+        }
+        if (actionBlocked(issuer, "head_sack")) return false;
+        if (!nearby(issuer, target)) {
+            issuer.tell("Trebuie să fii lângă țintă pentru a pune sacul.");
             return false;
         }
         var store = store();
+        importLegacyProjections(store);
         String targetKey = key(target);
-        if (!store.cuffed.containsKey(targetKey) && !store.bound.containsKey(targetKey)) {
+        var state = store.states.get(targetKey);
+        if (state == null || state.restraint == RestraintStatus.NONE
+                || (state.condition != PlayerCondition.CONSCIOUS_RESTRAINED
+                && state.condition != PlayerCondition.UNCONSCIOUS_CUSTODY)) {
             issuer.tell("Sacul se poate pune doar unui suspect încătușat sau legat.");
             return false;
         }
@@ -1329,16 +1389,28 @@ public class CustodyService implements CustodyRoleplayUseCase {
             issuer.tell("Ține Sacul de Captiv în mâna principală.");
             return false;
         }
-        if (store.headSacks.containsKey(targetKey)) {
+        if (store.headSacks.containsKey(targetKey)
+                && state.vision == VisionStatus.BLINDFOLDED) {
             issuer.tell(target.name() + " are deja sacul pe cap.");
             return true;
+        }
+        long at = now();
+        var canonicalResult = CustodyTransitionEngine.apply(state,
+                new CustodyTransition("rp007:sack:" + targetKey + ":" + at,
+                        CustodyTransition.Action.APPLY_BLINDFOLD, at, uuidOf(issuer),
+                        "", "", StateProvider.NATIVE, "black_sack", 0),
+                ctx.policies());
+        if (!canonicalResult.ok() && !canonicalResult.idempotent()) {
+            issuer.tell("Sacul a fost refuzat: " + canonicalResult.code());
+            return false;
         }
         var record = new CustodyStore.HeadSackRecord();
         record.target = target.name();
         record.targetUuid = uuidOf(target);
         record.issuer = issuer.name();
         record.issuerUuid = uuidOf(issuer);
-        record.appliedAt = now();
+        record.appliedAt = at;
+        store.states.put(targetKey, state);
         store.headSacks.put(targetKey, record);
         ctx.custody().write(store);
         target.applyEffect("minecraft:blindness",
@@ -1361,6 +1433,18 @@ public class CustodyService implements CustodyRoleplayUseCase {
         if (store.downed.containsKey(playerKey)) {
             player.tell("Ești inconștient și nu poți da jos sacul încă.");
             return false;
+        }
+        importLegacyProjections(store);
+        var state = store.states.get(playerKey);
+        if (state != null && state.vision == VisionStatus.BLINDFOLDED) {
+            long at = now();
+            var result = CustodyTransitionEngine.apply(state,
+                    new CustodyTransition("rp007:sack-remove:" + playerKey + ":" + at,
+                            CustodyTransition.Action.REMOVE_BLINDFOLD, at, uuidOf(player),
+                            "", "", StateProvider.NATIVE, "black_sack", 0),
+                    ctx.policies());
+            if (!result.ok() && !result.idempotent()) return false;
+            store.states.put(playerKey, state);
         }
         store.headSacks.remove(playerKey);
         ctx.custody().write(store);
@@ -2065,15 +2149,6 @@ public class CustodyService implements CustodyRoleplayUseCase {
                 changed = true;
                 continue;
             }
-            if (!issuerEligible(record.issuer, record.issuerUuid)) {
-                store.bound.remove(entry.getKey());
-                audit.record("custody_recovery",
-                        record.issuer, record.issuerUuid,
-                        record.target, record.targetUuid, "SUCCESS",
-                        "ineligible_issuer kind=bound key=" + entry.getKey());
-                changed = true;
-                continue;
-            }
             var target = findStored(record.targetUuid, record.target);
             if (target == null) continue;
             target.closeMenu();
@@ -2085,7 +2160,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
             boolean malformed = record == null
                     || (blank(record.targetUuid) && blank(record.target));
             boolean badIssuer = !malformed
-                    && !issuerEligible(record.issuer, record.issuerUuid);
+                    && !validRestraintIdentity(record.issuer, record.issuerUuid);
             boolean orphan = !store.cuffed.containsKey(entry.getKey())
                     && !store.bound.containsKey(entry.getKey());
             if (malformed || badIssuer || orphan) {
