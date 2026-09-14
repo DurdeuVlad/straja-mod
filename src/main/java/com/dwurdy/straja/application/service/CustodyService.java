@@ -71,6 +71,9 @@ public class CustodyService implements CustodyRoleplayUseCase {
         return null;
     }
 
+    private record CarrySnapshot(String targetKey, String targetUuid,
+                                 String targetName, String carrierId) {}
+
     private void notify(String uuid, String name, String text) {
         var p = findStored(uuid, name);
         if (p != null) p.tell(text);
@@ -722,6 +725,98 @@ public class CustodyService implements CustodyRoleplayUseCase {
         return Long.MAX_VALUE - at < duration ? Long.MAX_VALUE : at + duration;
     }
 
+    private Map<String, CarrySnapshot> carriedSnapshots(CustodyStore store) {
+        importLegacyProjections(store);
+        var result = new java.util.LinkedHashMap<String, CarrySnapshot>();
+        for (var entry : store.states.entrySet()) {
+            var state = entry.getValue();
+            if (state != null && state.transport == TransportStatus.CARRIED) {
+                result.put(entry.getKey(), new CarrySnapshot(entry.getKey(),
+                        state.playerUuid, state.playerName, state.carrierId));
+            }
+        }
+        return result;
+    }
+
+    /** Applies the canonical STOP_CARRY transition without touching entities. */
+    private boolean stopCarriedState(CustodyStore store, CustodyState state,
+                                     String actorId, String reason) {
+        long at = now();
+        var result = CustodyTransitionEngine.apply(state,
+                new CustodyTransition("carry:stop:" + state.playerId + ":" + at + ":"
+                        + (reason == null ? "recovery" : reason),
+                        CustodyTransition.Action.STOP_CARRY, at,
+                        actorId == null || actorId.isBlank() ? "system" : actorId,
+                        "", "", StateProvider.SYSTEM,
+                        reason == null ? "recovery" : reason, 0),
+                ctx.policies());
+        return result.ok() && !result.idempotent();
+    }
+
+    private boolean stopAllCarried(CustodyStore store, String reason) {
+        boolean changed = false;
+        for (var entry : new ArrayList<>(store.states.entrySet())) {
+            var state = entry.getValue();
+            if (state == null || state.transport != TransportStatus.CARRIED) continue;
+            var target = findStored(state.playerUuid, state.playerName);
+            if (target != null) target.stopRiding();
+            if (stopCarriedState(store, state, "system", reason)) {
+                audit.record("carry_recovery", "system", "",
+                        state.playerName, state.playerUuid, "SUCCESS", reason);
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
+    private boolean stopCarriesInvolving(CustodyStore store, PlayerGateway player, String reason) {
+        if (player == null) return false;
+        String playerKey = key(player);
+        String playerUuid = uuidOf(player);
+        boolean changed = false;
+        for (var entry : new ArrayList<>(store.states.entrySet())) {
+            var state = entry.getValue();
+            if (state == null || state.transport != TransportStatus.CARRIED
+                    || (!playerKey.equals(entry.getKey()) && !playerUuid.equals(state.carrierId))) {
+                continue;
+            }
+            var target = findStored(state.playerUuid, state.playerName);
+            if (target != null) target.stopRiding();
+            if (stopCarriedState(store, state, playerUuid, reason)) {
+                audit.record("carry_recovery", player.name(), playerUuid,
+                        state.playerName, state.playerUuid, "SUCCESS", reason);
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
+    /** Reconciles canonical carry state with the physical passenger relation. */
+    private boolean reconcileCarried(CustodyStore store, Map<String, CarrySnapshot> before) {
+        boolean changed = false;
+        for (var snapshot : before.values()) {
+            var state = store.states.get(snapshot.targetKey());
+            var target = findStored(snapshot.targetUuid(), snapshot.targetName());
+            if (state == null || state.transport != TransportStatus.CARRIED) {
+                if (target != null) target.stopRiding();
+                continue;
+            }
+            var carrier = findStored(state.carrierId, "");
+            boolean physical = target != null && carrier != null
+                    && target.dimension().equals(carrier.dimension())
+                    && target.isPassengerOf(carrier.uuid())
+                    && carrier.hasPassenger(target.uuid());
+            if (physical) continue;
+            if (target != null) target.stopRiding();
+            if (stopCarriedState(store, state, "system", "physical_desync")) {
+                audit.record("carry_recovery", "system", "",
+                        state.playerName, state.playerUuid, "SUCCESS", "physical_desync");
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
     /** Projects canonical terminal/control changes back to RP-007 records. */
     private boolean projectCanonicalStates(CustodyStore store) {
         boolean changed = false;
@@ -800,6 +895,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
             }
         }
         changed |= processCanonicalDeadlines(store);
+        changed |= stopAllCarried(store, "restart");
         if (changed) ctx.custody().write(store);
     }
 
@@ -811,7 +907,9 @@ public class CustodyService implements CustodyRoleplayUseCase {
     public void recoverOnLogin(PlayerGateway player) {
         var store = store();
         String playerKey = key(player);
+        var carried = carriedSnapshots(store);
         boolean changed = processCanonicalDeadlines(store);
+        changed |= reconcileCarried(store, carried);
         var record = store.cuffed.get(playerKey);
         if (record != null && !issuerStillEligible(record)) {
             recoverCuff(store, record, player);
@@ -873,12 +971,13 @@ public class CustodyService implements CustodyRoleplayUseCase {
     public void recoverOnLogout(PlayerGateway player) {
         var store = store();
         boolean changed = importLegacyProjections(store);
+        changed |= stopCarriesInvolving(store, player, "logout");
         if (store.states != null) {
             var state = store.states.get(key(player));
             if (state != null) {
                 var recovery = CustodyDeadlineEngine.recover(
                         state, RecoveryEvent.LOGOUT, now(), ctx.policies());
-                changed = recovery.changed();
+                changed |= recovery.changed();
             }
         }
         var discarded = new ArrayList<String>();
@@ -898,6 +997,15 @@ public class CustodyService implements CustodyRoleplayUseCase {
         }
     }
 
+    /** A dimension transfer ends carry and restores the target's own timer. */
+    public void recoverOnDimensionChange(PlayerGateway player) {
+        var store = store();
+        boolean changed = importLegacyProjections(store);
+        changed |= stopCarriesInvolving(store, player, "dimension_change");
+        changed |= processCanonicalDeadlines(store);
+        if (changed) ctx.custody().write(store);
+    }
+
     /**
      * Death recovery: ends all restraint state for the victim and queues any
      * hidden item by UUID — nothing is injected into the dying inventory.
@@ -906,7 +1014,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
     public void recoverAfterDeath(PlayerGateway player) {
         var store = store();
         String playerKey = key(player);
-        boolean changed = false;
+        boolean changed = stopCarriesInvolving(store, player, "death");
         var canonical = store.states.get(playerKey);
         if (canonical != null && canonical.condition != PlayerCondition.DEAD) {
             long at = now();
@@ -1331,6 +1439,95 @@ public class CustodyService implements CustodyRoleplayUseCase {
         return true;
     }
 
+    /** Starts one server-authorized carry using the canonical state machine. */
+    @Override
+    public boolean startCarry(PlayerGateway carrier, PlayerGateway target) {
+        if (carrier == null || target == null || !carrier.isOnline() || !target.isOnline()) {
+            if (carrier != null) carrier.tell("Transportul cere doi jucători online.");
+            return false;
+        }
+        if (key(carrier).equals(key(target))) {
+            carrier.tell("Nu te poți transporta singur.");
+            return false;
+        }
+        if (actionBlocked(carrier, "carry")) return false;
+        if (carrier.isPassenger() || carrier.hasPassenger(target.uuid()) || target.isPassenger()) {
+            carrier.tell("Transportul nu poate fi suprapus peste alt transport.");
+            return false;
+        }
+
+        var store = store();
+        importLegacyProjections(store);
+        String targetKey = key(target);
+        var state = store.states.get(targetKey);
+        if (state == null || (state.condition != PlayerCondition.DOWNED
+                && state.condition != PlayerCondition.UNCONSCIOUS_CUSTODY
+                && state.condition != PlayerCondition.CONSCIOUS_RESTRAINED)) {
+            carrier.tell("Poți transporta doar un jucător inconștient sau imobilizat.");
+            return false;
+        }
+        if (state.transport != TransportStatus.NONE) {
+            carrier.tell("Ținta este deja transportată.");
+            return false;
+        }
+
+        long at = now();
+        var transition = new CustodyTransition(
+                "carry:start:" + targetKey + ":" + at + ":" + uuidOf(carrier),
+                CustodyTransition.Action.START_CARRY, at, uuidOf(carrier), uuidOf(carrier),
+                "", StateProvider.NATIVE, "carry", 0);
+        var result = CustodyTransitionEngine.apply(state, transition, ctx.policies());
+        if (!result.ok() && !result.idempotent()) {
+            carrier.tell("Transportul nu poate începe: " + result.code());
+            return false;
+        }
+        if (!target.startRiding(carrier.uuid())) {
+            stopCarriedState(store, state, uuidOf(carrier), "mount_failed");
+            ctx.custody().write(store);
+            carrier.tell("Transportul nu a putut fi sincronizat cu serverul.");
+            audit.record("carry_start", carrier.name(), uuidOf(carrier),
+                    target.name(), uuidOf(target), "REFUSED", "mount_failed");
+            return false;
+        }
+
+        ctx.custody().write(store);
+        target.tell("Ești transportat de " + carrier.name()
+                + ". Timpul tău de inconștiență este pus pe pauză temporar.");
+        carrier.tell("Transporți pe " + target.name() + ".");
+        audit.record("carry_start", carrier.name(), uuidOf(carrier),
+                target.name(), uuidOf(target), "SUCCESS",
+                "deadline=" + state.transportDeadlineAt);
+        return true;
+    }
+
+    /** Drops a carried target, or ends carry from a lifecycle recovery path. */
+    @Override
+    public boolean dropCarry(PlayerGateway carrier, PlayerGateway target, String reason) {
+        if (target == null) return false;
+        var store = store();
+        importLegacyProjections(store);
+        String targetKey = key(target);
+        var state = store.states.get(targetKey);
+        if (state == null || state.transport != TransportStatus.CARRIED) return false;
+        String expectedCarrier = state.carrierId == null ? "" : state.carrierId;
+        if (carrier != null && !expectedCarrier.equals(uuidOf(carrier))) {
+            carrier.tell("Nu ești persoana care transportă această țintă.");
+            return false;
+        }
+        if (target.isOnline()) target.stopRiding();
+        boolean changed = stopCarriedState(store, state,
+                carrier == null ? "system" : uuidOf(carrier),
+                reason == null ? "manual_drop" : reason);
+        if (!changed) return false;
+        ctx.custody().write(store);
+        target.tell("Ai fost lăsat jos și revii la starea ta de custodie.");
+        if (carrier != null) carrier.tell("Ai lăsat jos pe " + target.name() + ".");
+        audit.record("carry_stop", carrier == null ? "system" : carrier.name(),
+                carrier == null ? "" : uuidOf(carrier), target.name(), uuidOf(target),
+                "SUCCESS", reason == null ? "manual_drop" : reason);
+        return true;
+    }
+
     /**
      * Baton strike semantics. The event adapter computes whether the incoming
      * damage would be lethal; this returns what the adapter must do.
@@ -1548,7 +1745,9 @@ public class CustodyService implements CustodyRoleplayUseCase {
     /** Per-tick custody maintenance: expiry, distance break, effects, wake. */
     public void tick() {
         var store = store();
+        var carried = carriedSnapshots(store);
         boolean changed = processCanonicalDeadlines(store);
+        changed |= reconcileCarried(store, carried);
         for (var entry : new java.util.ArrayList<>(store.cuffRequests.entrySet())) {
             var request = entry.getValue();
             if (request == null || blank(request.id)) {
@@ -1682,6 +1881,12 @@ public class CustodyService implements CustodyRoleplayUseCase {
             }
             var target = findStored(record.targetUuid, record.target);
             if (target == null) continue;
+            var canonical = store.states.get(entry.getKey());
+            if (canonical != null && canonical.transport == TransportStatus.CARRIED) {
+                // The canonical transport deadline owns carried timing. The
+                // legacy wakesAt projection must not wake a passenger early.
+                continue;
+            }
             if (now() >= record.wakesAt) {
                 // Inline wake on the same store instance: a nested read/write
                 // here would be clobbered by the outer store write at the end.

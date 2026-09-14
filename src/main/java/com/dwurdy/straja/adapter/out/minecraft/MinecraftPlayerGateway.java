@@ -123,4 +123,32 @@ public class MinecraftPlayerGateway implements PlayerGateway {
             p.teleportTo(level, x, y, z, p.getYRot(), p.getXRot());
         }
     }
+
+    @Override public boolean startRiding(UUID vehicleUuid) {
+        ServerPlayer passenger = entity();
+        ServerPlayer vehicle = vehicleUuid == null ? null : server.getPlayerList().getPlayer(vehicleUuid);
+        return passenger != null && vehicle != null && passenger.startRiding(vehicle, true);
+    }
+
+    @Override public void stopRiding() {
+        ServerPlayer p = entity();
+        if (p != null) p.stopRiding();
+    }
+
+    @Override public boolean isPassenger() {
+        ServerPlayer p = entity();
+        return p != null && p.isPassenger();
+    }
+
+    @Override public boolean isPassengerOf(UUID vehicleUuid) {
+        ServerPlayer p = entity();
+        return p != null && vehicleUuid != null && p.getVehicle() != null
+                && vehicleUuid.equals(p.getVehicle().getUUID());
+    }
+
+    @Override public boolean hasPassenger(UUID passengerUuid) {
+        ServerPlayer p = entity();
+        return p != null && passengerUuid != null
+                && p.getPassengers().stream().anyMatch(entity -> passengerUuid.equals(entity.getUUID()));
+    }
 }

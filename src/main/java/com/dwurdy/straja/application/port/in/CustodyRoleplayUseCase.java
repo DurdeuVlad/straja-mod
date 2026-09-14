@@ -47,6 +47,9 @@ public interface CustodyRoleplayUseCase {
     boolean resolveDowned(PlayerGateway player, String destination);
     boolean giveCuffs(PlayerGateway player);
 
+    boolean startCarry(PlayerGateway carrier, PlayerGateway target);
+    boolean dropCarry(PlayerGateway carrier, PlayerGateway target, String reason);
+
     DamageDecision batonStrike(
             PlayerGateway issuer,
             PlayerGateway target,
@@ -72,6 +75,7 @@ public interface CustodyRoleplayUseCase {
 
     void recoverOnLogin(PlayerGateway player);
     void recoverOnLogout(PlayerGateway player);
+    void recoverOnDimensionChange(PlayerGateway player);
     void recoverAfterDeath(PlayerGateway player);
 
     void tick();
