@@ -153,6 +153,14 @@ public final class StrajaEvents {
         runtime.custodyRoleplay().recoverOnLogout(gateway);
     }
 
+    @SubscribeEvent
+    public void onChangedDimension(PlayerEvent.PlayerChangedDimensionEvent event) {
+        StrajaRuntime runtime = StrajaRuntime.get();
+        if (runtime == null || !(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) return;
+        runtime.custodyRoleplay().recoverOnDimensionChange(
+                new MinecraftPlayerGateway(player.getServer(), player.getUUID()));
+    }
+
     /**
      * Classifies damage before it can resolve. The custody service owns the
      * one-outcome decision; this adapter only translates the NeoForge event
@@ -245,6 +253,12 @@ public final class StrajaEvents {
         }
         if (!(event.getTarget() instanceof net.minecraft.server.level.ServerPlayer target)) return;
         var targetGateway = new MinecraftPlayerGateway(target.getServer(), target.getUUID());
+        if (player.isCrouching() && gateway.mainHand().isEmpty()) {
+            boolean handled = runtime.custodyRoleplay().dropCarry(gateway, targetGateway, "manual_drop");
+            if (!handled) handled = runtime.custodyRoleplay().startCarry(gateway, targetGateway);
+            if (handled) event.setCanceled(true);
+            return;
+        }
         String held = gateway.mainHand().id();
         if ("straja:order_book".equals(held) || "straja:mission_carnet".equals(held)) {
             if (runtime.missionRoleplay().issueDraft(gateway, targetGateway)) event.setCanceled(true);

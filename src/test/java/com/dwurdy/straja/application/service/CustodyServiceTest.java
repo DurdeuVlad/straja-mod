@@ -12,6 +12,7 @@ import com.dwurdy.straja.domain.model.LethalEventResolver;
 import com.dwurdy.straja.domain.model.PlayerCondition;
 import com.dwurdy.straja.domain.model.ItemSpec;
 import com.dwurdy.straja.domain.model.Rank;
+import com.dwurdy.straja.domain.model.TransportStatus;
 import com.dwurdy.straja.support.Fakes;
 import com.dwurdy.straja.support.Fakes.*;
 import org.junit.jupiter.api.BeforeEach;
@@ -278,6 +279,62 @@ class CustodyServiceTest {
     }
 
     // ------------------------------------------------------------ baton / downed
+
+    @Test
+    void carryingPausesDownedClockAndDropRestoresIt() {
+        ctx.policies().downedDurationSeconds = 30;
+        custody.startDowned(civilian, guard, "test");
+        clock.advance(1_000);
+
+        assertTrue(custody.startCarry(guard, civilian));
+        var carried = ctx.custody().read().states.get(civilian.uuid().toString());
+        assertEquals(TransportStatus.CARRIED, carried.transport);
+        assertNull(carried.downedDeadlineAt);
+        assertTrue(carried.pausedDownedRemainingMs >= 28_000);
+        assertEquals(guard.uuid, civilian.vehicleUuid);
+
+        clock.advance(20_000);
+        custody.tick();
+        assertTrue(custody.isDowned(civilian), "legacy wakesAt cannot wake a carried target");
+        assertEquals(TransportStatus.CARRIED,
+                ctx.custody().read().states.get(civilian.uuid().toString()).transport);
+
+        assertTrue(custody.dropCarry(guard, civilian, "manual_drop"));
+        var dropped = ctx.custody().read().states.get(civilian.uuid().toString());
+        assertEquals(TransportStatus.NONE, dropped.transport);
+        assertTrue(dropped.downedDeadlineAt > clock.now);
+        assertNull(civilian.vehicleUuid);
+    }
+
+    @Test
+    void carryEndsWhenCarrierLogsOutAndCannotBeStacked() {
+        assertTrue(custody.startDowned(civilian, guard, "test") != null);
+        assertTrue(custody.startCarry(guard, civilian));
+        assertFalse(custody.startCarry(boss, civilian));
+
+        custody.recoverOnLogout(guard);
+
+        var state = ctx.custody().read().states.get(civilian.uuid().toString());
+        assertEquals(TransportStatus.NONE, state.transport);
+        assertTrue(custody.isDowned(civilian));
+        assertNull(civilian.vehicleUuid);
+    }
+
+    @Test
+    void transportDeadlineDetachesAndResumesDownedClock() {
+        ctx.policies().carryTransportDeadlineSeconds = 1;
+        custody.startDowned(civilian, guard, "test");
+        assertTrue(custody.startCarry(guard, civilian));
+
+        clock.advance(1_000);
+        custody.tick();
+
+        var state = ctx.custody().read().states.get(civilian.uuid().toString());
+        assertEquals(TransportStatus.NONE, state.transport);
+        assertTrue(custody.isDowned(civilian));
+        assertTrue(state.downedDeadlineAt > clock.now);
+        assertNull(civilian.vehicleUuid);
+    }
 
     @Test
     void lethalResolverStartsDownedOnlyForTheStrajaOwner() {
