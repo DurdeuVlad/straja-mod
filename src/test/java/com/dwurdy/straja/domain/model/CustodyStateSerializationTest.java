@@ -25,6 +25,7 @@ class CustodyStateSerializationTest {
         state.sourceUuid = "22222222-2222-2222-2222-222222222222";
         state.enteredAt = 10;
         state.downedDeadlineAt = 20L;
+        state.pausedDownedRemainingMs = 15L;
         state.resuscitationDeadlineAt = 30L;
         state.unconsciousCustodyDeadlineAt = 40L;
         state.transportDeadlineAt = 50L;
@@ -51,6 +52,7 @@ class CustodyStateSerializationTest {
         assertEquals(state.sourceUuid, loaded.sourceUuid);
         assertEquals(state.enteredAt, loaded.enteredAt);
         assertEquals(state.downedDeadlineAt, loaded.downedDeadlineAt);
+        assertEquals(state.pausedDownedRemainingMs, loaded.pausedDownedRemainingMs);
         assertEquals(state.resuscitationDeadlineAt, loaded.resuscitationDeadlineAt);
         assertEquals(state.unconsciousCustodyDeadlineAt, loaded.unconsciousCustodyDeadlineAt);
         assertEquals(state.transportDeadlineAt, loaded.transportDeadlineAt);

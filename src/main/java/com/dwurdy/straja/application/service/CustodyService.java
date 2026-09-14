@@ -6,6 +6,12 @@ import com.dwurdy.straja.application.port.out.ItemView;
 import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.domain.model.Capability;
 import com.dwurdy.straja.domain.model.CustodyStore;
+import com.dwurdy.straja.domain.model.CustodyDeadlineEngine;
+import com.dwurdy.straja.domain.model.CustodyTransition;
+import com.dwurdy.straja.domain.model.CustodyTransitionResult;
+import com.dwurdy.straja.domain.model.CustodyState;
+import com.dwurdy.straja.domain.model.RecoveryEvent;
+import com.dwurdy.straja.domain.model.StateProvider;
 import com.dwurdy.straja.domain.model.ItemSpec;
 import com.dwurdy.straja.domain.model.Rank;
 import java.util.ArrayList;
@@ -49,6 +55,27 @@ public class CustodyService implements CustodyRoleplayUseCase {
 
     private static boolean matches(PlayerGateway p, String uuid, String name) {
         return PlayerService.identityMatches(p, uuid, name);
+    }
+
+    /** Returns the canonical DC-001 state for a live player, when present. */
+    public CustodyState canonicalState(PlayerGateway player) {
+        return store().states.get(key(player));
+    }
+
+    /**
+     * Applies one already-authorized canonical transition and persists it as a
+     * single aggregate mutation.  Interaction adapters remain outside this
+     * method; DC-002 only supplies the authoritative state/timer boundary.
+     */
+    public CustodyTransitionResult applyCanonicalTransition(PlayerGateway player,
+                                                              CustodyTransition transition) {
+        var store = store();
+        var state = store.states.get(key(player));
+        if (state == null) return CustodyTransitionResult.rejected("STATE_NOT_FOUND");
+        var result = com.dwurdy.straja.domain.model.CustodyTransitionEngine.apply(
+                state, transition, ctx.policies());
+        if (result.ok() && !result.idempotent()) ctx.custody().write(store);
+        return result;
     }
 
     private PlayerGateway findStored(String uuid, String name) {
@@ -574,8 +601,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
      */
     public void recoverOnLogin(PlayerGateway player) {
         var store = store();
+        boolean changed = processCanonicalDeadlines(store, now());
         String playerKey = key(player);
-        boolean changed = false;
         var record = store.cuffed.get(playerKey);
         if (record != null && !issuerStillEligible(record)) {
             recoverCuff(store, record, player);
@@ -636,6 +663,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
     /** Logout recovery: drops only transient cuff/surrender requests. */
     public void recoverOnLogout(PlayerGateway player) {
         var store = store();
+        boolean changed = recoverCanonical(store, player, RecoveryEvent.LOGOUT);
         var discarded = new ArrayList<String>();
         store.cuffRequests.values().removeIf(request -> {
             if (request == null) return false;
@@ -644,7 +672,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
             if (mine) discarded.add(request.id);
             return mine;
         });
-        if (discarded.isEmpty()) return;
+        if (discarded.isEmpty() && !changed) return;
         ctx.custody().write(store);
         for (String id : discarded) {
             audit.record("custody_request_discard", player.name(), uuidOf(player),
@@ -660,7 +688,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
     public void recoverAfterDeath(PlayerGateway player) {
         var store = store();
         String playerKey = key(player);
-        boolean changed = false;
+        boolean changed = markCanonicalDead(store, player);
         var record = store.cuffed.remove(playerKey);
         if (record != null) {
             changed = true;
@@ -1093,6 +1121,67 @@ public class CustodyService implements CustodyRoleplayUseCase {
 
     // ------------------------------------------------------------ tick
 
+    /**
+     * Applies the configured restart policy once per server bootstrap.  The
+     * persisted absolute deadlines are still evaluated by the normal tick;
+     * this hook only handles an explicit non-RETAIN restart policy.
+     */
+    public void recoverOnRestart() {
+        var store = store();
+        boolean changed = false;
+        for (var entry : store.states.entrySet()) {
+            var state = entry.getValue();
+            if (state != null && CustodyDeadlineEngine.recover(
+                    state, RecoveryEvent.RESTART, now(), ctx.policies())) changed = true;
+        }
+        if (changed) ctx.custody().write(store);
+    }
+
+    /** Resolves canonical DC-002 deadlines against one persisted store read. */
+    private boolean processCanonicalDeadlines(CustodyStore store, long at) {
+        boolean changed = false;
+        for (var entry : new java.util.ArrayList<>(store.states.entrySet())) {
+            var state = entry.getValue();
+            if (state == null || !state.wellFormed()) continue;
+            var resolutions = CustodyDeadlineEngine.resolveDue(state, at, ctx.policies());
+            if (resolutions.isEmpty()) continue;
+            changed = true;
+            var target = findStored(state.playerUuid, state.playerName);
+            for (var resolution : resolutions) {
+                if (resolution.timer() == CustodyDeadlineEngine.Timer.DOWNED_DEATH
+                        && target != null && target.health() > 0) {
+                    // The state transition is authoritative; the gateway side
+                    // effect merely lets the normal server death lifecycle run.
+                    target.setHealth(0);
+                }
+                audit.record("custody_deadline", state.playerName, state.playerUuid,
+                        state.playerName, state.playerUuid, "SUCCESS",
+                        resolution.timer().name().toLowerCase()
+                                + " transitionId=" + resolution.transitionId());
+            }
+        }
+        return changed;
+    }
+
+    private boolean recoverCanonical(CustodyStore store, PlayerGateway player,
+                                     RecoveryEvent event) {
+        var state = store.states.get(key(player));
+        return state != null && CustodyDeadlineEngine.recover(state, event, now(), ctx.policies());
+    }
+
+    private boolean markCanonicalDead(CustodyStore store, PlayerGateway player) {
+        var state = store.states.get(key(player));
+        if (state == null || state.condition == com.dwurdy.straja.domain.model.PlayerCondition.DEAD
+                || !state.wellFormed()) return false;
+        var result = com.dwurdy.straja.domain.model.CustodyTransitionEngine.apply(
+                state,
+                new CustodyTransition("death:" + key(player) + ":" + now(),
+                        CustodyTransition.Action.DIE, now(), "death-lifecycle", "", "",
+                        StateProvider.SYSTEM, "death", 0),
+                ctx.policies());
+        return result.ok() && !result.idempotent();
+    }
+
     private void applyCuffSlowness(PlayerGateway player) {
         player.applyEffect("minecraft:slowness",
                 Math.max(20, ctx.policies().cuffSlownessTicks), ctx.policies().cuffSlownessAmplifier);
@@ -1145,7 +1234,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
     /** Per-tick custody maintenance: expiry, distance break, effects, wake. */
     public void tick() {
         var store = store();
-        boolean changed = false;
+        boolean changed = processCanonicalDeadlines(store, now());
         for (var entry : new java.util.ArrayList<>(store.cuffRequests.entrySet())) {
             var request = entry.getValue();
             if (request == null || blank(request.id)) {

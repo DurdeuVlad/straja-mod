@@ -43,6 +43,10 @@ public final class CustodyTransitionEngine {
             case RESOLVE_UNCONSCIOUS_DEADLINE -> resolveUnconsciousDeadline(state, transition);
             case DELIVER_TO_JAIL -> deliverToJail(state, transition, policies);
             case REVIVE_IN_JAIL -> reviveInJail(state, transition, policies);
+            case RESOLVE_DOWNED_DEADLINE -> resolveDownedDeadline(state, transition, policies);
+            case RESOLVE_TRANSPORT_DEADLINE -> resolveTransportDeadline(state, transition);
+            case RESOLVE_RESUSCITATION_DEADLINE -> resolveResuscitationDeadline(state, transition);
+            case RESOLVE_JAIL_DELIVERY_DEADLINE -> resolveJailDeliveryDeadline(state, transition);
             case RELEASE_RESTRAINT -> releaseRestraint(state, transition);
             case RELEASE_CUSTODY -> releaseCustody(state, transition, policies);
             case DIE -> die(state, transition, policies);
@@ -67,6 +71,7 @@ public final class CustodyTransitionEngine {
         }
         state.condition = PlayerCondition.DOWNED;
         state.downedDeadlineAt = deadline(transition.at(), policies.downedDurationSeconds);
+        state.pausedDownedRemainingMs = null;
         state.resuscitationDeadlineAt = null;
         state.resuscitationProgress = 0;
         return CustodyTransitionResult.applied();
@@ -77,13 +82,17 @@ public final class CustodyTransitionEngine {
                                                                 StrajaPolicies policies) {
         if (state.condition != PlayerCondition.DOWNED
                 || state.custody != CustodyStatus.FREE
-                || state.restraint != RestraintStatus.NONE) {
+                || state.restraint != RestraintStatus.NONE
+                || state.transport != TransportStatus.NONE) {
             return reject("RESUSCITATION_REQUIRES_DOWNED_FREE");
         }
-        if (expired(state.downedDeadlineAt, transition.at())) {
+        if (state.downedDeadlineAt == null
+                || expired(state.downedDeadlineAt, transition.at())) {
             return reject("DOWNED_DEADLINE_EXPIRED");
         }
         state.condition = PlayerCondition.RESUSCITATING;
+        state.pausedDownedRemainingMs = remaining(state.downedDeadlineAt, transition.at());
+        state.downedDeadlineAt = null;
         state.resuscitationDeadlineAt = deadline(transition.at(), policies.resuscitationTimeoutSeconds);
         state.resuscitationProgress = 0;
         return CustodyTransitionResult.applied();
@@ -106,6 +115,7 @@ public final class CustodyTransitionEngine {
         if (state.resuscitationProgress >= required) {
             state.condition = PlayerCondition.ALIVE;
             state.downedDeadlineAt = null;
+            state.pausedDownedRemainingMs = null;
             state.resuscitationDeadlineAt = null;
             state.resuscitationProgress = 0;
         }
@@ -129,6 +139,10 @@ public final class CustodyTransitionEngine {
                 || state.restraint != RestraintStatus.NONE) {
             return reject("RESTRAINT_REQUIRES_FREE_TARGET");
         }
+        if (state.condition == PlayerCondition.DOWNED
+                && expired(state.downedDeadlineAt, transition.at())) {
+            return reject("DOWNED_DEADLINE_EXPIRED");
+        }
         state.restraint = restraint;
         state.custody = custody;
         state.restraintActorId = transition.actorId();
@@ -139,6 +153,7 @@ public final class CustodyTransitionEngine {
         if (state.condition == PlayerCondition.DOWNED) {
             state.condition = PlayerCondition.UNCONSCIOUS_CUSTODY;
             state.downedDeadlineAt = null;
+            state.pausedDownedRemainingMs = null;
             state.unconsciousCustodyDeadlineAt = deadline(
                     transition.at(), policies.unconsciousCustodyDurationSeconds);
         } else {
@@ -156,8 +171,17 @@ public final class CustodyTransitionEngine {
                                                         StrajaPolicies policies) {
         String carrier = transition.carrierId().isEmpty() ? transition.actorId() : transition.carrierId();
         if (blank(carrier) || samePlayer(state, carrier)) return reject("CARRIER_INVALID");
-        if (state.condition == PlayerCondition.DEAD || state.transport != TransportStatus.NONE) {
+        if (state.condition == PlayerCondition.DEAD
+                || state.condition == PlayerCondition.RESUSCITATING
+                || state.transport != TransportStatus.NONE) {
             return reject("CARRY_NOT_AVAILABLE");
+        }
+        if (state.condition == PlayerCondition.DOWNED) {
+            if (expired(state.downedDeadlineAt, transition.at())) {
+                return reject("DOWNED_DEADLINE_EXPIRED");
+            }
+            state.pausedDownedRemainingMs = remaining(state.downedDeadlineAt, transition.at());
+            state.downedDeadlineAt = null;
         }
         state.transport = TransportStatus.CARRIED;
         state.carrierId = carrier;
@@ -168,9 +192,31 @@ public final class CustodyTransitionEngine {
     private static CustodyTransitionResult stopCarry(CustodyState state,
                                                        CustodyTransition transition) {
         if (state.transport != TransportStatus.CARRIED) return reject("NOT_CARRIED");
+        if (expired(state.transportDeadlineAt, transition.at())) {
+            return reject("TRANSPORT_DEADLINE_EXPIRED");
+        }
+        return stopCarryAt(state, transition);
+    }
+
+    private static CustodyTransitionResult resolveTransportDeadline(CustodyState state,
+                                                                      CustodyTransition transition) {
+        if (state.transport != TransportStatus.CARRIED
+                || !expired(state.transportDeadlineAt, transition.at())) {
+            return reject("TRANSPORT_DEADLINE_ACTIVE");
+        }
+        return stopCarryAt(state, transition);
+    }
+
+    private static CustodyTransitionResult stopCarryAt(CustodyState state,
+                                                        CustodyTransition transition) {
         state.transport = TransportStatus.NONE;
         state.carrierId = "";
         state.transportDeadlineAt = null;
+        if (state.condition == PlayerCondition.DOWNED && state.downedDeadlineAt == null) {
+            if (!positive(state.pausedDownedRemainingMs)) return reject("DOWNED_TIMER_MISSING");
+            state.downedDeadlineAt = deadlineFromMillis(transition.at(), state.pausedDownedRemainingMs);
+            state.pausedDownedRemainingMs = null;
+        }
         return CustodyTransitionResult.applied();
     }
 
@@ -206,10 +252,7 @@ public final class CustodyTransitionEngine {
                                                  StrajaPolicies policies) {
         if (state.condition == PlayerCondition.DOWNED) {
             if (!expired(state.downedDeadlineAt, transition.at())) return reject("DOWNED_DEADLINE_ACTIVE");
-            state.condition = PlayerCondition.ALIVE;
-            state.custody = CustodyStatus.FREE;
-            state.downedDeadlineAt = null;
-            return CustodyTransitionResult.applied();
+            return reject("DOWNED_DEADLINE_EXPIRED_USE_RESOLUTION");
         }
         if (state.condition == PlayerCondition.UNCONSCIOUS_CUSTODY) {
             if (!expired(state.unconsciousCustodyDeadlineAt, transition.at())) {
@@ -218,6 +261,9 @@ public final class CustodyTransitionEngine {
             state.condition = state.restraint == RestraintStatus.NONE
                     ? PlayerCondition.ALIVE : PlayerCondition.CONSCIOUS_RESTRAINED;
             state.unconsciousCustodyDeadlineAt = null;
+            state.transport = TransportStatus.NONE;
+            state.carrierId = "";
+            state.transportDeadlineAt = null;
             return CustodyTransitionResult.applied();
         }
         return reject("WAKE_REQUIRES_CONTROL_LOSS");
@@ -232,6 +278,44 @@ public final class CustodyTransitionEngine {
         state.condition = state.restraint == RestraintStatus.NONE
                 ? PlayerCondition.ALIVE : PlayerCondition.CONSCIOUS_RESTRAINED;
         state.unconsciousCustodyDeadlineAt = null;
+        state.transport = TransportStatus.NONE;
+        state.carrierId = "";
+        state.transportDeadlineAt = null;
+        return CustodyTransitionResult.applied();
+    }
+
+    private static CustodyTransitionResult resolveDownedDeadline(CustodyState state,
+                                                                   CustodyTransition transition,
+                                                                   StrajaPolicies policies) {
+        if (state.condition != PlayerCondition.DOWNED
+                || !expired(state.downedDeadlineAt, transition.at())) {
+            return reject("DOWNED_DEADLINE_ACTIVE");
+        }
+        return die(state, transition, policies);
+    }
+
+    private static CustodyTransitionResult resolveResuscitationDeadline(CustodyState state,
+                                                                          CustodyTransition transition) {
+        if (state.condition != PlayerCondition.RESUSCITATING
+                || !expired(state.resuscitationDeadlineAt, transition.at())) {
+            return reject("RESUSCITATION_DEADLINE_ACTIVE");
+        }
+        if (!positive(state.pausedDownedRemainingMs)) return reject("DOWNED_TIMER_MISSING");
+        state.condition = PlayerCondition.DOWNED;
+        state.resuscitationDeadlineAt = null;
+        state.downedDeadlineAt = deadlineFromMillis(transition.at(), state.pausedDownedRemainingMs);
+        state.pausedDownedRemainingMs = null;
+        state.resuscitationProgress = 0;
+        return CustodyTransitionResult.applied();
+    }
+
+    private static CustodyTransitionResult resolveJailDeliveryDeadline(CustodyState state,
+                                                                          CustodyTransition transition) {
+        if (state.custody != CustodyStatus.ARRESTED
+                || !expired(state.jailDeliveryDeadlineAt, transition.at())) {
+            return reject("JAIL_DELIVERY_DEADLINE_ACTIVE");
+        }
+        state.jailDeliveryDeadlineAt = null;
         return CustodyTransitionResult.applied();
     }
 
@@ -312,6 +396,7 @@ public final class CustodyTransitionEngine {
         if (state.condition == PlayerCondition.UNCONSCIOUS_CUSTODY) {
             state.condition = PlayerCondition.DOWNED;
             state.unconsciousCustodyDeadlineAt = null;
+            state.pausedDownedRemainingMs = null;
             state.downedDeadlineAt = deadline(transition.at(), policies.downedDurationSeconds);
         }
         return CustodyTransitionResult.applied();
@@ -322,6 +407,7 @@ public final class CustodyTransitionEngine {
                                                 StrajaPolicies policies) {
         state.condition = PlayerCondition.DEAD;
         state.downedDeadlineAt = null;
+        state.pausedDownedRemainingMs = null;
         state.resuscitationDeadlineAt = null;
         state.unconsciousCustodyDeadlineAt = null;
         state.transportDeadlineAt = null;
@@ -367,6 +453,19 @@ public final class CustodyTransitionEngine {
 
     private static long deadline(long at, int seconds) {
         return at + Math.max(1, seconds) * 1000L;
+    }
+
+    private static long deadlineFromMillis(long at, long remainingMs) {
+        return at + Math.max(1L, remainingMs);
+    }
+
+    private static Long remaining(Long deadline, long at) {
+        if (deadline == null) return null;
+        return Math.max(1L, deadline - at);
+    }
+
+    private static boolean positive(Long value) {
+        return value != null && value > 0;
     }
 
     private static boolean blank(String value) {

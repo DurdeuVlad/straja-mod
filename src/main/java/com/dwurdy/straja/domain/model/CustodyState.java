@@ -34,6 +34,12 @@ public class CustodyState {
 
     /** Deadlines are absolute epoch milliseconds; null means not applicable. */
     public Long downedDeadlineAt;
+    /**
+     * Remaining downed time captured when the normal death timer is paused.
+     * A null downed deadline plus this value is the persisted paused form of
+     * the timer (carry or active resuscitation), so reconnects cannot reset it.
+     */
+    public Long pausedDownedRemainingMs;
     public Long resuscitationDeadlineAt;
     public Long unconsciousCustodyDeadlineAt;
     public Long transportDeadlineAt;
@@ -92,11 +98,27 @@ public class CustodyState {
                 && (restraint == RestraintStatus.NONE || custody == CustodyStatus.FREE)) {
             result.add("conscious_restrained_without_valid_control_context");
         }
-        if (condition == PlayerCondition.DOWNED && !positive(downedDeadlineAt)) {
+        if (condition == PlayerCondition.DOWNED
+                && !positive(downedDeadlineAt) && !positive(pausedDownedRemainingMs)) {
             result.add("downed_deadline_missing");
+        }
+        if (condition == PlayerCondition.DOWNED && transport == TransportStatus.CARRIED
+                && downedDeadlineAt != null) {
+            result.add("downed_timer_must_be_paused_while_carried");
+        }
+        if (pausedDownedRemainingMs != null && pausedDownedRemainingMs <= 0) {
+            result.add("paused_downed_time_invalid");
+        }
+        if (condition != PlayerCondition.DOWNED && condition != PlayerCondition.RESUSCITATING
+                && pausedDownedRemainingMs != null) {
+            result.add("orphan_paused_downed_time");
         }
         if (condition == PlayerCondition.RESUSCITATING && !positive(resuscitationDeadlineAt)) {
             result.add("resuscitation_deadline_missing");
+        }
+        if (condition == PlayerCondition.RESUSCITATING
+                && !positive(pausedDownedRemainingMs)) {
+            result.add("resuscitation_downed_time_missing");
         }
         if (condition == PlayerCondition.UNCONSCIOUS_CUSTODY
                 && custody != CustodyStatus.JAILED

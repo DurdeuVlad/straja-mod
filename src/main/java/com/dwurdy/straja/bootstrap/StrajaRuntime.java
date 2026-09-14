@@ -170,6 +170,7 @@ public final class StrajaRuntime {
                         instance.guards, instance.missions, instance.complaints, instance.fines,
                         instance.archive, instance.reports, instance.audiences, instance.admin)::submit);
         instance.logDeploymentGates();
+        instance.custody.recoverOnRestart();
         return instance;
     }
 
