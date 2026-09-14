@@ -214,22 +214,48 @@ class CustodyServiceTest {
 
     @Test
     void crowbarCutsCuffsAndRope() {
-        custody.requestCuffs(guard, civilian);
-        var req = ctx.custody().read().cuffRequests.values().iterator().next();
-        custody.accept(civilian, req.id);
-        hold(guard, CustodyService.ROPE);
-        assertTrue(custody.applyRope(guard, civilian));
+        hold(boss, CustodyService.ROPE);
+        assertTrue(custody.applyRope(boss, civilian), () -> boss.messages.toString());
+        var state = ctx.custody().read().states.get(civilian.uuid().toString());
+        assertEquals(com.dwurdy.straja.domain.model.CustodyStatus.HOSTAGE, state.custody);
+        assertEquals(com.dwurdy.straja.domain.model.RestraintStatus.ROPE_BOUND, state.restraint);
         hold(guard, CustodyService.BOLT_CUTTERS);
         assertTrue(custody.release(guard, civilian));
         assertFalse(custody.isCuffed(civilian));
         assertFalse(custody.isBound(civilian));
+
+        custody.requestCuffs(guard, civilian);
+        var req = ctx.custody().read().cuffRequests.values().iterator().next();
+        assertTrue(custody.accept(civilian, req.id));
+        hold(guard, CustodyService.BOLT_CUTTERS);
+        assertFalse(custody.release(guard, civilian), "cutters must not release police cuffs");
+        assertTrue(custody.isCuffed(civilian));
     }
 
     @Test
-    void ropeRequiresCuffedTarget() {
-        hold(guard, CustodyService.ROPE);
-        assertFalse(custody.applyRope(guard, civilian));
-        assertTrue(guard.told("deja încătușat"));
+    void ropeCreatesCriminalHostageStateWithoutPoliceCuffs() {
+        hold(boss, CustodyService.ROPE);
+        assertTrue(custody.applyRope(boss, civilian), () -> boss.messages.toString());
+        var state = ctx.custody().read().states.get(civilian.uuid().toString());
+        assertEquals(com.dwurdy.straja.domain.model.CustodyStatus.HOSTAGE, state.custody);
+        assertEquals(com.dwurdy.straja.domain.model.RestraintStatus.ROPE_BOUND, state.restraint);
+        assertFalse(custody.isCuffed(civilian));
+    }
+
+    @Test
+    void ropeCapturesDownedTargetAndStopsTheNormalDeathClock() {
+        assertNotNull(custody.startDowned(civilian, guard, "test"));
+        hold(boss, CustodyService.ROPE);
+
+        assertTrue(custody.applyRope(boss, civilian));
+        var state = ctx.custody().read().states.get(civilian.uuid().toString());
+        assertEquals(PlayerCondition.UNCONSCIOUS_CUSTODY, state.condition);
+        assertEquals(com.dwurdy.straja.domain.model.CustodyStatus.HOSTAGE, state.custody);
+        assertNull(state.downedDeadlineAt);
+        assertFalse(custody.isDowned(civilian));
+        assertEquals(LethalEventResolver.Outcome.PROTECTED_BY_CUSTODY,
+                custody.resolveLethalEvent(civilian, guard, DamageCategory.ORDINARY,
+                        false, false, false).outcome());
     }
 
     @Test
@@ -241,6 +267,8 @@ class CustodyServiceTest {
         custody.accept(civilian, req.id);
         hold(guard, CustodyService.HEAD_SACK);
         assertTrue(custody.applyHeadSack(guard, civilian));
+        assertEquals(com.dwurdy.straja.domain.model.VisionStatus.BLINDFOLDED,
+                ctx.custody().read().states.get(civilian.uuid().toString()).vision);
         assertTrue(civilian.effects.stream().anyMatch(e -> e.contains("blindness")));
         assertTrue(custody.removeHeadSack(civilian));
         assertFalse(custody.hasHeadSack(civilian));
@@ -888,8 +916,8 @@ class CustodyServiceTest {
     }
 
     @Test
-    void tickDropsBoundAndOrphanedSackWhenIssuerBecomesIneligible() {
-        // bound + sack issued by the real guard with valid provenance
+    void criminalBoundAndSackSurviveIssuerLogoutOrAuthorityChanges() {
+        // Criminal restraint uses stable provenance, not police rank eligibility.
         var store = ctx.custody().read();
         var bound = new CustodyStore.BoundRecord();
         bound.target = civilian.name();
@@ -904,7 +932,7 @@ class CustodyServiceTest {
         sack.issuerUuid = guard.uuid().toString();
         store.headSacks.put(civilian.uuid().toString(), sack);
         ctx.custody().write(store);
-        // issuer loses authority before the next tick
+        // The issuer disappearing must not silently remove the hostage state.
         var state = players.state(guard.uuid());
         state.fired = true;
         players.save(guard.uuid(), state);
@@ -912,10 +940,10 @@ class CustodyServiceTest {
         custody.tick();
 
         var after = ctx.custody().read();
-        assertFalse(after.bound.containsKey(civilian.uuid().toString()),
-                "bound record must be dropped when the issuer is no longer eligible");
-        assertTrue(after.headSacks.isEmpty(),
-                "dropping the bound record orphans the sack in the same pass");
+        assertTrue(after.bound.containsKey(civilian.uuid().toString()),
+                "criminal rope must remain after issuer authority changes");
+        assertTrue(after.headSacks.containsKey(civilian.uuid().toString()),
+                "the black sack must remain attached to the valid restraint");
     }
 
     @Test

@@ -66,7 +66,6 @@ public final class PolicyRegistry {
         k("cuffs.breakGraceSeconds", "cuffBreakGraceSeconds", Kind.INT);
         k("cuffs.genericKeyTokens", "genericKeyTokens", Kind.STRING_LIST);
         // restraints
-        k("restraints.ropeRequiresCuffs", "ropeRequiresCuffs", Kind.BOOL);
         k("restraints.ropeSlownessTicks", "ropeSlownessTicks", Kind.INT);
         k("restraints.ropeSlownessAmplifier", "ropeSlownessAmplifier", Kind.INT);
         k("restraints.headSackBlindnessTicks", "headSackBlindnessTicks", Kind.INT);
