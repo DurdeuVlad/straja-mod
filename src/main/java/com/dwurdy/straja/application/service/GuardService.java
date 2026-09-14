@@ -104,7 +104,10 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
                 case "checkpoint_activated" -> player.tell("Checkpoint atins. Următorul devine disponibil peste 10 minute.");
                 case "checkpoint_available" -> player.tell("Checkpoint disponibil: " + event.data().get("checkpoint")
                         + ". Ai " + event.data().get("missionMinutes") + " minute.");
-                case "patrol_complete" -> player.tell("Patrulă completă. Salariul rămâne în sold; vorbește cu Comisaru' pentru decontare.");
+                case "patrol_round_complete" -> player.tell("Rundă de patrulare completă (runda "
+                        + event.data().get("round") + "). Checkpoint-ul "
+                        + event.data().get("checkpoint") + " devine disponibil peste "
+                        + ctx.policies().checkpointUnlockMinutes + " minute.");
                 case "duty_ended" -> player.tell("Serviciul s-a încheiat: " + event.data().get("reason")
                         + ". Soldul acumulat a fost păstrat.");
                 case "special_started" -> player.tell("Special Duty activ. Cronometrele checkpoint-urilor sunt suspendate.");
@@ -122,9 +125,56 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         }
         equipment.settleEquipmentDebt(state);
         if (!state.duty && state.serviceEquipment != null) equipment.reclaimServiceEquipment(player, state);
+        if (!state.duty) restoreDutyFaction(player, state);
         players.save(player.uuid(), state);
         notifyEvents(player, result.events());
         return true;
+    }
+
+    // ---------------------------------------------------------------- faction capture/restore (§7)
+
+    /** Moves the guard onto the operational Straja team, remembering their team. */
+    private void captureDutyFaction(PlayerGateway player, GuardState state) {
+        if (!ctx.policies().captureDutyFaction) return;
+        state.dutyCapturedFaction = ctx.factions().teamOf(player);
+        state.dutyFactionManaged = true;
+        ctx.factions().joinTeam(player, ctx.policies().strajaTeamName);
+    }
+
+    /**
+     * Restores the captured team. A captured team that no longer exists is
+     * flagged loudly instead of guessed; a guard who had no team returns to
+     * none.
+     */
+    private void restoreDutyFaction(PlayerGateway player, GuardState state) {
+        if (!state.dutyFactionManaged) return;
+        state.dutyFactionManaged = false;
+        String captured = state.dutyCapturedFaction;
+        state.dutyCapturedFaction = null;
+        if (captured == null) {
+            ctx.factions().leaveTeam(player);
+            return;
+        }
+        if (ctx.factions().teamExists(captured)) {
+            ctx.factions().joinTeam(player, captured);
+            return;
+        }
+        ctx.factions().leaveTeam(player);
+        player.tell("Facțiunea ta anterioară \"" + captured + "\" nu mai există; ai rămas fără echipă.");
+        audit.record("faction_restore_failed", "system", player.uuid().toString(),
+                player.name(), player.uuid().toString(), "FAIL", captured);
+    }
+
+    /** Normal (patrol) shifts start and end at the Secretary (§7). */
+    private boolean nearSecretary(PlayerGateway player) {
+        var secretary = ctx.setup().read().location("secretary");
+        if (secretary == null) return true; // unconfigured: fail open, setup checklist flags it
+        if (!secretary.dimension.equals(player.dimension())) return false;
+        double dx = player.x() - secretary.x;
+        double dy = player.y() - secretary.y;
+        double dz = player.z() - secretary.z;
+        double radius = ctx.policies().secretaryRadiusBlocks;
+        return dx * dx + dy * dy + dz * dz <= radius * radius;
     }
 
     public static String coreError(String code) {
@@ -702,6 +752,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             Result ended = DutyEngine.endDuty(state, "demoted_to_civil", now(), salaryFor(target, state), ctx.policies());
             equipment.settleEquipmentDebt(state);
             equipment.reclaimServiceEquipment(target, state);
+            restoreDutyFaction(target, state);
         }
         state.rank = nextRank;
         state.kitClaimedRank = 0;
@@ -727,6 +778,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             DutyEngine.endDuty(state, "suspended", now(), salaryFor(target, state), ctx.policies());
             equipment.settleEquipmentDebt(state);
             equipment.reclaimServiceEquipment(target, state);
+            restoreDutyFaction(target, state);
         }
         players.save(target.uuid(), state);
         fireStatusChange(target, "suspendat din Strajă");
@@ -768,6 +820,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             DutyEngine.endDuty(state, "fired", now(), salaryFor(target, state), ctx.policies());
             equipment.settleEquipmentDebt(state);
             equipment.reclaimServiceEquipment(target, state);
+            restoreDutyFaction(target, state);
         }
         state.fired = true;
         state.invited = false;
@@ -846,12 +899,17 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
                     player.tell("Serviciul nu a început: echipamentul de serviciu nu a putut fi predat complet.");
                     return;
                 }
+                captureDutyFaction(player, state);
                 players.save(player.uuid(), state);
                 audit.record("duty_start", player.name(), player.uuid().toString(),
                         player.name(), player.uuid().toString(), "SUCCESS", "free_shift");
                 player.tell("Tură liberă începută. Ești plătit pe oră; "
                         + "termini tura când dorești de la secretară sau cu /straja stop.");
             }
+            return;
+        }
+        if (!nearSecretary(player)) {
+            player.tell("Tura de patrulare începe la secretară. Mergi la Secretara Străjii pentru a intra în serviciu.");
             return;
         }
         SetupData setup = ctx.setup().read();
@@ -868,6 +926,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
                 player.tell("Serviciul nu a început: echipamentul de serviciu nu a putut fi predat complet.");
                 return;
             }
+            captureDutyFaction(player, state);
             markDutyActivity(player, state, now());
             players.save(player.uuid(), state);
             audit.record("duty_start", player.name(), player.uuid().toString(),
@@ -913,6 +972,10 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             player.tell("Nu ești în serviciu.");
             return;
         }
+        if (!"FREE".equals(state.mode) && !nearSecretary(player)) {
+            player.tell("Tura normală se încheie la secretară. Mergi la Secretara Străjii pentru a ieși din serviciu.");
+            return;
+        }
         markDutyActivity(player, state, now());
         Result result = DutyEngine.endDuty(state, "voluntary_stop", now(), salaryFor(player, state), ctx.policies());
         if (applyCoreResult(player, state, result)) {
@@ -951,6 +1014,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         state.salaryActivityPaused = false;
         state.lastEndReason = "server_restart";
         equipment.reclaimServiceEquipment(player, state);
+        restoreDutyFaction(player, state);
         players.save(player.uuid(), state);
         player.tell("Serviciul activ a fost închis la restart; timpul offline nu se plătește.");
         return true;
@@ -1031,6 +1095,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
                 DutyEngine.endDuty(state, "resignation_notice", now(), salaryFor(player, state), ctx.policies());
                 equipment.settleEquipmentDebt(state);
                 equipment.reclaimServiceEquipment(player, state);
+                restoreDutyFaction(player, state);
             }
             Result started = DutyEngine.beginResignation(state, now(), ctx.policies().resignationNoticeMinutes);
             if (!started.ok()) {
@@ -1579,14 +1644,16 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             player.tell("Contractul de echipament a expirat (" + p.serviceLeaseMinutes
                     + " min). Tura s-a încheiat și echipamentul a fost rechemat.");
             equipment.reclaimServiceEquipment(player, state);
+            restoreDutyFaction(player, state);
             players.save(player.uuid(), state);
             notifyEvents(player, ended.events());
             return new DutyEngine.TickResult(ended.events());
         }
         var result = DutyEngine.tickDuty(state, current, salaryFor(player, state),
                 ctx.setup().read().missionMinutes, ctx.policies(), activity.accrualNow);
-        if (!state.duty && state.serviceEquipment != null) {
-            equipment.reclaimServiceEquipment(player, state);
+        if (!state.duty) {
+            if (state.serviceEquipment != null) equipment.reclaimServiceEquipment(player, state);
+            restoreDutyFaction(player, state);
         }
         if (activity.pausing) {
             state.salaryActivityPaused = true;

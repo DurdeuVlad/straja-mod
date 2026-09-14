@@ -29,6 +29,7 @@ public class GuardState {
     public String patrolState = "OFF";         // ACTIVE | WAITING | SUSPENDED | OFF
     public List<String> route = new ArrayList<>();
     public int patrolIndex = 0;
+    public int patrolRounds = 0;             // completed patrol rounds this shift (route loops, §8)
     public Long waitingUntil = null;
     public Long deadlineAt = null;
     public Map<String, Integer> missionMinutes = new LinkedHashMap<>();
@@ -57,6 +58,8 @@ public class GuardState {
     public boolean regearPending = false;
     public String specialAuthorizedBy = null;
     public String lastEndReason = null;
+    public boolean dutyFactionManaged = false;   // we moved the player to the Straja team this shift
+    public String dutyCapturedFaction = null;    // scoreboard team captured at duty start, restored at end
     public boolean resigned = false;
     public Long resignedAt = null;
     public Long rejoinAvailableAt = null;

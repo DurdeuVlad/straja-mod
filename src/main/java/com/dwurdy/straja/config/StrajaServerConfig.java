@@ -90,6 +90,9 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> PROMOTION_SERVICE_BLOCKS;
 
     public static final ModConfigSpec.IntValue FREE_DUTY_MIN_RANK;
+    public static final ModConfigSpec.IntValue SECRETARY_RADIUS_BLOCKS;
+    public static final ModConfigSpec.BooleanValue CAPTURE_DUTY_FACTION;
+    public static final ModConfigSpec.ConfigValue<String> STRAJA_TEAM_NAME;
 
 
     public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> QUIZ_QUESTIONS;
@@ -331,6 +334,18 @@ public final class StrajaServerConfig {
                         "Guards at or above this rank (and the commissioner) start and",
                         "end shifts at will — no patrol route or checkpoints required.")
                 .defineInRange("freeDutyMinRank", defaults.freeDutyMinRank, 1, 4);
+        SECRETARY_RADIUS_BLOCKS = B.comment(
+                        "Normal (patrol) duty may only be started or stopped within this",
+                        "many blocks of the configured secretary location.")
+                .defineInRange("secretaryRadiusBlocks", defaults.secretaryRadiusBlocks, 0, 128);
+        CAPTURE_DUTY_FACTION = B.comment(
+                        "Capture the guard's scoreboard team at duty start, move them to",
+                        "the operational Straja team, and restore the captured team at",
+                        "shift end.")
+                .define("captureDutyFaction", defaults.captureDutyFaction);
+        STRAJA_TEAM_NAME = B.comment(
+                        "Scoreboard team applied to on-duty guards.")
+                .define("strajaTeamName", defaults.strajaTeamName);
         B.pop();
 
         B.push("quiz");
@@ -612,6 +627,9 @@ public final class StrajaServerConfig {
         p.promotionServiceBlocks = mapOrDefault(StrajaPolicies.parseIntMap(PROMOTION_SERVICE_BLOCKS.get()),
                 defaults().promotionServiceBlocks);
         p.freeDutyMinRank = FREE_DUTY_MIN_RANK.get();
+        p.secretaryRadiusBlocks = SECRETARY_RADIUS_BLOCKS.get();
+        p.captureDutyFaction = CAPTURE_DUTY_FACTION.get();
+        p.strajaTeamName = STRAJA_TEAM_NAME.get();
         p.quiz = listOrDefault(StrajaPolicies.parseQuiz(QUIZ_QUESTIONS.get()), defaults().quiz);
         p.trainingQuiz = listOrDefault(StrajaPolicies.parseQuiz(TRAINING_QUIZ_QUESTIONS.get()),
                 defaults().trainingQuiz);

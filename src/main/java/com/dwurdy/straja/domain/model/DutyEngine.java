@@ -130,6 +130,7 @@ public final class DutyEngine {
         state.patrolState = "ACTIVE";
         state.route = new ArrayList<>(route);
         state.patrolIndex = 0;
+        state.patrolRounds = 0;
         state.waitingUntil = null;
         state.missionMinutes = new java.util.LinkedHashMap<>();
         for (String checkpointId : route) {
@@ -175,6 +176,7 @@ public final class DutyEngine {
         state.patrolState = "OFF";
         state.route = new ArrayList<>();
         state.patrolIndex = 0;
+        state.patrolRounds = 0;
         state.waitingUntil = null;
         state.deadlineAt = null;
         state.missionMinutes = new java.util.LinkedHashMap<>();
@@ -206,17 +208,18 @@ public final class DutyEngine {
         state.deadlineAt = null;
 
         if (state.patrolIndex >= state.route.size() - 1) {
-            state.duty = false;
-            state.mode = "OFF_DUTY";
-            state.patrolState = "OFF";
-            state.lastAccrualAt = null;
-            state.lastDutyActivityAt = null;
-            state.lastDutyActivityX = null;
-            state.lastDutyActivityY = null;
-            state.lastDutyActivityZ = null;
-            state.salaryActivityPaused = false;
-            state.lastEndReason = "patrol_complete";
-            events.add(DomainEvent.of("patrol_complete"));
+            // §8: the route loops — a completed round returns to checkpoint 1
+            // after the standard unlock pause; duty ends only on stop or a
+            // missed deadline.
+            state.patrolRounds += 1;
+            state.patrolIndex = 0;
+            state.patrolState = "WAITING";
+            state.waitingUntil = now + unlockMinutes(policies) * MINUTE_MS;
+            events.add(DomainEvent.builder("patrol_round_complete")
+                    .put("round", state.patrolRounds)
+                    .put("checkpoint", state.route.get(0))
+                    .put("waitingUntil", state.waitingUntil)
+                    .build());
             return Result.pass(events);
         }
 

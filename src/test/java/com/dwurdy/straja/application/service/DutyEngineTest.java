@@ -116,7 +116,7 @@ class DutyEngineTest {
     }
 
     @Test
-    void finalCheckpointCompletesPatrol() {
+    void finalCheckpointLoopsIntoNextRound() {
         GuardState state = juniorOnDuty();
         for (int i = 0; i < 3; i++) {
             DutyEngine.activateCheckpoint(state, ROUTE.get(i), 60_000, 20, Map.of(), POLICY);
@@ -124,9 +124,22 @@ class DutyEngineTest {
         }
         Result last = DutyEngine.activateCheckpoint(state, "checkpoint_4", 800_000, 20, Map.of(), POLICY);
         assertTrue(last.ok());
-        assertFalse(state.duty);
-        assertEquals("OFF", state.patrolState);
-        assertEquals("patrol_complete", state.lastEndReason);
+        // §8: the route loops — duty continues, round counter bumps, and
+        // checkpoint_1 becomes the next target after the unlock pause.
+        assertTrue(state.duty);
+        assertEquals(1, state.patrolRounds);
+        assertEquals(0, state.patrolIndex);
+        assertEquals("WAITING", state.patrolState);
+        assertTrue(last.events().stream().anyMatch(e -> e.type().equals("patrol_round_complete")));
+
+        long nextActive = 800_000 + DutyEngine.DEFAULT_UNLOCK_MINUTES * DutyEngine.MINUTE_MS;
+        DutyEngine.tickDuty(state, nextActive + 1, 20, Map.of(), POLICY, null);
+        assertEquals("ACTIVE", state.patrolState);
+        assertNotNull(state.deadlineAt);
+        // second round still requires activating checkpoint_1
+        Result wrong = DutyEngine.activateCheckpoint(state, "checkpoint_2", nextActive + 1, 20, Map.of(), POLICY);
+        assertFalse(wrong.ok());
+        assertEquals("wrong_checkpoint", wrong.code());
     }
 
     @Test

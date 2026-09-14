@@ -104,6 +104,9 @@ public final class PolicyRegistry {
         // duty / faction
         k("duty.freeDutyMinRank", "freeDutyMinRank", Kind.INT);
         k("duty.nativeFactionMaxLength", "nativeFactionMaxLength", Kind.INT);
+        k("duty.secretaryRadiusBlocks", "secretaryRadiusBlocks", Kind.INT);
+        k("duty.captureDutyFaction", "captureDutyFaction", Kind.BOOL);
+        k("duty.strajaTeamName", "strajaTeamName", Kind.STRING);
         // quiz / trainer
         k("quiz.questions", "quiz", Kind.QUIZ);
         k("quiz.trainingQuestions", "trainingQuiz", Kind.QUIZ);

@@ -63,7 +63,13 @@ The NPC roles are:
   (`straja:training_manual`) — right-click it to read the rules.
 - **Secretary** — duty self-service (start/checkpoint/stop, salary, coins,
   food, kit, resignation/rejoin), mission browsing/accept/report/fail, order
-  carnet, complaint investigation reports, archive catalog.
+  carnet, complaint investigation reports, archive catalog. Patrol shifts
+  **must** start and end here — `/straja stop` away from the Secretary is
+  refused for normal duty (free-duty ranks keep at-will stop). On duty start
+  the guard's scoreboard team is captured and the `Straja` team is applied;
+  the captured team is restored at shift end. Patrol routes loop — after the
+  last checkpoint the next round returns to checkpoint 1 and duty ends only
+  on stop or a missed deadline.
 - **Jailer** — custody, downed-state and sentence status, officer task
   accept/complete/arrest, and issues the cuffs item when permitted.
 - **Archivist** — folder read/issue, sheet authoring/edit/submit/sign,

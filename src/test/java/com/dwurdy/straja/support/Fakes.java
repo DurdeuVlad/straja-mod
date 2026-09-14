@@ -269,6 +269,31 @@ public final class Fakes {
         }
     }
 
+    // ---------------------------------------------------------------- factions
+
+    /** In-memory scoreboard teams keyed by player UUID; teams exist once joined. */
+    public static final class TestFactions implements FactionGateway {
+        public final Map<UUID, String> memberships = new HashMap<>();
+        public final java.util.Set<String> teams = new java.util.LinkedHashSet<>();
+
+        @Override public String teamOf(PlayerGateway player) {
+            return memberships.get(player.uuid());
+        }
+
+        @Override public void joinTeam(PlayerGateway player, String teamName) {
+            teams.add(teamName);
+            memberships.put(player.uuid(), teamName);
+        }
+
+        @Override public void leaveTeam(PlayerGateway player) {
+            memberships.remove(player.uuid());
+        }
+
+        @Override public boolean teamExists(String teamName) {
+            return teamName != null && teams.contains(teamName);
+        }
+    }
+
     // ---------------------------------------------------------------- context
 
     /** Full context backed by in-memory SavedData-equivalent stores. */
@@ -297,7 +322,7 @@ public final class Fakes {
                 new SavedStores.Archive(access),
                 new SavedStores.Npcs(access),
                 new SavedStores.Test(access),
-                currency, delivery, new TestWorld());
+                currency, delivery, new TestWorld(), new TestFactions());
     }
 
     public static StrajaPolicies policies() {

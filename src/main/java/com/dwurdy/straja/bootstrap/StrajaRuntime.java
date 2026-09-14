@@ -116,7 +116,8 @@ public final class StrajaRuntime {
                 new SavedStores.Test(stores),
                 new ItemCoinCurrencyProvider(() -> policies.coinItemIds),
                 new EnvelopeDeliveryProvider(server, policies),
-                new com.dwurdy.straja.adapter.out.minecraft.MinecraftWorldGateway(server));
+                new com.dwurdy.straja.adapter.out.minecraft.MinecraftWorldGateway(server),
+                new com.dwurdy.straja.adapter.out.faction.ScoreboardFactionGateway(server));
 
         this.players = new PlayerService(ctx);
         this.audit = new AuditService(ctx);
