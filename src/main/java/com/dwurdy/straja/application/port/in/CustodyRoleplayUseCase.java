@@ -1,10 +1,24 @@
 package com.dwurdy.straja.application.port.in;
 
 import com.dwurdy.straja.application.port.out.PlayerGateway;
+import com.dwurdy.straja.domain.model.DamageCategory;
+import com.dwurdy.straja.domain.model.LethalEventResolver;
 import java.util.List;
+import java.util.UUID;
 
 /** Player-facing custody surface: cuff requests, restraint, downed and recovery. */
 public interface CustodyRoleplayUseCase {
+    /** Server-authoritative visual modes; clients never infer gameplay state. */
+    enum VisualMode { NORMAL, FAINT, CARRIED, RESTRAINED }
+
+    enum RestraintVisual { NONE, ROPE, CUFFS }
+
+    record VisualState(
+            UUID playerId,
+            VisualMode mode,
+            RestraintVisual restraint,
+            boolean blindfolded) {}
+
     enum Action {
         ACCEPT_REQUEST,
         REFUSE_REQUEST,
@@ -30,6 +44,8 @@ public interface CustodyRoleplayUseCase {
     boolean isBound(PlayerGateway player);
     boolean isDowned(PlayerGateway player);
 
+    List<VisualState> visualStates();
+
     boolean requestCuffs(PlayerGateway issuer, PlayerGateway target);
     boolean accept(PlayerGateway player, String id);
     boolean refuse(PlayerGateway player, String id);
@@ -45,6 +61,12 @@ public interface CustodyRoleplayUseCase {
     boolean resolveDowned(PlayerGateway player, String destination);
     boolean giveCuffs(PlayerGateway player);
 
+    boolean startCarry(PlayerGateway carrier, PlayerGateway target);
+    boolean dropCarry(PlayerGateway carrier, PlayerGateway target, String reason);
+
+    boolean startResuscitation(PlayerGateway rescuer, PlayerGateway target);
+    boolean advanceResuscitation(PlayerGateway rescuer, PlayerGateway target, int progress);
+
     DamageDecision batonStrike(
             PlayerGateway issuer,
             PlayerGateway target,
@@ -54,6 +76,15 @@ public interface CustodyRoleplayUseCase {
 
     double capBatonDamage(double health, double absorption);
 
+    /** Resolves one potentially lethal event without allowing provider overlap. */
+    LethalEventResolver.Decision resolveLethalEvent(
+            PlayerGateway target,
+            PlayerGateway source,
+            DamageCategory category,
+            boolean explicitHardKill,
+            boolean vampireEligible,
+            boolean vampireDbnoActive);
+
     boolean actionBlocked(PlayerGateway player, String action);
 
     void cuffStatus(PlayerGateway player);
@@ -61,6 +92,7 @@ public interface CustodyRoleplayUseCase {
 
     void recoverOnLogin(PlayerGateway player);
     void recoverOnLogout(PlayerGateway player);
+    void recoverOnDimensionChange(PlayerGateway player);
     void recoverAfterDeath(PlayerGateway player);
 
     void tick();

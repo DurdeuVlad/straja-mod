@@ -32,6 +32,40 @@ class StrajaPoliciesTest {
         assertFalse(p.testCommandsEnabled, "test commands must default to off");
     }
 
+    @Test
+    void custodyDefaultsDescribeEveryControlAndRecoveryBoundary() {
+        StrajaPolicies p = new StrajaPolicies();
+        assertEquals(60, p.downedDurationSeconds);
+        assertEquals(120, p.carryTransportDeadlineSeconds);
+        assertEquals(30, p.resuscitationTimeoutSeconds);
+        assertEquals(100, p.resuscitationProgressPercent);
+        assertEquals(120, p.unconsciousCustodyDurationSeconds);
+        assertEquals(300, p.jailDeliveryDeadlineSeconds);
+        assertTrue(p.jailAutomaticRevivalEnabled);
+        assertEquals("PRESERVE_DOWNED", p.secondWeaponHitBehavior);
+        assertEquals("ALLOW", p.ordinaryDamageBehavior);
+        assertEquals("ALLOW", p.nonWeaponDamageBehavior);
+        assertEquals("KILL", p.exceptionalDamageBehavior);
+        assertTrue(p.criminalRopeEnabled);
+        assertTrue(p.criminalCutterEnabled);
+        assertTrue(p.policeCuffsEnabled);
+        assertTrue(p.universalKeyEnabled);
+        assertTrue(p.blackSackApplicationEnabled);
+        assertTrue(p.blackSackRemovalEnabled);
+        assertEquals("RETAIN", p.logoutRecoveryBehavior);
+        assertEquals("RETAIN", p.restartRecoveryBehavior);
+        assertEquals("CLEAR_ALL", p.deathRecoveryBehavior);
+        assertEquals("RELEASE_TRANSPORT", p.dimensionChangeRecoveryBehavior);
+        assertEquals("RELEASE_TRANSPORT", p.missingDestinationRecoveryBehavior);
+        assertEquals(DamageBehavior.PRESERVE_DOWNED,
+                p.damageBehavior(DamageCategory.SECOND_WEAPON_HIT));
+        assertEquals(DamageBehavior.KILL, p.damageBehavior(DamageCategory.EXCEPTIONAL));
+        assertEquals(RecoveryBehavior.CLEAR_ALL, p.recoveryBehavior(RecoveryEvent.DEATH));
+        p.deathRecoveryBehavior = "not-a-policy";
+        assertEquals(RecoveryBehavior.CLEAR_ALL, p.recoveryBehavior(RecoveryEvent.DEATH),
+                "invalid direct values fail closed to the safe death default");
+    }
+
     // ------------------------------------------------------------ config encoding
 
     @Test
