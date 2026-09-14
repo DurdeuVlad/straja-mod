@@ -37,11 +37,63 @@ public final class StrajaEvents {
         for (var player : runtime.serverGateway().onlinePlayers()) {
             runtime.guardDuty().tickPlayerDuty(player);
         }
+        for (var sp : event.getServer().getPlayerList().getPlayers()) {
+            refreshRankNameplate(runtime, sp);
+        }
         if (runtime.policies().testCommandsEnabled && runtime.policies().isLocalEnvironment()) {
             for (var virtual : runtime.testPlayers().all()) {
                 runtime.guardDuty().tickPlayerDuty(virtual);
             }
         }
+    }
+
+    /** §4: bracketed rank prefix on chat sender names. */
+    @SubscribeEvent
+    public void onNameFormat(PlayerEvent.NameFormat event) {
+        StrajaRuntime runtime = StrajaRuntime.get();
+        if (runtime == null || !runtime.policies().rankPrefixChat) return;
+        var gateway = new MinecraftPlayerGateway(event.getEntity().getServer(), event.getEntity().getUUID());
+        String prefix = runtime.playerQueries().rankPrefixFor(gateway);
+        if (prefix != null) {
+            event.setDisplayname(Component.literal(prefix + " ").append(event.getDisplayname()));
+        }
+    }
+
+    /** §4: bracketed rank prefix in the TAB player list. */
+    @SubscribeEvent
+    public void onTabListNameFormat(PlayerEvent.TabListNameFormat event) {
+        StrajaRuntime runtime = StrajaRuntime.get();
+        if (runtime == null || !runtime.policies().rankPrefixTab) return;
+        var gateway = new MinecraftPlayerGateway(event.getEntity().getServer(), event.getEntity().getUUID());
+        String prefix = runtime.playerQueries().rankPrefixFor(gateway);
+        if (prefix != null) {
+            event.setDisplayName(Component.literal(prefix + " ").append(event.getDisplayName()));
+        }
+    }
+
+    /**
+     * §4 nameplate surface (opt-in): applies the "[Rank] Name" custom name and
+     * clears it only while it is ours — a foreign custom name is left alone.
+     * Runs once a second per online player.
+     */
+    private void refreshRankNameplate(StrajaRuntime runtime, net.minecraft.server.level.ServerPlayer sp) {
+        String profile = sp.getGameProfile().getName();
+        var current = sp.getCustomName();
+        String owned = current != null ? current.getString() : null;
+        boolean ours = owned != null && owned.startsWith("[") && owned.endsWith(" " + profile);
+        if (!runtime.policies().rankPrefixNameplate) {
+            if (ours) { sp.setCustomName(null); sp.setCustomNameVisible(false); }
+            return;
+        }
+        var gateway = new MinecraftPlayerGateway(sp.getServer(), sp.getUUID());
+        String prefix = runtime.playerQueries().rankPrefixFor(gateway);
+        String expected = prefix != null ? prefix + " " + profile : null;
+        if (expected == null) {
+            if (ours) { sp.setCustomName(null); sp.setCustomNameVisible(false); }
+            return;
+        }
+        if (!expected.equals(owned)) sp.setCustomName(Component.literal(expected));
+        if (!sp.isCustomNameVisible()) sp.setCustomNameVisible(true);
     }
 
     /** Re-applies registry name/skin when a persisted NPC entity loads. */

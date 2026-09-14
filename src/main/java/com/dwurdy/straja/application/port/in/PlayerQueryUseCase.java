@@ -26,4 +26,12 @@ public interface PlayerQueryUseCase {
      * the commissioner). Read-only; never reveals setup state to others.
      */
     String setupHintFor(PlayerGateway player);
+
+    /**
+     * §4 display composition: the bracketed rank prefix ("[Sergent]") for
+     * chat/TAB/nameplate surfaces, or null for civilians and former members.
+     * Uses the configured rank display names (#15); faction membership never
+     * suppresses it while the member is authorized.
+     */
+    String rankPrefixFor(PlayerGateway player);
 }

@@ -975,6 +975,10 @@ final class TestCommands {
             case "coins" -> String.valueOf(runtime.context().currency().balanceOf(player));
             case "specializations" -> state.specializations == null ? "null"
                     : String.join(",", state.specializations);
+            case "prefix" -> {
+                String prefix = runtime.playerQueries().rankPrefixFor(player);
+                yield prefix == null ? "none" : prefix;
+            }
             default -> "?";
         };
     }

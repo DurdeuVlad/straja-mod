@@ -163,7 +163,13 @@ through the in-game config screen (mod list → Straja → Config). Changes appl
 on the next server start. Sections include `identity`, `timers`, `mission`,
 `cuffs`, `restraints`, `downed`, `arrestRewards`, `economy`, `salary`,
 `promotion`, `quiz`, `jailer`, `equipment`, `trainer`, `security`, `envelope`, `archive`,
-`rooms`, `fines`, `prison`, `audit`, `complaints`, `debug`, and `testing`.
+`rooms`, `fines`, `prison`, `audit`, `complaints`, `ranks`, `debug`, and `testing`.
+
+The `ranks` section also controls the §4 display prefix: every authorized
+member (including off-duty) shows `[Rank] Name` in chat and the TAB list,
+independently of their scoreboard team — the nameplate surface is opt-in via
+`prefixNameplate`. Rank names and the Comisar title are configurable, and
+renaming a rank never touches the persisted numeric rank.
 
 Structured values use simple list encodings shown in the file's comments:
 

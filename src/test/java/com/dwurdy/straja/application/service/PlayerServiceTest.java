@@ -90,4 +90,64 @@ class PlayerServiceTest {
         assertFalse(PlayerService.identityMatches(p, "", ""));
         assertFalse(PlayerService.identityMatches(p, null, null));
     }
+
+    @Test
+    void rankPrefixCoversEveryAuthorizedRank() {
+        TestPlayer p = server.add("guard");
+        for (int rank = 1; rank <= 4; rank++) {
+            var st = ctx.players().read(p.uuid());
+            st.rank = rank;
+            ctx.players().write(p.uuid(), st);
+            assertEquals("[" + policies.rankName(rank) + "]", players.rankPrefixFor(p));
+        }
+    }
+
+    @Test
+    void rankPrefixIsNullForCiviliansAndFormerMembers() {
+        TestPlayer p = server.add("civ");
+        assertNull(players.rankPrefixFor(p));
+        var st = ctx.players().read(p.uuid());
+        st.rank = 2;
+        st.fired = true;
+        ctx.players().write(p.uuid(), st);
+        assertNull(players.rankPrefixFor(p));
+        st.fired = false;
+        st.resigned = true;
+        ctx.players().write(p.uuid(), st);
+        assertNull(players.rankPrefixFor(p));
+    }
+
+    @Test
+    void rankPrefixSurvivesOffDutyAndSuspendedStates() {
+        TestPlayer p = server.add("serg");
+        var st = ctx.players().read(p.uuid());
+        st.rank = 3;
+        ctx.players().write(p.uuid(), st);
+        // Off duty → still prefixed.
+        assertEquals("[Sergent]", players.rankPrefixFor(p));
+        st.suspended = true;
+        ctx.players().write(p.uuid(), st);
+        assertEquals("[Sergent]", players.rankPrefixFor(p));
+    }
+
+    @Test
+    void rankPrefixUsesConfiguredDisplayNames() {
+        TestPlayer p = server.add("guard");
+        var st = ctx.players().read(p.uuid());
+        st.rank = 2;
+        ctx.players().write(p.uuid(), st);
+        assertEquals("[Străjer]", players.rankPrefixFor(p));
+        // Renaming a rank updates the prefix — the numeric rank stays 2.
+        policies.rankNames.put(2, "Plutonier");
+        assertEquals("[Plutonier]", players.rankPrefixFor(p));
+        assertEquals(2, ctx.players().read(p.uuid()).rank);
+    }
+
+    @Test
+    void rankPrefixForCommissionerUsesComisarTitle() {
+        TestPlayer dwurdy = server.add("dwurdy");
+        assertEquals("[Comisar]", players.rankPrefixFor(dwurdy));
+        policies.comisarTitle = "Șef";
+        assertEquals("[Șef]", players.rankPrefixFor(dwurdy));
+    }
 }
