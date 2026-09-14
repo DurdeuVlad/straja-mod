@@ -938,6 +938,20 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             player.tell("Doar un străjer activ poate începe serviciul.");
             return;
         }
+        // §11: an overdue activity report can block a new shift (opt-in).
+        if (ctx.policies().reportBlockDutyWhenOverdue && !players.isCommissioner(player)) {
+            var reports = ctx.reports().read();
+            String uuid = player.uuid().toString();
+            if (com.dwurdy.straja.domain.model.ActivityReports.ensureAnchor(reports, uuid, now())) {
+                ctx.reports().write(reports);
+            }
+            if (com.dwurdy.straja.domain.model.ActivityReports.isOverdue(
+                    reports, uuid, now(), ctx.policies().reportIntervalDays * 86_400_000L)) {
+                player.tell("Raportul tău de activitate este restant. "
+                        + "Depune-l la Secretariat înainte de a începe serviciul.");
+                return;
+            }
+        }
         if (freeDutyEligible(player, state)) {
             Result free = DutyEngine.startFreeDuty(state, now(), ctx.policies(),
                     players.isCommissioner(player));

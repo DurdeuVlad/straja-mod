@@ -121,6 +121,11 @@ public class StrajaPolicies {
     public int freeDutyMinRank = 3;
     public int nativeFactionMaxLength = 40;
 
+    // §11: activity reports — a reporting interval runs per member; overdue
+    // reports optionally block duty start at the Secretary.
+    public int reportIntervalDays = 7;
+    public boolean reportBlockDutyWhenOverdue = false;
+
     // §4: bracketed rank prefix on chat / TAB / nameplate — per-surface flags;
     // the composition uses the configurable rank display names.
     public boolean rankPrefixChat = true;

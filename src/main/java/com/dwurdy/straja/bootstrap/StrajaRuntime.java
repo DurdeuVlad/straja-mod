@@ -42,6 +42,7 @@ public final class StrajaRuntime {
     private final com.dwurdy.straja.application.service.PrisonService prison;
     private final com.dwurdy.straja.application.service.FineService fines;
     private final com.dwurdy.straja.application.service.ComplaintService complaints;
+    private final com.dwurdy.straja.application.service.ReportService reports;
     private final com.dwurdy.straja.application.service.RoomService rooms;
     private final com.dwurdy.straja.application.service.ArchiveService archive;
     private final com.dwurdy.straja.application.service.MigrationService migration;
@@ -110,6 +111,7 @@ public final class StrajaRuntime {
                 new SavedStores.Prison(stores),
                 new SavedStores.Rooms(stores),
                 new SavedStores.Complaints(stores),
+                new SavedStores.Reports(stores),
                 new SavedStores.Custody(stores),
                 new SavedStores.Archive(stores),
                 new SavedStores.Npcs(stores),
@@ -129,6 +131,7 @@ public final class StrajaRuntime {
         this.prison = new com.dwurdy.straja.application.service.PrisonService(ctx, players, audit, custody);
         this.fines = new com.dwurdy.straja.application.service.FineService(ctx, players, audit, prison);
         this.complaints = new com.dwurdy.straja.application.service.ComplaintService(ctx, players, audit);
+        this.reports = new com.dwurdy.straja.application.service.ReportService(ctx, players, audit);
         this.rooms = new com.dwurdy.straja.application.service.RoomService(ctx, players, audit, ctx.world());
         this.archive = new com.dwurdy.straja.application.service.ArchiveService(ctx, players, audit);
         this.migration = new com.dwurdy.straja.application.service.MigrationService(ctx, audit);
@@ -155,7 +158,7 @@ public final class StrajaRuntime {
         com.dwurdy.straja.adapter.in.form.FormPayloads.setSubmissionConsumer(
                 new com.dwurdy.straja.adapter.in.form.FormSubmissionRouter(
                         instance.guards, instance.missions, instance.complaints, instance.fines,
-                        instance.archive)::submit);
+                        instance.archive, instance.reports)::submit);
         instance.logDeploymentGates();
         return instance;
     }
@@ -208,6 +211,7 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.port.in.GuardDutyUseCase guardDuty() { return guards; }
     public com.dwurdy.straja.application.port.in.MissionRoleplayUseCase missionRoleplay() { return missions; }
     public com.dwurdy.straja.application.port.in.ComplaintRoleplayUseCase complaintRoleplay() { return complaints; }
+    public com.dwurdy.straja.application.port.in.ReportUseCase reportRoleplay() { return reports; }
     public com.dwurdy.straja.application.port.in.FineRoleplayUseCase fineRoleplay() { return fines; }
     public com.dwurdy.straja.application.port.in.CustodyRoleplayUseCase custodyRoleplay() { return custody; }
     public com.dwurdy.straja.application.port.in.PrisonRoleplayUseCase prisonRoleplay() { return prison; }

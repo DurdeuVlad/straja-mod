@@ -84,6 +84,12 @@ public final class SavedStores {
         @Override public void write(ComplaintStore store) { writeJson(store); }
     }
 
+    public static class Reports extends JsonBackedStore implements ReportRepository {
+        public Reports(StoreAccess access) { super(access, "reports"); }
+        @Override public ActivityReportStore read() { return readJson(ActivityReportStore.class, ActivityReportStore::new); }
+        @Override public void write(ActivityReportStore store) { writeJson(store); }
+    }
+
     public static class Custody extends JsonBackedStore implements CustodyRepository {
         public Custody(StoreAccess access) { super(access, "custody"); }
         @Override public CustodyStore read() { return readJson(CustodyStore.class, CustodyStore::new); }

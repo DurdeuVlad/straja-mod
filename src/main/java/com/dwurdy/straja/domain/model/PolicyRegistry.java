@@ -101,6 +101,9 @@ public final class PolicyRegistry {
         k("promotion.serviceBlocks", "promotionServiceBlocks", Kind.INT_MAP);
         // rank display names (§2: Stagiar/Străjer/Sergent/Inspector)
         k("rank.names", "rankNames", Kind.INT_STR_MAP);
+        // §11 activity reports
+        k("reports.intervalDays", "reportIntervalDays", Kind.INT);
+        k("reports.blockDutyWhenOverdue", "reportBlockDutyWhenOverdue", Kind.BOOL);
         // §4 rank prefix surfaces
         k("rank.prefix.chat", "rankPrefixChat", Kind.BOOL);
         k("rank.prefix.tab", "rankPrefixTab", Kind.BOOL);

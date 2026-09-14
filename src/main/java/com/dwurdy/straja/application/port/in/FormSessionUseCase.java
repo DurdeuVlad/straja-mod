@@ -37,6 +37,8 @@ public interface FormSessionUseCase {
         ARCHIVE_COPY("archive-copy"),
         ARCHIVE_ENVELOPE("archive-envelope"),
         ARCHIVE_DOCUMENT_ISSUE("archive-document-issue"),
+        REPORT_SUBMIT("report-submit"),
+        REPORT_REVIEW("report-review"),
         OTHER_REQUEST("other-request");
 
         private final String id;

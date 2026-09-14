@@ -91,6 +91,8 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.BooleanValue RANK_PREFIX_TAB;
     public static final ModConfigSpec.BooleanValue RANK_PREFIX_NAMEPLATE;
     public static final ModConfigSpec.ConfigValue<String> COMISAR_TITLE;
+    public static final ModConfigSpec.IntValue REPORT_INTERVAL_DAYS;
+    public static final ModConfigSpec.BooleanValue REPORT_BLOCK_DUTY_WHEN_OVERDUE;
     public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> PROMOTION_SERVICE_BLOCKS;
 
     public static final ModConfigSpec.IntValue FREE_DUTY_MIN_RANK;
@@ -335,6 +337,16 @@ public final class StrajaServerConfig {
         COMISAR_TITLE = B.comment(
                         "Display title for the commissioner prefix.")
                 .define("comisarTitle", defaults.comisarTitle);
+        B.pop();
+
+        B.push("reports");
+        REPORT_INTERVAL_DAYS = B.comment(
+                        "Days between a member's activity reports (§11).")
+                .defineInRange("intervalDays", defaults.reportIntervalDays, 1, 365);
+        REPORT_BLOCK_DUTY_WHEN_OVERDUE = B.comment(
+                        "Refuse duty start at the Secretary while the member's",
+                        "activity report is overdue.")
+                .define("blockDutyWhenOverdue", defaults.reportBlockDutyWhenOverdue);
         B.pop();
 
         B.push("promotion");
@@ -645,6 +657,8 @@ public final class StrajaServerConfig {
         p.rankPrefixTab = RANK_PREFIX_TAB.get();
         p.rankPrefixNameplate = RANK_PREFIX_NAMEPLATE.get();
         p.comisarTitle = COMISAR_TITLE.get();
+        p.reportIntervalDays = REPORT_INTERVAL_DAYS.get();
+        p.reportBlockDutyWhenOverdue = REPORT_BLOCK_DUTY_WHEN_OVERDUE.get();
         p.promotionServiceBlocks = mapOrDefault(StrajaPolicies.parseIntMap(PROMOTION_SERVICE_BLOCKS.get()),
                 defaults().promotionServiceBlocks);
         p.freeDutyMinRank = FREE_DUTY_MIN_RANK.get();

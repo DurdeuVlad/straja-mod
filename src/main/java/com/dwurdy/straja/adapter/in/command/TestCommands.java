@@ -793,6 +793,32 @@ final class TestCommands {
                 })));
 
         // ---------------------------------------------------------------- complaints
+        test.then(Commands.literal("report-submit")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("text", StringArgumentType.greedyString())
+                                .executes(ctx -> run(ctx, runtime -> send(ctx,
+                                        "submit=" + runtime.reportRoleplay().submit(player(ctx, runtime),
+                                                StringArgumentType.getString(ctx, "text"),
+                                                "", "", "")))))));
+        test.then(Commands.literal("report-status")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(ctx -> run(ctx, runtime ->
+                                runtime.reportRoleplay().status(player(ctx, runtime))))));
+        test.then(Commands.literal("report-list")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(ctx -> run(ctx, runtime ->
+                                runtime.reportRoleplay().listForReview(player(ctx, runtime))))));
+        test.then(Commands.literal("report-review")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("report", StringArgumentType.word())
+                                .then(Commands.argument("decision", StringArgumentType.word())
+                                        .then(Commands.argument("note", StringArgumentType.greedyString())
+                                                .executes(ctx -> run(ctx, runtime -> send(ctx,
+                                                        "review=" + runtime.reportRoleplay().review(
+                                                                player(ctx, runtime),
+                                                                StringArgumentType.getString(ctx, "report"),
+                                                                StringArgumentType.getString(ctx, "decision"),
+                                                                StringArgumentType.getString(ctx, "note"))))))))));
         test.then(Commands.literal("complaint-submit")
                 .then(Commands.argument("id", StringArgumentType.word())
                         .then(Commands.argument("accused", StringArgumentType.word())

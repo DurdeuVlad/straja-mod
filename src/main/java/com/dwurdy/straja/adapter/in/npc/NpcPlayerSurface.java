@@ -21,6 +21,7 @@ final class NpcPlayerSurface {
             "archive-sheet-read", "archive-sheet-edit", "archive-recipients",
             "archive-sheet-submit", "archive-sheet-sign", "archive-sheet-copy",
             "archive-sheet-envelope", "archive-sheet-issue", "archive-sheet-revoke",
+            "report-review",
             "duty-checkpoint");
 
     enum RoleRoute { RECEPTIONIST, SECRETARY, JAILER, ARCHIVIST, TRAINER, RECRUITER, UNKNOWN }
@@ -468,6 +469,26 @@ final class NpcPlayerSurface {
                         .ifPresent(a -> actions.add(new ChatAction("Emite actul " + id, a)));
                 case REVOKE_SHEET -> parameterizedActionId("archive-sheet-revoke", id)
                         .ifPresent(a -> actions.add(new ChatAction("Revocă actul " + id, a)));
+            }
+        }
+        return List.copyOf(actions);
+    }
+
+    /** Maps the trusted report projection to clickable actions; pure and state-free. */
+    static List<ChatAction> reportActions(
+            List<com.dwurdy.straja.application.port.in.ReportUseCase.AvailableAction> available,
+            RoleRoute role) {
+        if (available == null || available.isEmpty() || role != RoleRoute.SECRETARY) return List.of();
+        var actions = new java.util.ArrayList<ChatAction>();
+        for (var entry : available) {
+            if (entry == null || entry.action() == null) continue;
+            String id = entry.reportId() == null ? "" : entry.reportId();
+            switch (entry.action()) {
+                case SUBMIT -> actions.add(new ChatAction("Depune raport de activitate", "report-submit"));
+                case STATUS -> actions.add(new ChatAction("Raportul meu", "report-status"));
+                case REVIEW_LIST -> actions.add(new ChatAction("Rapoarte în așteptare", "report-review-list"));
+                case REVIEW -> parameterizedActionId("report-review", id)
+                        .ifPresent(a -> actions.add(new ChatAction("Verifică raportul " + id, a)));
             }
         }
         return List.copyOf(actions);

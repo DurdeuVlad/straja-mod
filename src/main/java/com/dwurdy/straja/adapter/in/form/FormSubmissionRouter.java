@@ -20,15 +20,18 @@ public final class FormSubmissionRouter {
     private final ComplaintRoleplayUseCase complaints;
     private final FineRoleplayUseCase fines;
     private final ArchiveRoleplayUseCase archive;
+    private final com.dwurdy.straja.application.port.in.ReportUseCase reports;
 
     public FormSubmissionRouter(GuardRecruitmentUseCase guards, MissionRoleplayUseCase missions,
             ComplaintRoleplayUseCase complaints, FineRoleplayUseCase fines,
-            ArchiveRoleplayUseCase archive) {
+            ArchiveRoleplayUseCase archive,
+            com.dwurdy.straja.application.port.in.ReportUseCase reports) {
         this.guards = guards;
         this.missions = missions;
         this.complaints = complaints;
         this.fines = fines;
         this.archive = archive;
+        this.reports = reports;
     }
 
     public void submit(ServerPlayer player, FormSessionUseCase.Submission submission) {
@@ -133,6 +136,12 @@ public final class FormSubmissionRouter {
                     archive.packEnvelope(gateway, submission.recordId(), values.get("target"));
             case ARCHIVE_DOCUMENT_ISSUE ->
                     archive.issueDocument(gateway, submission.recordId(), values.get("target"));
+            case REPORT_SUBMIT ->
+                    reports.submit(gateway, values.get("activity"), values.get("missions"),
+                            values.get("incidents"), values.get("notes"));
+            case REPORT_REVIEW ->
+                    reports.review(gateway, submission.recordId(), values.get("decision"),
+                            values.get("note"));
             default -> {}
         }
     }
