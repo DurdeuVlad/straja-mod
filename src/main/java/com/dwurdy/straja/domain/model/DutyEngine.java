@@ -12,14 +12,15 @@ import java.util.List;
 public final class DutyEngine {
     public static final long MINUTE_MS = 60_000L;
     /** Fallbacks used only when no policies are supplied (e.g. pure unit tests). */
-    public static final int DEFAULT_UNLOCK_MINUTES = 10;
+    public static final int DEFAULT_UNLOCK_MINUTES = 5;
     public static final int DEFAULT_DEADLINE_MINUTES = 30;
     public static final int DEFAULT_SERVICE_BLOCK_MINUTES = 10;
 
     private DutyEngine() {}
 
+    /** Non-empty route of distinct checkpoints; the minimum size is a service/policy concern. */
     public static boolean uniqueRoute(List<String> route) {
-        return route != null && route.size() == 4 && new HashSet<>(route).size() == 4;
+        return route != null && !route.isEmpty() && new HashSet<>(route).size() == route.size();
     }
 
     private static int missionMinutesFor(java.util.Map<String, Integer> missionMinutes,
@@ -38,6 +39,21 @@ public final class DutyEngine {
     private static int serviceBlockMinutes(StrajaPolicies policies) {
         return policies != null && policies.serviceBlockMinutes > 0
                 ? policies.serviceBlockMinutes : DEFAULT_SERVICE_BLOCK_MINUTES;
+    }
+
+    private static int requisitionPerBlock(StrajaPolicies policies) {
+        return policies != null ? Math.max(0, policies.requisitionPointsPerBlock) : 1;
+    }
+
+    /** Laps required to finish a patrol; 0 keeps the legacy endless loop. */
+    private static int patrolRounds(StrajaPolicies policies) {
+        return policies != null ? Math.max(0, policies.patrolRounds) : 1;
+    }
+
+    /** Real-minute ceiling for a NORMAL patrol; <=0 disables the cap. */
+    private static long patrolCapMs(StrajaPolicies policies) {
+        return policies != null && policies.patrolMaxMinutes > 0
+                ? policies.patrolMaxMinutes * MINUTE_MS : 0;
     }
 
     private static long granularityMs(StrajaPolicies policies) {
@@ -79,7 +95,9 @@ public final class DutyEngine {
 
         long consumedMs = chunks * granMs;
 
-        // Service points (promotion credit) tick on their own interval.
+        // Service points (promotion credit) tick on their own interval;
+        // the spendable requisition balance accrues alongside at the
+        // configured rate.
         long blockMs = serviceBlockMinutes(policies) * MINUTE_MS;
         long beforeBlocks = state.dutyServiceMs / blockMs;
         state.dutyServiceMs += consumedMs;
@@ -87,6 +105,7 @@ public final class DutyEngine {
         if (blocks > 0) {
             state.dutyBlocksCurrent += blocks;
             state.serviceBlocks += blocks;
+            state.requisitionPoints += (long) blocks * requisitionPerBlock(policies);
         }
 
         // Paid seconds are capped per window; suppressed time still earns
@@ -131,7 +150,7 @@ public final class DutyEngine {
         state.route = new ArrayList<>(route);
         state.patrolIndex = 0;
         state.patrolRounds = 0;
-        state.requiredRounds = 0;
+        state.requiredRounds = patrolRounds(policies);
         state.waitingUntil = null;
         state.missionMinutes = new java.util.LinkedHashMap<>();
         for (String checkpointId : route) {
@@ -259,6 +278,15 @@ public final class DutyEngine {
         // shifts accrue salary without a route.
         if (!"NORMAL".equals(state.mode)) return new TickResult(events);
 
+        // Hard real-time ceiling: a patrol cannot run past patrolMaxMinutes
+        // regardless of checkpoint pacing — ends gracefully, salary kept.
+        // The final accrual honors the anti-AFK clamp, same as a normal tick.
+        long capMs = patrolCapMs(policies);
+        if (capMs > 0 && state.dutyStartedAt != null && now - state.dutyStartedAt >= capMs) {
+            events.addAll(endDuty(state, "patrol_time_cap", salaryTimestamp, salaryPerHour, policies).events());
+            return new TickResult(events);
+        }
+
         if ("WAITING".equals(state.patrolState) && state.waitingUntil != null && now >= state.waitingUntil) {
             state.patrolState = "ACTIVE";
             state.waitingUntil = null;
@@ -346,7 +374,7 @@ public final class DutyEngine {
         state.quizPassed = false;
         state.quizOrder = new ArrayList<>();
         state.quizIndex = 0;
-        state.regearPending = false;
+        state.requisitionPoints = 0;
         state.kitClaimedRank = 0;
         state.resignationPending = false;
         state.resignationDeadlineAt = null;
@@ -407,7 +435,7 @@ public final class DutyEngine {
     }
 
     /**
-     * Commissioner / lieutenant authorization for special duty and regear.
+     * Commissioner / lieutenant authorization for special duty.
      * Commissioner identity is decided by the caller via
      * {@link PlayerService#isCommissioner} — this engine never re-derives it
      * from configured names, which would bypass the UUID-pinning policies.
@@ -416,7 +444,7 @@ public final class DutyEngine {
                                        String targetName, int targetRank, String action) {
         if (commissioner) return true;
         if ("special_duty".equals(action) || "resume_special".equals(action)
-                || "complete_special".equals(action) || "regear".equals(action)) {
+                || "complete_special".equals(action)) {
             return actorRank == Rank.INSPECTOR.level()
                     && !canon(targetName).equals(canon(actorName))
                     && targetRank < Rank.INSPECTOR.level();

@@ -22,7 +22,8 @@ class NpcInteractionSurfaceTest {
                 Arguments.of(NpcRoles.SECRETARY, NpcPlayerSurface.RoleRoute.SECRETARY),
                 Arguments.of(NpcRoles.JAILER, NpcPlayerSurface.RoleRoute.JAILER),
                 Arguments.of(NpcRoles.ARCHIVIST, NpcPlayerSurface.RoleRoute.ARCHIVIST),
-                Arguments.of(NpcRoles.TRAINER, NpcPlayerSurface.RoleRoute.TRAINER));
+                Arguments.of(NpcRoles.TRAINER, NpcPlayerSurface.RoleRoute.TRAINER),
+                Arguments.of(NpcRoles.ARMORER, NpcPlayerSurface.RoleRoute.ARMORER));
     }
 
     @ParameterizedTest
@@ -178,35 +179,35 @@ class NpcInteractionSurfaceTest {
     private static com.dwurdy.straja.application.port.in.GuardDutyUseCase.DutyView view(
             boolean activeGuard, boolean canStart, String checkpointId, boolean canStop,
             boolean canClaimSalary, boolean canViewCoins, boolean canClaimFood,
-            boolean canClaimKit, boolean canRequestRegear, boolean canBeginResignation,
+            boolean canClaimKit, boolean canBeginResignation,
             boolean canConfirmResignation, boolean canCancelResignation, boolean canRejoin) {
         return new com.dwurdy.straja.application.port.in.GuardDutyUseCase.DutyView(
                 activeGuard, canStart, checkpointId, canStop, canClaimSalary, canViewCoins,
-                canClaimFood, canClaimKit, canRequestRegear, canBeginResignation,
+                canClaimFood, canClaimKit, canBeginResignation,
                 canConfirmResignation, canCancelResignation, canRejoin);
     }
 
     @Test
     void dutyActionsMapperEmitsEveryEnabledAction() {
         var actions = NpcPlayerSurface.dutyActions(
-                view(true, true, "checkpoint_2", true, true, true, true, true, true,
+                view(true, true, "checkpoint_2", true, true, true, true, true,
                         true, true, true, true));
         var ids = actions.stream().map(NpcPlayerSurface.ChatAction::actionId).toList();
         assertEquals(java.util.List.of(
                 "duty-start", "duty-checkpoint:checkpoint_2", "duty-stop", "duty-salary",
-                "duty-coins", "duty-food", "duty-kit", "duty-regear",
+                "duty-coins", "duty-food", "duty-kit",
                 "resignation-start", "resignation-confirm", "resignation-cancel", "rejoin"), ids);
     }
 
     @Test
     void dutyActionsMapperOmitsDisabledActions() {
         var actions = NpcPlayerSurface.dutyActions(
-                view(true, false, "", false, false, true, false, false, false,
+                view(true, false, "", false, false, true, false, false,
                         false, false, false, false));
         var ids = actions.stream().map(NpcPlayerSurface.ChatAction::actionId).toList();
         assertEquals(java.util.List.of("duty-coins"), ids);
         var civil = NpcPlayerSurface.dutyActions(
-                view(false, false, "", false, false, false, false, false, false,
+                view(false, false, "", false, false, false, false, false,
                         false, false, false, false));
         assertTrue(civil.isEmpty());
     }
@@ -214,7 +215,7 @@ class NpcInteractionSurfaceTest {
     @Test
     void dutyCheckpointActionParsesAndRejectsMalformed() {
         var actions = NpcPlayerSurface.dutyActions(
-                view(true, false, "checkpoint_1", false, false, false, false, false,
+                view(true, false, "checkpoint_1", false, false, false, false,
                         false, false, false, false, false));
         var parsed = NpcPlayerSurface.parseActionId(
                 actions.get(0).actionId()).orElseThrow();
@@ -224,7 +225,7 @@ class NpcInteractionSurfaceTest {
         assertTrue(NpcPlayerSurface.parseActionId("duty-checkpoint:").isEmpty());
         assertTrue(NpcPlayerSurface.parameterizedActionId("duty-checkpoint", "").isEmpty());
         var none = NpcPlayerSurface.dutyActions(
-                view(true, true, "", false, false, false, false, false, false,
+                view(true, true, "", false, false, false, false, false,
                         false, false, false, false));
         assertTrue(none.stream().noneMatch(a -> a.actionId().startsWith("duty-checkpoint")),
                 "an empty checkpoint id must not emit a parameterized action");
@@ -572,7 +573,7 @@ class NpcInteractionSurfaceTest {
     @Test
     void dutyActionsContainNoTypedCommandsOrAdminActions() {
         var actions = NpcPlayerSurface.dutyActions(
-                view(true, true, "checkpoint_2", true, true, true, true, true, true,
+                view(true, true, "checkpoint_2", true, true, true, true, true,
                         true, true, true, true));
         for (var action : actions) {
             assertFalse(action.label().contains("/straja"),

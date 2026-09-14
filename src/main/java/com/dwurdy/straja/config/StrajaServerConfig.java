@@ -23,6 +23,10 @@ public final class StrajaServerConfig {
 
     public static final ModConfigSpec.IntValue CHECKPOINT_UNLOCK_MINUTES;
     public static final ModConfigSpec.IntValue CHECKPOINT_DEADLINE_MINUTES;
+    public static final ModConfigSpec.IntValue PATROL_MIN_CHECKPOINTS;
+    public static final ModConfigSpec.IntValue PATROL_ROUNDS;
+    public static final ModConfigSpec.IntValue PATROL_MAX_MINUTES;
+    public static final ModConfigSpec.IntValue PATROL_MAX_CHECKPOINTS;
     public static final ModConfigSpec.IntValue SERVICE_BLOCK_MINUTES;
     public static final ModConfigSpec.IntValue FOOD_COOLDOWN_MINUTES;
     public static final ModConfigSpec.IntValue QUIZ_COOLDOWN_MINUTES;
@@ -142,13 +146,16 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.IntValue JAILER_ASSAULT_MISSION_MAX_ASSIGNEES;
 
     public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> KITS;
-    public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> SERVICE_EQUIPMENT;
-    public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> REGEAR_COST;
+    public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> ARMORY_STOCK;
+    public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> ARMORY_RESERVES;
     public static final ModConfigSpec.ConfigValue<String> FOOD_ITEM;
     public static final ModConfigSpec.IntValue FOOD_AMOUNT;
     public static final ModConfigSpec.ConfigValue<String> TRAINING_MANUAL_ITEM;
 
-    public static final ModConfigSpec.IntValue SERVICE_LEASE_MINUTES;
+    public static final ModConfigSpec.IntValue PROMOTION_BONUS_HOURS;
+    public static final ModConfigSpec.IntValue REQUISITION_POINTS_PER_BLOCK;
+    public static final ModConfigSpec.IntValue DEMOTION_SERVICE_BLOCK_COST;
+    public static final ModConfigSpec.IntValue SUSPENSION_REQUISITION_COST;
     public static final ModConfigSpec.BooleanValue REQUIRE_REAL_COIN_PROVIDER_OUTSIDE_LOCAL;
     public static final ModConfigSpec.BooleanValue REQUIRE_COMMISSIONER_UUID_OUTSIDE_LOCAL;
     public static final ModConfigSpec.BooleanValue REQUIRE_DEBUG_DISABLED_OUTSIDE_LOCAL;
@@ -243,8 +250,21 @@ public final class StrajaServerConfig {
         B.pop();
 
         B.push("timers");
-        CHECKPOINT_UNLOCK_MINUTES = B.defineInRange("checkpointUnlockMinutes", 10, 1, 1440);
+        CHECKPOINT_UNLOCK_MINUTES = B.defineInRange("checkpointUnlockMinutes", 5, 1, 1440);
         CHECKPOINT_DEADLINE_MINUTES = B.defineInRange("checkpointDeadlineMinutes", 30, 1, 1440);
+        PATROL_MIN_CHECKPOINTS = B.comment(
+                        "Minimum placed checkpoints required before a patrol shift can start.")
+                .defineInRange("patrolMinCheckpoints", 2, 1, 64);
+        PATROL_ROUNDS = B.comment(
+                        "Laps of the route that complete a patrol (0 = endless loop).")
+                .defineInRange("patrolRounds", 1, 0, 100);
+        PATROL_MAX_MINUTES = B.comment(
+                        "Hard real-time ceiling for a patrol shift; the shift ends",
+                        "gracefully at the cap with accrued salary kept (0 disables).")
+                .defineInRange("patrolMaxMinutes", 60, 0, 1440);
+        PATROL_MAX_CHECKPOINTS = B.comment(
+                        "Upper bound on admin-defined patrol checkpoint slots.")
+                .defineInRange("patrolMaxCheckpoints", 16, 1, 128);
         SERVICE_BLOCK_MINUTES = B.comment(
                         "Duty-time interval that earns one service point",
                         "(promotion credit). Salary accrues separately — see [salary].")
@@ -520,27 +540,46 @@ public final class StrajaServerConfig {
 
         B.push("equipment");
         KITS = B.comment(
-                        "Duty kits granted per rank.",
+                        "Permanent rank kits granted at rank-up; gear is owned, never reclaimed.",
                         "Entries: \"rank=itemId,count\" — one entry per item.",
                         "An empty or fully malformed list falls back to the built-in defaults.")
                 .defineListAllowEmpty(List.of("kits"),
                         StrajaPolicies.formatKits(defaults.kits),
                         () -> "1=minecraft:iron_sword,1", StrajaServerConfig::isKitEntry);
-        SERVICE_EQUIPMENT = B.comment(
-                        "Leased service equipment per rank (reclaimed at duty end).",
-                        "Entries: \"rank=key|itemId|count|replacementCost|label\".")
-                .defineListAllowEmpty(List.of("serviceEquipment"),
-                        StrajaPolicies.formatEquipment(defaults.serviceEquipment),
-                        () -> "2=cuffs|straja:cuffs|1|100|cătușe de serviciu",
-                        StrajaServerConfig::isEquipmentEntry);
-        REGEAR_COST = B.comment(
-                        "Regear approval cost per rank.",
-                        "Entries: \"rank=coins\".")
-                .defineListAllowEmpty(List.of("regearCost"),
-                        StrajaPolicies.formatIntMap(defaults.regearCost),
-                        () -> "1=100", StrajaServerConfig::isIntMapEntry);
         FOOD_ITEM = B.define("foodItem", defaults.foodItem, StrajaServerConfig::isItemId);
         FOOD_AMOUNT = B.defineInRange("foodAmount", defaults.foodAmount, 1, 64);
+        B.pop();
+
+        B.push("armory");
+        ARMORY_STOCK = B.comment(
+                        "Armorer NPC coin stock (rank-gated gear sold for Bronze coins).",
+                        "Entries: \"key|itemId|count|priceBronze|minRank\".")
+                .defineListAllowEmpty(List.of("stock"),
+                        StrajaPolicies.formatArmoryItems(defaults.armoryStock),
+                        () -> "baton|straja:baton|1|200|2",
+                        StrajaServerConfig::isArmoryEntry);
+        ARMORY_RESERVES = B.comment(
+                        "Armorer NPC reserve gear priced in requisition points (spendable merit).",
+                        "Entries: \"key|itemId|count|pointsCost|minRank\".")
+                .defineListAllowEmpty(List.of("reserves"),
+                        StrajaPolicies.formatArmoryItems(defaults.armoryReserves),
+                        () -> "sword|minecraft:iron_sword|1|3|1",
+                        StrajaServerConfig::isArmoryEntry);
+        B.pop();
+
+        B.push("merit");
+        PROMOTION_BONUS_HOURS = B.comment(
+                        "Rank-up bonus credited to unpaid salary, in hours of the new rank's wage.")
+                .defineInRange("promotionBonusHours", 5, 0, 720);
+        REQUISITION_POINTS_PER_BLOCK = B.comment(
+                        "Requisition points (spendable merit) earned per service block.")
+                .defineInRange("requisitionPointsPerBlock", 1, 0, 1000);
+        DEMOTION_SERVICE_BLOCK_COST = B.comment(
+                        "Service blocks docked on demotion (clamped at zero).")
+                .defineInRange("demotionServiceBlockCost", 30, 0, 100000);
+        SUSPENSION_REQUISITION_COST = B.comment(
+                        "Requisition points docked on suspension (clamped at zero).")
+                .defineInRange("suspensionRequisitionCost", 20, 0, 100000);
         B.pop();
 
         B.push("trainer");
@@ -550,7 +589,6 @@ public final class StrajaServerConfig {
         B.pop();
 
         B.push("security");
-        SERVICE_LEASE_MINUTES = B.defineInRange("serviceLeaseMinutes", 240, 1, 10080);
         REQUIRE_REAL_COIN_PROVIDER_OUTSIDE_LOCAL = B.comment(
                         "Outside local, an unavailable coin provider is logged as a failed",
                         "deployment gate at startup; coin operations fail closed regardless.")
@@ -697,6 +735,10 @@ public final class StrajaServerConfig {
 
         p.checkpointUnlockMinutes = CHECKPOINT_UNLOCK_MINUTES.get();
         p.checkpointDeadlineMinutes = CHECKPOINT_DEADLINE_MINUTES.get();
+        p.patrolMinCheckpoints = PATROL_MIN_CHECKPOINTS.get();
+        p.patrolRounds = PATROL_ROUNDS.get();
+        p.patrolMaxMinutes = PATROL_MAX_MINUTES.get();
+        p.patrolMaxCheckpoints = PATROL_MAX_CHECKPOINTS.get();
         p.serviceBlockMinutes = SERVICE_BLOCK_MINUTES.get();
         p.foodCooldownMinutes = FOOD_COOLDOWN_MINUTES.get();
         p.quizCooldownMinutes = QUIZ_COOLDOWN_MINUTES.get();
@@ -818,13 +860,17 @@ public final class StrajaServerConfig {
         p.jailerAssaultSentenceDays = JAILER_ASSAULT_SENTENCE_DAYS.get();
         p.jailerAssaultMissionMaxAssignees = JAILER_ASSAULT_MISSION_MAX_ASSIGNEES.get();
         p.kits = mapOrDefault(StrajaPolicies.parseKits(KITS.get()), defaults().kits);
-        p.serviceEquipment = mapOrDefault(StrajaPolicies.parseEquipment(SERVICE_EQUIPMENT.get()),
-                defaults().serviceEquipment);
-        p.regearCost = mapOrDefault(StrajaPolicies.parseIntMap(REGEAR_COST.get()), defaults().regearCost);
+        p.armoryStock = listOrDefault(StrajaPolicies.parseArmoryItems(ARMORY_STOCK.get()),
+                defaults().armoryStock);
+        p.armoryReserves = listOrDefault(StrajaPolicies.parseArmoryItems(ARMORY_RESERVES.get()),
+                defaults().armoryReserves);
         p.foodItem = FOOD_ITEM.get();
         p.foodAmount = FOOD_AMOUNT.get();
         p.trainingManualItem = TRAINING_MANUAL_ITEM.get();
-        p.serviceLeaseMinutes = SERVICE_LEASE_MINUTES.get();
+        p.promotionBonusHours = PROMOTION_BONUS_HOURS.get();
+        p.requisitionPointsPerBlock = REQUISITION_POINTS_PER_BLOCK.get();
+        p.demotionServiceBlockCost = DEMOTION_SERVICE_BLOCK_COST.get();
+        p.suspensionRequisitionCost = SUSPENSION_REQUISITION_COST.get();
         p.requireRealCoinProviderOutsideLocal = REQUIRE_REAL_COIN_PROVIDER_OUTSIDE_LOCAL.get();
         p.requireCommissionerUuidOutsideLocal = REQUIRE_COMMISSIONER_UUID_OUTSIDE_LOCAL.get();
         p.requireDebugDisabledOutsideLocal = REQUIRE_DEBUG_DISABLED_OUTSIDE_LOCAL.get();
@@ -966,12 +1012,10 @@ public final class StrajaServerConfig {
                 s.substring(sep + 1).split(",")[0].trim()) != null;
     }
 
-    private static boolean isEquipmentEntry(Object o) {
+    private static boolean isArmoryEntry(Object o) {
         if (!(o instanceof String s)) return false;
-        int sep = s.indexOf('=');
-        if (sep <= 0) return false;
-        String[] parts = s.substring(sep + 1).split("\\|", 5);
-        return parts.length >= 4 && ResourceLocation.tryParse(parts[1].trim()) != null;
+        String[] parts = s.split("\\|", 5);
+        return parts.length >= 5 && ResourceLocation.tryParse(parts[1].trim()) != null;
     }
 
     private static boolean isQuizEntry(Object o) {

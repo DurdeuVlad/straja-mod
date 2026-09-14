@@ -26,9 +26,10 @@ public final class NpcRoles {
     public static final String ARCHIVIST = "archivist";
     public static final String TRAINER = "trainer";
     public static final String RECRUITER = "recruiter";
+    public static final String ARMORER = "armorer";
 
     private static final Set<String> KNOWN =
-            Set.of(RECEPTIONIST, SECRETARY, JAILER, ARCHIVIST, TRAINER, RECRUITER);
+            Set.of(RECEPTIONIST, SECRETARY, JAILER, ARCHIVIST, TRAINER, RECRUITER, ARMORER);
 
     private NpcRoles() {}
 
@@ -99,7 +100,21 @@ public final class NpcRoles {
             case "duty-coins" -> runtime.guardDuty().coins(gw);
             case "duty-food" -> runtime.guardDuty().food(gw);
             case "duty-kit" -> runtime.guardDuty().kit(gw);
-            case "duty-regear" -> runtime.guardDuty().requestRegear(gw);
+            case "armory-status" -> {
+                var offers = runtime.armory().offers(gw);
+                if (offers.isEmpty()) {
+                    gw.tell("Armurierul nu are articole pentru tine acum.");
+                } else {
+                    gw.tell("Stoc armurier: " + offers.stream()
+                            .filter(o -> !o.reserve())
+                            .map(o -> o.count() + "× " + o.itemId() + " = " + o.cost() + " monede")
+                            .collect(java.util.stream.Collectors.joining("; ")));
+                    gw.tell("Rezerve (puncte de rechiziție): " + offers.stream()
+                            .filter(com.dwurdy.straja.application.port.in.ArmoryUseCase.Offer::reserve)
+                            .map(o -> o.count() + "× " + o.itemId() + " = " + o.cost() + " pct")
+                            .collect(java.util.stream.Collectors.joining("; ")));
+                }
+            }
             case "resignation-start" -> runtime.guardDuty().beginResignation(gw);
             case "resignation-confirm" -> runtime.guardDuty().confirmResignation(gw);
             case "resignation-cancel" -> runtime.guardDuty().cancelResignation(gw);
@@ -264,6 +279,8 @@ public final class NpcRoles {
             }
             case "tool-npc-record" -> runtime.adminTools().npcShowRecord(gw, id);
             case "tool-survey-stamp" -> runtime.adminTools().surveyStamp(gw, id);
+            case "armory-buy" -> runtime.armory().buy(gw, id);
+            case "armory-reserve" -> runtime.armory().buyReserve(gw, id);
             default -> { return false; }
         }
         return true;
@@ -793,6 +810,10 @@ public final class NpcRoles {
                     "tool-npc-remove-confirm", "tool-npc-record" ->
                     runtime.adminTools().npcStillRegistered(id);
             case "tool-survey-stamp" -> runtime.adminTools().surveyPending(player);
+            case "armory-buy" -> runtime.armory().offers(player).stream()
+                    .anyMatch(o -> !o.reserve() && id.equals(o.key()));
+            case "armory-reserve" -> runtime.armory().offers(player).stream()
+                    .anyMatch(o -> o.reserve() && id.equals(o.key()));
             default -> false;
         };
     }
@@ -917,6 +938,8 @@ public final class NpcRoles {
                     runtime.archiveRoleplay().availableActions(gateway)));
             case TRAINER -> actions.addAll(NpcPlayerSurface.trainingActions(
                     runtime.guardRecruitment().trainingView(gateway)));
+            case ARMORER -> actions.addAll(NpcPlayerSurface.armoryActions(
+                    runtime.armory().offers(gateway)));
             case RECEPTIONIST -> {
                 actions.addAll(NpcPlayerSurface.complaintActions(
                         runtime.complaintRoleplay().availableActions(gateway),

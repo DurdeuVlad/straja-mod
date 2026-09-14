@@ -38,6 +38,7 @@ public final class StrajaRuntime {
     private final AuditService audit;
     private final EquipmentService equipment;
     private final GuardService guards;
+    private final com.dwurdy.straja.application.service.ArmoryService armory;
     private final com.dwurdy.straja.application.service.NpcAdminService npcs;
     private final com.dwurdy.straja.application.service.MissionService missions;
     private final com.dwurdy.straja.application.service.CustodyService custody;
@@ -138,6 +139,7 @@ public final class StrajaRuntime {
         this.audit = new AuditService(ctx);
         this.equipment = new EquipmentService(ctx);
         this.guards = new GuardService(ctx, players, audit, equipment, this::bootId);
+        this.armory = new com.dwurdy.straja.application.service.ArmoryService(ctx, players, audit);
         this.npcs = new com.dwurdy.straja.application.service.NpcAdminService(ctx);
         this.missions = new com.dwurdy.straja.application.service.MissionService(ctx, players, audit);
         this.custody = new com.dwurdy.straja.application.service.CustodyService(ctx, players, audit);
@@ -238,6 +240,7 @@ public final class StrajaRuntime {
     public GuardService guards() { return guards; }
     public com.dwurdy.straja.application.port.in.GuardRecruitmentUseCase guardRecruitment() { return guards; }
     public com.dwurdy.straja.application.port.in.GuardDutyUseCase guardDuty() { return guards; }
+    public com.dwurdy.straja.application.port.in.ArmoryUseCase armory() { return armory; }
     public com.dwurdy.straja.application.port.in.MissionRoleplayUseCase missionRoleplay() { return missions; }
     public com.dwurdy.straja.application.port.in.ComplaintRoleplayUseCase complaintRoleplay() { return complaints; }
     public com.dwurdy.straja.application.port.in.ReportUseCase reportRoleplay() { return reports; }

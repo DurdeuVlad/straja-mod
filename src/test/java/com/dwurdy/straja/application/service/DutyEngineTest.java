@@ -43,12 +43,22 @@ class DutyEngineTest {
     }
 
     @Test
-    void startDutyRejectsDuplicateOrShortRoutes() {
+    void startDutyRejectsDuplicateOrEmptyRoutes() {
         GuardState state = new GuardState();
         state.rank = Rank.STAGIAR.level();
         assertEquals("route_invalid", DutyEngine.startDuty(state,
                 List.of("a", "a", "b", "c"), 0, Map.of(), POLICY).code());
-        assertEquals("route_invalid", DutyEngine.startDuty(state, List.of("a", "b", "c"), 0, Map.of(), POLICY).code());
+        assertEquals("route_invalid", DutyEngine.startDuty(state, List.of(), 0, Map.of(), POLICY).code());
+        assertEquals("route_invalid", DutyEngine.startDuty(state, null, 0, Map.of(), POLICY).code());
+        // variable-length routes are legal at engine level — the minimum is a
+        // service/policy concern enforced before the engine runs
+        GuardState two = new GuardState();
+        two.rank = Rank.STAGIAR.level();
+        assertTrue(DutyEngine.startDuty(two, List.of("a", "b"), 0, Map.of(), POLICY).ok());
+        GuardState six = new GuardState();
+        six.rank = Rank.STAGIAR.level();
+        assertTrue(DutyEngine.startDuty(six,
+                List.of("a", "b", "c", "d", "e", "f"), 0, Map.of(), POLICY).ok());
     }
 
     @Test
@@ -116,7 +126,7 @@ class DutyEngineTest {
     }
 
     @Test
-    void finalCheckpointLoopsIntoNextRound() {
+    void finalCheckpointCompletesPatrolByDefault() {
         GuardState state = juniorOnDuty();
         for (int i = 0; i < 3; i++) {
             DutyEngine.activateCheckpoint(state, ROUTE.get(i), 60_000, 20, Map.of(), POLICY);
@@ -124,8 +134,28 @@ class DutyEngineTest {
         }
         Result last = DutyEngine.activateCheckpoint(state, "checkpoint_4", 800_000, 20, Map.of(), POLICY);
         assertTrue(last.ok());
-        // §8: the route loops — duty continues, round counter bumps, and
-        // checkpoint_1 becomes the next target after the unlock pause.
+        // default patrolRounds=1: one pass through the route ends the shift
+        assertFalse(state.duty);
+        assertEquals("patrol_complete", state.lastEndReason);
+        assertTrue(last.events().stream().anyMatch(e -> e.type().equals("patrol_complete")));
+        assertTrue(last.events().stream().anyMatch(e -> e.type().equals("duty_ended")));
+    }
+
+    @Test
+    void zeroRequiredRoundsLoopsIndefinitely() {
+        StrajaPolicies looping = new StrajaPolicies();
+        looping.patrolRounds = 0;
+        looping.patrolMaxMinutes = 0; // disable the cap for the loop contract
+        GuardState state = new GuardState();
+        state.rank = Rank.STAGIAR.level();
+        assertTrue(DutyEngine.startDuty(state, ROUTE, 0, Map.of(), looping).ok());
+        for (int i = 0; i < 3; i++) {
+            DutyEngine.activateCheckpoint(state, ROUTE.get(i), 60_000, 20, Map.of(), looping);
+            DutyEngine.tickDuty(state, 60_000 + DutyEngine.DEFAULT_UNLOCK_MINUTES * DutyEngine.MINUTE_MS + 1, 20, Map.of(), looping, null);
+        }
+        Result last = DutyEngine.activateCheckpoint(state, "checkpoint_4", 800_000, 20, Map.of(), looping);
+        assertTrue(last.ok());
+        // §8 legacy loop: duty continues, round counter bumps, checkpoint_1 is next
         assertTrue(state.duty);
         assertEquals(1, state.patrolRounds);
         assertEquals(0, state.patrolIndex);
@@ -133,13 +163,42 @@ class DutyEngineTest {
         assertTrue(last.events().stream().anyMatch(e -> e.type().equals("patrol_round_complete")));
 
         long nextActive = 800_000 + DutyEngine.DEFAULT_UNLOCK_MINUTES * DutyEngine.MINUTE_MS;
-        DutyEngine.tickDuty(state, nextActive + 1, 20, Map.of(), POLICY, null);
+        DutyEngine.tickDuty(state, nextActive + 1, 20, Map.of(), looping, null);
         assertEquals("ACTIVE", state.patrolState);
         assertNotNull(state.deadlineAt);
-        // second round still requires activating checkpoint_1
-        Result wrong = DutyEngine.activateCheckpoint(state, "checkpoint_2", nextActive + 1, 20, Map.of(), POLICY);
+        Result wrong = DutyEngine.activateCheckpoint(state, "checkpoint_2", nextActive + 1, 20, Map.of(), looping);
         assertFalse(wrong.ok());
         assertEquals("wrong_checkpoint", wrong.code());
+    }
+
+    @Test
+    void patrolTimeCapEndsNormalDuty() {
+        GuardState state = juniorOnDuty();
+        state.dutyStartedAt = 0L;
+        var result = DutyEngine.tickDuty(state,
+                POLICY.patrolMaxMinutes * DutyEngine.MINUTE_MS, 20, Map.of(), POLICY, null);
+        assertFalse(state.duty);
+        assertEquals("patrol_time_cap", state.lastEndReason);
+        assertTrue(result.events().stream().anyMatch(e -> e.type().equals("duty_ended")));
+    }
+
+    @Test
+    void patrolTimeCapIgnoresFreeDuty() {
+        GuardState state = new GuardState();
+        state.rank = Rank.SERGENT.level();
+        assertTrue(DutyEngine.startFreeDuty(state, 0, POLICY, false).ok());
+        DutyEngine.tickDuty(state,
+                (POLICY.patrolMaxMinutes + 5L) * DutyEngine.MINUTE_MS, 36, Map.of(), POLICY, null);
+        assertTrue(state.duty, "free shifts are not bounded by the patrol cap");
+    }
+
+    @Test
+    void requisitionAccruesPerServiceBlock() {
+        GuardState state = juniorOnDuty();
+        DutyEngine.accrue(state, 30 * DutyEngine.MINUTE_MS, 16, POLICY);
+        assertEquals(3, state.serviceBlocks);
+        assertEquals(3L * POLICY.requisitionPointsPerBlock, state.requisitionPoints,
+                "spendable requisition accrues alongside promotion blocks");
     }
 
     @Test
@@ -285,13 +344,13 @@ class DutyEngineTest {
     void canAuthorizeRules() {
         // commissioner flag (computed by PlayerService) bypasses rank rules
         assertTrue(DutyEngine.canAuthorize(true, "dwurdy", 0, "guard1", 2, "special_duty"));
-        assertTrue(DutyEngine.canAuthorize(true, "someone", 0, "other", 2, "regear"));
+        assertTrue(DutyEngine.canAuthorize(true, "someone", 0, "other", 2, "any_action"));
         // lieutenant for a lower-ranked different target
         assertTrue(DutyEngine.canAuthorize(false, "lt", 4, "guard1", 2, "special_duty"));
         // lieutenant cannot authorize self
         assertFalse(DutyEngine.canAuthorize(false, "lt", 4, "lt", 4, "special_duty"));
         // junior cannot authorize
-        assertFalse(DutyEngine.canAuthorize(false, "jr", 1, "guard1", 1, "regear"));
+        assertFalse(DutyEngine.canAuthorize(false, "jr", 1, "guard1", 1, "any_action"));
         // names alone never confer commissioner authority
         assertFalse(DutyEngine.canAuthorize(false, "dwurdy", 0, "guard1", 2, "special_duty"));
     }

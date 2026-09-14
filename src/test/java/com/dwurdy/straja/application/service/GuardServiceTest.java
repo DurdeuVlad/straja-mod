@@ -274,56 +274,61 @@ class GuardServiceTest {
     }
 
     @Test
-    void stopDutyReclaimsAllServiceEquipment() {
+    void stopDutyKeepsAllPermanentGear() {
         placeCheckpoints();
         TestPlayer p = recruitToStagiar();
+        int swordBefore = countItem(p, "minecraft:iron_sword");
+        assertEquals(1, swordBefore, "the rank kit sword is already owned gear");
+        standAt(p, 1);
         guards.startDuty(p);
-        assertNotNull(players.state(p.uuid()).serviceEquipment);
         guards.stopDuty(p);
         var state = players.state(p.uuid());
         assertFalse(state.duty);
-        assertNull(state.serviceEquipment);
-        long remaining = 0;
+        assertEquals(swordBefore, countItem(p, "minecraft:iron_sword"),
+                "stopping a shift never takes owned gear back");
+        long serviceMarked = 0;
         for (int i = 0; i < p.inventory.slots(); i++) {
             var stack = p.inventory.stackAt(i);
-            if (!stack.isEmpty() && "1".equals(stack.data("StrajaService"))) remaining++;
+            if (!stack.isEmpty() && "1".equals(stack.data("StrajaService"))) serviceMarked++;
         }
-        assertEquals(0, remaining, "service equipment left in inventory after reclaim");
+        assertEquals(0, serviceMarked, "no leased service markers exist in the new model");
     }
 
     @Test
-    void serviceLeaseExpiryEndsDutyAndReclaims() {
+    void patrolTimeCapEndsDutyGracefully() {
         placeCheckpoints();
         TestPlayer p = recruitToStagiar();
+        standAt(p, 1);
         guards.startDuty(p);
         var state = players.state(p.uuid());
         assertTrue(state.duty);
-        assertNotNull(state.serviceEquipment);
-        // age the lease past serviceLeaseMinutes
-        state.serviceEquipment.issuedAt =
-                clock.nowMillis() - (ctx.policies().serviceLeaseMinutes + 1L) * 60_000L;
+        // age the patrol past the real-time ceiling (default 60 min)
+        state.dutyStartedAt =
+                clock.nowMillis() - (ctx.policies().patrolMaxMinutes + 1L) * 60_000L;
         players.save(p.uuid(), state);
         guards.tickPlayerDuty(p);
         var after = players.state(p.uuid());
         assertFalse(after.duty);
-        assertNull(after.serviceEquipment);
-        assertEquals("service_lease_expired", after.lastEndReason);
-        assertTrue(p.told("echipament"));
+        assertEquals("patrol_time_cap", after.lastEndReason);
+        assertTrue(p.told("Serviciul s-a încheiat"));
+        assertEquals(1, countItem(p, "minecraft:iron_sword"), "gear is kept at the cap");
     }
 
     @Test
-    void serviceLeaseDoesNotExpireEarly() {
+    void patrolTimeCapDoesNotEndEarly() {
         placeCheckpoints();
         TestPlayer p = recruitToStagiar();
+        standAt(p, 1);
         guards.startDuty(p);
         var state = players.state(p.uuid());
-        state.serviceEquipment.issuedAt =
-                clock.nowMillis() - (ctx.policies().serviceLeaseMinutes - 1L) * 60_000L;
+        state.dutyStartedAt =
+                clock.nowMillis() - (ctx.policies().patrolMaxMinutes - 1L) * 60_000L;
+        // keep the checkpoint deadline far out so only the cap could end it
+        state.deadlineAt = clock.nowMillis() + 60 * 60_000L;
         players.save(p.uuid(), state);
         guards.tickPlayerDuty(p);
         var after = players.state(p.uuid());
         assertTrue(after.duty);
-        assertNotNull(after.serviceEquipment);
     }
 
     @Test
@@ -333,6 +338,7 @@ class GuardServiceTest {
         var boot1 = new GuardService(ctx, players, new AuditService(ctx),
                 new EquipmentService(ctx), () -> "boot-1");
         boot1.recoverOnLogin(p);
+        standAt(p, 1);
         boot1.startDuty(p);
         assertTrue(players.state(p.uuid()).duty);
         boot1.recoverOnLogin(p); // same boot: a relogin keeps the active duty
@@ -344,70 +350,59 @@ class GuardServiceTest {
         assertFalse(state.duty);
         assertEquals("server_restart", state.lastEndReason);
         assertEquals("boot-2", state.runtimeBootId);
-        assertNull(state.serviceEquipment, "service equipment is reclaimed with the duty");
+        assertEquals(1, countItem(p, "minecraft:iron_sword"),
+                "owned gear survives a restart-forced duty close");
         boot2.recoverOnLogin(p); // recovery is idempotent
         assertFalse(players.state(p.uuid()).duty);
     }
 
     @Test
-    void partialEquipmentIssueChargesNoDebtForUndeliveredItems() {
+    void dutyStartNeverIssuesOrRequiresGear() {
         placeCheckpoints();
         TestPlayer p = recruitToStagiar();
-        // promote to GUARD so the spec has 3 items (sword, baton, cuffs)
-        var state = players.state(p.uuid());
-        state.rank = Rank.GUARD.level();
-        players.save(p.uuid(), state);
-        // exactly one free slot → sword delivers, baton + cuffs cannot
-        for (int i = 1; i < p.inventory.slots(); i++) {
-            p.inventory.slots.set(i, new com.dwurdy.straja.application.port.out.ItemView(
-                    "minecraft:stone", 64, 64, java.util.Map.of()));
-        }
-        guards.startDuty(p);
-        state = players.state(p.uuid());
-        assertFalse(state.duty, "partial issue must abort the duty start");
-        assertNull(state.serviceEquipment);
-        assertEquals(0, state.equipmentDebt,
-                "gear that was never delivered must not create equipment debt");
-        assertFalse(p.told("Echipament lipsă"), "no missing-equipment charge for undelivered items");
-        // the one delivered item was reclaimed cleanly on abort
-        assertEquals(0, countItem(p, "minecraft:iron_sword"));
-        // a retry with free inventory issues everything normally
-        for (int i = 0; i < p.inventory.slots(); i++) p.inventory.extract(i, 64);
-        standAt(p, 1);
-        guards.startDuty(p);
-        state = players.state(p.uuid());
-        assertTrue(state.duty);
-        assertEquals(3, state.serviceEquipment.items.size());
-    }
-
-    @Test
-    void failedEquipmentIssueWithNoFreeSlotsChargesNothing() {
-        placeCheckpoints();
-        TestPlayer p = recruitToStagiar();
+        // a full inventory no longer blocks or aborts duty — nothing is issued at start
         for (int i = 0; i < p.inventory.slots(); i++) {
             p.inventory.slots.set(i, new com.dwurdy.straja.application.port.out.ItemView(
                     "minecraft:stone", 64, 64, java.util.Map.of()));
         }
+        standAt(p, 1);
         guards.startDuty(p);
         var state = players.state(p.uuid());
-        assertFalse(state.duty);
-        assertNull(state.serviceEquipment);
-        assertEquals(0, state.equipmentDebt);
-        assertEquals(0, countItem(p, "minecraft:iron_sword"));
+        assertTrue(state.duty, "duty starts regardless of inventory space");
+        assertEquals("NORMAL", state.mode);
     }
 
     @Test
-    void missingEquipmentBecomesDebt() {
-        placeCheckpoints();
-        TestPlayer p = recruitToStagiar();
-        guards.startDuty(p);
-        // lose the issued sword: empty the whole inventory before stopping
-        for (int i = 0; i < p.inventory.slots(); i++) p.inventory.extract(i, 64);
-        guards.stopDuty(p);
+    void kitStaysClaimableWhenInventoryIsFullAtRankUp() {
+        TestPlayer c = commissioner();
+        TestPlayer p = server.add("recruit");
+        assertTrue(guards.invite(c, p));
+        guards.recruit(p);
+        // answer all but the last question, then fill the inventory
+        for (int i = 0; i < ctx.policies().quiz.size() - 1; i++) {
+            var state = players.state(p.uuid());
+            String questionId = state.quizOrder.get(state.quizIndex);
+            var question = ctx.policies().quiz.stream()
+                    .filter(q -> q.id().equals(questionId)).findFirst().orElseThrow();
+            guards.quiz(p, question.answers().get(0));
+        }
+        for (int i = 0; i < p.inventory.slots(); i++) {
+            p.inventory.slots.set(i, new com.dwurdy.straja.application.port.out.ItemView(
+                    "minecraft:stone", 64, 64, java.util.Map.of()));
+        }
+        var last = players.state(p.uuid());
+        var lastQuestion = ctx.policies().quiz.stream()
+                .filter(q -> q.id().equals(last.quizOrder.get(last.quizIndex))).findFirst().orElseThrow();
+        guards.quiz(p, lastQuestion.answers().get(0));
         var state = players.state(p.uuid());
-        assertNull(state.serviceEquipment);
-        assertTrue(state.equipmentDebt > 0, "missing equipment should create debt");
-        assertTrue(p.told("Echipament lipsă"));
+        assertEquals(Rank.STAGIAR.level(), state.rank);
+        assertEquals(0, state.kitClaimedRank, "undeliverable kit stays claimable");
+        assertTrue(p.told("Kitul nu încape"));
+        // free slots -> /straja kit delivers it
+        for (int i = 0; i < p.inventory.slots(); i++) p.inventory.extract(i, 64);
+        guards.kit(p);
+        assertEquals(Rank.STAGIAR.level(), players.state(p.uuid()).kitClaimedRank);
+        assertEquals(1, countItem(p, "minecraft:iron_sword"));
     }
 
     // ---------------------------------------------------------------- duty
@@ -421,16 +416,17 @@ class GuardServiceTest {
     }
 
     @Test
-    void startDutyBeginsPatrolAndIssuesEquipment() {
+    void startDutyBeginsPatrolWithoutIssuingGear() {
         placeCheckpoints();
         TestPlayer p = recruitToStagiar();
         standAt(p, 1);
+        int swordsBefore = countItem(p, "minecraft:iron_sword");
         guards.startDuty(p);
         var state = players.state(p.uuid());
         assertTrue(state.duty);
         assertEquals("ACTIVE", state.patrolState);
-        assertEquals(1, state.serviceEquipment.items.size()); // junior: sword only
-        assertEquals(1, countItem(p, "minecraft:iron_sword"));
+        assertEquals(swordsBefore, countItem(p, "minecraft:iron_sword"),
+                "duty start issues nothing — the rank kit is already owned");
     }
 
     @Test
@@ -479,8 +475,11 @@ class GuardServiceTest {
         }
         var state = players.state(p.uuid());
         assertTrue(state.duty);
-        assertEquals(2, state.unpaidSalary); // 600s x 16/3600 = 2.67 -> 2 coins, fraction carried
+        long bonus = ctx.policies().promotionBonusHours * ctx.policies().salaryPerHour(1);
+        assertEquals(bonus + 2, state.unpaidSalary); // 600s x 16/3600 = 2.67 -> 2 coins, fraction carried
         assertEquals(1, state.serviceBlocks); // 10 minutes = 1 service point
+        assertEquals(ctx.policies().requisitionPointsPerBlock, state.requisitionPoints,
+                "each service block also accrues spendable requisition points");
     }
 
     // ---------------------------------------------------------------- salary
@@ -498,10 +497,11 @@ class GuardServiceTest {
         }
         guards.salary(p);
         var currency = (Fakes.TestCurrency) ctx.currency();
-        assertEquals(2, currency.balance); // 10min at Stagiar 16/h
+        long expected = ctx.policies().promotionBonusHours * ctx.policies().salaryPerHour(1) + 2;
+        assertEquals(expected, currency.balance); // rank-up bonus + 10min at Stagiar 16/h
         // replay: the same payout must not double-deliver
         guards.salary(p);
-        assertEquals(2, currency.balance); // 10min at Stagiar 16/h
+        assertEquals(expected, currency.balance);
         assertTrue(p.told("Nu ai salariu disponibil"));
     }
 
@@ -548,16 +548,16 @@ class GuardServiceTest {
     }
 
     @Test
-    void salarySettlesEquipmentDebtFirst() {
+    void salaryPaysTheFullBalance() {
         TestPlayer p = recruitToStagiar();
         var state = players.state(p.uuid());
         state.unpaidSalary = 100;
-        state.equipmentDebt = 40;
         players.save(p.uuid(), state);
         guards.salary(p);
         state = players.state(p.uuid());
-        assertEquals(0, state.equipmentDebt);
-        assertEquals(60, ((Fakes.TestCurrency) ctx.currency()).balance);
+        assertEquals(0, state.unpaidSalary);
+        assertEquals(100, ((Fakes.TestCurrency) ctx.currency()).balance,
+                "no equipment debt skims the payout — the whole balance is paid");
     }
 
     // ---------------------------------------------------------------- food/kit
@@ -570,11 +570,15 @@ class GuardServiceTest {
     }
 
     @Test
-    void kitClaimsOncePerRank() {
+    void kitIsGrantedAtRankUpAndClaimsOncePerRank() {
         TestPlayer p = recruitToStagiar();
-        guards.kit(p);
-        // junior kit is 6 items, but the iron sword is leased as service equipment instead
-        assertEquals(5, p.inventory.slots.stream().filter(s -> !s.isEmpty()).count());
+        // the Stagiar kit (6 items incl. the sword) was delivered at quiz pass
+        assertEquals(6, p.inventory.slots.stream().filter(s -> !s.isEmpty()).count());
+        assertEquals(1, countItem(p, "minecraft:iron_sword"));
+        var state = players.state(p.uuid());
+        assertEquals(Rank.STAGIAR.level(), state.kitClaimedRank);
+        long bonus = ctx.policies().promotionBonusHours * ctx.policies().salaryPerHour(1);
+        assertEquals(bonus, state.unpaidSalary, "rank-up pays the configured salary bonus");
         guards.kit(p);
         assertTrue(p.told("deja ridicat"));
     }
@@ -693,7 +697,6 @@ class GuardServiceTest {
         assertFalse(view.canViewCoins());
         assertFalse(view.canClaimFood());
         assertFalse(view.canClaimKit());
-        assertFalse(view.canRequestRegear());
         assertFalse(view.canBeginResignation());
         assertFalse(view.canConfirmResignation());
         assertFalse(view.canCancelResignation());
@@ -708,11 +711,10 @@ class GuardServiceTest {
         assertTrue(view.canStart());
         assertTrue(view.checkpointId().isEmpty());
         assertFalse(view.canStop());
-        assertFalse(view.canClaimSalary());
+        assertTrue(view.canClaimSalary(), "the rank-up bonus is already in the unpaid balance");
         assertTrue(view.canViewCoins());
         assertFalse(view.canClaimFood(), "food requires an active duty");
-        assertTrue(view.canClaimKit());
-        assertTrue(view.canRequestRegear());
+        assertFalse(view.canClaimKit(), "the rank kit was already granted at quiz pass");
         assertTrue(view.canBeginResignation());
         assertFalse(view.canConfirmResignation());
         assertFalse(view.canCancelResignation());
@@ -731,8 +733,7 @@ class GuardServiceTest {
         assertEquals("checkpoint_1", view.checkpointId());
         assertTrue(view.canStop());
         assertTrue(view.canClaimFood());
-        assertFalse(view.canRequestRegear(), "regear requires off duty");
-        assertTrue(view.canClaimKit(), "kit for the current rank was not claimed yet");
+        assertFalse(view.canClaimKit(), "the rank kit was already granted at quiz pass");
     }
 
     @Test
@@ -830,7 +831,7 @@ class GuardServiceTest {
     void setupErrorDoesNotAdvertiseTypedCommand() {
         TestPlayer p = recruitToStagiar();
         guards.startDuty(p);
-        assertTrue(p.told("cele patru puncte de patrulare"));
+        assertTrue(p.told("puncte de patrulare"));
         assertFalse(p.messages.stream().anyMatch(m -> m.contains("/straja")),
                 "player-facing setup errors must not advertise typed commands");
     }
@@ -846,11 +847,10 @@ class GuardServiceTest {
         assertTrue(audited("duty_checkpoint"));
         guards.food(p);
         assertTrue(audited("food_claim"));
-        guards.kit(p);
-        assertTrue(audited("kit_claim"));
         guards.stopDuty(p);
-        guards.requestRegear(p);
-        assertTrue(audited("regear_request"));
+        assertTrue(audited("duty_stop"));
+        guards.meritDock(commissioner(), p, 1);
+        assertTrue(audited("merit_dock"));
     }
 
     private int countItem(TestPlayer p, String itemId) {
@@ -875,7 +875,6 @@ class GuardServiceTest {
         var state = players.state(senior.uuid());
         assertTrue(state.duty, "senior must start a free shift without checkpoints");
         assertEquals("FREE", state.mode);
-        assertNotNull(state.serviceEquipment, "free duty still issues service equipment");
         assertTrue(senior.told("Tură liberă"));
     }
 
@@ -893,7 +892,7 @@ class GuardServiceTest {
         TestPlayer junior = recruitToStagiar();
         guards.startDuty(junior);
         assertFalse(players.state(junior.uuid()).duty);
-        assertTrue(junior.told("cele patru puncte de patrulare"));
+        assertTrue(junior.told("puncte de patrulare"));
     }
 
     @Test
@@ -905,7 +904,8 @@ class GuardServiceTest {
         guards.tickPlayerDuty(senior);
         var state = players.state(senior.uuid());
         assertTrue(state.duty);
-        assertEquals(ctx.policies().salaryPerHour(Rank.SERGENT.level()),
+        long bonus = ctx.policies().promotionBonusHours * ctx.policies().salaryPerHour(1);
+        assertEquals(ctx.policies().salaryPerHour(Rank.SERGENT.level()) + bonus,
                 state.unpaidSalary, "one real hour of free duty pays the hourly wage");
         assertFalse(state.salaryActivityPaused, "trusted ranks never hit the AFK salary gate");
     }
@@ -919,21 +919,21 @@ class GuardServiceTest {
         var state = players.state(senior.uuid());
         assertFalse(state.duty);
         assertEquals("voluntary_stop", state.lastEndReason);
-        assertNull(state.serviceEquipment, "equipment is reclaimed when the shift ends");
+        assertTrue(countItem(senior, "minecraft:iron_sword") > 0 || countItem(senior, "minecraft:diamond_sword") > 0,
+                "owned gear stays after a free shift ends");
     }
 
     @Test
-    void freeDutyEquipmentLeaseStillEndsShift() {
+    void freeDutyIsNotCappedByThePatrolTimer() {
         TestPlayer senior = guardAtRank(Rank.SERGENT.level());
         guards.startDuty(senior);
         var state = players.state(senior.uuid());
-        state.serviceEquipment.issuedAt =
-                clock.nowMillis() - (ctx.policies().serviceLeaseMinutes + 1L) * 60_000L;
+        state.dutyStartedAt =
+                clock.nowMillis() - (ctx.policies().patrolMaxMinutes + 1L) * 60_000L;
         players.save(senior.uuid(), state);
         guards.tickPlayerDuty(senior);
-        var after = players.state(senior.uuid());
-        assertFalse(after.duty);
-        assertEquals("service_lease_expired", after.lastEndReason);
+        assertTrue(players.state(senior.uuid()).duty,
+                "the real-time cap applies to patrols, not free shifts");
     }
 
     // ------------------------------------------------------------ native faction
@@ -1014,7 +1014,10 @@ class GuardServiceTest {
         guards.requestPromotion(p);
         var state = players.state(p.uuid());
         assertEquals(Rank.GUARD.level(), state.rank);
-        assertEquals(0, state.kitClaimedRank, "new rank unlocks the next kit");
+        assertEquals(Rank.GUARD.level(), state.kitClaimedRank,
+                "the new rank kit is granted automatically at promotion");
+        long bonus = ctx.policies().promotionBonusHours * ctx.policies().salaryPerHour(2);
+        assertTrue(state.unpaidSalary >= bonus, "rank-up credits the salary bonus");
         assertTrue(p.told("Avansare: Străjer"));
     }
 
@@ -1157,7 +1160,7 @@ class GuardServiceTest {
         assertEquals(4, setup.checkpoints.stream().filter(SetupData.Checkpoint::isPlaced).count());
         var first = setup.checkpoints.get(0);
         assertEquals(108, first.x);
-        assertEquals(92, first.z);
+        assertEquals(100, first.z);
         for (var point : setup.checkpoints) {
             assertTrue(setup.missionMinutes.containsKey(point.id),
                     point.id + " should get a default mission time");
@@ -1343,6 +1346,157 @@ class GuardServiceTest {
         assertTrue(p.told("îndepărtat"));
         assertEquals("AUTHORIZED", players.state(p.uuid()).applicationState,
                 "the recorded chain stays intact even after firing");
+    }
+
+    // ------------------------------------------------------------ PAT-001 variable routes
+
+    @Test
+    void checkpointAddGrowsTheRoute() {
+        TestPlayer c = commissioner();
+        String id = guards.addCheckpoint(c);
+        assertEquals("checkpoint_5", id, "the next free slot id is allocated");
+        var setup = ctx.setup().read();
+        assertEquals(5, setup.checkpoints.size());
+        assertFalse(setup.checkpoints.get(4).isPlaced(), "a new slot starts unplaced");
+
+        TestPlayer random = server.add("random");
+        assertNull(guards.addCheckpoint(random), "checkpoint add is commissioner-only");
+        assertEquals(5, ctx.setup().read().checkpoints.size());
+    }
+
+    @Test
+    void checkpointRemoveShrinksRouteAndDropsOverrides() {
+        placeCheckpoints();
+        TestPlayer c = commissioner();
+        var setup = ctx.setup().read();
+        setup.missionMinutes.put("checkpoint_2", 45);
+        ctx.setup().write(setup);
+
+        assertTrue(guards.removeCheckpoint(c, "checkpoint_2"));
+        setup = ctx.setup().read();
+        assertEquals(3, setup.checkpoints.size());
+        assertFalse(setup.missionMinutes.containsKey("checkpoint_2"),
+                "the mission-time override goes with the slot");
+        assertFalse(guards.removeCheckpoint(c, "checkpoint_2"), "double-remove refuses");
+
+        TestPlayer random = server.add("random");
+        assertFalse(guards.removeCheckpoint(random, "checkpoint_1"),
+                "checkpoint remove is commissioner-only");
+    }
+
+    @Test
+    void variableLengthRouteStartsPatrol() {
+        TestPlayer c = commissioner();
+        // shrink to the configured minimum: 2 placed checkpoints
+        placeCheckpoints();
+        guards.removeCheckpoint(c, "checkpoint_3");
+        guards.removeCheckpoint(c, "checkpoint_4");
+        TestPlayer p = recruitToStagiar();
+        standAt(p, 1);
+        guards.startDuty(p);
+        var state = players.state(p.uuid());
+        assertTrue(state.duty, "a two-checkpoint route satisfies the minimum");
+        assertEquals(2, state.route.size());
+
+        // grow past the legacy four
+        for (int i = 0; i < 3; i++) guards.addCheckpoint(c);
+        placeAllCheckpointPositions(c);
+        var all = ctx.setup().read().checkpoints;
+        assertEquals(5, all.size());
+        TestPlayer q = server.add("recruit2");
+        assertTrue(guards.invite(c, q));
+        guards.recruit(q);
+        for (int i = 0; i < ctx.policies().quiz.size(); i++) {
+            var qs = players.state(q.uuid());
+            String qid = qs.quizOrder.get(qs.quizIndex);
+            var question = ctx.policies().quiz.stream()
+                    .filter(x -> x.id().equals(qid)).findFirst().orElseThrow();
+            guards.quiz(q, question.answers().get(0));
+        }
+        standAt(q, 1);
+        guards.startDuty(q);
+        assertEquals(5, players.state(q.uuid()).route.size(),
+                "routes longer than the legacy four start normally");
+    }
+
+    private void placeAllCheckpointPositions(TestPlayer c) {
+        SetupData setup = ctx.setup().read();
+        for (int i = 0; i < setup.checkpoints.size(); i++) {
+            var cp = setup.checkpoints.get(i);
+            cp.x = (double) (i + 1);
+            cp.y = 64d;
+            cp.z = 0d;
+        }
+        ctx.setup().write(setup);
+    }
+
+    @Test
+    void definePatrolRouteReplacesTheWholeRoute() {
+        TestPlayer c = commissioner();
+        assertTrue(guards.definePatrolRoute(c, "minecraft:overworld",
+                java.util.List.of(new double[]{1, 64, 1}, new double[]{5, 64, 5},
+                        new double[]{9, 64, 9})));
+        var setup = ctx.setup().read();
+        assertEquals(3, setup.checkpoints.size());
+        assertEquals("checkpoint_1", setup.checkpoints.get(0).id);
+        assertEquals(9, setup.checkpoints.get(2).x.intValue());
+
+        assertFalse(guards.definePatrolRoute(c, "minecraft:overworld",
+                java.util.List.of(new double[]{1, 64, 1})),
+                "below the configured minimum refuses");
+        assertFalse(guards.definePatrolRoute(server.add("random"), "minecraft:overworld",
+                java.util.List.of(new double[]{1, 64, 1}, new double[]{2, 64, 2})),
+                "route definition is commissioner-only");
+    }
+
+    // ------------------------------------------------------------ EQ-006 punishment docking
+
+    @Test
+    void demotionDocksServiceBlocks() {
+        TestPlayer c = commissioner();
+        TestPlayer p = guardAtRank(Rank.GUARD.level());
+        setBlocks(p, 100);
+        guards.demote(c, p);
+        var state = players.state(p.uuid());
+        assertEquals(Rank.STAGIAR.level(), state.rank);
+        assertEquals(100 - ctx.policies().demotionServiceBlockCost, state.serviceBlocks,
+                "demotion docks promotion progress, not spendable points");
+    }
+
+    @Test
+    void suspensionDocksRequisitionPoints() {
+        TestPlayer c = commissioner();
+        TestPlayer p = guardAtRank(Rank.GUARD.level());
+        var state = players.state(p.uuid());
+        state.requisitionPoints = 50;
+        state.serviceBlocks = 42;
+        players.save(p.uuid(), state);
+        guards.suspend(c, p);
+        state = players.state(p.uuid());
+        assertEquals(50 - ctx.policies().suspensionRequisitionCost, state.requisitionPoints);
+        assertEquals(42, state.serviceBlocks,
+                "suspension docks the spendable balance, not promotion progress");
+    }
+
+    @Test
+    void meritDockClampsAtZeroAndAudits() {
+        TestPlayer c = commissioner();
+        TestPlayer p = recruitToStagiar();
+        var state = players.state(p.uuid());
+        state.requisitionPoints = 3;
+        players.save(p.uuid(), state);
+
+        assertTrue(guards.meritDock(c, p, 10));
+        assertEquals(0, players.state(p.uuid()).requisitionPoints, "docking clamps at zero");
+        assertTrue(audited("merit_dock"));
+
+        TestPlayer random = server.add("random");
+        state = players.state(p.uuid());
+        state.requisitionPoints = 5;
+        players.save(p.uuid(), state);
+        assertFalse(guards.meritDock(random, p, 5), "merit dock is commissioner-only");
+        assertEquals(5, players.state(p.uuid()).requisitionPoints);
+        assertFalse(guards.meritDock(c, p, 0), "non-positive amounts refuse");
     }
 
     @Test

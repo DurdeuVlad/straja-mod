@@ -100,9 +100,17 @@ public final class StrajaCommands {
         root.then(adminOnly(Commands.literal("coins").executes(c -> player(c, StrajaRuntime.get().guards()::coins))));
         root.then(adminOnly(Commands.literal("food").executes(c -> player(c, StrajaRuntime.get().guards()::food))));
         root.then(adminOnly(Commands.literal("kit").executes(c -> player(c, StrajaRuntime.get().guards()::kit))));
-        root.then(adminOnly(Commands.literal("regear").executes(c -> player(c, StrajaRuntime.get().guards()::requestRegear))));
-        root.then(adminOnly(Commands.literal("approve-regear").then(Commands.argument("player", EntityArgument.player())
-                .executes(c -> { StrajaRuntime.get().guards().approveRegear(actor(c), target(c, "player")); return 1; }))));
+
+        // merit ledger: players inspect; the Comisar docks requisition points
+        var merit = adminOnly(Commands.literal("merit"));
+        merit.executes(c -> player(c, StrajaRuntime.get().guards()::showMerit));
+        merit.then(Commands.literal("dock")
+                .then(Commands.argument("player", EntityArgument.player())
+                        .then(Commands.argument("points", IntegerArgumentType.integer(1))
+                                .executes(c -> StrajaRuntime.get().guards()
+                                        .meritDock(actor(c), target(c, "player"),
+                                                IntegerArgumentType.getInteger(c, "points")) ? 1 : 0))));
+        root.then(merit);
 
         // admin rank ops
         for (String op : new String[]{"promote", "demote", "suspend", "fire"}) {
@@ -140,6 +148,14 @@ public final class StrajaCommands {
                         .executes(c -> adminActor(c, p -> StrajaRuntime.get().guards()
                                 .setCheckpoint(p, StringArgumentType.getString(c, "id")))));
         root.then(adminOnly(setCheckpoint));
+        var checkpoint = Commands.literal("checkpoint")
+                .then(Commands.literal("add")
+                        .executes(c -> adminActor(c, p -> StrajaRuntime.get().guards().addCheckpoint(p))))
+                .then(Commands.literal("remove")
+                        .then(Commands.argument("id", StringArgumentType.word())
+                                .executes(c -> adminActor(c, p -> StrajaRuntime.get().guards()
+                                        .removeCheckpoint(p, StringArgumentType.getString(c, "id"))))));
+        root.then(adminOnly(checkpoint));
         var setMissionTime = Commands.literal("set-mission-time")
                 .then(Commands.argument("id", StringArgumentType.word())
                         .then(Commands.argument("minutes", IntegerArgumentType.integer())
@@ -1013,7 +1029,7 @@ public final class StrajaCommands {
                 "invite", "recruit", "recrute", "quiz", "start", "checkpoint", "special",
                 "resign", "demisie", "rejoin",
                 // economy and communication
-                "salary", "coins", "food", "kit", "regear", "approve-regear",
+                "salary", "coins", "food", "kit", "merit",
                 "report", "message", "request", "inbox",
                 // roleplay service lanes
                 "mission", "cuffs", "prison", "fine", "complaint", "room", "archive",
@@ -1036,12 +1052,12 @@ public final class StrajaCommands {
                     "/straja status | rules | regulament | help",
                     "/straja invite <jucător> | recruit | quiz <răspuns> | resign | rejoin",
                     "/straja start | checkpoint <id> | stop | special <start|resume|complete> <jucător>",
-                    "/straja salary | coins | food | kit | regear | approve-regear <jucător>",
+                    "/straja salary | coins | food | kit | merit | merit dock <jucător> <puncte>",
                     "/straja report|message|request <text> | inbox",
                     "/straja promote | demote | suspend | reinstate | fire | faction <jucător> <nume>",
                     "/straja setup — checklist ghidat | setup here | setup patrol | setup npcs | setup tools",
                     "/straja policy list | get <cheie> | set <cheie> <valoare> | reset <cheie>",
-                    "/straja set-checkpoint <id> | set-mission-time <id> <min> | set-location <nume>",
+                    "/straja checkpoint add | checkpoint remove <id> | set-checkpoint <id> | set-mission-time <id> <min> | set-location <nume>",
                     "/straja mission | cuffs | prison | fine | complaint | room | archive — help pe subcomandă",
                     "/straja npc list|spawn|assign|set-name|set-skin|remove",
                     "/straja migrate <worldPath> | backup | debug ... | test ...");
