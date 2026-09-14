@@ -50,4 +50,10 @@ class OptionalModCompatibilityTest {
         assertFalse(profile.hasOptionalMods());
         assertTrue(profile.loadedIds().isEmpty());
     }
+
+    @Test
+    void absentVampirismDoesNotAttemptToLoadItsProviderClass() {
+        assertTrue(OptionalModCompatibility.loadProvider(
+                OptionalModCompatibility.fromLoadedIds(Set.of())).isEmpty());
+    }
 }

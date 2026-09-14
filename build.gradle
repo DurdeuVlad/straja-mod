@@ -22,6 +22,8 @@ group = mod_group_id
 repositories {
     mavenLocal()
     maven { url = "https://api.modrinth.com/maven" }
+    // Vampirism's API classifier is compile-only; the mod remains optional at runtime.
+    maven { url = "https://maven.maxanier.de/releases" }
 }
 
 base {
@@ -123,6 +125,7 @@ dependencies {
     // redistributed — drop it into libs/ to enable the coin economy in dev runs.
     // Any item IDs can be configured under [economy] instead.
     localRuntime files("libs/adys_decorations-1.0.7.2-neoforge-1.21.1.jar")
+    compileOnly "de.teamlapen.vampirism:Vampirism:${vampirism_version}:api"
 
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'

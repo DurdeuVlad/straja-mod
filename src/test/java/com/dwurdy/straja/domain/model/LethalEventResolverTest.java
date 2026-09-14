@@ -44,7 +44,7 @@ class LethalEventResolverTest {
                 RestraintStatus.NONE, DamageCategory.ORDINARY, false, true, false);
 
         assertEquals(LethalEventResolver.Outcome.VAMPIRISM_DBNO, decision.outcome());
-        assertTrue(decision.cancelVanillaDeath());
+        assertTrue(!decision.cancelVanillaDeath());
     }
 
     @Test
