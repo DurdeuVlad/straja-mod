@@ -5,6 +5,7 @@ import com.dwurdy.straja.application.port.in.CustodyRoleplayUseCase;
 import com.dwurdy.straja.application.port.out.ItemView;
 import com.dwurdy.straja.domain.model.CustodyStore;
 import com.dwurdy.straja.domain.model.CustodyState;
+import com.dwurdy.straja.domain.model.CustodyStatus;
 import com.dwurdy.straja.domain.model.CustodyTransition;
 import com.dwurdy.straja.domain.model.CustodyTransitionEngine;
 import com.dwurdy.straja.domain.model.DamageCategory;
@@ -12,6 +13,7 @@ import com.dwurdy.straja.domain.model.LethalEventResolver;
 import com.dwurdy.straja.domain.model.PlayerCondition;
 import com.dwurdy.straja.domain.model.ItemSpec;
 import com.dwurdy.straja.domain.model.Rank;
+import com.dwurdy.straja.domain.model.RestraintStatus;
 import com.dwurdy.straja.domain.model.TransportStatus;
 import com.dwurdy.straja.support.Fakes;
 import com.dwurdy.straja.support.Fakes.*;
@@ -349,6 +351,36 @@ class CustodyServiceTest {
     }
 
     @Test
+    void carrierDeathDetachesTargetAndPreservesItsDownedState() {
+        assertNotNull(custody.startDowned(civilian, guard, "test"));
+        assertTrue(custody.startCarry(guard, civilian));
+
+        custody.recoverAfterDeath(guard);
+
+        var state = ctx.custody().read().states.get(civilian.uuid().toString());
+        assertEquals(PlayerCondition.DOWNED, state.condition);
+        assertEquals(TransportStatus.NONE, state.transport);
+        assertTrue(state.downedDeadlineAt > clock.now);
+        assertNull(civilian.vehicleUuid);
+    }
+
+    @Test
+    void restartDetachesCarryAndRestoresThePausedDownedDeadline() {
+        ctx.policies().downedDurationSeconds = 30;
+        assertNotNull(custody.startDowned(civilian, guard, "test"));
+        clock.advance(1_000);
+        assertTrue(custody.startCarry(guard, civilian));
+
+        custody.recoverOnRestart();
+
+        var state = ctx.custody().read().states.get(civilian.uuid().toString());
+        assertEquals(PlayerCondition.DOWNED, state.condition);
+        assertEquals(TransportStatus.NONE, state.transport);
+        assertTrue(state.downedDeadlineAt > clock.now);
+        assertNull(civilian.vehicleUuid);
+    }
+
+    @Test
     void transportDeadlineDetachesAndResumesDownedClock() {
         ctx.policies().carryTransportDeadlineSeconds = 1;
         custody.startDowned(civilian, guard, "test");
@@ -401,6 +433,40 @@ class CustodyServiceTest {
         assertTrue(state.downedDeadlineAt > clock.now);
         assertTrue(custody.isDowned(civilian));
         assertTrue(audit.tail(20).stream().anyMatch(e -> "resuscitation_interrupt".equals(e.action)));
+    }
+
+    @Test
+    void dimensionChangeInterruptsResuscitationAndRestoresThePausedDownedDeadline() {
+        assertNotNull(custody.startDowned(civilian, guard, "test"));
+        assertTrue(custody.startResuscitation(guard, civilian));
+
+        custody.recoverOnDimensionChange(civilian);
+
+        var state = ctx.custody().read().states.get(civilian.uuid().toString());
+        assertEquals(PlayerCondition.DOWNED, state.condition);
+        assertEquals("", state.resuscitatorId);
+        assertNull(state.resuscitationDeadlineAt);
+        assertTrue(state.downedDeadlineAt > clock.now);
+    }
+
+    @Test
+    void abandonedUnconsciousCustodyRestoresWalkingButKeepsPhysicalRestraint() {
+        ctx.policies().unconsciousCustodyDurationSeconds = 1;
+        hold(boss, CustodyService.ROPE);
+        assertTrue(custody.applyRope(boss, civilian));
+        custody.startDowned(civilian, guard, "test");
+
+        clock.advance(1_000);
+        custody.tick();
+
+        var state = ctx.custody().read().states.get(civilian.uuid().toString());
+        assertEquals(PlayerCondition.CONSCIOUS_RESTRAINED, state.condition);
+        assertEquals(CustodyStatus.HOSTAGE, state.custody);
+        assertEquals(RestraintStatus.ROPE_BOUND, state.restraint);
+        assertNull(state.unconsciousCustodyDeadlineAt);
+        assertTrue(custody.isBound(civilian));
+        assertTrue(custody.actionBlocked(civilian, "interact"),
+                "waking does not permit self-release or restrained actions");
     }
 
     @Test
