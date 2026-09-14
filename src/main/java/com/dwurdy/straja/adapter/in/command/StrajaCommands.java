@@ -208,6 +208,10 @@ public final class StrajaCommands {
         // migration from the legacy KubeJS world (console-usable, op-only)
         root.then(migrateNode());
 
+        // §25 emergency system — usable by the Comisar and op/console; the
+        // use case performs the authority check.
+        root.then(emergencyNode());
+
         // npc admin
         root.then(NpcCommands.build());
 
@@ -445,6 +449,37 @@ public final class StrajaCommands {
         };
         for (String line : lines) ctx.getSource().sendSystemMessage(Component.literal(line));
         return 1;
+    }
+
+    /** §25: Comisar/op console-gated in the service, not by permission level. */
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> emergencyNode() {
+        var node = Commands.literal("emergency");
+        node.then(Commands.literal("alert")
+                .then(Commands.argument("message", StringArgumentType.greedyString())
+                        .executes(c -> adminActor(c, p -> StrajaRuntime.get().emergencyRoleplay()
+                                .alert(p, StringArgumentType.getString(c, "message"))))));
+        node.then(Commands.literal("clear")
+                .executes(c -> adminActor(c, StrajaRuntime.get().emergencyRoleplay()::clearUrgency)));
+        node.then(Commands.literal("start")
+                .executes(c -> adminActor(c, p -> StrajaRuntime.get().emergencyRoleplay()
+                        .start(p, null, null, null)))
+                .then(Commands.argument("multiplier", DoubleArgumentType.doubleArg(1.0))
+                        .executes(c -> adminActor(c, p -> StrajaRuntime.get().emergencyRoleplay()
+                                .start(p, DoubleArgumentType.getDouble(c, "multiplier"), null, null)))
+                        .then(Commands.argument("rounds", IntegerArgumentType.integer(1))
+                                .executes(c -> adminActor(c, p -> StrajaRuntime.get().emergencyRoleplay()
+                                        .start(p, DoubleArgumentType.getDouble(c, "multiplier"),
+                                                IntegerArgumentType.getInteger(c, "rounds"), null)))
+                                .then(Commands.argument("reason", StringArgumentType.greedyString())
+                                        .executes(c -> adminActor(c, p -> StrajaRuntime.get().emergencyRoleplay()
+                                                .start(p, DoubleArgumentType.getDouble(c, "multiplier"),
+                                                        IntegerArgumentType.getInteger(c, "rounds"),
+                                                        StringArgumentType.getString(c, "reason"))))))));
+        node.then(Commands.literal("end")
+                .executes(c -> adminActor(c, StrajaRuntime.get().emergencyRoleplay()::end)));
+        node.then(Commands.literal("status")
+                .executes(c -> adminActor(c, StrajaRuntime.get().emergencyRoleplay()::status)));
+        return node;
     }
 
     private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> cuffsNode() {

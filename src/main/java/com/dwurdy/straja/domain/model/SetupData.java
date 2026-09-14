@@ -23,10 +23,12 @@ public class SetupData {
         return data;
     }
 
+    public static final String HQ = "hq";
+
     public static final String[] LOCATION_KEYS = {
             "reportsLectern", "commissionerMailbox", "commissionerOffice",
             "receptionist", "secretary", "prisonRelease", "infirmary", "trainer",
-            "recruiter"
+            "recruiter", HQ
     };
 
     public static class Checkpoint {

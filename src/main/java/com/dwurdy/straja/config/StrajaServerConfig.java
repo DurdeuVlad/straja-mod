@@ -101,6 +101,11 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.IntValue SECRETARY_RADIUS_BLOCKS;
     public static final ModConfigSpec.BooleanValue CAPTURE_DUTY_FACTION;
     public static final ModConfigSpec.ConfigValue<String> STRAJA_TEAM_NAME;
+    public static final ModConfigSpec.IntValue EMERGENCY_URGENCY_TTL;
+    public static final ModConfigSpec.DoubleValue EMERGENCY_PAY_MULTIPLIER;
+    public static final ModConfigSpec.DoubleValue EMERGENCY_MAX_PAY_MULTIPLIER;
+    public static final ModConfigSpec.IntValue EMERGENCY_PATROL_ROUNDS;
+    public static final ModConfigSpec.IntValue EMERGENCY_MAX_PATROL_ROUNDS;
 
 
     public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> QUIZ_QUESTIONS;
@@ -388,6 +393,27 @@ public final class StrajaServerConfig {
         STRAJA_TEAM_NAME = B.comment(
                         "Scoreboard team applied to on-duty guards.")
                 .define("strajaTeamName", defaults.strajaTeamName);
+        B.pop();
+
+        B.push("emergency");
+        EMERGENCY_URGENCY_TTL = B.comment(
+                        "Minutes an urgency call stays live; members logging in while",
+                        "it is live still receive it (§25).")
+                .defineInRange("urgencyTtlMinutes", defaults.emergencyUrgencyTtlMinutes, 1, 1440);
+        EMERGENCY_PAY_MULTIPLIER = B.comment(
+                        "Default hazard-pay multiplier applied to hourly wages while",
+                        "the emergency mode is active.")
+                .defineInRange("payMultiplier", defaults.emergencyPayMultiplier, 1.0, 100.0);
+        EMERGENCY_MAX_PAY_MULTIPLIER = B.comment(
+                        "Upper clamp for the hazard-pay multiplier a Comisar may set.")
+                .defineInRange("maxPayMultiplier", defaults.emergencyMaxPayMultiplier, 1.0, 100.0);
+        EMERGENCY_PATROL_ROUNDS = B.comment(
+                        "Default full route laps required per patrol shift started",
+                        "while the emergency mode is active.")
+                .defineInRange("patrolRounds", defaults.emergencyPatrolRounds, 1, 100);
+        EMERGENCY_MAX_PATROL_ROUNDS = B.comment(
+                        "Upper clamp for required patrol rounds a Comisar may set.")
+                .defineInRange("maxPatrolRounds", defaults.emergencyMaxPatrolRounds, 1, 100);
         B.pop();
 
         B.push("quiz");
@@ -680,6 +706,11 @@ public final class StrajaServerConfig {
         p.secretaryRadiusBlocks = SECRETARY_RADIUS_BLOCKS.get();
         p.captureDutyFaction = CAPTURE_DUTY_FACTION.get();
         p.strajaTeamName = STRAJA_TEAM_NAME.get();
+        p.emergencyUrgencyTtlMinutes = EMERGENCY_URGENCY_TTL.get();
+        p.emergencyPayMultiplier = EMERGENCY_PAY_MULTIPLIER.get();
+        p.emergencyMaxPayMultiplier = EMERGENCY_MAX_PAY_MULTIPLIER.get();
+        p.emergencyPatrolRounds = EMERGENCY_PATROL_ROUNDS.get();
+        p.emergencyMaxPatrolRounds = EMERGENCY_MAX_PATROL_ROUNDS.get();
         p.quiz = listOrDefault(StrajaPolicies.parseQuiz(QUIZ_QUESTIONS.get()), defaults().quiz);
         p.trainingQuiz = listOrDefault(StrajaPolicies.parseQuiz(TRAINING_QUIZ_QUESTIONS.get()),
                 defaults().trainingQuiz);

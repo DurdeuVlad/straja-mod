@@ -133,6 +133,7 @@ public final class StrajaEvents {
         runtime.missionRoleplay().deliverPendingRewards(gateway);
         runtime.fineRoleplay().recoverOnLogin(gateway);
         runtime.archiveRoleplay().deliverPending(gateway);
+        runtime.emergencyRoleplay().deliverUrgency(gateway);
         runtime.roomRoleplay().assignAutomatically(gateway);
         runtime.roomRoleplay().processWaitlist();
         runtime.audienceRoleplay().deliverOutcome(gateway);

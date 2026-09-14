@@ -33,6 +33,7 @@ public class GuardState {
     public List<String> route = new ArrayList<>();
     public int patrolIndex = 0;
     public int patrolRounds = 0;             // completed patrol rounds this shift (route loops, §8)
+    public int requiredRounds = 0;           // §25: laps required to complete the patrol (0 = unlimited)
     public Long waitingUntil = null;
     public Long deadlineAt = null;
     public Map<String, Integer> missionMinutes = new LinkedHashMap<>();

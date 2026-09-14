@@ -95,6 +95,19 @@ The NPC roles are:
   Comisar administers templates in-game via `/straja mission template`
   (create/set/duplicate/enable/disable); issued missions keep their stamped
   reward, persist the template id, and can mark patrol-substituting work.
+- **Emergency system** (§25) — the Comisar (or op/console/RCON) can raise a
+  TTL-bound **urgency call** (`/straja emergency alert <mesaj>`, default
+  `emergency.urgencyTtlMinutes=60`): every online member — on- or off-duty —
+  hears it once, members logging in while it is live still receive it, and the
+  message points at the `hq` location when configured. `clear` dismisses early;
+  expiry lapses silently. A sustained **emergency mode**
+  (`/straja emergency start [multiplier] [runde] [motiv]`) multiplies every
+  hourly wage accrual by the hazard-pay factor (`emergency.payMultiplier`,
+  clamped by `emergency.maxPayMultiplier`; the salary tell notes the bonus)
+  and turns new patrol shifts into finite runs of `emergency.patrolRounds`
+  full route laps — the shift snapshots its requirement at start, so ending
+  the emergency mid-shift never strands a patrol. `end` restores the base
+  rate; accrued salary is untouched. State persists across restarts.
 - **Jailer** — custody, downed-state and sentence status, officer task
   accept/complete/arrest, and issues the cuffs item when permitted.
 - **Archivist** — folder read/issue, sheet authoring/edit/submit/sign,
@@ -159,6 +172,8 @@ not the target player UX:
 - `/straja archive folder|sheet|edit|recipients|submit|sign|revoke|copy|
   envelope|catalog` — archive
 - `/straja npc list|spawn|assign|set-name|set-skin|remove` — native NPCs
+- `/straja emergency alert|clear|start|end|status` — §25 urgency calls and the
+  sustained emergency mode (Comisar or op/console; `status` is public)
 - `/straja migrate <worldPath>` — import legacy `kubejs_persistent_data.nbt`
   + `playerdata/*.dat` (op-only, idempotent, audit-logged)
 - `/straja backup` — create a bounded SavedData snapshot (op-only)
@@ -187,7 +202,7 @@ on the next server start. Sections include `identity`, `timers`, `mission`,
 `cuffs`, `restraints`, `downed`, `arrestRewards`, `economy`, `salary`,
 `promotion`, `quiz`, `jailer`, `equipment`, `trainer`, `security`, `envelope`, `archive`,
 `rooms`, `fines`, `prison`, `audit`, `complaints`, `ranks`, `reports`,
-`audiences`, `debug`, and `testing`.
+`audiences`, `emergency`, `debug`, and `testing`.
 
 The `ranks` section also controls the §4 display prefix: every authorized
 member (including off-duty) shows `[Rank] Name` in chat and the TAB list,
