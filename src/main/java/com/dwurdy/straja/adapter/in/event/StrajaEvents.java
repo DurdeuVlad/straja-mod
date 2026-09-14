@@ -259,6 +259,13 @@ public final class StrajaEvents {
             if (handled) event.setCanceled(true);
             return;
         }
+        if (!player.isCrouching() && gateway.mainHand().isEmpty()) {
+            boolean handled = runtime.custodyRoleplay().advanceResuscitation(
+                    gateway, targetGateway, 100);
+            if (!handled) handled = runtime.custodyRoleplay().startResuscitation(gateway, targetGateway);
+            if (handled) event.setCanceled(true);
+            return;
+        }
         String held = gateway.mainHand().id();
         if ("straja:order_book".equals(held) || "straja:mission_carnet".equals(held)) {
             if (runtime.missionRoleplay().issueDraft(gateway, targetGateway)) event.setCanceled(true);

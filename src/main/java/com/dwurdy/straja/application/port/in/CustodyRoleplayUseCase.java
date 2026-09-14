@@ -50,6 +50,9 @@ public interface CustodyRoleplayUseCase {
     boolean startCarry(PlayerGateway carrier, PlayerGateway target);
     boolean dropCarry(PlayerGateway carrier, PlayerGateway target, String reason);
 
+    boolean startResuscitation(PlayerGateway rescuer, PlayerGateway target);
+    boolean advanceResuscitation(PlayerGateway rescuer, PlayerGateway target, int progress);
+
     DamageDecision batonStrike(
             PlayerGateway issuer,
             PlayerGateway target,

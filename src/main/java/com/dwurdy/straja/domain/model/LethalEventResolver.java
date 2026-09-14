@@ -95,6 +95,14 @@ public final class LethalEventResolver {
                     "VAMPIRISM_PROVIDER_OWNS_DBNO", true);
         }
 
+        // An active resuscitation is a protected hand-off: ordinary damage
+        // cannot finish the target while a rescuer is actively bringing them
+        // back. Interruption is handled by the application lifecycle flow.
+        if (event.condition() == PlayerCondition.RESUSCITATING) {
+            return new Decision(Outcome.PROTECTED_BY_CUSTODY,
+                    "RESUSCITATION_DAMAGE_PRESERVED", true);
+        }
+
         boolean downedOrResuscitating = event.condition() == PlayerCondition.DOWNED
                 || event.condition() == PlayerCondition.RESUSCITATING;
         if (downedOrResuscitating) {

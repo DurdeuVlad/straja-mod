@@ -337,6 +337,55 @@ class CustodyServiceTest {
     }
 
     @Test
+    void resuscitationPausesDownedTimerAndCompletesOnce() {
+        assertNotNull(custody.startDowned(civilian, guard, "test"));
+        clock.advance(1_000);
+
+        assertTrue(custody.startResuscitation(guard, civilian));
+        var active = ctx.custody().read().states.get(civilian.uuid().toString());
+        assertEquals(PlayerCondition.RESUSCITATING, active.condition);
+        assertEquals(guard.uuid().toString(), active.resuscitatorId);
+        assertNull(active.downedDeadlineAt);
+        assertTrue(active.pausedDownedRemainingMs > 0);
+
+        assertTrue(custody.advanceResuscitation(guard, civilian, 100));
+        var recovered = ctx.custody().read().states.get(civilian.uuid().toString());
+        assertEquals(PlayerCondition.ALIVE, recovered.condition);
+        assertEquals("", recovered.resuscitatorId);
+        assertFalse(custody.isDowned(civilian));
+        assertEquals(10, civilian.health);
+
+        assertFalse(custody.advanceResuscitation(guard, civilian, 100),
+                "a completed resuscitation cannot be applied twice");
+    }
+
+    @Test
+    void resuscitationInterruptsWhenRescuerMovesAndResumesDownedTimer() {
+        assertNotNull(custody.startDowned(civilian, guard, "test"));
+        assertTrue(custody.startResuscitation(guard, civilian));
+        guard.teleport("minecraft:overworld", 20, 64, 20);
+
+        custody.tick();
+
+        var state = ctx.custody().read().states.get(civilian.uuid().toString());
+        assertEquals(PlayerCondition.DOWNED, state.condition);
+        assertEquals("", state.resuscitatorId);
+        assertTrue(state.downedDeadlineAt > clock.now);
+        assertTrue(custody.isDowned(civilian));
+        assertTrue(audit.tail(20).stream().anyMatch(e -> "resuscitation_interrupt".equals(e.action)));
+    }
+
+    @Test
+    void carriedDownedPlayerCannotStartResuscitation() {
+        assertNotNull(custody.startDowned(civilian, guard, "test"));
+        assertTrue(custody.startCarry(guard, civilian));
+
+        assertFalse(custody.startResuscitation(guard, civilian));
+        assertEquals(PlayerCondition.DOWNED,
+                ctx.custody().read().states.get(civilian.uuid().toString()).condition);
+    }
+
+    @Test
     void lethalResolverStartsDownedOnlyForTheStrajaOwner() {
         var decision = custody.resolveLethalEvent(civilian, guard,
                 DamageCategory.ORDINARY, false, false, false);
