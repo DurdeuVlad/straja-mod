@@ -228,15 +228,38 @@ public final class StrajaEvents {
                 toolClickHandledAt.put(player.getUUID(), player.level().getGameTime());
                 String targetUuid = event.getTarget().getStringUUID();
                 if (heldTool == AdminToolSurface.Tool.NPC_WAND) {
-                    NpcRoles.sendToolMenu(player,
-                            runtime.adminTools().npcWandMenu(gateway, targetUuid));
+                    NpcRoles.sendToolMenu(player, runtime.adminTools().npcWandMenu(
+                            gateway, targetUuid,
+                            !(event.getTarget() instanceof net.minecraft.server.level.ServerPlayer),
+                            event.getTarget() instanceof StrajaNpcEntity));
                 } else {
                     runtime.adminTools().cloneCapture(gateway, targetUuid);
                 }
             }
             return;
         }
-        if (!(event.getTarget() instanceof net.minecraft.server.level.ServerPlayer target)) return;
+        // A registry-bound NPC routes its role surface here regardless of
+        // entity type — bound foreign NPCs (e.g. pre-existing CustomNPCs)
+        // never run StrajaNpcEntity.mobInteract. Consuming the packet makes
+        // the Straja role own the click: the host entity's own interaction
+        // is suppressed. Unregistered targets fall through untouched, so a
+        // foreign NPC keeps its native dialog and an unregistered
+        // StrajaNpcEntity still reaches mobInteract.
+        if (!(event.getTarget() instanceof net.minecraft.server.level.ServerPlayer target)) {
+            var registration = runtime.npcRegistry().registration(event.getTarget().getStringUUID());
+            if (registration != null && registration.role() != null
+                    && NpcRoles.isKnown(registration.role())
+                    && event.getLevel() instanceof net.minecraft.server.level.ServerLevel level) {
+                event.setCanceled(true);
+                if (event.getHand() == net.minecraft.world.InteractionHand.MAIN_HAND) {
+                    // Same trailing-packet guard as the tool claim: a held
+                    // patrol wand must not see this click as an air gesture.
+                    toolClickHandledAt.put(player.getUUID(), player.level().getGameTime());
+                    NpcRoles.interact(registration.role(), player, level);
+                }
+            }
+            return;
+        }
         var targetGateway = new MinecraftPlayerGateway(target.getServer(), target.getUUID());
         String held = gateway.mainHand().id();
         if ("straja:order_book".equals(held) || "straja:mission_carnet".equals(held)) {
@@ -496,17 +519,40 @@ public final class StrajaEvents {
         }
     }
 
+    /**
+     * On-duty guards must not damage the jailer when
+     * {@code jailerGuardImmunity} is on. Native Straja NPCs enforce that in
+     * {@code jailerMayTakeDamage}; a registry-bound foreign NPC never runs
+     * those overrides, so the same rule is applied here. Non-jailer bound
+     * NPCs keep the host mod's damage rules untouched.
+     */
+    @SubscribeEvent
+    public void onBoundNpcIncomingDamage(
+            net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent event) {
+        StrajaRuntime runtime = StrajaRuntime.get();
+        if (runtime == null || event.getEntity().level().isClientSide()
+                || event.getEntity() instanceof StrajaNpcEntity) return;
+        var registration = runtime.npcRegistry().registration(event.getEntity().getStringUUID());
+        if (registration == null || !"jailer".equals(registration.role())) return;
+        if (!(event.getSource().getEntity() instanceof net.minecraft.server.level.ServerPlayer attacker)) return;
+        var gateway = new MinecraftPlayerGateway(attacker.getServer(), attacker.getUUID());
+        if (!runtime.policies().jailerDamageAllowed(
+                runtime.playerQueries().isOnDutyGuard(gateway))) {
+            event.setCanceled(true);
+        }
+    }
+
     /** Hurting or killing the jailer NPC spawns a JAILER_ASSAULT arrest mission. */
     @SubscribeEvent
     public void onNpcDamage(net.neoforged.neoforge.event.entity.living.LivingDamageEvent.Post event) {
         StrajaRuntime runtime = StrajaRuntime.get();
         if (runtime == null || event.getEntity().level().isClientSide()
-                || !(event.getEntity() instanceof StrajaNpcEntity npc)
-                || !"jailer".equals(npc.getRoleId())) return;
+                || !"jailer".equals(npcRoleOf(runtime, event.getEntity()))) return;
         if (!(event.getSource().getEntity() instanceof net.minecraft.server.level.ServerPlayer attacker)) return;
         var gateway = new MinecraftPlayerGateway(attacker.getServer(), attacker.getUUID());
-        String outcome = npc.getHealth() <= 0.5f ? "KILLED" : "WOUNDED";
-        runtime.fineRoleplay().createJailerAssaultMission(gateway, npc.getStringUUID(), outcome);
+        String outcome = event.getEntity().getHealth() <= 0.5f ? "KILLED" : "WOUNDED";
+        runtime.fineRoleplay().createJailerAssaultMission(gateway,
+                event.getEntity().getStringUUID(), outcome);
     }
 
     /**
@@ -524,8 +570,9 @@ public final class StrajaEvents {
         }
         if (!(event.getSource().getEntity() instanceof net.minecraft.server.level.ServerPlayer attacker)) return;
         var gateway = new MinecraftPlayerGateway(attacker.getServer(), attacker.getUUID());
-        if (event.getEntity() instanceof StrajaNpcEntity npc && "jailer".equals(npc.getRoleId())) {
-            runtime.fineRoleplay().createJailerAssaultMission(gateway, npc.getStringUUID(), "KILLED");
+        if ("jailer".equals(npcRoleOf(runtime, event.getEntity()))) {
+            runtime.fineRoleplay().createJailerAssaultMission(gateway,
+                    event.getEntity().getStringUUID(), "KILLED");
             return;
         }
         if (event.getEntity() instanceof net.minecraft.server.level.ServerPlayer victim) {
@@ -543,5 +590,19 @@ public final class StrajaEvents {
         if (runtime.custodyRoleplay().actionBlocked(gateway, "item_use")) {
             event.setCanceled(true);
         }
+    }
+
+    /**
+     * The registry is the source of truth for an entity's Straja role —
+     * bound foreign NPCs exist only as records. An unregistered
+     * {@link StrajaNpcEntity} falls back to its persisted entity field.
+     */
+    private static String npcRoleOf(StrajaRuntime runtime, net.minecraft.world.entity.Entity entity) {
+        var registration = runtime.npcRegistry().registration(entity.getStringUUID());
+        if (registration != null && registration.role() != null
+                && !registration.role().isEmpty()) {
+            return registration.role();
+        }
+        return entity instanceof StrajaNpcEntity npc ? npc.getRoleId() : null;
     }
 }

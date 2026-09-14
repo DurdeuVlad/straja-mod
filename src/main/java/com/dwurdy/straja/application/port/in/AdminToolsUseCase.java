@@ -35,8 +35,16 @@ public interface AdminToolsUseCase {
 
     // ---------------------------------------------------------------- AT-002 NPC Wand
 
-    /** Click on an entity: the wand menu for a registered Straja NPC, null + tell otherwise. */
-    Menu npcWandMenu(PlayerGateway player, String entityUuid);
+    /**
+     * Click on an entity: the wand menu. For a registered NPC this is the
+     * role/name/skin/remove menu (appearance options only when the target is
+     * a native {@code StrajaNpcEntity} — a bound foreign entity keeps its own
+     * look). For an unregistered <b>bindable</b> entity (any non-player) the
+     * menu is the role list that binds a record in place, no spawn. A player
+     * target is refused: players are never NPC-bound.
+     */
+    Menu npcWandMenu(PlayerGateway player, String entityUuid,
+                     boolean bindable, boolean strajaNative);
 
     void npcAssign(PlayerGateway player, String entityUuid, String role);
 

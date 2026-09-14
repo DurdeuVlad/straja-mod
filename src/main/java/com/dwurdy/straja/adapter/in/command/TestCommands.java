@@ -1190,8 +1190,19 @@ final class TestCommands {
                 .then(Commands.argument("id", StringArgumentType.word())
                         .then(Commands.argument("entity", StringArgumentType.word())
                                 .executes(ctx -> run(ctx, runtime -> {
+                                    String entityArg = StringArgumentType.getString(ctx, "entity");
+                                    net.minecraft.world.entity.Entity target = null;
+                                    try {
+                                        var uuid = java.util.UUID.fromString(entityArg);
+                                        for (var lvl : ctx.getSource().getServer().getAllLevels()) {
+                                            target = lvl.getEntity(uuid);
+                                            if (target != null) break;
+                                        }
+                                    } catch (IllegalArgumentException ignored) {}
                                     var menu = runtime.adminTools().npcWandMenu(player(ctx, runtime),
-                                            StringArgumentType.getString(ctx, "entity"));
+                                            entityArg,
+                                            !(target instanceof net.minecraft.server.level.ServerPlayer),
+                                            target instanceof com.dwurdy.straja.adapter.in.npc.StrajaNpcEntity);
                                     if (menu == null) { send(ctx, "wand menu refused"); return; }
                                     send(ctx, menu.title());
                                     for (var a : menu.actions()) send(ctx, "  " + a.label() + " -> " + a.actionId());

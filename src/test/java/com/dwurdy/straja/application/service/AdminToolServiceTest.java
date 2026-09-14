@@ -63,7 +63,7 @@ class AdminToolServiceTest {
     void wrongHolderIsRefusedEverywhereWithATell() {
         registerNpc("secretary");
         tools.giveToolKit(civil);
-        assertNull(tools.npcWandMenu(civil, npcUuid));
+        assertNull(tools.npcWandMenu(civil, npcUuid, true, true));
         tools.npcAssign(civil, npcUuid, "jailer");
         tools.npcRename(civil, npcUuid, "x");
         tools.npcSetSkin(civil, npcUuid, "x");
@@ -135,11 +135,12 @@ class AdminToolServiceTest {
 
     @Test
     void wandMenuOnlyForRegisteredNpcs() {
-        assertNull(tools.npcWandMenu(comisar, npcUuid));
+        // A player target is never bindable — keeps the plain refusal.
+        assertNull(tools.npcWandMenu(comisar, npcUuid, false, false));
         assertTrue(comisar.told("NPC Straja înregistrat"));
 
         registerNpc("secretary");
-        var menu = tools.npcWandMenu(comisar, npcUuid);
+        var menu = tools.npcWandMenu(comisar, npcUuid, true, true);
         assertNotNull(menu);
         var ids = menu.actions().stream().map(AdminToolsUseCase.MenuAction::actionId).toList();
         for (String role : NpcAdminService.ROLE_ORDER) {
@@ -182,10 +183,90 @@ class AdminToolServiceTest {
 
     @Test
     void wandMutationsRefuseUnregisteredEntities() {
-        tools.npcAssign(comisar, npcUuid, "jailer");
+        // Assign is the bind path — it creates the record for a valid role.
+        // Appearance ops still refuse, and an unknown role binds nothing.
+        tools.npcAssign(comisar, npcUuid, "bogus");
+        assertTrue(comisar.told("Rol necunoscut"));
         tools.npcRename(comisar, npcUuid, "x");
         tools.npcSetSkin(comisar, npcUuid, "x");
         assertTrue(comisar.told("nu mai este înregistrat"));
+        assertTrue(ctx.npcs().read().npcs.isEmpty());
+    }
+
+    // ---------------------------------------------------------------- BIND foreign NPCs
+
+    @Test
+    void wandBindMenuOnUnregisteredEntityOffersRoles() {
+        var menu = tools.npcWandMenu(comisar, npcUuid, true, false);
+        assertNotNull(menu, "an unregistered bindable entity gets the bind menu");
+        assertTrue(menu.title().contains("Atașează un rol")
+                || menu.title().contains("atașează un rol"));
+        var ids = menu.actions().stream().map(AdminToolsUseCase.MenuAction::actionId).toList();
+        assertEquals(NpcAdminService.ROLE_ORDER.size(), ids.size(),
+                "bind menu is the role list only — no rename/skin/remove");
+        for (String role : NpcAdminService.ROLE_ORDER) {
+            assertTrue(ids.contains("tool-npc-assign:" + npcUuid + "-" + role));
+        }
+    }
+
+    @Test
+    void wandAssignBindsAnUnregisteredEntityInPlace() {
+        tools.npcAssign(comisar, npcUuid, "armorer");
+        var record = ctx.npcs().read().npcs.get(npcUuid);
+        assertNotNull(record, "assign on an unregistered entity creates the record");
+        assertEquals("armorer", record.role);
+        assertEquals("", record.displayName, "bind never touches appearance fields");
+        assertEquals("", record.skin);
+        assertTrue(comisar.told("are acum rolul armorer"));
+    }
+
+    @Test
+    void wandMenuHidesAppearanceOptionsForBoundForeignNpcs() {
+        registerNpc("secretary");
+        var foreign = tools.npcWandMenu(comisar, npcUuid, true, false);
+        var ids = foreign.actions().stream().map(AdminToolsUseCase.MenuAction::actionId).toList();
+        assertFalse(ids.contains("tool-npc-rename:" + npcUuid),
+                "rename is dead on a foreign entity");
+        assertFalse(ids.contains("tool-npc-skin:" + npcUuid));
+        assertTrue(ids.contains("tool-npc-remove:" + npcUuid));
+        assertTrue(ids.contains("tool-npc-record:" + npcUuid));
+        var detach = foreign.actions().stream()
+                .filter(a -> a.actionId().equals("tool-npc-remove:" + npcUuid)).findFirst().orElseThrow();
+        assertEquals("Detașează rolul", detach.label(),
+                "foreign removal detaches the record instead of deleting the entity");
+    }
+
+    @Test
+    void detachDropsOnlyTheRegistryRecord() {
+        tools.npcAssign(comisar, npcUuid, "armorer");
+        assertTrue(ctx.npcs().read().npcs.containsKey(npcUuid));
+
+        tools.npcRemove(comisar, npcUuid);
+        assertFalse(ctx.npcs().read().npcs.containsKey(npcUuid),
+                "detach removes the record; the entity itself is never touched");
+        assertFalse(tools.npcStillRegistered(npcUuid));
+    }
+
+    @Test
+    void clonerAppliesCapturedRoleToAForeignEntity() {
+        registerNpc("secretary");
+        tools.cloneCapture(comisar, npcUuid);
+        assertNotNull(state(comisar).cloneTemplate);
+
+        String foreign = UUID.randomUUID().toString();
+        tools.cloneCapture(comisar, foreign);
+        var record = ctx.npcs().read().npcs.get(foreign);
+        assertNotNull(record, "cloner apply-mode binds the unregistered entity");
+        assertEquals("secretary", record.role);
+        assertEquals("", record.displayName, "apply-mode never writes appearance fields");
+        assertEquals("", record.skin);
+        assertTrue(comisar.told("aspectul rămâne neschimbat"));
+    }
+
+    @Test
+    void clonerWithoutTemplateStillRefusesUnregisteredTargets() {
+        tools.cloneCapture(comisar, npcUuid);
+        assertTrue(comisar.told("capturează doar un NPC Straja înregistrat"));
         assertTrue(ctx.npcs().read().npcs.isEmpty());
     }
 
@@ -427,7 +508,7 @@ class AdminToolServiceTest {
         assertFalse(tools.isToolHolder(null));
         assertDoesNotThrow(() -> {
             tools.giveToolKit(null);
-            tools.npcWandMenu(null, npcUuid);
+            tools.npcWandMenu(null, npcUuid, true, true);
             tools.patrolClick(null, "minecraft:overworld", 1, 2, 3);
             tools.patrolFinish(null);
             tools.surveyMenu(null, "minecraft:overworld", 1, 2, 3);
