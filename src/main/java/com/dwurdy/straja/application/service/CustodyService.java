@@ -11,7 +11,9 @@ import com.dwurdy.straja.domain.model.CustodyStore;
 import com.dwurdy.straja.domain.model.CustodyStatus;
 import com.dwurdy.straja.domain.model.CustodyTransition;
 import com.dwurdy.straja.domain.model.CustodyTransitionEngine;
+import com.dwurdy.straja.domain.model.DamageCategory;
 import com.dwurdy.straja.domain.model.ItemSpec;
+import com.dwurdy.straja.domain.model.LethalEventResolver;
 import com.dwurdy.straja.domain.model.Rank;
 import com.dwurdy.straja.domain.model.PlayerCondition;
 import com.dwurdy.straja.domain.model.RecoveryEvent;
@@ -1384,6 +1386,67 @@ public class CustodyService implements CustodyRoleplayUseCase {
     /** Maximum baton damage so the hit never kills on its own. */
     public double capBatonDamage(double health, double absorption) {
         return Math.max(0, health + absorption - 1);
+    }
+
+    /**
+     * Resolves one potentially lethal event and starts Straja downed only when
+     * Straja is the selected owner. Provider flags are supplied by optional
+     * compatibility adapters; false is the safe absence case.
+     */
+    @Override
+    public LethalEventResolver.Decision resolveLethalEvent(
+            PlayerGateway target,
+            PlayerGateway source,
+            DamageCategory category,
+            boolean explicitHardKill,
+            boolean vampireEligible,
+            boolean vampireDbnoActive) {
+        if (target == null) {
+            return LethalEventResolver.resolve(null, ctx.policies());
+        }
+        var store = store();
+        String targetKey = key(target);
+        CustodyState state = store.states.get(targetKey);
+        if (state == null) {
+            state = newCanonicalState(target);
+            if (store.downed.containsKey(targetKey)) {
+                state.condition = PlayerCondition.DOWNED;
+            }
+            var cuffed = store.cuffed.containsKey(targetKey);
+            var bound = store.bound.containsKey(targetKey);
+            if (cuffed) {
+                state.custody = CustodyStatus.ARRESTED;
+                state.restraint = RestraintStatus.CUFFED;
+            } else if (bound) {
+                state.custody = CustodyStatus.HOSTAGE;
+                state.restraint = RestraintStatus.ROPE_BOUND;
+            }
+        }
+        var context = new LethalEventResolver.Context(
+                state.condition, state.custody, state.restraint, category,
+                explicitHardKill, vampireEligible, vampireDbnoActive);
+        var decision = LethalEventResolver.resolve(context, ctx.policies());
+        if (decision.outcome() != LethalEventResolver.Outcome.STRAJA_DOWNED) {
+            audit.record("lethal_resolve",
+                    source == null ? "system" : source.name(),
+                    source == null ? "" : uuidOf(source),
+                    target.name(), uuidOf(target), decision.outcome().name(),
+                    "code=" + decision.code());
+            return decision;
+        }
+        var record = startDowned(target, source, "lethal_damage");
+        if (record == null) {
+            decision = new LethalEventResolver.Decision(
+                    LethalEventResolver.Outcome.VANILLA_DEATH,
+                    "STRAJA_DOWNED_TRANSITION_FAILED",
+                    false);
+        }
+        audit.record("lethal_resolve",
+                source == null ? "system" : source.name(),
+                source == null ? "" : uuidOf(source),
+                target.name(), uuidOf(target), decision.outcome().name(),
+                "code=" + decision.code());
+        return decision;
     }
 
     // ------------------------------------------------------------ action locks

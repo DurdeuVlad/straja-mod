@@ -7,6 +7,8 @@ import com.dwurdy.straja.domain.model.CustodyStore;
 import com.dwurdy.straja.domain.model.CustodyState;
 import com.dwurdy.straja.domain.model.CustodyTransition;
 import com.dwurdy.straja.domain.model.CustodyTransitionEngine;
+import com.dwurdy.straja.domain.model.DamageCategory;
+import com.dwurdy.straja.domain.model.LethalEventResolver;
 import com.dwurdy.straja.domain.model.PlayerCondition;
 import com.dwurdy.straja.domain.model.ItemSpec;
 import com.dwurdy.straja.domain.model.Rank;
@@ -276,6 +278,31 @@ class CustodyServiceTest {
     }
 
     // ------------------------------------------------------------ baton / downed
+
+    @Test
+    void lethalResolverStartsDownedOnlyForTheStrajaOwner() {
+        var decision = custody.resolveLethalEvent(civilian, guard,
+                DamageCategory.ORDINARY, false, false, false);
+
+        assertEquals(LethalEventResolver.Outcome.STRAJA_DOWNED, decision.outcome());
+        assertTrue(decision.cancelVanillaDeath());
+        assertTrue(custody.isDowned(civilian));
+        assertTrue(audit.tail(20).stream().anyMatch(e -> "lethal_resolve".equals(e.action)
+                && "STRAJA_DOWNED".equals(e.result)
+                && e.details.contains("STRAJA_OWNS_DOWNED_TRANSITION")));
+    }
+
+    @Test
+    void lethalResolverLeavesSecondWeaponHitTerminalAndUnrestrained() {
+        custody.startDowned(civilian, guard, "test");
+
+        var decision = custody.resolveLethalEvent(civilian, guard,
+                DamageCategory.SECOND_WEAPON_HIT, false, false, false);
+
+        assertEquals(LethalEventResolver.Outcome.STRAJA_DEATH, decision.outcome());
+        assertTrue(!decision.cancelVanillaDeath());
+        assertTrue(custody.isDowned(civilian), "the death event owns cleanup after it fires");
+    }
 
     @Test
     void batonNonLethalPassesThroughCapped() {
