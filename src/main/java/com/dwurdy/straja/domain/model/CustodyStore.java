@@ -12,6 +12,13 @@ import java.util.Map;
  */
 public class CustodyStore {
     public int nextRequestId = 1;
+    /**
+     * Canonical DC-001 state, keyed by the stable player identity.  The maps
+     * below are retained as compatibility projections for the already-shipped
+     * RP-007 implementation and migration reader; new downed/custody flows
+     * must use this aggregate state plus CustodyTransitionEngine.
+     */
+    public Map<String, CustodyState> states = new LinkedHashMap<>();
     public Map<String, CuffRequest> cuffRequests = new LinkedHashMap<>();
     public Map<String, CuffRecord> cuffed = new LinkedHashMap<>();
     public Map<String, BoundRecord> bound = new LinkedHashMap<>();

@@ -1,0 +1,379 @@
+package com.dwurdy.straja.domain.model;
+
+/**
+ * Server-independent custody state machine.  It owns only domain invariants;
+ * adapters remain responsible for capability checks, inventory, entities,
+ * effects, messaging, and persistence.
+ */
+public final class CustodyTransitionEngine {
+    private CustodyTransitionEngine() {}
+
+    public static CustodyTransitionResult apply(CustodyState state,
+                                                 CustodyTransition transition,
+                                                 StrajaPolicies policies) {
+        if (state == null || transition == null || policies == null) {
+            return CustodyTransitionResult.rejected("INVALID_INPUT");
+        }
+        if (transition.id().isEmpty()) {
+            return CustodyTransitionResult.rejected("TRANSITION_ID_REQUIRED");
+        }
+        if (transition.action() == null || transition.at() < 0) {
+            return CustodyTransitionResult.rejected("INVALID_TRANSITION");
+        }
+        if (!state.wellFormed()) {
+            return CustodyTransitionResult.rejected("MALFORMED_STATE");
+        }
+        if (transition.id().equals(state.transitionId)) {
+            return CustodyTransitionResult.replay();
+        }
+
+        CustodyTransitionResult result = switch (transition.action()) {
+            case ENTER_DOWNED -> enterDowned(state, transition, policies);
+            case START_RESUSCITATION -> startResuscitation(state, transition, policies);
+            case ADVANCE_RESUSCITATION -> advanceResuscitation(state, transition, policies);
+            case APPLY_ROPE -> applyRestraint(state, transition, policies, RestraintStatus.ROPE_BOUND,
+                    CustodyStatus.HOSTAGE, "CRIMINAL_ROPE_DISABLED");
+            case APPLY_CUFFS -> applyRestraint(state, transition, policies, RestraintStatus.CUFFED,
+                    CustodyStatus.ARRESTED, "POLICE_CUFFS_DISABLED");
+            case START_CARRY -> startCarry(state, transition, policies);
+            case STOP_CARRY -> stopCarry(state, transition);
+            case APPLY_BLINDFOLD -> applyBlindfold(state, transition, policies);
+            case REMOVE_BLINDFOLD -> removeBlindfold(state, transition, policies);
+            case WAKE -> wake(state, transition, policies);
+            case RESOLVE_UNCONSCIOUS_DEADLINE -> resolveUnconsciousDeadline(state, transition);
+            case DELIVER_TO_JAIL -> deliverToJail(state, transition, policies);
+            case REVIVE_IN_JAIL -> reviveInJail(state, transition, policies);
+            case RELEASE_RESTRAINT -> releaseRestraint(state, transition);
+            case RELEASE_CUSTODY -> releaseCustody(state, transition, policies);
+            case DIE -> die(state, transition, policies);
+        };
+        if (!result.ok()) return result;
+
+        state.transitionId = transition.id();
+        state.enteredAt = transition.at();
+        state.provider = transition.provider();
+        if (!transition.source().isEmpty()) state.source = transition.source();
+        return CustodyTransitionResult.applied();
+    }
+
+    private static CustodyTransitionResult enterDowned(CustodyState state,
+                                                         CustodyTransition transition,
+                                                         StrajaPolicies policies) {
+        if (state.condition != PlayerCondition.ALIVE
+                || state.custody != CustodyStatus.FREE
+                || state.restraint != RestraintStatus.NONE
+                || state.transport != TransportStatus.NONE) {
+            return reject("DOWNED_REQUIRES_FREE_ALIVE");
+        }
+        state.condition = PlayerCondition.DOWNED;
+        state.downedDeadlineAt = deadline(transition.at(), policies.downedDurationSeconds);
+        state.resuscitationDeadlineAt = null;
+        state.resuscitationProgress = 0;
+        return CustodyTransitionResult.applied();
+    }
+
+    private static CustodyTransitionResult startResuscitation(CustodyState state,
+                                                                CustodyTransition transition,
+                                                                StrajaPolicies policies) {
+        if (state.condition != PlayerCondition.DOWNED
+                || state.custody != CustodyStatus.FREE
+                || state.restraint != RestraintStatus.NONE) {
+            return reject("RESUSCITATION_REQUIRES_DOWNED_FREE");
+        }
+        if (expired(state.downedDeadlineAt, transition.at())) {
+            return reject("DOWNED_DEADLINE_EXPIRED");
+        }
+        state.condition = PlayerCondition.RESUSCITATING;
+        state.resuscitationDeadlineAt = deadline(transition.at(), policies.resuscitationTimeoutSeconds);
+        state.resuscitationProgress = 0;
+        return CustodyTransitionResult.applied();
+    }
+
+    private static CustodyTransitionResult advanceResuscitation(CustodyState state,
+                                                                  CustodyTransition transition,
+                                                                  StrajaPolicies policies) {
+        if (state.condition != PlayerCondition.RESUSCITATING) {
+            return reject("RESUSCITATION_NOT_ACTIVE");
+        }
+        if (expired(state.resuscitationDeadlineAt, transition.at())) {
+            return reject("RESUSCITATION_DEADLINE_EXPIRED");
+        }
+        if (transition.progress() < state.resuscitationProgress || transition.progress() > 100) {
+            return reject("RESUSCITATION_PROGRESS_INVALID");
+        }
+        state.resuscitationProgress = transition.progress();
+        int required = Math.max(1, Math.min(100, policies.resuscitationProgressPercent));
+        if (state.resuscitationProgress >= required) {
+            state.condition = PlayerCondition.ALIVE;
+            state.downedDeadlineAt = null;
+            state.resuscitationDeadlineAt = null;
+            state.resuscitationProgress = 0;
+        }
+        return CustodyTransitionResult.applied();
+    }
+
+    private static CustodyTransitionResult applyRestraint(CustodyState state,
+                                                            CustodyTransition transition,
+                                                            StrajaPolicies policies,
+                                                            RestraintStatus restraint,
+                                                            CustodyStatus custody,
+                                                            String disabledCode) {
+        boolean enabled = restraint == RestraintStatus.ROPE_BOUND
+                ? policies.criminalRopeEnabled : policies.policeCuffsEnabled;
+        if (!enabled) return reject(disabledCode);
+        if (blank(transition.actorId()) || samePlayer(state, transition.actorId())) {
+            return reject("RESTRAINT_ACTOR_INVALID");
+        }
+        if ((state.condition != PlayerCondition.ALIVE && state.condition != PlayerCondition.DOWNED)
+                || state.custody != CustodyStatus.FREE
+                || state.restraint != RestraintStatus.NONE) {
+            return reject("RESTRAINT_REQUIRES_FREE_TARGET");
+        }
+        state.restraint = restraint;
+        state.custody = custody;
+        state.restraintActorId = transition.actorId();
+        state.custodyActorId = transition.actorId();
+        state.vision = VisionStatus.NORMAL;
+        state.resuscitationDeadlineAt = null;
+        state.resuscitationProgress = 0;
+        if (state.condition == PlayerCondition.DOWNED) {
+            state.condition = PlayerCondition.UNCONSCIOUS_CUSTODY;
+            state.downedDeadlineAt = null;
+            state.unconsciousCustodyDeadlineAt = deadline(
+                    transition.at(), policies.unconsciousCustodyDurationSeconds);
+        } else {
+            state.condition = PlayerCondition.CONSCIOUS_RESTRAINED;
+            state.unconsciousCustodyDeadlineAt = null;
+        }
+        if (custody == CustodyStatus.ARRESTED) {
+            state.jailDeliveryDeadlineAt = deadline(transition.at(), policies.jailDeliveryDeadlineSeconds);
+        }
+        return CustodyTransitionResult.applied();
+    }
+
+    private static CustodyTransitionResult startCarry(CustodyState state,
+                                                        CustodyTransition transition,
+                                                        StrajaPolicies policies) {
+        String carrier = transition.carrierId().isEmpty() ? transition.actorId() : transition.carrierId();
+        if (blank(carrier) || samePlayer(state, carrier)) return reject("CARRIER_INVALID");
+        if (state.condition == PlayerCondition.DEAD || state.transport != TransportStatus.NONE) {
+            return reject("CARRY_NOT_AVAILABLE");
+        }
+        state.transport = TransportStatus.CARRIED;
+        state.carrierId = carrier;
+        state.transportDeadlineAt = deadline(transition.at(), policies.carryTransportDeadlineSeconds);
+        return CustodyTransitionResult.applied();
+    }
+
+    private static CustodyTransitionResult stopCarry(CustodyState state,
+                                                       CustodyTransition transition) {
+        if (state.transport != TransportStatus.CARRIED) return reject("NOT_CARRIED");
+        state.transport = TransportStatus.NONE;
+        state.carrierId = "";
+        state.transportDeadlineAt = null;
+        return CustodyTransitionResult.applied();
+    }
+
+    private static CustodyTransitionResult applyBlindfold(CustodyState state,
+                                                           CustodyTransition transition,
+                                                           StrajaPolicies policies) {
+        if (!policies.blackSackApplicationEnabled) return reject("BLACK_SACK_APPLICATION_DISABLED");
+        if (blank(transition.actorId()) || samePlayer(state, transition.actorId())) {
+            return reject("BLINDFOLD_ACTOR_INVALID");
+        }
+        if (state.restraint == RestraintStatus.NONE || state.vision == VisionStatus.BLINDFOLDED) {
+            return reject("BLINDFOLD_REQUIRES_UNBLINDFOLDED_RESTRAINT");
+        }
+        state.vision = VisionStatus.BLINDFOLDED;
+        return CustodyTransitionResult.applied();
+    }
+
+    private static CustodyTransitionResult removeBlindfold(CustodyState state,
+                                                             CustodyTransition transition,
+                                                             StrajaPolicies policies) {
+        if (!policies.blackSackRemovalEnabled) return reject("BLACK_SACK_REMOVAL_DISABLED");
+        if (state.vision != VisionStatus.BLINDFOLDED) return reject("NOT_BLINDFOLDED");
+        if (blank(transition.actorId())) return reject("BLINDFOLD_ACTOR_REQUIRED");
+        if (samePlayer(state, transition.actorId()) && !policies.blackSackSelfRemoval) {
+            return reject("SELF_BLINDFOLD_REMOVAL_FORBIDDEN");
+        }
+        state.vision = VisionStatus.NORMAL;
+        return CustodyTransitionResult.applied();
+    }
+
+    private static CustodyTransitionResult wake(CustodyState state,
+                                                 CustodyTransition transition,
+                                                 StrajaPolicies policies) {
+        if (state.condition == PlayerCondition.DOWNED) {
+            if (!expired(state.downedDeadlineAt, transition.at())) return reject("DOWNED_DEADLINE_ACTIVE");
+            state.condition = PlayerCondition.ALIVE;
+            state.custody = CustodyStatus.FREE;
+            state.downedDeadlineAt = null;
+            return CustodyTransitionResult.applied();
+        }
+        if (state.condition == PlayerCondition.UNCONSCIOUS_CUSTODY) {
+            if (!expired(state.unconsciousCustodyDeadlineAt, transition.at())) {
+                return reject("UNCONSCIOUS_CUSTODY_DEADLINE_ACTIVE");
+            }
+            state.condition = state.restraint == RestraintStatus.NONE
+                    ? PlayerCondition.ALIVE : PlayerCondition.CONSCIOUS_RESTRAINED;
+            state.unconsciousCustodyDeadlineAt = null;
+            return CustodyTransitionResult.applied();
+        }
+        return reject("WAKE_REQUIRES_CONTROL_LOSS");
+    }
+
+    private static CustodyTransitionResult resolveUnconsciousDeadline(CustodyState state,
+                                                                        CustodyTransition transition) {
+        if (state.condition != PlayerCondition.UNCONSCIOUS_CUSTODY
+                || !expired(state.unconsciousCustodyDeadlineAt, transition.at())) {
+            return reject("UNCONSCIOUS_CUSTODY_DEADLINE_ACTIVE");
+        }
+        state.condition = state.restraint == RestraintStatus.NONE
+                ? PlayerCondition.ALIVE : PlayerCondition.CONSCIOUS_RESTRAINED;
+        state.unconsciousCustodyDeadlineAt = null;
+        return CustodyTransitionResult.applied();
+    }
+
+    private static CustodyTransitionResult deliverToJail(CustodyState state,
+                                                          CustodyTransition transition,
+                                                          StrajaPolicies policies) {
+        if (state.custody != CustodyStatus.ARRESTED || blank(transition.destination())) {
+            return reject("JAIL_DELIVERY_REQUIRES_ARREST_AND_DESTINATION");
+        }
+        state.custody = CustodyStatus.JAILED;
+        state.destination = transition.destination();
+        state.transport = TransportStatus.NONE;
+        state.carrierId = "";
+        state.transportDeadlineAt = null;
+        state.jailDeliveryDeadlineAt = null;
+        if (state.condition == PlayerCondition.UNCONSCIOUS_CUSTODY) {
+            state.unconsciousCustodyDeadlineAt = null;
+            state.jailRevivalAt = policies.jailAutomaticRevivalEnabled
+                    ? deadline(transition.at(), policies.jailAutomaticRevivalDelaySeconds) : null;
+        } else {
+            state.jailRevivalAt = null;
+        }
+        return CustodyTransitionResult.applied();
+    }
+
+    private static CustodyTransitionResult reviveInJail(CustodyState state,
+                                                         CustodyTransition transition,
+                                                         StrajaPolicies policies) {
+        if (state.custody != CustodyStatus.JAILED
+                || state.condition != PlayerCondition.UNCONSCIOUS_CUSTODY) {
+            return reject("JAIL_REVIVAL_REQUIRES_UNCONSCIOUS_PRISONER");
+        }
+        if (policies.jailAutomaticRevivalEnabled && !expired(state.jailRevivalAt, transition.at())) {
+            return reject("JAIL_REVIVAL_NOT_DUE");
+        }
+        state.condition = state.restraint == RestraintStatus.NONE
+                ? PlayerCondition.ALIVE : PlayerCondition.CONSCIOUS_RESTRAINED;
+        state.unconsciousCustodyDeadlineAt = null;
+        state.jailRevivalAt = null;
+        return CustodyTransitionResult.applied();
+    }
+
+    private static CustodyTransitionResult releaseRestraint(CustodyState state,
+                                                             CustodyTransition transition) {
+        if (state.restraint == RestraintStatus.NONE) return reject("NOT_RESTRAINED");
+        if (blank(transition.actorId()) || samePlayer(state, transition.actorId())) {
+            return reject("SELF_RESTRAINT_REMOVAL_FORBIDDEN");
+        }
+        if (state.custody == CustodyStatus.JAILED) return reject("JAILED_RESTRAINT_REQUIRES_RELEASE");
+        state.restraint = RestraintStatus.NONE;
+        state.restraintActorId = "";
+        state.vision = VisionStatus.NORMAL;
+        if (state.condition == PlayerCondition.UNCONSCIOUS_CUSTODY) {
+            state.condition = PlayerCondition.ALIVE;
+            state.custody = CustodyStatus.FREE;
+            state.unconsciousCustodyDeadlineAt = null;
+        } else {
+            state.condition = PlayerCondition.ALIVE;
+            state.custody = CustodyStatus.FREE;
+        }
+        state.custodyActorId = "";
+        state.jailDeliveryDeadlineAt = null;
+        return CustodyTransitionResult.applied();
+    }
+
+    private static CustodyTransitionResult releaseCustody(CustodyState state,
+                                                           CustodyTransition transition,
+                                                           StrajaPolicies policies) {
+        if (state.custody == CustodyStatus.FREE || state.custody == CustodyStatus.JAILED) {
+            return reject("CUSTODY_RELEASE_NOT_AVAILABLE");
+        }
+        if (blank(transition.actorId()) || samePlayer(state, transition.actorId())) {
+            return reject("SELF_CUSTODY_RELEASE_FORBIDDEN");
+        }
+        if (state.restraint != RestraintStatus.NONE) return reject("RESTRAINT_MUST_BE_RELEASED_FIRST");
+        state.custody = CustodyStatus.FREE;
+        state.custodyActorId = "";
+        if (state.condition == PlayerCondition.UNCONSCIOUS_CUSTODY) {
+            state.condition = PlayerCondition.DOWNED;
+            state.unconsciousCustodyDeadlineAt = null;
+            state.downedDeadlineAt = deadline(transition.at(), policies.downedDurationSeconds);
+        }
+        return CustodyTransitionResult.applied();
+    }
+
+    private static CustodyTransitionResult die(CustodyState state,
+                                                CustodyTransition transition,
+                                                StrajaPolicies policies) {
+        state.condition = PlayerCondition.DEAD;
+        state.downedDeadlineAt = null;
+        state.resuscitationDeadlineAt = null;
+        state.unconsciousCustodyDeadlineAt = null;
+        state.transportDeadlineAt = null;
+        state.jailDeliveryDeadlineAt = null;
+        state.jailRevivalAt = null;
+        state.resuscitationProgress = 0;
+        switch (policies.recoveryBehavior(RecoveryEvent.DEATH)) {
+            case CLEAR_ALL, WAKE -> clearAll(state);
+            case RELEASE_RESTRAINTS -> {
+                state.restraint = RestraintStatus.NONE;
+                state.vision = VisionStatus.NORMAL;
+                state.custody = CustodyStatus.FREE;
+                state.custodyActorId = "";
+                state.restraintActorId = "";
+            }
+            case RELEASE_TRANSPORT -> {
+                state.transport = TransportStatus.NONE;
+                state.carrierId = "";
+            }
+            case RETAIN -> { /* death is itself an explicit resolution */ }
+        }
+        return CustodyTransitionResult.applied();
+    }
+
+    private static void clearAll(CustodyState state) {
+        state.custody = CustodyStatus.FREE;
+        state.transport = TransportStatus.NONE;
+        state.restraint = RestraintStatus.NONE;
+        state.vision = VisionStatus.NORMAL;
+        state.carrierId = "";
+        state.restraintActorId = "";
+        state.custodyActorId = "";
+        state.destination = "";
+    }
+
+    private static boolean samePlayer(CustodyState state, String actorId) {
+        return !blank(actorId) && (actorId.equals(state.playerId) || actorId.equals(state.playerUuid));
+    }
+
+    private static boolean expired(Long deadline, long now) {
+        return deadline != null && now >= deadline;
+    }
+
+    private static long deadline(long at, int seconds) {
+        return at + Math.max(1, seconds) * 1000L;
+    }
+
+    private static boolean blank(String value) {
+        return value == null || value.isBlank();
+    }
+
+    private static CustodyTransitionResult reject(String code) {
+        return CustodyTransitionResult.rejected(code);
+    }
+}
