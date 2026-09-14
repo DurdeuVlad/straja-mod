@@ -62,6 +62,8 @@ public interface CustodyRoleplayUseCase {
     boolean wakeDowned(PlayerGateway player, String reason);
 
     boolean resolveDowned(PlayerGateway player, String destination);
+    boolean enterJail(PlayerGateway player, String destination);
+    boolean releaseFromJail(PlayerGateway player);
     boolean giveCuffs(PlayerGateway player);
 
     /** Read-only guard used before opening the client confirmation prompt. */

@@ -284,8 +284,11 @@ public class PrisonService implements PrisonRoleplayUseCase {
         ctx.prison().write(data);
         var online = findFor(sentence);
         if (online != null && !sentence.cellId.isEmpty()) {
-            custody.resolveDowned(online, "PRISON");
-            teleportToCell(online, cell);
+            if (custody.enterJail(online, "prison")) {
+                teleportToCell(online, cell);
+            } else {
+                online.tell("Arestarea a fost înregistrată, dar predarea la închisoare trebuie repetată.");
+            }
         }
         if (online != null) {
             online.tell("Ai fost arestat pentru " + sentence.sentenceDays
@@ -319,7 +322,7 @@ public class PrisonService implements PrisonRoleplayUseCase {
             actor.tell(target.name() + " nu are o sentință activă.");
             return false;
         }
-        releaseSentence(data, sentence, target, "FORCED_RELEASE");
+        if (!releaseSentence(data, sentence, target, "FORCED_RELEASE")) return false;
         ctx.prison().write(data);
         audit.record("prison_release", actor.name(), uuidOf(actor),
                 sentence.target, sentence.targetUuid, "SUCCESS",
@@ -327,9 +330,10 @@ public class PrisonService implements PrisonRoleplayUseCase {
         return true;
     }
 
-    private void releaseSentence(PrisonStore data, Sentence sentence, PlayerGateway target, String reason) {
+    private boolean releaseSentence(PrisonStore data, Sentence sentence, PlayerGateway target, String reason) {
         if (sentence == null || java.util.Set.of("SERVED", "FORCED_RELEASE", "CANCELLED")
-                .contains(sentence.status)) return;
+                .contains(sentence.status)) return false;
+        if (target != null && !custody.releaseFromJail(target)) return false;
         sentence.status = "FORCED_RELEASE".equals(reason) ? "FORCED_RELEASE" : "SERVED";
         sentence.servedAt = now();
         sentence.releaseReason = reason == null ? "SERVED" : reason;
@@ -340,6 +344,7 @@ public class PrisonService implements PrisonRoleplayUseCase {
                     ? "Ai fost eliberat administrativ din celulă."
                     : "Ți-ai executat sentința. Ești eliberat din celulă.");
         }
+        return true;
     }
 
     private void teleportToRelease(PlayerGateway player) {
@@ -392,8 +397,9 @@ public class PrisonService implements PrisonRoleplayUseCase {
         var assignment = cell == null || blank(cell.id) ? null : data.assignments.get(cell.id);
         if (cell != null && !blank(cell.dimension) && assignment != null
                 && sentence.id.equals(assignment.sentenceId)) {
-            custody.resolveDowned(player, "PRISON");
-            teleportToCell(player, cell);
+            if (custody.enterJail(player, "prison")) {
+                teleportToCell(player, cell);
+            }
             return;
         }
         // The cell or its assignment is missing/mismatched: release any
@@ -486,12 +492,14 @@ public class PrisonService implements PrisonRoleplayUseCase {
                         && sentence.id != null && sentence.id.equals(e.sentenceId));
                 changed = true;
                 if (target != null) {
-                    custody.resolveDowned(target, "PRISON");
-                    teleportToCell(target, cell);
+                    if (custody.enterJail(target, "prison")) {
+                        teleportToCell(target, cell);
+                    }
                 }
             }
             if (target == null) continue; // offline time never counts
             var cell = data.cell(sentence.cellId);
+            if (!custody.enterJail(target, "prison")) continue;
             if (cell != null && !(cell.dimension.equals(target.dimension())
                     && target.x() >= cell.minX && target.x() <= cell.maxX
                     && target.y() >= cell.minY && target.y() <= cell.maxY
@@ -519,7 +527,9 @@ public class PrisonService implements PrisonRoleplayUseCase {
                         + "Mișcă-te sau interacționează periodic.");
             }
             changed = true;
-            if (sentence.remainingActiveMs <= 0) releaseSentence(data, sentence, target, "SERVED");
+            if (sentence.remainingActiveMs <= 0) {
+                changed |= releaseSentence(data, sentence, target, "SERVED");
+            }
         }
         changed |= pruneClosedSentences(data);
         if (changed) ctx.prison().write(data);

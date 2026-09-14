@@ -226,6 +226,11 @@ class CustodyDeadlineEngineTest {
         assertEquals(CustodyStatus.FREE, state.custody);
         assertNull(state.downedDeadlineAt);
         assertFalse(CustodyDeadlineEngine.tick(state, 1_000, policies).changed());
+
+        var retry = CustodyDeadlineEngine.recover(state, RecoveryEvent.LOGOUT, 2_000,
+                policies);
+        assertFalse(retry.changed());
+        assertTrue(retry.idempotent());
     }
 
     @Test

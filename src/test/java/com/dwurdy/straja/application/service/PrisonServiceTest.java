@@ -52,6 +52,10 @@ class PrisonServiceTest {
         var s = prison.arrest(inmate, null, 1, boss, null);
         assertEquals("ACTIVE", s.status);
         assertEquals("celula_1", s.cellId);
+        var custodyState = ctx.custody().read().states.get(inmate.uuid().toString());
+        assertNotNull(custodyState);
+        assertEquals(PlayerCondition.ALIVE, custodyState.condition);
+        assertEquals(CustodyStatus.JAILED, custodyState.custody);
         // teleported inside the cell
         assertTrue(inmate.x >= 0 && inmate.x <= 5);
         assertTrue(prison.insideCell("minecraft:overworld", inmate.x, inmate.y, inmate.z));
@@ -184,6 +188,9 @@ class PrisonServiceTest {
         assertTrue(prison.release(boss, inmate, "test"));
         assertEquals("FORCED_RELEASE", ctx.prison().read().sentences.get(0).status);
         assertTrue(ctx.prison().read().assignments.isEmpty());
+        var custodyState = ctx.custody().read().states.get(inmate.uuid().toString());
+        assertEquals(PlayerCondition.ALIVE, custodyState.condition);
+        assertEquals(CustodyStatus.FREE, custodyState.custody);
     }
 
     @Test
