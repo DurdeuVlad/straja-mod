@@ -48,6 +48,7 @@ public final class PolicyRegistry {
         k("mission.maxRewardPerIssuerPerDay", "missionMaxRewardPerIssuerPerDay", Kind.INT);
         k("mission.maxActivePerPlayer", "missionMaxActivePerPlayer", Kind.INT);
         k("mission.defaultMinimumRank", "missionDefaultMinimumRank", Kind.INT);
+        k("mission.rewardOverrideMargin", "missionRewardOverrideMargin", Kind.DOUBLE);
         k("mission.maxAssignees", "missionMaxAssignees", Kind.INT);
         k("mission.retentionLimit", "missionRetentionLimit", Kind.INT);
         k("mission.quickCreateEnabled", "missionQuickCreateEnabled", Kind.BOOL);

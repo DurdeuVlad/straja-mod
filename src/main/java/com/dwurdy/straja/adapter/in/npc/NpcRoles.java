@@ -113,6 +113,9 @@ public final class NpcRoles {
                     com.dwurdy.straja.application.port.in.MissionRoleplayUseCase.Action.DRAFT_WRITE, "");
             case "mission-draft-scope" -> openMissionForm(player, runtime, gw,
                     com.dwurdy.straja.application.port.in.MissionRoleplayUseCase.Action.DRAFT_SCOPE, "");
+            case "mission-template-list" -> runtime.missionRoleplay().templateList(gw);
+            case "mission-budget-adjust" -> openMissionForm(player, runtime, gw,
+                    com.dwurdy.straja.application.port.in.MissionRoleplayUseCase.Action.ADJUST_BUDGET, "");
             case "cuffs-status" -> runtime.custodyRoleplay().cuffStatus(gw);
             case "prison-status" -> runtime.prisonRoleplay().status(gw);
             case "downed-status" -> runtime.custodyRoleplay().downedStatus(gw);
@@ -168,6 +171,7 @@ public final class NpcRoles {
                     com.dwurdy.straja.application.port.in.MissionRoleplayUseCase.Action.REPORT, id);
             case "mission-fail" -> openMissionForm(player, runtime, gw,
                     com.dwurdy.straja.application.port.in.MissionRoleplayUseCase.Action.FAIL, id);
+            case "mission-template-issue" -> runtime.missionRoleplay().draftFromTemplate(gw, id);
             case "complaint-report" -> openComplaintForm(player, runtime, gw,
                     com.dwurdy.straja.application.port.in.ComplaintRoleplayUseCase.Action.REPORT, id);
             case "complaint-review" -> openComplaintForm(player, runtime, gw,
@@ -285,6 +289,16 @@ public final class NpcRoles {
                     java.util.List.of(
                             new FormSessionUseCase.Field("minimumRank", "Rang minim", 16, false),
                             new FormSessionUseCase.Field("maxAssignees", "Max participanți", 3, false)));
+            case ADJUST_BUDGET -> new FormSessionUseCase.Request(
+                    FormSessionUseCase.Action.MISSION_BUDGET_ADJUST, "",
+                    "Ajustare buget", "Ore estimate și risc recalculează recompensa. "
+                            + "Completează „Recompensă” doar pentru o depășire motivată — "
+                            + "peste marja permisă motivul este obligatoriu și se înregistrează.",
+                    java.util.List.of(
+                            new FormSessionUseCase.Field("hours", "Ore estimate", 6, false),
+                            new FormSessionUseCase.Field("risk", "Risc (multiplicator)", 6, false),
+                            new FormSessionUseCase.Field("reward", "Recompensă (gol = calculată)", 10, false),
+                            new FormSessionUseCase.Field("reason", "Motiv depășire", 240, false)));
             default -> null;
         };
         if (request == null) return true;
@@ -550,7 +564,8 @@ public final class NpcRoles {
                 yield view != null && id.equals(view.checkpointId());
             }
             case "mission-join", "mission-accept", "mission-decline", "mission-complete",
-                    "mission-report", "mission-fail", "mission-reward", "mission-reward-recover" -> {
+                    "mission-report", "mission-fail", "mission-reward", "mission-reward-recover",
+                    "mission-template-issue" -> {
                 var expected = missionActionFor(operation);
                 yield expected != null && runtime.missionRoleplay().availableActions(player)
                         .stream().anyMatch(a -> a.action() == expected && id.equals(a.missionId()));
@@ -604,6 +619,7 @@ public final class NpcRoles {
             case "mission-fail" -> com.dwurdy.straja.application.port.in.MissionRoleplayUseCase.Action.FAIL;
             case "mission-reward" -> com.dwurdy.straja.application.port.in.MissionRoleplayUseCase.Action.CLAIM_REWARD;
             case "mission-reward-recover" -> com.dwurdy.straja.application.port.in.MissionRoleplayUseCase.Action.RECOVER_REWARD;
+            case "mission-template-issue" -> com.dwurdy.straja.application.port.in.MissionRoleplayUseCase.Action.ISSUE_TEMPLATE;
             default -> null;
         };
     }

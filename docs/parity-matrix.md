@@ -112,6 +112,7 @@ Test suite: **331 unit tests** (`gradlew test --rerun-tasks`, all green) across
 | Mission create/issue/accept/refuse/complete/fail | PASS | `unit:MissionServiceTest`; `rcon:` issue→persist across restart; NPC actions + native forms cover accept/decline/report/fail/complete end-to-end; `deliverPendingRewards` on login reconciles interrupted payments and retries pending reward deliveries |
 | Order books (`straja:order_book`) | PASS | `code:` registered item; `rcon:` give + mission draft flow |
 | Sealed packages via Envelope | PASS | `code:EnvelopeDeliveryProvider.sendPackage` (real `MailService`); used by mission issue |
+| Mission templates + calculated budget (§13) | PASS | `code:MissionTemplate`/`MissionTemplateStore`/`MissionBudget` + `MissionTemplateRepository`; `unit:MissionServiceTest.strajerTemplateTwoHoursRisk15*` (72 B/participant, 144 B budget), `templateRewardsRederiveFromCurrentWageTable`, `overMarginOverride*` (reason-gated + audited), `templatesPersist*`; `rcon:` `template-list`/`draft-template`/`draft-adjust`; forms: `mission-budget-adjust` |
 | Deadlines + reward splitting | PASS | `unit:MissionServiceTest` |
 | Max-active / copies / budget pool limits | PASS | `unit:MissionServiceTest` incl. fail-closed budget counter fix |
 | Open missions cancelled on status change | PASS | `unit:MissionServiceTest.statusChangeHooksAllFireAndCancelMissions` (multi-listener wiring) + `resignationCancelsOpenMissions` + `suspendCancelsOpenMissions` |

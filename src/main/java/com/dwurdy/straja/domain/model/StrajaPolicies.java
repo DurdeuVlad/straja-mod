@@ -46,6 +46,9 @@ public class StrajaPolicies {
     public int missionRetentionLimit = 200;
     public boolean missionQuickCreateEnabled = true;
     public boolean missionQuickCreateLocalOnly = true;
+    // §13: rewards above calculated × (1 + margin) require an explicit,
+    // audited reason.
+    public double missionRewardOverrideMargin = 0.25;
 
     // cuffs
     public int cuffRequestTimeoutSeconds = 60;

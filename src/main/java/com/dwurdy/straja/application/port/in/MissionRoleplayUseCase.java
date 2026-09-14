@@ -11,6 +11,7 @@ import java.util.List;
  */
 public interface MissionRoleplayUseCase {
     enum Action { GET_CARNET, DRAFT_WRITE, DRAFT_STATUS, DRAFT_SCOPE, DRAFT_SIGN, DRAFT_PACKAGE,
+                  TEMPLATE_LIST, ISSUE_TEMPLATE, ADJUST_BUDGET,
                   JOIN, ACCEPT, DECLINE, REPORT, FAIL, COMPLETE, CLAIM_REWARD, RECOVER_REWARD }
 
     record AvailableAction(Action action, String missionId) {}
@@ -24,6 +25,24 @@ public interface MissionRoleplayUseCase {
     void draftSign(PlayerGateway player);
     void draftPackage(PlayerGateway player);
     boolean issueDraft(PlayerGateway issuer, PlayerGateway target);
+    /** §13 issuer preview: enabled templates with budgets re-derived from the current wage table. */
+    void templateList(PlayerGateway player);
+    /** §13 creates a work draft from a template; reward is calculated, never hand-typed. */
+    void draftFromTemplate(PlayerGateway player, String templateId);
+    /**
+     * §13 adjusts a template draft's hours/risk and optionally overrides the
+     * calculated reward. Overrides above the configured margin require a
+     * reason and are audited.
+     */
+    void draftAdjust(PlayerGateway player, String hours, String risk, String reward, String reason);
+    /** §13 commissioner administration: list every template including disabled. */
+    void templateListAll(PlayerGateway player);
+    void templateCreate(PlayerGateway player, String name, int minRank, double hours,
+                        double risk, int maxPaid, int deadlineMinutes, String objective,
+                        boolean supersedesPatrol);
+    void templateSet(PlayerGateway player, String id, String field, String value);
+    void templateDuplicate(PlayerGateway player, String id);
+    void templateSetEnabled(PlayerGateway player, String id, boolean enabled);
     boolean join(PlayerGateway player, String id);
     void accept(PlayerGateway player, String id);
     boolean decline(PlayerGateway player, String id);

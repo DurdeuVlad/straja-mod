@@ -8,8 +8,11 @@ import com.dwurdy.straja.domain.model.Capability;
 import com.dwurdy.straja.domain.model.GuardState;
 import com.dwurdy.straja.domain.model.ItemSpec;
 import com.dwurdy.straja.domain.model.Mission;
+import com.dwurdy.straja.domain.model.MissionBudget;
 import com.dwurdy.straja.domain.model.MissionDraft;
 import com.dwurdy.straja.domain.model.MissionStore;
+import com.dwurdy.straja.domain.model.MissionTemplate;
+import com.dwurdy.straja.domain.model.MissionTemplateStore;
 import com.dwurdy.straja.domain.model.PermissionLevel;
 import com.dwurdy.straja.domain.model.Rank;
 import com.dwurdy.straja.domain.model.SetupData;
@@ -392,6 +395,371 @@ public class MissionService implements MissionRoleplayUseCase {
         return true;
     }
 
+    // ------------------------------------------------------------ §13 templates + calculated budgets
+
+    private MissionTemplateStore templateStore() {
+        var store = ctx.missionTemplates().read();
+        if (!store.seeded) {
+            store.seeded = true;
+            seed(store, "Patrulare suplimentară", 2, 2.0, 1.0, 2, 120,
+                    "Parcurge ruta de patrulare alocată și raportează incidențele.", true);
+            seed(store, "Escortă oficială", 2, 1.5, 1.5, 2, 90,
+                    "Însoțește oficialul sau încărcătura pe traseul indicat până la destinație.", false);
+            seed(store, "Pază de cartier", 1, 2.0, 1.0, 1, 120,
+                    "Menține prezența la punctul indicat și notează mișcările suspecte.", true);
+            ctx.missionTemplates().write(store);
+        }
+        return store;
+    }
+
+    private void seed(MissionTemplateStore store, String name, int minRank, double hours,
+                      double risk, int maxPaid, int deadlineMinutes, String objective,
+                      boolean supersedesPatrol) {
+        var t = new MissionTemplate();
+        t.id = "T" + store.nextId++;
+        t.name = name;
+        t.minRank = minRank;
+        t.estimatedHours = hours;
+        t.risk = risk;
+        t.maxPaidParticipants = maxPaid;
+        t.deadlineMinutes = deadlineMinutes;
+        t.objective = objective;
+        t.supersedesPatrol = supersedesPatrol;
+        t.createdAt = t.updatedAt = now();
+        store.templates.put(t.id, t);
+    }
+
+    /** Per-participant reward in Bronze, re-derived from the current wage table. */
+    private int calculatedReward(MissionTemplate t) {
+        return MissionBudget.perParticipant(
+                ctx.policies().salaryPerHour(t.minRank), t.estimatedHours, t.risk);
+    }
+
+    private static String num(double v) {
+        return v == Math.floor(v) && !Double.isInfinite(v)
+                ? String.valueOf((long) v) : String.format(java.util.Locale.ROOT, "%.2f", v);
+    }
+
+    /** Issuer preview: enabled templates with live-calculated budgets. */
+    public void templateList(PlayerGateway player) {
+        if (!missionAuthority(player)) {
+            player.tell("Doar Inspectorul sau Comisaru' pot consulta șabloanele de misiune.");
+            return;
+        }
+        var templates = templateStore().enabled();
+        if (templates.isEmpty()) {
+            player.tell("Nu există șabloane de misiune active.");
+            return;
+        }
+        player.tell("Șabloane de misiune (recompense derivate din salariul orar curent):");
+        for (var t : templates) {
+            int per = calculatedReward(t);
+            player.tell(t.id + " „" + t.name + "” — " + ctx.policies().rankName(t.minRank)
+                    + " " + ctx.policies().salaryPerHour(t.minRank) + " B/h × " + num(t.estimatedHours)
+                    + " h × risc " + num(t.risk) + " = " + per + " B/participant | max "
+                    + t.maxPaidParticipants + " plătiți | buget " + MissionBudget.teamBudget(per, t.maxPaidParticipants)
+                    + " B | termen " + t.deadlineMinutes + " min"
+                    + (t.supersedesPatrol ? " | înlocuiește patrula" : ""));
+        }
+    }
+
+    /** Creates a work draft from a template: reward is calculated, never hand-typed. */
+    public void draftFromTemplate(PlayerGateway player, String templateId) {
+        if (!draftGate(player)) return;
+        var t = templateStore().get(templateId);
+        if (t == null || !t.enabled) {
+            player.tell("Șablonul nu există sau este dezactivat.");
+            return;
+        }
+        int reward = calculatedReward(t);
+        var store = store();
+        var draft = new MissionDraft();
+        draft.issuer = player.name();
+        draft.issuerUuid = player.uuid() == null ? "" : player.uuid().toString();
+        draft.objective = t.objective.substring(0, Math.min(t.objective.length(), ctx.policies().envelopeMaxBodyLength));
+        draft.minutes = t.deadlineMinutes;
+        draft.reward = reward;
+        draft.minimumRank = t.minRank;
+        draft.maxAssignees = t.maxPaidParticipants;
+        draft.maxCopies = Math.max(1, Math.min(t.maxPaidParticipants, ctx.policies().missionMaxCopiesPerDraft));
+        draft.rewardPool = Math.min(ctx.policies().missionMaxRewardPool, reward * draft.maxCopies);
+        draft.rewardCommitted = 0;
+        draft.remainingRewardPool = draft.rewardPool;
+        draft.startAt = now();
+        draft.startLabel = "acum";
+        draft.issuedCount = 0;
+        draft.templateId = t.id;
+        draft.estimatedHours = t.estimatedHours;
+        draft.risk = t.risk;
+        draft.supersedesPatrol = t.supersedesPatrol;
+        store.drafts.put(playerKey(player), draft);
+        ctx.missions().write(store);
+        player.tell("Ordin din șablonul " + t.id + " „" + t.name + "”: " + reward + " B/participant"
+                + " (rang " + ctx.policies().rankName(t.minRank) + " × " + num(t.estimatedHours)
+                + " h × risc " + num(t.risk) + "), buget " + draft.rewardPool + " B. "
+                + "Ajustează bugetul la secretară dacă e nevoie, apoi semnează și sigilează.");
+    }
+
+    /**
+     * Adjusts a template draft's budget fields. An explicit reward above
+     * calculated × (1 + margin) requires a reason and is audited.
+     */
+    public void draftAdjust(PlayerGateway player, String hoursRaw, String riskRaw,
+                            String rewardRaw, String reason) {
+        if (!draftGate(player)) return;
+        var store = store();
+        var draft = draft(player, store);
+        if (draft == null || draft.templateId.isEmpty()) {
+            player.tell("Ajustarea bugetului se aplică doar ordinelor create dintr-un șablon.");
+            return;
+        }
+        if (draft.issuedCount > 0) {
+            player.tell("Ordinul are deja copii emise — bugetul nu se mai poate schimba.");
+            return;
+        }
+        double hours = parsePositive(hoursRaw, -1);
+        double risk = parsePositive(riskRaw, -1);
+        if (hours <= 0 || hours > 24 || risk <= 0 || risk > 10) {
+            player.tell("Orele estimate trebuie să fie între 0 și 24, iar riscul între 0 și 10.");
+            return;
+        }
+        int calculated = MissionBudget.perParticipant(
+                ctx.policies().salaryPerHour(draft.minimumRank), hours, risk);
+        int reward = calculated;
+        String trimmedReason = reason == null ? "" : reason.trim();
+        int explicit = (int) parsePositive(rewardRaw, -1);
+        if (explicit >= 0) {
+            if (!rewardValid(explicit)) {
+                player.tell("Recompensa trebuie să fie un număr întreg între 0 și "
+                        + ctx.policies().missionMaxReward + " monede.");
+                return;
+            }
+            int limit = (int) Math.ceil(calculated * (1.0 + ctx.policies().missionRewardOverrideMargin));
+            if (explicit > limit) {
+                if (trimmedReason.isEmpty()) {
+                    player.tell("Recompensa depășește limita calculată (" + limit
+                            + " B). Precizează un motiv pentru depășire.");
+                    return;
+                }
+                audit.record("mission_reward_override", player.name(),
+                        player.uuid() == null ? "" : player.uuid().toString(),
+                        draft.templateId, "", "OVERRIDDEN",
+                        "calculated=" + calculated + " requested=" + explicit
+                                + " reason=" + trimmedReason);
+            }
+            reward = explicit;
+        }
+        draft.estimatedHours = hours;
+        draft.risk = risk;
+        draft.reward = reward;
+        draft.rewardPool = Math.min(ctx.policies().missionMaxRewardPool, reward * draft.maxCopies);
+        draft.remainingRewardPool = Math.max(0, draft.rewardPool - draft.rewardCommitted);
+        draft.overrideReason = explicit > calculated ? trimmedReason : "";
+        draft.signedBy = "";
+        draft.signedAt = null;
+        draft.packagedAt = null;
+        ctx.missions().write(store);
+        player.tell("Buget ajustat: " + reward + " B/participant (calculat " + calculated
+                + " B), fond " + draft.rewardPool + " B. Semnează și sigilează din nou.");
+    }
+
+    private static double parsePositive(String raw, double fallback) {
+        if (raw == null || raw.isBlank() || "-".equals(raw.trim())) return fallback;
+        try {
+            return Double.parseDouble(raw.trim());
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
+    }
+
+    // ------------------------------------------------------------ §13 template administration (commissioner)
+
+    private boolean templateAuthority(PlayerGateway player) {
+        if (!players.isCommissioner(player)) {
+            player.tell("Doar Comisaru' administrează șabloanele de misiune.");
+            return false;
+        }
+        return true;
+    }
+
+    public void templateListAll(PlayerGateway player) {
+        if (!templateAuthority(player)) return;
+        var all = new ArrayList<>(templateStore().templates.values());
+        all.sort((a, b) -> a.id.compareTo(b.id));
+        if (all.isEmpty()) {
+            player.tell("Nu există șabloane de misiune.");
+            return;
+        }
+        for (var t : all) {
+            player.tell(t.id + " „" + t.name + "” — " + ctx.policies().rankName(t.minRank)
+                    + " × " + num(t.estimatedHours) + " h × risc " + num(t.risk)
+                    + " | max " + t.maxPaidParticipants + " | termen " + t.deadlineMinutes + " min"
+                    + " | " + (t.enabled ? "activ" : "dezactivat")
+                    + (t.supersedesPatrol ? " | înlocuiește patrula" : ""));
+        }
+    }
+
+    public void templateCreate(PlayerGateway player, String name, int minRank, double hours,
+                               double risk, int maxPaid, int deadlineMinutes, String objective,
+                               boolean supersedesPatrol) {
+        if (!templateAuthority(player)) return;
+        String problem = templateProblem(name, minRank, hours, risk, maxPaid, deadlineMinutes, objective);
+        if (problem != null) {
+            player.tell(problem);
+            return;
+        }
+        var store = templateStore();
+        var t = new MissionTemplate();
+        t.id = "T" + store.nextId++;
+        t.name = name.trim();
+        t.minRank = minRank;
+        t.estimatedHours = hours;
+        t.risk = risk;
+        t.maxPaidParticipants = maxPaid;
+        t.deadlineMinutes = deadlineMinutes;
+        t.objective = objective.trim();
+        t.supersedesPatrol = supersedesPatrol;
+        t.createdAt = t.updatedAt = now();
+        store.templates.put(t.id, t);
+        ctx.missionTemplates().write(store);
+        audit.record("mission_template_create", player.name(),
+                player.uuid() == null ? "" : player.uuid().toString(), t.id, "", "CREATED", t.name);
+        player.tell("Șablon " + t.id + " „" + t.name + "” creat — " + calculatedReward(t)
+                + " B/participant la salariul curent.");
+    }
+
+    public void templateSet(PlayerGateway player, String id, String field, String value) {
+        if (!templateAuthority(player)) return;
+        var store = templateStore();
+        var t = store.get(id);
+        if (t == null) {
+            player.tell("Șablonul " + id + " nu există.");
+            return;
+        }
+        String f = PlayerService.canon(field);
+        String v = value == null ? "" : value.trim();
+        switch (f) {
+            case "name" -> {
+                if (v.isEmpty() || v.length() > 60) { player.tell("Numele trebuie să aibă 1-60 caractere."); return; }
+                t.name = v;
+            }
+            case "minrank" -> {
+                int r;
+                try { r = Integer.parseInt(v); } catch (NumberFormatException e) { player.tell("Rangul minim trebuie să fie 1-4."); return; }
+                if (r < 1 || r > 4) { player.tell("Rangul minim trebuie să fie 1-4."); return; }
+                t.minRank = r;
+            }
+            case "hours" -> {
+                double h = parsePositive(v, -1);
+                if (h <= 0 || h > 24) { player.tell("Orele estimate trebuie să fie între 0 și 24."); return; }
+                t.estimatedHours = h;
+            }
+            case "risk" -> {
+                double r = parsePositive(v, -1);
+                if (r <= 0 || r > 10) { player.tell("Riscul trebuie să fie între 0 și 10."); return; }
+                t.risk = r;
+            }
+            case "participants" -> {
+                int p;
+                try { p = Integer.parseInt(v); } catch (NumberFormatException e) { player.tell("Număr de participanți invalid."); return; }
+                if (p < 1 || p > ctx.policies().missionMaxAssignees) {
+                    player.tell("Participanții plătiți trebuie să fie între 1 și " + ctx.policies().missionMaxAssignees + ".");
+                    return;
+                }
+                t.maxPaidParticipants = p;
+            }
+            case "deadline" -> {
+                int m;
+                try { m = Integer.parseInt(v); } catch (NumberFormatException e) { player.tell("Termen invalid."); return; }
+                if (!timeValid(m)) {
+                    player.tell("Termenul trebuie să fie între " + ctx.policies().missionMinMinutes
+                            + " și " + ctx.policies().missionMaxMinutes + " minute.");
+                    return;
+                }
+                t.deadlineMinutes = m;
+            }
+            case "objective" -> {
+                if (v.isEmpty() || v.length() > ctx.policies().envelopeMaxBodyLength) {
+                    player.tell("Obiectivul trebuie să aibă 1-" + ctx.policies().envelopeMaxBodyLength + " caractere.");
+                    return;
+                }
+                t.objective = v;
+            }
+            case "supersedespatrol" -> t.supersedesPatrol = "da".equals(v) || "true".equals(v) || "yes".equals(v);
+            default -> {
+                player.tell("Câmp necunoscut. Folosește: name|minrank|hours|risk|participants|deadline|objective|supersedesPatrol.");
+                return;
+            }
+        }
+        t.updatedAt = now();
+        ctx.missionTemplates().write(store);
+        audit.record("mission_template_set", player.name(),
+                player.uuid() == null ? "" : player.uuid().toString(), t.id, "", "UPDATED",
+                f + "=" + v);
+        player.tell(t.id + " actualizat (" + f + "). Recompensa curentă: " + calculatedReward(t) + " B/participant.");
+    }
+
+    public void templateDuplicate(PlayerGateway player, String id) {
+        if (!templateAuthority(player)) return;
+        var store = templateStore();
+        var src = store.get(id);
+        if (src == null) {
+            player.tell("Șablonul " + id + " nu există.");
+            return;
+        }
+        var t = new MissionTemplate();
+        t.id = "T" + store.nextId++;
+        t.name = src.name + " (copie)";
+        t.minRank = src.minRank;
+        t.estimatedHours = src.estimatedHours;
+        t.risk = src.risk;
+        t.maxPaidParticipants = src.maxPaidParticipants;
+        t.deadlineMinutes = src.deadlineMinutes;
+        t.objective = src.objective;
+        t.supersedesPatrol = src.supersedesPatrol;
+        t.enabled = false;
+        t.createdAt = t.updatedAt = now();
+        store.templates.put(t.id, t);
+        ctx.missionTemplates().write(store);
+        audit.record("mission_template_duplicate", player.name(),
+                player.uuid() == null ? "" : player.uuid().toString(), t.id, "", "DUPLICATED",
+                "from=" + src.id);
+        player.tell("Copiat în " + t.id + " (dezactivat — activează-l după ajustări).");
+    }
+
+    public void templateSetEnabled(PlayerGateway player, String id, boolean enabled) {
+        if (!templateAuthority(player)) return;
+        var store = templateStore();
+        var t = store.get(id);
+        if (t == null) {
+            player.tell("Șablonul " + id + " nu există.");
+            return;
+        }
+        t.enabled = enabled;
+        t.updatedAt = now();
+        ctx.missionTemplates().write(store);
+        audit.record("mission_template_enable", player.name(),
+                player.uuid() == null ? "" : player.uuid().toString(), t.id, "",
+                enabled ? "ENABLED" : "DISABLED", t.name);
+        player.tell(t.id + " „" + t.name + "” " + (enabled ? "activat" : "dezactivat") + ".");
+    }
+
+    private String templateProblem(String name, int minRank, double hours, double risk,
+                                   int maxPaid, int deadlineMinutes, String objective) {
+        if (name == null || name.isBlank() || name.length() > 60) return "Numele trebuie să aibă 1-60 caractere.";
+        if (minRank < 1 || minRank > 4) return "Rangul minim trebuie să fie 1-4.";
+        if (hours <= 0 || hours > 24) return "Orele estimate trebuie să fie între 0 și 24.";
+        if (risk <= 0 || risk > 10) return "Riscul trebuie să fie între 0 și 10.";
+        if (maxPaid < 1 || maxPaid > ctx.policies().missionMaxAssignees)
+            return "Participanții plătiți trebuie să fie între 1 și " + ctx.policies().missionMaxAssignees + ".";
+        if (!timeValid(deadlineMinutes))
+            return "Termenul trebuie să fie între " + ctx.policies().missionMinMinutes
+                    + " și " + ctx.policies().missionMaxMinutes + " minute.";
+        if (objective == null || objective.isBlank() || objective.length() > ctx.policies().envelopeMaxBodyLength)
+            return "Obiectivul trebuie să aibă 1-" + ctx.policies().envelopeMaxBodyLength + " caractere.";
+        return null;
+    }
+
     // ------------------------------------------------------------ issue
 
     /** Quick/secretary create: declares and delivers a mission in one step. */
@@ -588,6 +956,8 @@ public class MissionService implements MissionRoleplayUseCase {
         mission.packagedAt = draft.packagedAt;
         mission.delivery = "PENDING_PACKAGE";
         mission.origin = "CARNET";
+        mission.templateId = draft.templateId;
+        mission.supersedesPatrol = draft.supersedesPatrol;
         mission.draftKey = playerKey(issuer);
         mission.issuerBudgetKey = budget.key();
         mission.issuerBudgetAmount = draft.reward;
@@ -748,11 +1118,20 @@ public class MissionService implements MissionRoleplayUseCase {
         List<AvailableAction> actions = new ArrayList<>();
         if (missionAuthority(player)) {
             actions.add(new AvailableAction(Action.GET_CARNET, ""));
-            if (hasCarnet(player)) actions.add(new AvailableAction(Action.DRAFT_WRITE, ""));
+            if (hasCarnet(player)) {
+                actions.add(new AvailableAction(Action.DRAFT_WRITE, ""));
+                actions.add(new AvailableAction(Action.TEMPLATE_LIST, ""));
+                for (var t : templateStore().enabled()) {
+                    actions.add(new AvailableAction(Action.ISSUE_TEMPLATE, t.id));
+                }
+            }
             var draft = draft(player, store);
             if (draft != null) {
                 actions.add(new AvailableAction(Action.DRAFT_STATUS, ""));
                 actions.add(new AvailableAction(Action.DRAFT_SCOPE, ""));
+                if (draft.issuedCount == 0 && !draft.templateId.isEmpty()) {
+                    actions.add(new AvailableAction(Action.ADJUST_BUDGET, ""));
+                }
                 if (draft.objective != null && !draft.objective.isEmpty() && timeValid(draft.minutes)
                         && rewardValid(draft.reward) && draft.startAt > 0) {
                     actions.add(new AvailableAction(Action.DRAFT_SIGN, ""));

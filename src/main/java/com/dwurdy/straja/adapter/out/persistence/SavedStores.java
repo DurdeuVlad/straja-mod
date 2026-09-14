@@ -84,6 +84,12 @@ public final class SavedStores {
         @Override public void write(ComplaintStore store) { writeJson(store); }
     }
 
+    public static class MissionTemplates extends JsonBackedStore implements MissionTemplateRepository {
+        public MissionTemplates(StoreAccess access) { super(access, "mission_templates"); }
+        @Override public MissionTemplateStore read() { return readJson(MissionTemplateStore.class, MissionTemplateStore::new); }
+        @Override public void write(MissionTemplateStore store) { writeJson(store); }
+    }
+
     public static class Audiences extends JsonBackedStore implements AudienceRepository {
         public Audiences(StoreAccess access) { super(access, "audiences"); }
         @Override public AudienceStore read() { return readJson(AudienceStore.class, AudienceStore::new); }
