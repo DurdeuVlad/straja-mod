@@ -65,9 +65,9 @@ public class StrajaFormScreen extends AbstractContainerScreen<StrajaFormMenu> {
                 y += SINGLE_LINE_HEIGHT + 8;
             }
         }
-        addRenderableWidget(Button.builder(Component.literal("Submit"), b -> submit())
+        addRenderableWidget(Button.builder(Component.translatable("straja.form.submit"), b -> submit())
                 .bounds(x, topPos + imageHeight - 28, 80, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Cancel"), b -> onClose())
+        addRenderableWidget(Button.builder(Component.translatable("straja.form.cancel"), b -> onClose())
                 .bounds(x + 88, topPos + imageHeight - 28, 80, 20).build());
     }
 

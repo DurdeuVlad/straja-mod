@@ -26,18 +26,21 @@ public final class FormSessionBridge {
         sessions = null;
     }
 
-    public static void open(ServerPlayer player, FormSessionUseCase.Request request) {
+    public static Optional<FormSessionUseCase.View> open(
+            ServerPlayer player, FormSessionUseCase.Request request) {
         FormSessionUseCase port = sessions;
-        if (player == null || port == null) return;
+        if (player == null || port == null) return Optional.empty();
         Optional<FormSessionUseCase.View> view = port.open(player.getUUID(), request);
-        if (view.isEmpty()) return;
+        if (view.isEmpty()) return Optional.empty();
         OptionalInt opened = player.openMenu(new SimpleMenuProvider(
                         (id, inv, p) -> new StrajaFormMenu(id, inv, view.get()),
                         Component.literal(view.get().title())),
                 buf -> StrajaFormMenu.writeView(buf, view.get()));
         if (opened.isEmpty()) {
             port.cancel(player.getUUID(), view.get().sessionId());
+            return Optional.empty();
         }
+        return view;
     }
 
     public static Optional<FormSessionUseCase.Submission> consume(
