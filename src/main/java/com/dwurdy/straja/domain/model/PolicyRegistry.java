@@ -74,6 +74,8 @@ public final class PolicyRegistry {
         // downed
         k("downed.enabled", "downedEnabled", Kind.BOOL);
         k("downed.cooldownSeconds", "downedCooldownSeconds", Kind.INT);
+        // Canonical DC-002 name; cooldownSeconds remains the RP-007 alias.
+        k("downed.durationSeconds", "downedDurationSeconds", Kind.INT);
         k("downed.freezeInPlace", "downedFreezeInPlace", Kind.BOOL);
         k("downed.actionLock", "downedActionLock", Kind.BOOL);
         k("downed.slownessTicks", "downedSlownessTicks", Kind.INT);
@@ -239,6 +241,16 @@ public final class PolicyRegistry {
         try {
             Field field = StrajaPolicies.class.getField(key.field());
             Object parsed = parse(key.kind(), raw.trim());
+            if ("downed.cooldownSeconds".equals(path)
+                    || "downed.durationSeconds".equals(path)) {
+                // Keep the shipped RP-007 alias and the canonical deadline
+                // policy synchronized so live overrides cannot split the two
+                // adapters' timing rules.
+                int seconds = (Integer) parsed;
+                policies.downedCooldownSeconds = seconds;
+                policies.downedDurationSeconds = seconds;
+                return Result.pass();
+            }
             // Collections mutate in place so adapters that captured the
             // reference at bootstrap (e.g. the coin provider) see the change.
             Object current = field.get(policies);

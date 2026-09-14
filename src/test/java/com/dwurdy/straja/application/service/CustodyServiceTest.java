@@ -4,6 +4,10 @@ import com.dwurdy.straja.application.StrajaContext;
 import com.dwurdy.straja.application.port.in.CustodyRoleplayUseCase;
 import com.dwurdy.straja.application.port.out.ItemView;
 import com.dwurdy.straja.domain.model.CustodyStore;
+import com.dwurdy.straja.domain.model.CustodyState;
+import com.dwurdy.straja.domain.model.CustodyTransition;
+import com.dwurdy.straja.domain.model.CustodyTransitionEngine;
+import com.dwurdy.straja.domain.model.PlayerCondition;
 import com.dwurdy.straja.domain.model.ItemSpec;
 import com.dwurdy.straja.domain.model.Rank;
 import com.dwurdy.straja.support.Fakes;
@@ -299,19 +303,19 @@ class CustodyServiceTest {
     }
 
     @Test
-    void batonRefuseSurrenderKeepsDowned() {
+    void batonRefuseSurrenderDiesAtCanonicalDeadline() {
         hold(guard, CustodyService.BATON);
         custody.batonStrike(guard, civilian, 6, 0, 8);
         var req = ctx.custody().read().cuffRequests.values().iterator().next();
         assertTrue(custody.refuse(civilian, req.id));
         assertTrue(custody.isDowned(civilian));
         assertFalse(custody.isCuffed(civilian));
-        // wake after cooldown returns to downed position at half health
+        // The canonical deadline wins over the legacy wake projection.
         civilian.teleport("minecraft:overworld", 999, 64, 999);
-        clock.advance(61_000);
+        clock.advance(60_000);
         custody.tick();
         assertFalse(custody.isDowned(civilian));
-        assertEquals(10, civilian.health); // maxHealth*0.5
+        assertEquals(0, civilian.health);
     }
 
     @Test
@@ -427,6 +431,55 @@ class CustodyServiceTest {
         assertTrue(reloaded.cuffed.containsKey(civilian.uuid().toString()));
     }
 
+    @Test
+    void canonicalDeadlineSweepRunsThroughTheExistingCustodyTick() {
+        ctx.policies().downedDurationSeconds = 1;
+        var state = new CustodyState();
+        state.playerId = civilian.uuid().toString();
+        state.playerUuid = civilian.uuid().toString();
+        state.playerName = civilian.name();
+        var entered = CustodyTransitionEngine.apply(state,
+                CustodyTransition.of("down-1", CustodyTransition.Action.ENTER_DOWNED,
+                        clock.now, "weapon"), ctx.policies());
+        assertTrue(entered.ok());
+        var store = ctx.custody().read();
+        store.states.put(state.playerId, state);
+        ctx.custody().write(store);
+
+        clock.advance(999);
+        custody.tick();
+        assertEquals(PlayerCondition.DOWNED, ctx.custody().read().states.get(state.playerId).condition);
+        clock.advance(1);
+        custody.tick();
+        assertEquals(PlayerCondition.DEAD, ctx.custody().read().states.get(state.playerId).condition);
+        custody.tick();
+        assertEquals(PlayerCondition.DEAD, ctx.custody().read().states.get(state.playerId).condition);
+    }
+
+    @Test
+    void canonicalDeadlineContinuesAcrossLogoutAndResolvesOnLogin() {
+        ctx.policies().downedDurationSeconds = 1;
+        var state = new CustodyState();
+        state.playerId = civilian.uuid().toString();
+        state.playerUuid = civilian.uuid().toString();
+        state.playerName = civilian.name();
+        assertTrue(CustodyTransitionEngine.apply(state,
+                CustodyTransition.of("down-1", CustodyTransition.Action.ENTER_DOWNED,
+                        clock.now, "weapon"), ctx.policies()).ok());
+        var store = ctx.custody().read();
+        store.states.put(state.playerId, state);
+        ctx.custody().write(store);
+
+        civilian.online = false;
+        custody.recoverOnLogout(civilian); // default RETAIN does not reset the deadline
+        clock.advance(1_001);
+        civilian.online = true;
+        custody.recoverOnLogin(civilian);
+
+        assertEquals(PlayerCondition.DEAD,
+                ctx.custody().read().states.get(state.playerId).condition);
+    }
+
     // ------------------------------------------------------------ projection
 
     private void holdNothing(TestPlayer p) {
@@ -480,7 +533,8 @@ class CustodyServiceTest {
         assertFalse(kinds.contains(CustodyRoleplayUseCase.Action.REMOVE_HEAD_SACK));
         assertFalse(kinds.contains(CustodyRoleplayUseCase.Action.WAKE_DOWNED));
         clock.advance(61_000);
-        assertTrue(actionsOf(civilian, CustodyRoleplayUseCase.Action.WAKE_DOWNED).size() == 1);
+        custody.tick();
+        assertTrue(actionsOf(civilian, CustodyRoleplayUseCase.Action.WAKE_DOWNED).isEmpty());
     }
 
     @Test

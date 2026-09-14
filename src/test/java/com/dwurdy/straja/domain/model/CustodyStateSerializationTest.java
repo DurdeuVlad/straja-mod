@@ -31,6 +31,7 @@ class CustodyStateSerializationTest {
         state.jailDeliveryDeadlineAt = 60L;
         state.jailRevivalAt = 70L;
         state.resuscitationProgress = 65;
+        state.pausedDownedRemainingMs = 80L;
         state.carrierId = "carrier";
         state.restraintActorId = "guard";
         state.custodyActorId = "guard";
@@ -57,6 +58,7 @@ class CustodyStateSerializationTest {
         assertEquals(state.jailDeliveryDeadlineAt, loaded.jailDeliveryDeadlineAt);
         assertEquals(state.jailRevivalAt, loaded.jailRevivalAt);
         assertEquals(state.resuscitationProgress, loaded.resuscitationProgress);
+        assertEquals(state.pausedDownedRemainingMs, loaded.pausedDownedRemainingMs);
         assertEquals(state.carrierId, loaded.carrierId);
         assertEquals(state.restraintActorId, loaded.restraintActorId);
         assertEquals(state.custodyActorId, loaded.custodyActorId);

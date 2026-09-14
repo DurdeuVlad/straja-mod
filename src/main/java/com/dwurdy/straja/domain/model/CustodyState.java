@@ -41,6 +41,13 @@ public class CustodyState {
     public Long jailRevivalAt;
     public int resuscitationProgress;
 
+    /**
+     * Downed time retained while the normal downed clock is paused by carry or
+     * resuscitation.  This is a duration, not a wall-clock deadline: elapsed
+     * server time while paused must not consume it.
+     */
+    public long pausedDownedRemainingMs;
+
     public String carrierId = "";
     public String restraintActorId = "";
     public String custodyActorId = "";
@@ -92,19 +99,56 @@ public class CustodyState {
                 && (restraint == RestraintStatus.NONE || custody == CustodyStatus.FREE)) {
             result.add("conscious_restrained_without_valid_control_context");
         }
-        if (condition == PlayerCondition.DOWNED && !positive(downedDeadlineAt)) {
-            result.add("downed_deadline_missing");
+        if (condition == PlayerCondition.DOWNED) {
+            boolean paused = transport == TransportStatus.CARRIED;
+            if (paused) {
+                if (!positive(pausedDownedRemainingMs)) result.add("paused_downed_time_missing");
+                if (downedDeadlineAt != null) result.add("paused_downed_deadline_present");
+        } else if (!positive(downedDeadlineAt)) {
+                result.add("downed_deadline_missing");
+            }
+        } else if (downedDeadlineAt != null) {
+            result.add("orphan_downed_deadline");
         }
-        if (condition == PlayerCondition.RESUSCITATING && !positive(resuscitationDeadlineAt)) {
-            result.add("resuscitation_deadline_missing");
+        if (condition == PlayerCondition.RESUSCITATING) {
+            if (!positive(resuscitationDeadlineAt)) result.add("resuscitation_deadline_missing");
+            if (!positive(pausedDownedRemainingMs)) result.add("paused_downed_time_missing");
+        } else if (resuscitationDeadlineAt != null) {
+            result.add("orphan_resuscitation_deadline");
+        }
+        if (condition != PlayerCondition.DOWNED && condition != PlayerCondition.RESUSCITATING
+                && pausedDownedRemainingMs != 0) {
+            result.add("orphan_paused_downed_time");
         }
         if (condition == PlayerCondition.UNCONSCIOUS_CUSTODY
                 && custody != CustodyStatus.JAILED
                 && !positive(unconsciousCustodyDeadlineAt)) {
             result.add("unconscious_custody_deadline_missing");
+        } else if (condition != PlayerCondition.UNCONSCIOUS_CUSTODY
+                && unconsciousCustodyDeadlineAt != null) {
+            result.add("orphan_unconscious_custody_deadline");
         }
         if (transport == TransportStatus.CARRIED && !positive(transportDeadlineAt)) {
             result.add("transport_deadline_missing");
+        } else if (transport != TransportStatus.CARRIED && transportDeadlineAt != null) {
+            result.add("orphan_transport_deadline");
+        }
+        if (condition == PlayerCondition.DEAD && transport == TransportStatus.CARRIED) {
+            result.add("dead_player_carried");
+        }
+        if (custody == CustodyStatus.ARRESTED) {
+            if (!positive(jailDeliveryDeadlineAt) && condition != PlayerCondition.DEAD) {
+                result.add("jail_delivery_deadline_missing");
+            } else if (condition == PlayerCondition.DEAD && jailDeliveryDeadlineAt != null) {
+                result.add("orphan_jail_delivery_deadline");
+            }
+        } else if (jailDeliveryDeadlineAt != null) {
+            result.add("orphan_jail_delivery_deadline");
+        }
+        if (custody == CustodyStatus.JAILED && condition == PlayerCondition.UNCONSCIOUS_CUSTODY) {
+            // jailRevivalAt is policy-dependent and is validated by the deadline engine.
+        } else if (jailRevivalAt != null) {
+            result.add("orphan_jail_revival_deadline");
         }
         if (resuscitationProgress < 0 || resuscitationProgress > 100) {
             result.add("resuscitation_progress_out_of_range");
@@ -122,5 +166,9 @@ public class CustodyState {
 
     private static boolean positive(Long value) {
         return value != null && value > 0;
+    }
+
+    private static boolean positive(long value) {
+        return value > 0;
     }
 }
