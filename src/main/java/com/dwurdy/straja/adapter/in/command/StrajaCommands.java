@@ -159,6 +159,9 @@ public final class StrajaCommands {
         setup.then(Commands.literal("patrol")
                 .executes(c -> adminActor(c, StrajaRuntime.get().guards()::setupPatrol)));
         setup.then(Commands.literal("npcs").executes(NpcCommands::spawnMissing));
+        // Admin tool kit: Comisar/op holder gate re-checked inside the service.
+        setup.then(Commands.literal("tools")
+                .executes(c -> adminActor(c, StrajaRuntime.get().adminTools()::giveToolKit)));
         root.then(adminOnly(setup));
 
         // runtime policy overrides (persisted YAML layer, live apply)
@@ -1036,7 +1039,7 @@ public final class StrajaCommands {
                     "/straja salary | coins | food | kit | regear | approve-regear <jucător>",
                     "/straja report|message|request <text> | inbox",
                     "/straja promote | demote | suspend | reinstate | fire | faction <jucător> <nume>",
-                    "/straja setup — checklist ghidat | setup here | setup patrol | setup npcs",
+                    "/straja setup — checklist ghidat | setup here | setup patrol | setup npcs | setup tools",
                     "/straja policy list | get <cheie> | set <cheie> <valoare> | reset <cheie>",
                     "/straja set-checkpoint <id> | set-mission-time <id> <min> | set-location <nume>",
                     "/straja mission | cuffs | prison | fine | complaint | room | archive — help pe subcomandă",

@@ -3,6 +3,7 @@ package com.dwurdy.straja.adapter.in.npc;
 import com.dwurdy.straja.StrajaMod;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -48,6 +49,22 @@ public class StrajaNpcEntity extends PathfinderMob {
                 .add(Attributes.MAX_HEALTH, 20.0)
                 .add(Attributes.MOVEMENT_SPEED, 0.0)
                 .add(Attributes.KNOCKBACK_RESISTANCE, 1.0);
+    }
+
+    /**
+     * Spawns an NPC entity with the given role and optional skin/display name.
+     * Registry registration stays with the caller — the command path registers
+     * the role directly while the cloner tool applies a captured template.
+     */
+    public static StrajaNpcEntity spawn(ServerLevel level, double x, double y, double z,
+                                        String role, String skin, String displayName) {
+        var entity = new StrajaNpcEntity(NPC.get(), level);
+        entity.setPos(x, y, z);
+        entity.setRoleId(role);
+        if (skin != null) entity.setSkin(skin);
+        if (displayName != null) entity.setCustomName(Component.literal(displayName));
+        level.addFreshEntity(entity);
+        return entity;
     }
 
     @Override

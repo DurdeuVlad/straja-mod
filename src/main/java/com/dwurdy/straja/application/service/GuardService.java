@@ -1491,6 +1491,12 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
     // ------------------------------------------------------------ setup
 
     public void setCheckpoint(PlayerGateway player, String id) {
+        setCheckpointAt(player, id, player.dimension(), player.x(), player.y(), player.z());
+    }
+
+    /** Same checkpoint write as {@link #setCheckpoint}, at an explicit position (admin tools). */
+    public void setCheckpointAt(PlayerGateway player, String id, String dimension,
+                                double x, double y, double z) {
         if (!players.isCommissioner(player)) {
             player.tell("Doar Comisaru' poate configura checkpoint-urile.");
             return;
@@ -1501,10 +1507,10 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             player.tell("Checkpoint necunoscut. Folosește checkpoint_1 până checkpoint_4.");
             return;
         }
-        point.dimension = player.dimension();
-        point.x = Math.floor(player.x());
-        point.y = Math.floor(player.y());
-        point.z = Math.floor(player.z());
+        point.dimension = dimension;
+        point.x = Math.floor(x);
+        point.y = Math.floor(y);
+        point.z = Math.floor(z);
         ctx.setup().write(setup);
         player.tell(id + " salvat la " + point.x.intValue() + ", " + point.y.intValue() + ", "
                 + point.z.intValue() + " (" + point.dimension + ").");
@@ -1557,12 +1563,29 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             player.tell("Locație necunoscută: reports, mailbox, office, receptionist, secretary, prison-release, infirmary, trainer sau hq.");
             return;
         }
+        stampLocation(player, key, player.dimension(), player.x(), player.y(), player.z());
+    }
+
+    /**
+     * Same location write as {@link #setLocation}, at an explicit position and
+     * with a canonical {@link SetupData#LOCATION_KEYS} key (admin tools).
+     */
+    public void stampLocation(PlayerGateway player, String key, String dimension,
+                              double x, double y, double z) {
+        if (!players.isCommissioner(player)) {
+            player.tell("Doar Comisaru' poate configura locațiile administrative.");
+            return;
+        }
+        if (java.util.Arrays.asList(SetupData.LOCATION_KEYS).indexOf(key) < 0) {
+            player.tell("Locație necunoscută: reports, mailbox, office, receptionist, secretary, prison-release, infirmary, trainer sau hq.");
+            return;
+        }
         SetupData setup = ctx.setup().read();
         var location = new SetupData.Location();
-        location.dimension = player.dimension();
-        location.x = Math.floor(player.x());
-        location.y = Math.floor(player.y());
-        location.z = Math.floor(player.z());
+        location.dimension = dimension;
+        location.x = Math.floor(x);
+        location.y = Math.floor(y);
+        location.z = Math.floor(z);
         setup.locations.put(key, location);
         ctx.setup().write(setup);
         player.tell(key + " salvat la " + (int) location.x + ", " + (int) location.y + ", " + (int) location.z + ".");
@@ -1603,6 +1626,11 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
 
     /** One-shot: stamps every administrative location at the player's position. */
     public void setupLocationsHere(PlayerGateway player) {
+        setupLocationsAt(player, player.dimension(), player.x(), player.y(), player.z());
+    }
+
+    /** Same batch write as {@link #setupLocationsHere}, at an explicit position (admin tools). */
+    public void setupLocationsAt(PlayerGateway player, String dimension, double x, double y, double z) {
         if (!players.isCommissioner(player)) {
             player.tell("Doar Comisaru' poate configura locațiile administrative.");
             return;
@@ -1610,10 +1638,10 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         SetupData setup = ctx.setup().read();
         for (String key : SetupData.LOCATION_KEYS) {
             var location = new SetupData.Location();
-            location.dimension = player.dimension();
-            location.x = Math.floor(player.x());
-            location.y = Math.floor(player.y());
-            location.z = Math.floor(player.z());
+            location.dimension = dimension;
+            location.x = Math.floor(x);
+            location.y = Math.floor(y);
+            location.z = Math.floor(z);
             setup.locations.put(key, location);
         }
         ctx.setup().write(setup);

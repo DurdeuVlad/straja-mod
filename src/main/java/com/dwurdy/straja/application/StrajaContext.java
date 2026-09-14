@@ -33,4 +33,5 @@ public record StrajaContext(
         CurrencyProvider currency,
         DeliveryProvider delivery,
         WorldGateway world,
-        FactionGateway factions) {}
+        FactionGateway factions,
+        AdminToolRepository adminTools) {}

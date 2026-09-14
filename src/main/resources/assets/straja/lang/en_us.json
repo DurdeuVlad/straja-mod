@@ -19,5 +19,9 @@
   "item.straja.keychain": "Straja Keychain",
   "item.straja.fine_book": "Fine Book",
   "item.straja.fine_notice": "Fine Notice",
-  "item.straja.training_manual": "Straja Training Manual"
+  "item.straja.training_manual": "Straja Training Manual",
+  "item.straja.npc_wand": "NPC Wand",
+  "item.straja.patrol_wand": "Patrol Wand",
+  "item.straja.survey_rod": "Survey Rod",
+  "item.straja.npc_cloner": "NPC Cloner"
 }
