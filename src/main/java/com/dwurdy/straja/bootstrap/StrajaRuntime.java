@@ -8,6 +8,7 @@ import com.dwurdy.straja.adapter.out.persistence.SavedPlayerStateRepository;
 import com.dwurdy.straja.adapter.out.persistence.SavedStores;
 import com.dwurdy.straja.adapter.out.persistence.StoreAccess;
 import com.dwurdy.straja.adapter.out.persistence.StrajaDataProvider;
+import com.dwurdy.straja.adapter.in.compat.OptionalModCompatibility;
 import com.dwurdy.straja.application.StrajaContext;
 import com.dwurdy.straja.application.port.out.Clock;
 import com.dwurdy.straja.application.port.out.IdGenerator;
@@ -30,6 +31,7 @@ public final class StrajaRuntime {
 
     private final MinecraftServer server;
     private final StrajaPolicies policies;
+    private final OptionalModCompatibility.Profile compatibility;
     private final StrajaContext ctx;
     private final MinecraftServerGateway serverGateway;
     private final PlayerService players;
@@ -59,6 +61,9 @@ public final class StrajaRuntime {
     private StrajaRuntime(MinecraftServer server) {
         this.server = server;
         this.policies = StrajaServerConfig.toPolicies();
+        this.compatibility = OptionalModCompatibility.detect();
+        OptionalModCompatibility.applyFailSafe(compatibility, policies);
+        OptionalModCompatibility.log(compatibility);
         this.serverGateway = new MinecraftServerGateway(server);
         StoreAccess stores = name -> new NbtStore(StrajaDataProvider.get(server, name));
 
@@ -155,6 +160,9 @@ public final class StrajaRuntime {
             com.dwurdy.straja.StrajaMod.LOGGER.warn(
                     "[Straja] Ignored malformed policy override '{}' in straja-policies.yaml", failed);
         }
+        // Persisted policy overrides cannot re-enable Straja's generic downed
+        // owner while an optional provider is present.
+        OptionalModCompatibility.applyFailSafe(compatibility, policies);
         this.guards.onStatusChange((p, reason) -> this.missions.cancelOpenFor(p, reason));
         this.guards.onStatusChange((p, reason) -> this.rooms.releaseFor(p));
         this.guards.onPromotedToGuard(p -> this.rooms.assignAutomatically(p));
@@ -216,6 +224,7 @@ public final class StrajaRuntime {
 
     public MinecraftServer server() { return server; }
     public StrajaPolicies policies() { return policies; }
+    public OptionalModCompatibility.Profile compatibility() { return compatibility; }
     public StrajaContext context() { return ctx; }
     public MinecraftServerGateway serverGateway() { return serverGateway; }
     public PlayerService players() { return players; }

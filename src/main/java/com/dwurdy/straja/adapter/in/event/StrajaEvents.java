@@ -257,7 +257,8 @@ public final class StrajaEvents {
         }
         if (!(event.getTarget() instanceof net.minecraft.server.level.ServerPlayer target)) return;
         var targetGateway = new MinecraftPlayerGateway(target.getServer(), target.getUUID());
-        if (player.isCrouching() && gateway.mainHand().isEmpty()) {
+        if (runtime.compatibility().nativeCarryAllowed()
+                && player.isCrouching() && gateway.mainHand().isEmpty()) {
             boolean handled = runtime.custodyRoleplay().dropCarry(gateway, targetGateway, "manual_drop");
             if (!handled) handled = runtime.custodyRoleplay().startCarry(gateway, targetGateway);
             if (handled) event.setCanceled(true);
