@@ -29,5 +29,7 @@
   "straja.form.invalid": "Această acțiune nu mai este valabilă.",
   "straja.give_up.available": "Straja: poți renunța acum.",
   "straja.give_up.title": "Renunță",
-  "straja.give_up.confirmation": "Confirmi renunțarea? Starea de leșin se încheie și vei muri."
+  "straja.give_up.confirmation": "Confirmi renunțarea? Starea de leșin se încheie și vei muri.",
+  "straja.give_up.stale": "Acțiunea de renunțare nu mai este valabilă.",
+  "straja.give_up.result": "Ai renunțat. Salvarea și resuscitarea nu mai sunt posibile."
 }

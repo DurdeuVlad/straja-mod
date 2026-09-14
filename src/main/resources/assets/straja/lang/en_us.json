@@ -29,5 +29,7 @@
   "straja.form.invalid": "This form is no longer valid.",
   "straja.give_up.available": "Straja: You can give up now.",
   "straja.give_up.title": "Give up",
-  "straja.give_up.confirmation": "Confirm give-up? This ends the downed state and kills you."
+  "straja.give_up.confirmation": "Confirm give-up? This ends the downed state and kills you.",
+  "straja.give_up.stale": "That give-up action is no longer valid.",
+  "straja.give_up.result": "You gave up. Rescue and resuscitation are no longer possible."
 }

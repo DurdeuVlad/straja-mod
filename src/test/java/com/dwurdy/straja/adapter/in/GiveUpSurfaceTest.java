@@ -27,6 +27,8 @@ class GiveUpSurfaceTest {
         assertTrue(service.contains("Action.GIVE_UP, Action.OTHER_REQUEST"));
         assertTrue(menu.contains("count < 0"),
                 "the native menu must accept an empty server-issued field list");
+        assertTrue(menu.contains("startsWith(\"@\")"),
+                "localized form text must be resolved on the client");
     }
 
     @Test
@@ -53,6 +55,8 @@ class GiveUpSurfaceTest {
         assertTrue(events.contains("giveUpSessionIds"));
         assertTrue(events.contains("giveUpEligibility(gateway).eligible()"));
         assertTrue(events.contains("giveUpOffered.add(playerId)"));
+        assertTrue(events.contains("if (!giveUpOffered.contains(playerId))"));
+        assertTrue(events.contains("if (opened.isPresent())"));
         assertTrue(events.contains("FormSessionUseCase.Action.GIVE_UP"));
         assertTrue(events.contains("FormSessionBridge.cancelSession(playerId, sessionId)"));
         assertTrue(events.contains("giveUpOffered.remove(playerId)"));
@@ -69,5 +73,18 @@ class GiveUpSurfaceTest {
         assertTrue(screen.contains("new FormPayloads.Submit"));
         assertTrue(screen.contains("new FormPayloads.Cancel"));
         assertFalse(screen.contains("class GiveUp"));
+    }
+
+    @Test
+    void giveUpMessagesUseTranslationKeys() throws IOException {
+        String gateway = source("application/port/out/PlayerGateway.java");
+        String custody = source("application/service/CustodyService.java");
+        String english = Files.readString(Path.of("src/main/resources/assets/straja/lang/en_us.json"));
+        String romanian = Files.readString(Path.of("src/main/resources/assets/straja/lang/ro_ro.json"));
+
+        assertTrue(gateway.contains("tellKey"));
+        assertTrue(custody.contains("straja.give_up.result"));
+        assertTrue(english.contains("straja.give_up.stale"));
+        assertTrue(romanian.contains("straja.give_up.stale"));
     }
 }

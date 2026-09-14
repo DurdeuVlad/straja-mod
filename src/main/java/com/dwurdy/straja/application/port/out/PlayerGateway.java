@@ -34,6 +34,9 @@ public interface PlayerGateway {
 
     void tell(String text);
 
+    /** Sends a client-localized message when the concrete adapter supports it. */
+    default void tellKey(String translationKey) { tell(translationKey); }
+
     /** Replaces the player's action-bar status without adding chat history. */
     default void actionbar(String text) {}
 

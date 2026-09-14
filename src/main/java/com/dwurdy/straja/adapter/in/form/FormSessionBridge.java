@@ -34,7 +34,7 @@ public final class FormSessionBridge {
         if (view.isEmpty()) return Optional.empty();
         OptionalInt opened = player.openMenu(new SimpleMenuProvider(
                         (id, inv, p) -> new StrajaFormMenu(id, inv, view.get()),
-                        Component.literal(view.get().title())),
+                        StrajaFormMenu.textComponent(view.get().title())),
                 buf -> StrajaFormMenu.writeView(buf, view.get()));
         if (opened.isEmpty()) {
             port.cancel(player.getUUID(), view.get().sessionId());
