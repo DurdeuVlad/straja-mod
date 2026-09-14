@@ -185,6 +185,10 @@ final class TestCommands {
                 .then(Commands.argument("id", StringArgumentType.word())
                         .executes(ctx -> run(ctx, runtime ->
                                 runtime.guards().recruit(player(ctx, runtime))))));
+        test.then(Commands.literal("apply")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(ctx -> run(ctx, runtime ->
+                                runtime.guards().applyForStraja(player(ctx, runtime))))));
         test.then(Commands.literal("faction")
                 .then(Commands.argument("id", StringArgumentType.word())
                         .then(Commands.argument("name", StringArgumentType.greedyString())

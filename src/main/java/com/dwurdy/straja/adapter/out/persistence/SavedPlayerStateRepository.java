@@ -23,6 +23,7 @@ public class SavedPlayerStateRepository extends JsonBackedStore implements Playe
             // Gson skips field initializers — collections absent in old saves
             // come back null.
             if (state.specializations == null) state.specializations = new java.util.LinkedHashSet<>();
+            if (state.applicationState == null) state.applicationState = "NONE";
             return state;
         } catch (RuntimeException error) {
             store().put(key + "_corrupt_backup", raw);

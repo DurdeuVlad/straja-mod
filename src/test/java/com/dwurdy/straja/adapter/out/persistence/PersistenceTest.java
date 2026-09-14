@@ -58,6 +58,7 @@ class PersistenceTest {
         state.specializations.add("Recrutor"); // must not NPE on first write-back
         repo.write(id, state);
         assertTrue(repo.read(id).specializations.contains("Recrutor"));
+        assertEquals("NONE", state.applicationState, "absent application state normalizes");
     }
 
     @Test

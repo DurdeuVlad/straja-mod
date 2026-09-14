@@ -23,7 +23,7 @@ final class NpcPlayerSurface {
             "archive-sheet-envelope", "archive-sheet-issue", "archive-sheet-revoke",
             "duty-checkpoint");
 
-    enum RoleRoute { RECEPTIONIST, SECRETARY, JAILER, ARCHIVIST, TRAINER, UNKNOWN }
+    enum RoleRoute { RECEPTIONIST, SECRETARY, JAILER, ARCHIVIST, TRAINER, RECRUITER, UNKNOWN }
 
     record ChatAction(String label, String actionId) {
         /** Command shape used by the surface; the actual token is player-bound. */
@@ -56,6 +56,7 @@ final class NpcPlayerSurface {
             case NpcRoles.JAILER -> RoleRoute.JAILER;
             case NpcRoles.ARCHIVIST -> RoleRoute.ARCHIVIST;
             case NpcRoles.TRAINER -> RoleRoute.TRAINER;
+            case NpcRoles.RECRUITER -> RoleRoute.RECRUITER;
             default -> RoleRoute.UNKNOWN;
         };
     }
@@ -65,20 +66,26 @@ final class NpcPlayerSurface {
             case RECEPTIONIST -> new RoleSurface(
                     RoleRoute.RECEPTIONIST,
                     "Recepție",
-                    "Alege regulamentul Străjii, verifică situația, amenzile, camera sau facțiunea nativă; pentru recrutare și instruire caută Instructorul.",
+                    "Depui aici cererea de admitere, alegi regulamentul Străjii, verifici situația, amenzile, camera sau facțiunea nativă; examenul se susține la Recrutor, instruirea la Instructor.",
                     List.of(
+                            new ChatAction("Depune cererea", "application-submit"),
                             new ChatAction("Regulament", "rules"),
                             new ChatAction("Stare Străjer", "guard-status"),
                             new ChatAction("Amenzile mele", "fine-list"),
                             new ChatAction("Stare cameră", "room-status"),
                             new ChatAction("Declară facțiunea nativă", "faction-declare")));
+            case RECRUITER -> new RoleSurface(
+                    RoleRoute.RECRUITER,
+                    "Recrutare",
+                    "Depui cererea la Recepție, apoi susții aici examenul de admitere — îți pun întrebările una câte una; trecerea te autorizează ca Stagiar.",
+                    List.of(
+                            new ChatAction("Examen de admitere", "recruit"),
+                            new ChatAction("Răspunde la examen (formular)", "quiz-answer")));
             case TRAINER -> new RoleSurface(
                     RoleRoute.TRAINER,
                     "Instructor",
-                    "Aici începe recrutarea: quiz, module de instruire, puncte de serviciu și avansări; manualul teoretic se ridică tot de la mine.",
+                    "Instruirea străjerilor se face aici: module teoretice, puncte de serviciu și avansări; manualul teoretic se ridică tot de la mine.",
                     List.of(
-                            new ChatAction("Recrutare / quiz", "recruit"),
-                            new ChatAction("Răspunde la quiz (formular)", "quiz-answer"),
                             new ChatAction("Progres și puncte", "training-progress"),
                             new ChatAction("Manual de instruire", "training-manual")));
             case SECRETARY -> new RoleSurface(
@@ -185,8 +192,15 @@ final class NpcPlayerSurface {
     /** Maps the trusted trainer projection to clickable actions; pure and state-free. */
     static List<ChatAction> trainingActions(
             com.dwurdy.straja.application.port.in.GuardRecruitmentUseCase.TrainingView view) {
-        if (view == null || !view.canPromote()) return List.of();
-        return List.of(new ChatAction("Cere avansarea", "training-promote"));
+        if (view == null) return List.of();
+        var actions = new java.util.ArrayList<ChatAction>();
+        if (view.pendingModules() > 0) {
+            actions.add(new ChatAction("Răspunde la modul (formular)", "quiz-answer"));
+        }
+        if (view.canPromote()) {
+            actions.add(new ChatAction("Cere avansarea", "training-promote"));
+        }
+        return List.copyOf(actions);
     }
 
     /** Maps the trusted mission projection to clickable actions; pure and state-free. */

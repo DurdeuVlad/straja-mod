@@ -25,7 +25,8 @@ public class SetupData {
 
     public static final String[] LOCATION_KEYS = {
             "reportsLectern", "commissionerMailbox", "commissionerOffice",
-            "receptionist", "secretary", "prisonRelease", "infirmary", "trainer"
+            "receptionist", "secretary", "prisonRelease", "infirmary", "trainer",
+            "recruiter"
     };
 
     public static class Checkpoint {
