@@ -197,7 +197,7 @@ public final class StrajaEvents {
         boolean explicitHardKill = attacker != null && isExplicitHardKill(attacker);
         boolean lethal = target.getHealth() > 0
                 && event.getAmount() >= target.getHealth() + target.getAbsorptionAmount();
-        if (!downed && !lethal) return;
+        if (!downed && !lethal && !explicitHardKill) return;
 
         var category = explicitHardKill ? com.dwurdy.straja.domain.model.DamageCategory.EXCEPTIONAL
                 : downed && weaponHit
@@ -212,7 +212,9 @@ public final class StrajaEvents {
         switch (decision.outcome()) {
             case PROTECTED_BY_CUSTODY, VAMPIRISM_DBNO, VAMPIRISM_PRESERVE,
                     STRAJA_DOWNED, IGNORED_TERMINAL -> event.setCanceled(true);
-            case HARD_KILL, STRAJA_DEATH, VANILLA_DEATH -> { /* vanilla death proceeds */ }
+            case HARD_KILL, STRAJA_DEATH -> event.setAmount((float) Math.max(
+                    event.getAmount(), target.getHealth() + target.getAbsorptionAmount()));
+            case VANILLA_DEATH -> { /* vanilla death proceeds */ }
         }
     }
 
