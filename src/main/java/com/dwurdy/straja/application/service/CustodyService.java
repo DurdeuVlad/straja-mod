@@ -1527,22 +1527,30 @@ public class CustodyService implements CustodyRoleplayUseCase {
         return true;
     }
 
-    /** Consumes the downed state when an authorized transport happens. */
+    /**
+     * Resolves an incapacitated or temporarily arrested state when an
+     * authorized transport happens. Prison delivery uses canonical custody
+     * state because applying cuffs intentionally removes the legacy downed
+     * projection.
+     */
     public boolean resolveDowned(PlayerGateway player, String destination) {
         var store = store();
+        importLegacyProjections(store);
         String playerKey = key(player);
         var record = store.downed.get(playerKey);
-        if (record == null) return false;
         var canonical = store.states.get(playerKey);
-        if (canonical != null && "PRISON".equals(destination)) {
+        boolean jailDelivery = "PRISON".equals(destination);
+        boolean alreadyJailed = jailDelivery && canonical != null
+                && canonical.custody == CustodyStatus.JAILED;
+        boolean canonicalArrest = jailDelivery && canonical != null
+                && canonical.custody == CustodyStatus.ARRESTED;
+        if (record == null && !canonicalArrest && !alreadyJailed) return false;
+        if (canonicalArrest) {
             long at = now();
-            CustodyTransition.Action action = canonical.condition == PlayerCondition.UNCONSCIOUS_CUSTODY
-                    && canonical.custody == CustodyStatus.ARRESTED
-                    ? CustodyTransition.Action.DELIVER_TO_JAIL
-                    : CustodyTransition.Action.RECOVER_CLEAR_ALL;
             var transition = new CustodyTransition(
                     "rp007:resolve:" + playerKey + ":" + at,
-                    action, at, "system", "", "prison",
+                    CustodyTransition.Action.DELIVER_TO_JAIL, at,
+                    "system", "", "prison",
                     StateProvider.SYSTEM, "prison", 0);
             var result = CustodyTransitionEngine.apply(canonical, transition, ctx.policies());
             if (!result.ok() && !result.idempotent()) return false;
@@ -1552,7 +1560,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
         player.closeMenu();
         audit.record("downed_transport", player.name(), uuidOf(player),
                 player.name(), uuidOf(player), "SUCCESS",
-                "destination=" + destination + " reason=" + record.reason);
+                "destination=" + destination + " reason="
+                        + (record == null ? "canonical_custody" : record.reason));
         return true;
     }
 
