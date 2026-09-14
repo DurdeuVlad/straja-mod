@@ -216,6 +216,12 @@ class CustodyServiceTest {
         custody.accept(civilian, req.id);
         hold(guard, CustodyService.ROPE);
         assertTrue(custody.applyRope(guard, civilian));
+        giveItem(guard, CustodyService.ROPE);
+        hold(guard, CustodyService.ROPE);
+        int ropeBeforeRepeat = guard.inventory.countOf(CustodyService.ROPE);
+        assertTrue(custody.applyRope(guard, civilian));
+        assertEquals(ropeBeforeRepeat, guard.inventory.countOf(CustodyService.ROPE),
+                "reapplying an existing layered rope must not consume another rope");
         hold(guard, CustodyService.BOLT_CUTTERS);
         assertTrue(custody.release(guard, civilian));
         assertFalse(custody.isCuffed(civilian));
@@ -238,7 +244,14 @@ class CustodyServiceTest {
         custody.accept(civilian, req.id);
         hold(guard, CustodyService.HEAD_SACK);
         assertTrue(custody.applyHeadSack(guard, civilian));
+        assertEquals(0, guard.inventory.countOf(CustodyService.HEAD_SACK));
         assertTrue(civilian.effects.stream().anyMatch(e -> e.contains("blindness")));
+        giveItem(guard, CustodyService.HEAD_SACK);
+        hold(guard, CustodyService.HEAD_SACK);
+        int sackBeforeRepeat = guard.inventory.countOf(CustodyService.HEAD_SACK);
+        assertTrue(custody.applyHeadSack(guard, civilian));
+        assertEquals(sackBeforeRepeat, guard.inventory.countOf(CustodyService.HEAD_SACK),
+                "reapplying an existing head sack must not consume another sack");
         assertTrue(custody.removeHeadSack(civilian));
         assertFalse(custody.hasHeadSack(civilian));
     }
@@ -307,6 +320,8 @@ class CustodyServiceTest {
         hold(guard, CustodyService.BATON);
         custody.batonStrike(guard, civilian, 6, 0, 8);
         var req = ctx.custody().read().cuffRequests.values().iterator().next();
+        assertEquals(PlayerCondition.DOWNED,
+                ctx.custody().read().states.get(civilian.uuid().toString()).condition);
         assertTrue(custody.refuse(civilian, req.id));
         assertTrue(custody.isDowned(civilian));
         assertFalse(custody.isCuffed(civilian));
@@ -478,6 +493,116 @@ class CustodyServiceTest {
 
         assertEquals(PlayerCondition.DEAD,
                 ctx.custody().read().states.get(state.playerId).condition);
+    }
+
+    @Test
+    void wakeDownedCannotBypassPersistedDeadline() {
+        custody.startDowned(civilian, guard, "test");
+
+        assertFalse(custody.wakeDowned(civilian, "early"));
+        assertTrue(ctx.custody().read().downed.containsKey(civilian.uuid().toString()));
+        assertEquals(PlayerCondition.DOWNED,
+                ctx.custody().read().states.get(civilian.uuid().toString()).condition);
+    }
+
+    @Test
+    void legacyDownedAndCuffedRecordsMergeIntoUnconsciousCustody() {
+        var store = ctx.custody().read();
+        String playerKey = civilian.uuid().toString();
+        var downed = new CustodyStore.DownedRecord();
+        downed.target = civilian.name();
+        downed.targetUuid = playerKey;
+        downed.dimension = civilian.dimension();
+        downed.x = civilian.x();
+        downed.y = civilian.y();
+        downed.z = civilian.z();
+        downed.startedAt = clock.now;
+        downed.wakesAt = clock.now + 60_000;
+        store.downed.put(playerKey, downed);
+        var cuff = new CustodyStore.CuffRecord();
+        cuff.target = civilian.name();
+        cuff.targetUuid = playerKey;
+        cuff.issuer = guard.name();
+        cuff.issuerUuid = guard.uuid().toString();
+        cuff.cuffedAt = clock.now;
+        store.cuffed.put(playerKey, cuff);
+        ctx.custody().write(store);
+
+        custody.recoverOnLogin(civilian);
+
+        var state = ctx.custody().read().states.get(playerKey);
+        assertEquals(PlayerCondition.UNCONSCIOUS_CUSTODY, state.condition);
+        assertEquals(com.dwurdy.straja.domain.model.CustodyStatus.ARRESTED, state.custody);
+        assertEquals(com.dwurdy.straja.domain.model.RestraintStatus.CUFFED, state.restraint);
+        assertTrue(state.unconsciousCustodyDeadlineAt > clock.now);
+
+        clock.advance(60_000);
+        custody.tick();
+        state = ctx.custody().read().states.get(playerKey);
+        assertEquals(PlayerCondition.UNCONSCIOUS_CUSTODY, state.condition,
+                "the legacy downed wake deadline must not bypass unconscious custody");
+        assertTrue(ctx.custody().read().cuffed.containsKey(playerKey));
+
+        clock.advance(60_000);
+        custody.tick();
+        state = ctx.custody().read().states.get(playerKey);
+        assertEquals(PlayerCondition.CONSCIOUS_RESTRAINED, state.condition);
+    }
+
+    @Test
+    void directLegacyWakeCannotClearMergedUnconsciousCustodyEarly() {
+        var store = ctx.custody().read();
+        String playerKey = civilian.uuid().toString();
+        var state = new CustodyState();
+        state.playerId = playerKey;
+        state.playerUuid = playerKey;
+        state.playerName = civilian.name();
+        assertTrue(CustodyTransitionEngine.apply(state,
+                CustodyTransition.of("cuffs-1", CustodyTransition.Action.APPLY_CUFFS,
+                        clock.now, guard.uuid().toString()), ctx.policies()).ok());
+        state.condition = PlayerCondition.UNCONSCIOUS_CUSTODY;
+        state.unconsciousCustodyDeadlineAt = clock.now + 120_000;
+        state.downedDeadlineAt = null;
+        store.states.put(playerKey, state);
+        var downed = new CustodyStore.DownedRecord();
+        downed.target = civilian.name();
+        downed.targetUuid = playerKey;
+        downed.dimension = civilian.dimension();
+        downed.x = civilian.x();
+        downed.y = civilian.y();
+        downed.z = civilian.z();
+        downed.startedAt = clock.now;
+        downed.wakesAt = clock.now + 60_000;
+        store.downed.put(playerKey, downed);
+        ctx.custody().write(store);
+
+        clock.advance(60_000);
+        assertFalse(custody.wakeDowned(civilian, "legacy_direct_wake"));
+        assertEquals(PlayerCondition.UNCONSCIOUS_CUSTODY,
+                ctx.custody().read().states.get(playerKey).condition);
+    }
+
+    @Test
+    void legacyDownedProjectionImportedAndPersistedOnLogout() {
+        var store = ctx.custody().read();
+        String playerKey = civilian.uuid().toString();
+        var downed = new CustodyStore.DownedRecord();
+        downed.target = civilian.name();
+        downed.targetUuid = playerKey;
+        downed.dimension = civilian.dimension();
+        downed.x = civilian.x();
+        downed.y = civilian.y();
+        downed.z = civilian.z();
+        downed.startedAt = clock.now;
+        downed.wakesAt = clock.now + 60_000;
+        store.downed.put(playerKey, downed);
+        ctx.custody().write(store);
+
+        custody.recoverOnLogout(civilian);
+
+        assertNotNull(ctx.custody().read().states.get(playerKey));
+        assertEquals(PlayerCondition.DOWNED,
+                ctx.custody().read().states.get(playerKey).condition);
     }
 
     // ------------------------------------------------------------ projection

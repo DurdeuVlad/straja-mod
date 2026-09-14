@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /** Boundary and persistence tests for the canonical server-time evaluator. */
@@ -226,6 +227,28 @@ class CustodyDeadlineEngineTest {
         assertEquals(CustodyStatus.FREE, state.custody);
         assertNull(state.downedDeadlineAt);
         assertFalse(CustodyDeadlineEngine.tick(state, 1_000, policies).changed());
+    }
+
+    @Test
+    void nonRetainRecoveryIsIdempotentAcrossRepeatedCalls() {
+        for (String behavior : List.of("WAKE", "CLEAR_ALL", "RELEASE_RESTRAINTS")) {
+            var state = state("recovery-" + behavior);
+            var policies = policies();
+            policies.logoutRecoveryBehavior = behavior;
+            apply(state, CustodyTransition.of("down-1", CustodyTransition.Action.ENTER_DOWNED,
+                    0, "weapon"), policies);
+
+            var first = CustodyDeadlineEngine.recover(state, RecoveryEvent.LOGOUT, 250, policies);
+            var transitionId = state.transitionId;
+            var enteredAt = state.enteredAt;
+            var second = CustodyDeadlineEngine.recover(state, RecoveryEvent.LOGOUT, 500, policies);
+
+            assertTrue(first.changed(), behavior);
+            assertFalse(second.changed(), behavior);
+            assertTrue(second.idempotent(), behavior);
+            assertEquals(transitionId, state.transitionId, behavior);
+            assertEquals(enteredAt, state.enteredAt, behavior);
+        }
     }
 
     @Test

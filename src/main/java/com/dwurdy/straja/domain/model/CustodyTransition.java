@@ -30,6 +30,7 @@ public record CustodyTransition(
         WAKE,
         RESOLVE_UNCONSCIOUS_DEADLINE,
         RESOLVE_JAIL_DELIVERY_DEADLINE,
+        ENTER_JAIL,
         DELIVER_TO_JAIL,
         REVIVE_IN_JAIL,
         RELEASE_RESTRAINT,

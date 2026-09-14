@@ -163,7 +163,7 @@ public final class CustodyDeadlineEngine {
                                              DeadlineType type, CustodyTransition.Action action,
                                              StrajaPolicies policies) {
         var transition = new CustodyTransition(
-                "recovery:" + event.name() + ":" + action.name() + ":" + at,
+                "recovery:" + event.name() + ":" + action.name(),
                 action,
                 at,
                 "",

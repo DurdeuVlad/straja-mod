@@ -210,13 +210,16 @@ public class PrisonService implements PrisonRoleplayUseCase {
             Cell cell = firstFree(data);
             if (sentence == null || !"WAITING_CELL".equals(sentence.status) || cell == null) continue;
             assignCell(data, sentence, cell);
-            data.waitlist.removeIf(e -> e != null && entry.sentenceId.equals(e.sentenceId));
-            changed = true;
-            var target = findFor(sentence);
-            if (target != null) {
-                teleportToCell(target, cell);
+        data.waitlist.removeIf(e -> e != null && entry.sentenceId.equals(e.sentenceId));
+        changed = true;
+        var target = findFor(sentence);
+        if (target != null) {
+                if (!deliverToAssignedCell(target, sentence, cell)) {
+                    cancelSentence(data, sentence, "custody_delivery_failed");
+                    continue;
+                }
                 target.tell("Ai fost repartizat într-o celulă pentru executarea sentinței.");
-            }
+        }
         }
         if (changed) ctx.prison().write(data);
     }
@@ -284,8 +287,14 @@ public class PrisonService implements PrisonRoleplayUseCase {
         ctx.prison().write(data);
         var online = findFor(sentence);
         if (online != null && !sentence.cellId.isEmpty()) {
-            custody.resolveDowned(online, "PRISON");
-            teleportToCell(online, cell);
+            if (!deliverToAssignedCell(online, sentence, cell)) {
+                cancelSentence(data, sentence, "custody_delivery_failed");
+                ctx.prison().write(data);
+                audit.record("prison_arrest", actor == null ? "" : actor.name(),
+                        actor == null ? "" : uuidOf(actor), sentence.target,
+                        sentence.targetUuid, "REFUSED", "custody_delivery_failed");
+                return sentence;
+            }
         }
         if (online != null) {
             online.tell("Ai fost arestat pentru " + sentence.sentenceDays
@@ -319,7 +328,7 @@ public class PrisonService implements PrisonRoleplayUseCase {
             actor.tell(target.name() + " nu are o sentință activă.");
             return false;
         }
-        releaseSentence(data, sentence, target, "FORCED_RELEASE");
+        if (!releaseSentence(data, sentence, target, "FORCED_RELEASE")) return false;
         ctx.prison().write(data);
         audit.record("prison_release", actor.name(), uuidOf(actor),
                 sentence.target, sentence.targetUuid, "SUCCESS",
@@ -327,9 +336,10 @@ public class PrisonService implements PrisonRoleplayUseCase {
         return true;
     }
 
-    private void releaseSentence(PrisonStore data, Sentence sentence, PlayerGateway target, String reason) {
+    private boolean releaseSentence(PrisonStore data, Sentence sentence, PlayerGateway target, String reason) {
         if (sentence == null || java.util.Set.of("SERVED", "FORCED_RELEASE", "CANCELLED")
-                .contains(sentence.status)) return;
+                .contains(sentence.status)) return true;
+        if (target != null && !custody.releaseFromJail(target, reason)) return false;
         sentence.status = "FORCED_RELEASE".equals(reason) ? "FORCED_RELEASE" : "SERVED";
         sentence.servedAt = now();
         sentence.releaseReason = reason == null ? "SERVED" : reason;
@@ -340,6 +350,7 @@ public class PrisonService implements PrisonRoleplayUseCase {
                     ? "Ai fost eliberat administrativ din celulă."
                     : "Ți-ai executat sentința. Ești eliberat din celulă.");
         }
+        return true;
     }
 
     private void teleportToRelease(PlayerGateway player) {
@@ -392,8 +403,13 @@ public class PrisonService implements PrisonRoleplayUseCase {
         var assignment = cell == null || blank(cell.id) ? null : data.assignments.get(cell.id);
         if (cell != null && !blank(cell.dimension) && assignment != null
                 && sentence.id.equals(assignment.sentenceId)) {
-            custody.resolveDowned(player, "PRISON");
-            teleportToCell(player, cell);
+            if (!deliverToAssignedCell(player, sentence, cell)) {
+                cancelSentence(data, sentence, "custody_delivery_failed");
+                ctx.prison().write(data);
+                audit.record("prison_recover", player.name(), uuidOf(player),
+                        sentence.target, sentence.targetUuid, "SUCCESS",
+                        "custody_delivery_failed");
+            }
             return;
         }
         // The cell or its assignment is missing/mismatched: release any
@@ -486,8 +502,10 @@ public class PrisonService implements PrisonRoleplayUseCase {
                         && sentence.id != null && sentence.id.equals(e.sentenceId));
                 changed = true;
                 if (target != null) {
-                    custody.resolveDowned(target, "PRISON");
-                    teleportToCell(target, cell);
+                    if (!deliverToAssignedCell(target, sentence, cell)) {
+                        cancelSentence(data, sentence, "custody_delivery_failed");
+                        continue;
+                    }
                 }
             }
             if (target == null) continue; // offline time never counts
@@ -519,7 +537,12 @@ public class PrisonService implements PrisonRoleplayUseCase {
                         + "Mișcă-te sau interacționează periodic.");
             }
             changed = true;
-            if (sentence.remainingActiveMs <= 0) releaseSentence(data, sentence, target, "SERVED");
+            if (sentence.remainingActiveMs <= 0
+                    && !releaseSentence(data, sentence, target, "SERVED")) {
+                // Keep the sentence active and retry the canonical release on a
+                // later tick if persisted custody is malformed or incompatible.
+                sentence.remainingActiveMs = 1;
+            }
         }
         changed |= pruneClosedSentences(data);
         if (changed) ctx.prison().write(data);
@@ -551,5 +574,26 @@ public class PrisonService implements PrisonRoleplayUseCase {
 
     private static String uuidOf(PlayerGateway p) {
         return p == null || p.uuid() == null ? "" : p.uuid().toString();
+    }
+
+    /** Resolves any downed projection, then records the canonical jail state. */
+    private boolean deliverToAssignedCell(PlayerGateway target, Sentence sentence, Cell cell) {
+        if (target == null || sentence == null || cell == null || blank(cell.id)) return false;
+        custody.resolveDowned(target, "PRISON");
+        if (!custody.enterJail(target, "prison:" + cell.id)) return false;
+        teleportToCell(target, cell);
+        return true;
+    }
+
+    /** Closes a sentence when canonical custody rejects the cell delivery. */
+    private void cancelSentence(PrisonStore data, Sentence sentence, String reason) {
+        if (sentence == null) return;
+        if (!blank(sentence.cellId)) data.assignments.remove(sentence.cellId);
+        data.waitlist.removeIf(e -> e != null && sentence.id != null
+                && sentence.id.equals(e.sentenceId));
+        sentence.cellId = "";
+        sentence.status = "CANCELLED";
+        sentence.servedAt = now();
+        sentence.releaseReason = reason == null ? "CANCELLED" : reason;
     }
 }

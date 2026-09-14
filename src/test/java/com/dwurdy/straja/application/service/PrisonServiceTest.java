@@ -3,6 +3,8 @@ package com.dwurdy.straja.application.service;
 import com.dwurdy.straja.application.StrajaContext;
 import com.dwurdy.straja.domain.model.Rank;
 import com.dwurdy.straja.domain.model.Sentence;
+import com.dwurdy.straja.domain.model.CustodyStatus;
+import com.dwurdy.straja.domain.model.PlayerCondition;
 import com.dwurdy.straja.support.Fakes;
 import com.dwurdy.straja.support.Fakes.*;
 import org.junit.jupiter.api.BeforeEach;
@@ -53,6 +55,9 @@ class PrisonServiceTest {
         // teleported inside the cell
         assertTrue(inmate.x >= 0 && inmate.x <= 5);
         assertTrue(prison.insideCell("minecraft:overworld", inmate.x, inmate.y, inmate.z));
+        var custodyState = ctx.custody().read().states.get(inmate.uuid().toString());
+        assertEquals(CustodyStatus.JAILED, custodyState.custody);
+        assertEquals(PlayerCondition.ALIVE, custodyState.condition);
     }
 
     @Test
@@ -129,6 +134,44 @@ class PrisonServiceTest {
         assertTrue(prison.release(boss, inmate, "test"));
         assertEquals("FORCED_RELEASE", ctx.prison().read().sentences.get(0).status);
         assertTrue(ctx.prison().read().assignments.isEmpty());
+        var custodyState = ctx.custody().read().states.get(inmate.uuid().toString());
+        assertEquals(CustodyStatus.FREE, custodyState.custody);
+        assertEquals(PlayerCondition.ALIVE, custodyState.condition);
+    }
+
+    @Test
+    void malformedCanonicalJailEntryCancelsSentenceWithoutTeleporting() {
+        var sentence = prison.arrest(inmate, null, 1, boss, null);
+        inmate.teleport("minecraft:overworld", 20, 61, 20);
+        var custodyStore = ctx.custody().read();
+        custodyStore.states.get(inmate.uuid().toString()).condition = PlayerCondition.DEAD;
+        ctx.custody().write(custodyStore);
+        assertEquals("ACTIVE", ctx.prison().read().sentences.get(0).status);
+        assertEquals("celula_1", ctx.prison().read().sentences.get(0).cellId);
+        assertNotNull(ctx.prison().read().assignments.get("celula_1"));
+        assertEquals(sentence.id, ctx.prison().read().assignments.get("celula_1").sentenceId);
+        assertEquals(PlayerCondition.DEAD,
+                ctx.custody().read().states.get(inmate.uuid().toString()).condition);
+        prison.recoverOnLogin(inmate);
+
+        var after = ctx.prison().read();
+        var stored = after.sentences.stream().filter(s -> sentence.id.equals(s.id)).findFirst().orElseThrow();
+        assertEquals("CANCELLED", stored.status);
+        assertTrue(after.assignments.isEmpty());
+        assertEquals(20, inmate.x, "failed canonical delivery must not teleport the target");
+    }
+
+    @Test
+    void malformedCanonicalJailReleaseFailsClosedAndKeepsSentence() {
+        prison.arrest(inmate, null, 1, boss, null);
+        var custodyStore = ctx.custody().read();
+        custodyStore.states.get(inmate.uuid().toString()).condition = null;
+        ctx.custody().write(custodyStore);
+
+        assertFalse(prison.release(boss, inmate, "test"));
+
+        assertEquals("ACTIVE", ctx.prison().read().sentences.get(0).status);
+        assertFalse(ctx.prison().read().assignments.isEmpty());
     }
 
     @Test

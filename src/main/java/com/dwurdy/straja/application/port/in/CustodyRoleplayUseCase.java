@@ -43,6 +43,8 @@ public interface CustodyRoleplayUseCase {
     boolean wakeDowned(PlayerGateway player, String reason);
 
     boolean resolveDowned(PlayerGateway player, String destination);
+    boolean enterJail(PlayerGateway player, String destination);
+    boolean releaseFromJail(PlayerGateway player, String reason);
     boolean giveCuffs(PlayerGateway player);
 
     DamageDecision batonStrike(
