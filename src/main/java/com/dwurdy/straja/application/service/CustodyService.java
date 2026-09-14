@@ -1530,6 +1530,111 @@ public class CustodyService implements CustodyRoleplayUseCase {
 
     // ------------------------------------------------------------ downed
 
+    /**
+     * Read-only server-side guard for the later confirmation surface. Legacy
+     * downed records are projected in memory for the check, but are not
+     * persisted until a confirmed transition is accepted.
+     */
+    @Override
+    public CustodyRoleplayUseCase.GiveUpEligibility giveUpEligibility(PlayerGateway player) {
+        if (player == null || player.uuid() == null) {
+            return new CustodyRoleplayUseCase.GiveUpEligibility(false, "TARGET_UUID_REQUIRED");
+        }
+        if (!player.isOnline()) {
+            return new CustodyRoleplayUseCase.GiveUpEligibility(false, "TARGET_OFFLINE");
+        }
+        var store = store();
+        String playerKey = key(player);
+        CustodyState state = giveUpState(store, playerKey);
+        if (state == null) {
+            return new CustodyRoleplayUseCase.GiveUpEligibility(false, "DOWNED_STATE_MISSING");
+        }
+        if (!uuidOf(player).equals(state.playerUuid)) {
+            return new CustodyRoleplayUseCase.GiveUpEligibility(false, "TARGET_UUID_MISMATCH");
+        }
+        if (player.isPassenger() || legacyCustodyProjectionPresent(store, playerKey)) {
+            return new CustodyRoleplayUseCase.GiveUpEligibility(
+                    false, "GIVE_UP_REQUIRES_ORDINARY_DOWNED");
+        }
+        var result = CustodyTransitionEngine.giveUpEligibility(state, uuidOf(player));
+        return new CustodyRoleplayUseCase.GiveUpEligibility(result.ok(), result.code());
+    }
+
+    /**
+     * Applies one confirmed give-up request. The transition identity is tied
+     * to the accepted downed-state identity, so duplicate submits replay the
+     * same terminal action even when the client does not supply a packet id.
+     */
+    @Override
+    public boolean giveUp(PlayerGateway player, boolean confirmed) {
+        if (!confirmed) return false;
+        if (player == null || player.uuid() == null || !player.isOnline()) return false;
+
+        var store = store();
+        String playerKey = key(player);
+        CustodyState state = giveUpState(store, playerKey);
+        if (state == null || !uuidOf(player).equals(state.playerUuid)) return false;
+        if (player.isPassenger() || legacyCustodyProjectionPresent(store, playerKey)) return false;
+
+        String giveUpPrefix = "give-up:" + playerKey + ":";
+        if (state.condition == PlayerCondition.DEAD
+                && state.transitionId != null && state.transitionId.startsWith(giveUpPrefix)) {
+            return true;
+        }
+
+        var eligibility = CustodyTransitionEngine.giveUpEligibility(state, uuidOf(player));
+        if (!eligibility.ok()) {
+            audit.record("give_up", player.name(), uuidOf(player),
+                    player.name(), uuidOf(player), "REFUSED", "code=" + eligibility.code());
+            return false;
+        }
+
+        long at = now();
+        String priorTransitionId = state.transitionId == null ? "" : state.transitionId;
+        var transition = new CustodyTransition(
+                giveUpPrefix + (priorTransitionId.isEmpty() ? state.enteredAt : priorTransitionId),
+                CustodyTransition.Action.GIVE_UP, at, uuidOf(player),
+                "", "", StateProvider.NATIVE, "give_up", 0);
+        var result = CustodyTransitionEngine.apply(state, transition, ctx.policies());
+        if (!result.ok() && !result.idempotent()) {
+            audit.record("give_up", player.name(), uuidOf(player),
+                    player.name(), uuidOf(player), "REFUSED", "code=" + result.code());
+            return false;
+        }
+
+        store.states.put(playerKey, state);
+        store.downed.remove(playerKey);
+        ctx.custody().write(store);
+
+        // The actual death event remains the adapter boundary. These two
+        // calls ensure the accepted application action immediately reaches it
+        // and cannot leave a stale passenger/menu behind in the meantime.
+        player.stopRiding();
+        player.closeMenu();
+        player.setHealth(0);
+        player.tell("Ai renunțat și ai murit. Nu mai poți fi resuscitat.");
+        audit.record("give_up", player.name(), uuidOf(player),
+                player.name(), uuidOf(player), "SUCCESS", "transition=" + transition.id());
+        return true;
+    }
+
+    /** Returns canonical state without normalizing or writing legacy data. */
+    private CustodyState giveUpState(CustodyStore store, String playerKey) {
+        if (store == null) return null;
+        CustodyState state = store.states.get(playerKey);
+        if (state != null) return state;
+        var record = store.downed.get(playerKey);
+        return record == null || malformedDowned(record)
+                ? null : canonicalFromLegacyDowned(playerKey, record);
+    }
+
+    /** Legacy restraint projections are still authoritative until reconciled. */
+    private static boolean legacyCustodyProjectionPresent(CustodyStore store, String playerKey) {
+        return store.cuffed.containsKey(playerKey)
+                || store.bound.containsKey(playerKey)
+                || store.headSacks.containsKey(playerKey);
+    }
+
     public CustodyStore.DownedRecord startDowned(PlayerGateway player, PlayerGateway source, String reason) {
         if (!ctx.policies().downedEnabled) return null;
         var store = store();

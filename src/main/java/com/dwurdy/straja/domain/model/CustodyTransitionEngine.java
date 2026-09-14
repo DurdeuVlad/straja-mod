@@ -52,6 +52,7 @@ public final class CustodyTransitionEngine {
             case RECOVER_CLEAR_ALL -> recoverClearAll(state);
             case RECOVER_RELEASE_RESTRAINTS -> recoverReleaseRestraints(state);
             case RECOVER_WAKE -> recoverWake(state);
+            case GIVE_UP -> giveUp(state, transition, policies);
             case DIE -> die(state, transition, policies);
         };
         if (!result.ok()) return result;
@@ -511,6 +512,55 @@ public final class CustodyTransitionEngine {
                 state.carrierId = "";
             }
             case RETAIN -> { /* death is itself an explicit resolution */ }
+        }
+        return CustodyTransitionResult.applied();
+    }
+
+    /**
+     * Read-only eligibility check for the application confirmation surface.
+     * It performs the same guards as {@code GIVE_UP} without mutating state.
+     */
+    public static CustodyTransitionResult giveUpEligibility(CustodyState state,
+                                                              String actorId) {
+        if (state == null) return CustodyTransitionResult.rejected("INVALID_INPUT");
+        if (!state.wellFormed()) return CustodyTransitionResult.rejected("MALFORMED_STATE");
+        return giveUpGuards(state, actorId);
+    }
+
+    /**
+     * Ends only an ordinary Straja-owned downed state. This is deliberately a
+     * distinct transition from {@link CustodyTransition.Action#DIE}: give-up
+     * is a player-authored action and must never become a way around transport,
+     * rescue, restraint, custody, jail, or another provider's ownership.
+     */
+    private static CustodyTransitionResult giveUp(CustodyState state,
+                                                    CustodyTransition transition,
+                                                    StrajaPolicies policies) {
+        CustodyTransitionResult eligibility = giveUpGuards(state, transition.actorId());
+        if (!eligibility.ok()) return eligibility;
+
+        // Reuse the configured death lifecycle policy. The action itself does
+        // not cause damage or invoke a server; callers perform that boundary
+        // work after this pure transition succeeds.
+        return die(state, transition, policies);
+    }
+
+    private static CustodyTransitionResult giveUpGuards(CustodyState state, String actorId) {
+        if (state.condition == PlayerCondition.DEAD) return reject("ALREADY_DEAD");
+        if (state.provider == StateProvider.VAMPIRISM) {
+            return reject("EXTERNAL_PROVIDER_OWNS_STATE");
+        }
+        if (state.provider == StateProvider.UNKNOWN) {
+            return reject("STATE_PROVIDER_UNKNOWN");
+        }
+        if (state.condition != PlayerCondition.DOWNED
+                || state.custody != CustodyStatus.FREE
+                || state.transport != TransportStatus.NONE
+                || state.restraint != RestraintStatus.NONE) {
+            return reject("GIVE_UP_REQUIRES_ORDINARY_DOWNED");
+        }
+        if (blank(actorId) || !samePlayer(state, actorId)) {
+            return reject("GIVE_UP_ACTOR_INVALID");
         }
         return CustodyTransitionResult.applied();
     }

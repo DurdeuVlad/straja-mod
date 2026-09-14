@@ -1134,4 +1134,55 @@ class CustodyServiceTest {
         custody.deliverPendingItems(civilian);
         assertEquals(2, civilian.inventory.countOf("minecraft:apple"), "no duplicate delivery");
     }
+
+    @Test
+    void giveUpRequiresConfirmationThenTransitionsOnceAndClearsDownedProjection() {
+        assertNotNull(custody.startDowned(civilian, guard, "test"));
+        assertTrue(custody.giveUpEligibility(civilian).eligible());
+
+        assertFalse(custody.giveUp(civilian, false), "the first UI press is not lethal");
+        assertEquals(PlayerCondition.DOWNED,
+                ctx.custody().read().states.get(civilian.uuid().toString()).condition);
+        assertTrue(ctx.custody().read().downed.containsKey(civilian.uuid().toString()));
+        assertEquals(1, civilian.health);
+
+        assertTrue(custody.giveUp(civilian, true));
+        var store = ctx.custody().read();
+        assertEquals(PlayerCondition.DEAD, store.states.get(civilian.uuid().toString()).condition);
+        assertFalse(store.downed.containsKey(civilian.uuid().toString()));
+        assertNull(store.states.get(civilian.uuid().toString()).downedDeadlineAt);
+        assertEquals(0, civilian.health);
+
+        assertTrue(custody.giveUp(civilian, true), "duplicate submit replays the accepted action");
+    }
+
+    @Test
+    void giveUpContractRejectsCustodyProviderAndMalformedTargetsWithoutMutation() {
+        assertNotNull(custody.startDowned(civilian, guard, "test"));
+        var store = ctx.custody().read();
+        var state = store.states.get(civilian.uuid().toString());
+        state.provider = com.dwurdy.straja.domain.model.StateProvider.VAMPIRISM;
+        ctx.custody().write(store);
+        var external = custody.giveUpEligibility(civilian);
+        assertFalse(external.eligible());
+        assertEquals("EXTERNAL_PROVIDER_OWNS_STATE", external.code());
+        assertFalse(custody.giveUp(civilian, true));
+        assertEquals(PlayerCondition.DOWNED,
+                ctx.custody().read().states.get(civilian.uuid().toString()).condition);
+
+        state.provider = com.dwurdy.straja.domain.model.StateProvider.NATIVE;
+        state.condition = PlayerCondition.CONSCIOUS_RESTRAINED;
+        state.custody = CustodyStatus.HOSTAGE;
+        state.restraint = RestraintStatus.ROPE_BOUND;
+        state.restraintActorId = guard.uuid().toString();
+        state.custodyActorId = guard.uuid().toString();
+        state.downedDeadlineAt = null;
+        ctx.custody().write(store);
+        var custodyGuard = custody.giveUpEligibility(civilian);
+        assertFalse(custodyGuard.eligible());
+        assertEquals("GIVE_UP_REQUIRES_ORDINARY_DOWNED", custodyGuard.code());
+        assertFalse(custody.giveUp(civilian, true));
+        assertEquals(PlayerCondition.CONSCIOUS_RESTRAINED,
+                ctx.custody().read().states.get(civilian.uuid().toString()).condition);
+    }
 }

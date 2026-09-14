@@ -37,6 +37,7 @@ public record CustodyTransition(
         RECOVER_CLEAR_ALL,
         RECOVER_RELEASE_RESTRAINTS,
         RECOVER_WAKE,
+        GIVE_UP,
         DIE
     }
 

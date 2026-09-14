@@ -30,6 +30,9 @@ public interface CustodyRoleplayUseCase {
 
     record AvailableAction(Action action, String recordId) {}
 
+    /** Server-authoritative eligibility result for the later confirmation UI. */
+    record GiveUpEligibility(boolean eligible, String code) {}
+
     enum DamageAction {
         NOT_BATON,
         CANCEL,
@@ -60,6 +63,12 @@ public interface CustodyRoleplayUseCase {
 
     boolean resolveDowned(PlayerGateway player, String destination);
     boolean giveCuffs(PlayerGateway player);
+
+    /** Read-only guard used before opening the client confirmation prompt. */
+    GiveUpEligibility giveUpEligibility(PlayerGateway player);
+
+    /** Applies one confirmed, idempotent give-up transition for the player. */
+    boolean giveUp(PlayerGateway player, boolean confirmed);
 
     boolean startCarry(PlayerGateway carrier, PlayerGateway target);
     boolean dropCarry(PlayerGateway carrier, PlayerGateway target, String reason);
