@@ -34,6 +34,9 @@ public interface PlayerGateway {
 
     void tell(String text);
 
+    /** Replaces the player's action-bar status without adding chat history. */
+    default void actionbar(String text) {}
+
     /** Give an item without capacity guarantees; returns false when refused. */
     boolean give(ItemSpec item);
 

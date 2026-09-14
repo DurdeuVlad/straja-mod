@@ -97,6 +97,7 @@ public final class Fakes {
         public double health = 20, maxHealth = 20, absorption;
         public final TestInventory inventory;
         public final List<String> messages = new ArrayList<>();
+        public final List<String> actionbarMessages = new ArrayList<>();
         public int selectedSlot = -1;
         public final List<String> effects = new ArrayList<>();
         public UUID vehicleUuid;
@@ -123,6 +124,7 @@ public final class Fakes {
         @Override public double absorption() { return absorption; }
         @Override public void setHealth(double value) { health = value; }
         @Override public void tell(String text) { messages.add(text); }
+        @Override public void actionbar(String text) { actionbarMessages.add(text); }
         @Override public boolean give(ItemSpec item) {
             return inventory.insert(new ItemView(item.id(), item.count(), 64, item.customData()));
         }
