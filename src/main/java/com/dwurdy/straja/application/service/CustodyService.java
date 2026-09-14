@@ -41,6 +41,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
     public static final String ROPE = "straja:rope";
     public static final String HEAD_SACK = "straja:head_sack";
     public static final String BATON = "straja:baton";
+    private static final double RESUSCITATION_DISTANCE_BLOCKS = 3.0;
 
     private final StrajaContext ctx;
     private final PlayerService players;
@@ -471,6 +472,12 @@ public class CustodyService implements CustodyRoleplayUseCase {
                     ? newCanonicalState(target)
                     : canonicalFromLegacyDowned(targetKey, legacyDowned);
         }
+        if (canonical.condition == PlayerCondition.RESUSCITATING) {
+            var rescuer = findStored(canonical.resuscitatorId, "");
+            if (!interruptResuscitation(store, canonical, target, rescuer, "restraint_applied")) {
+                return false;
+            }
+        }
         long at = now();
         var canonicalResult = CustodyTransitionEngine.apply(canonical,
                 new CustodyTransition("rp007:cuffs:" + targetKey + ":" + at,
@@ -840,7 +847,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
                     store.downed.remove(entry.getKey());
                     changed = true;
                 }
-            } else if (state.condition != PlayerCondition.DOWNED && downed != null) {
+            } else if (state.condition != PlayerCondition.DOWNED
+                    && state.condition != PlayerCondition.RESUSCITATING && downed != null) {
                 store.downed.remove(entry.getKey());
                 changed = true;
             }
@@ -872,6 +880,13 @@ public class CustodyService implements CustodyRoleplayUseCase {
      */
     private boolean processCanonicalDeadlines(CustodyStore store) {
         boolean changed = importLegacyProjections(store);
+        var activeResuscitations = new java.util.HashSet<String>();
+        for (var entry : store.states.entrySet()) {
+            if (entry.getValue() != null
+                    && entry.getValue().condition == PlayerCondition.RESUSCITATING) {
+                activeResuscitations.add(entry.getKey());
+            }
+        }
         for (int pass = 0; pass < 8; pass++) {
             var sweep = CustodyDeadlineEngine.tick(store, now(), ctx.policies());
             changed |= projectCanonicalStates(store);
@@ -879,6 +894,19 @@ public class CustodyService implements CustodyRoleplayUseCase {
             changed = true;
         }
         changed |= projectCanonicalStates(store);
+        for (String playerKey : activeResuscitations) {
+            var state = store.states.get(playerKey);
+            if (state != null && state.condition == PlayerCondition.DOWNED
+                    && store.downed.containsKey(playerKey)) {
+                var target = findStored(state.playerUuid, state.playerName);
+                if (target != null) {
+                    target.setHealth(1);
+                    target.tell("Resuscitarea a expirat. Ai rămas inconștient.");
+                }
+                audit.record("resuscitation_timeout", "system", "",
+                        state.playerName, state.playerUuid, "SUCCESS", "timeout");
+            }
+        }
         return changed;
     }
 
@@ -895,6 +923,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
             }
         }
         changed |= processCanonicalDeadlines(store);
+        changed |= interruptAllResuscitations(store, "restart");
         changed |= stopAllCarried(store, "restart");
         if (changed) ctx.custody().write(store);
     }
@@ -910,6 +939,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
         var carried = carriedSnapshots(store);
         boolean changed = processCanonicalDeadlines(store);
         changed |= reconcileCarried(store, carried);
+        changed |= processResuscitations(store);
         var record = store.cuffed.get(playerKey);
         if (record != null && !issuerStillEligible(record)) {
             recoverCuff(store, record, player);
@@ -971,6 +1001,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
     public void recoverOnLogout(PlayerGateway player) {
         var store = store();
         boolean changed = importLegacyProjections(store);
+        changed |= interruptResuscitationsInvolving(store, player, "logout");
         changed |= stopCarriesInvolving(store, player, "logout");
         if (store.states != null) {
             var state = store.states.get(key(player));
@@ -1001,6 +1032,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
     public void recoverOnDimensionChange(PlayerGateway player) {
         var store = store();
         boolean changed = importLegacyProjections(store);
+        changed |= interruptResuscitationsInvolving(store, player, "dimension_change");
         changed |= stopCarriesInvolving(store, player, "dimension_change");
         changed |= processCanonicalDeadlines(store);
         if (changed) ctx.custody().write(store);
@@ -1014,7 +1046,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
     public void recoverAfterDeath(PlayerGateway player) {
         var store = store();
         String playerKey = key(player);
-        boolean changed = stopCarriesInvolving(store, player, "death");
+        boolean changed = interruptResuscitationsInvolving(store, player, "death");
+        changed |= stopCarriesInvolving(store, player, "death");
         var canonical = store.states.get(playerKey);
         if (canonical != null && canonical.condition != PlayerCondition.DEAD) {
             long at = now();
@@ -1528,6 +1561,207 @@ public class CustodyService implements CustodyRoleplayUseCase {
         return true;
     }
 
+    /** Starts a bounded, server-authorized resuscitation of a nearby downed player. */
+    @Override
+    public boolean startResuscitation(PlayerGateway rescuer, PlayerGateway target) {
+        if (rescuer == null || target == null || !rescuer.isOnline() || !target.isOnline()) {
+            if (rescuer != null) rescuer.tell("Resuscitarea cere doi jucători online.");
+            return false;
+        }
+        if (key(rescuer).equals(key(target))) {
+            rescuer.tell("Nu te poți resuscita singur.");
+            return false;
+        }
+        if (actionBlocked(rescuer, "resuscitate")) return false;
+        if (!nearby(rescuer, target)) {
+            rescuer.tell("Trebuie să fii lângă persoana leșinată pentru a o resuscita.");
+            return false;
+        }
+
+        var store = store();
+        importLegacyProjections(store);
+        String targetKey = key(target);
+        CustodyState state = store.states.get(targetKey);
+        if (state == null || state.condition != PlayerCondition.DOWNED
+                || state.custody != CustodyStatus.FREE
+                || state.restraint != RestraintStatus.NONE
+                || state.transport != TransportStatus.NONE
+                || state.resuscitatorId != null && !state.resuscitatorId.isBlank()) {
+            rescuer.tell("Această persoană nu poate fi resuscitată acum.");
+            return false;
+        }
+        if (!downedAtRecordedLocation(target, store)) {
+            rescuer.tell("Persoana leșinată nu mai este la locul în care a căzut.");
+            return false;
+        }
+        long at = now();
+        var result = CustodyTransitionEngine.apply(state,
+                new CustodyTransition("resus:start:" + targetKey + ":" + at + ":" + uuidOf(rescuer),
+                        CustodyTransition.Action.START_RESUSCITATION, at, uuidOf(rescuer),
+                        "", "", StateProvider.NATIVE, "resuscitation", 0),
+                ctx.policies());
+        if (!result.ok() && !result.idempotent()) {
+            rescuer.tell("Resuscitarea nu poate începe: " + result.code());
+            return false;
+        }
+        store.states.put(targetKey, state);
+        ctx.custody().write(store);
+        target.setHealth(1);
+        target.closeMenu();
+        target.tell("Resuscitarea a început. Nu te mișca și așteaptă ajutorul.");
+        rescuer.tell("Resuscitezi pe " + target.name() + ". Rămâi aproape până la final.");
+        audit.record("resuscitation_start", rescuer.name(), uuidOf(rescuer),
+                target.name(), uuidOf(target), "SUCCESS",
+                "deadline=" + state.resuscitationDeadlineAt);
+        return true;
+    }
+
+    /** Advances resuscitation progress; completion restores controlled health exactly once. */
+    @Override
+    public boolean advanceResuscitation(PlayerGateway rescuer, PlayerGateway target, int progress) {
+        if (rescuer == null || target == null || !rescuer.isOnline() || !target.isOnline()) return false;
+        if (progress < 0 || progress > 100) return false;
+        var store = store();
+        importLegacyProjections(store);
+        String targetKey = key(target);
+        CustodyState state = store.states.get(targetKey);
+        if (state == null || state.condition != PlayerCondition.RESUSCITATING
+                || !uuidOf(rescuer).equals(state.resuscitatorId)) return false;
+        String interruption = resuscitationInterruptionReason(rescuer, target, store, state);
+        if (interruption != null) {
+            interruptResuscitation(store, state, target, rescuer, interruption);
+            ctx.custody().write(store);
+            return false;
+        }
+
+        long at = now();
+        var result = CustodyTransitionEngine.apply(state,
+                new CustodyTransition("resus:advance:" + targetKey + ":" + at + ":" + progress,
+                        CustodyTransition.Action.ADVANCE_RESUSCITATION, at, uuidOf(rescuer),
+                        "", "", StateProvider.NATIVE, "resuscitation", progress),
+                ctx.policies());
+        if (!result.ok() && !result.idempotent()) return false;
+        boolean completed = state.condition == PlayerCondition.ALIVE;
+        if (completed) {
+            store.downed.remove(targetKey);
+            double ratio = Math.max(0.1, Math.min(1, ctx.policies().downedWakeHealthRatio));
+            target.setHealth(Math.max(1, target.maxHealth() * ratio));
+            target.closeMenu();
+            target.tell("Resuscitarea a reușit. Poți acționa din nou.");
+            rescuer.tell(target.name() + " și-a revenit.");
+            audit.record("resuscitation_complete", rescuer.name(), uuidOf(rescuer),
+                    target.name(), uuidOf(target), "SUCCESS", "progress=" + progress);
+        }
+        ctx.custody().write(store);
+        return true;
+    }
+
+    private boolean nearby(PlayerGateway first, PlayerGateway second) {
+        if (!first.dimension().equals(second.dimension())) return false;
+        double dx = first.x() - second.x();
+        double dy = first.y() - second.y();
+        double dz = first.z() - second.z();
+        return dx * dx + dy * dy + dz * dz <= RESUSCITATION_DISTANCE_BLOCKS
+                * RESUSCITATION_DISTANCE_BLOCKS;
+    }
+
+    private boolean downedAtRecordedLocation(PlayerGateway target, CustodyStore store) {
+        var record = store.downed.get(key(target));
+        return record != null && target.dimension().equals(record.dimension)
+                && Math.abs(target.x() - record.x) + Math.abs(target.y() - record.y)
+                + Math.abs(target.z() - record.z) <= 0.05;
+    }
+
+    private String resuscitationInterruptionReason(PlayerGateway rescuer, PlayerGateway target,
+                                                    CustodyStore store, CustodyState state) {
+        if (!rescuer.isOnline()) return "rescuer_logout";
+        if (!target.isOnline()) return "target_logout";
+        if (!nearby(rescuer, target)) return "distance_or_dimension";
+        if (!downedAtRecordedLocation(target, store)) return "target_moved";
+        return null;
+    }
+
+    /** Interrupts one active resuscitation and resumes the paused downed timer. */
+    private boolean interruptResuscitation(CustodyStore store, CustodyState state,
+                                           PlayerGateway target, PlayerGateway rescuer,
+                                           String reason) {
+        long at = now();
+        var result = CustodyTransitionEngine.apply(state,
+                new CustodyTransition("resus:interrupt:" + state.playerId + ":" + at + ":"
+                        + (reason == null ? "recovery" : reason),
+                        CustodyTransition.Action.INTERRUPT_RESUSCITATION, at, "system",
+                        "", "", StateProvider.SYSTEM, reason == null ? "recovery" : reason, 0),
+                ctx.policies());
+        if (!result.ok() && !result.idempotent()) return false;
+        if (target != null && target.isOnline()) {
+            target.setHealth(1);
+            target.tell("Resuscitarea a fost întreruptă. Ai rămas inconștient.");
+        }
+        if (rescuer != null && rescuer.isOnline()) {
+            rescuer.tell("Resuscitarea a fost întreruptă: " + reason + ".");
+        }
+        audit.record("resuscitation_interrupt",
+                rescuer == null ? "system" : rescuer.name(),
+                rescuer == null ? "" : uuidOf(rescuer),
+                state.playerName, state.playerUuid, "SUCCESS", reason);
+        return true;
+    }
+
+    private boolean interruptResuscitationsInvolving(CustodyStore store, PlayerGateway player,
+                                                      String reason) {
+        if (player == null) return false;
+        String playerKey = key(player);
+        String playerUuid = uuidOf(player);
+        boolean changed = false;
+        for (var entry : new ArrayList<>(store.states.entrySet())) {
+            var state = entry.getValue();
+            if (state == null || state.condition != PlayerCondition.RESUSCITATING
+                    || (!playerKey.equals(entry.getKey()) && !playerUuid.equals(state.resuscitatorId))) {
+                continue;
+            }
+            var target = findStored(state.playerUuid, state.playerName);
+            var rescuer = findStored(state.resuscitatorId, "");
+            if (interruptResuscitation(store, state, target, rescuer, reason)) changed = true;
+        }
+        return changed;
+    }
+
+    private boolean interruptAllResuscitations(CustodyStore store, String reason) {
+        boolean changed = false;
+        for (var state : new ArrayList<>(store.states.values())) {
+            if (state != null && state.condition == PlayerCondition.RESUSCITATING) {
+                var target = findStored(state.playerUuid, state.playerName);
+                var rescuer = findStored(state.resuscitatorId, "");
+                if (interruptResuscitation(store, state, target, rescuer, reason)) changed = true;
+            }
+        }
+        return changed;
+    }
+
+    private boolean processResuscitations(CustodyStore store) {
+        boolean changed = false;
+        for (var state : new ArrayList<>(store.states.values())) {
+            if (state == null || state.condition != PlayerCondition.RESUSCITATING) continue;
+            var target = findStored(state.playerUuid, state.playerName);
+            var rescuer = findStored(state.resuscitatorId, "");
+            String reason = target == null || rescuer == null
+                    ? "participant_unavailable"
+                    : resuscitationInterruptionReason(rescuer, target, store, state);
+            if (reason != null && interruptResuscitation(store, state, target, rescuer, reason)) {
+                changed = true;
+                continue;
+            }
+            if (target != null) {
+                target.setHealth(1);
+                target.closeMenu();
+                target.applyEffect("minecraft:slowness",
+                        Math.max(20, ctx.policies().downedSlownessTicks),
+                        ctx.policies().downedSlownessAmplifier);
+            }
+        }
+        return changed;
+    }
+
     /**
      * Baton strike semantics. The event adapter computes whether the incoming
      * damage would be lethal; this returns what the adapter must do.
@@ -1748,6 +1982,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
         var carried = carriedSnapshots(store);
         boolean changed = processCanonicalDeadlines(store);
         changed |= reconcileCarried(store, carried);
+        changed |= processResuscitations(store);
         for (var entry : new java.util.ArrayList<>(store.cuffRequests.entrySet())) {
             var request = entry.getValue();
             if (request == null || blank(request.id)) {
@@ -1882,9 +2117,11 @@ public class CustodyService implements CustodyRoleplayUseCase {
             var target = findStored(record.targetUuid, record.target);
             if (target == null) continue;
             var canonical = store.states.get(entry.getKey());
-            if (canonical != null && canonical.transport == TransportStatus.CARRIED) {
+            if (canonical != null && (canonical.transport == TransportStatus.CARRIED
+                    || canonical.condition == PlayerCondition.RESUSCITATING)) {
                 // The canonical transport deadline owns carried timing. The
-                // legacy wakesAt projection must not wake a passenger early.
+                // resuscitation deadline owns active rescue timing. The legacy
+                // wakesAt projection must not resolve either state early.
                 continue;
             }
             if (now() >= record.wakesAt) {

@@ -49,6 +49,8 @@ public class CustodyState {
     public long pausedDownedRemainingMs;
 
     public String carrierId = "";
+    /** UUID of the player currently performing resuscitation, if any. */
+    public String resuscitatorId = "";
     public String restraintActorId = "";
     public String custodyActorId = "";
     public String destination = "";
@@ -74,6 +76,11 @@ public class CustodyState {
         }
         if (transport == TransportStatus.NONE && !blank(carrierId)) {
             result.add("orphan_carrier");
+        }
+        if (condition == PlayerCondition.RESUSCITATING && blank(resuscitatorId)) {
+            result.add("resuscitator_missing");
+        } else if (condition != PlayerCondition.RESUSCITATING && !blank(resuscitatorId)) {
+            result.add("orphan_resuscitator");
         }
         if (restraint == RestraintStatus.NONE && !blank(restraintActorId)) {
             result.add("orphan_restraint_actor");

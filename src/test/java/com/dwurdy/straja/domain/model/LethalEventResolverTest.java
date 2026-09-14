@@ -67,6 +67,17 @@ class LethalEventResolverTest {
     }
 
     @Test
+    void activeResuscitationPreservesTargetFromNormalFollowUpDamage() {
+        var decision = resolve(PlayerCondition.RESUSCITATING, CustodyStatus.FREE,
+                RestraintStatus.NONE, DamageCategory.SECOND_WEAPON_HIT,
+                false, false, false);
+
+        assertEquals(LethalEventResolver.Outcome.PROTECTED_BY_CUSTODY, decision.outcome());
+        assertEquals("RESUSCITATION_DAMAGE_PRESERVED", decision.code());
+        assertTrue(decision.cancelVanillaDeath());
+    }
+
+    @Test
     void normalDamageAgainstDownedTargetCannotCreateAnotherOutcome() {
         var decision = resolve(PlayerCondition.DOWNED, CustodyStatus.FREE,
                 RestraintStatus.NONE, DamageCategory.NON_WEAPON, false, false, false);
