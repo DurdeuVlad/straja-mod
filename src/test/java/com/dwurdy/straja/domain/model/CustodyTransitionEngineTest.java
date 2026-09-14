@@ -157,6 +157,12 @@ class CustodyTransitionEngineTest {
     @Test
     void policyRegistryExposesTheNewConfigurationBoundary() {
         var p = new StrajaPolicies();
+        assertTrue(PolicyRegistry.apply(p, "downed.durationSeconds", "17").ok());
+        assertEquals(17, p.downedDurationSeconds);
+        assertEquals(17, p.downedCooldownSeconds,
+                "the legacy RP-007 alias must stay in sync with the canonical timer");
+        assertTrue(PolicyRegistry.apply(p, "downed.cooldownSeconds", "19").ok());
+        assertEquals(19, p.downedDurationSeconds);
         assertTrue(PolicyRegistry.apply(p, "custody.carryTransportDeadlineSeconds", "17").ok());
         assertEquals(17, p.carryTransportDeadlineSeconds);
         assertTrue(PolicyRegistry.apply(p, "custody.secondWeaponHitBehavior", "cancel").ok());

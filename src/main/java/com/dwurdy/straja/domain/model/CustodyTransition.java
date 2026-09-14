@@ -17,8 +17,10 @@ public record CustodyTransition(
 
     public enum Action {
         ENTER_DOWNED,
+        ENTER_UNCONSCIOUS_CUSTODY,
         START_RESUSCITATION,
         ADVANCE_RESUSCITATION,
+        INTERRUPT_RESUSCITATION,
         APPLY_ROPE,
         APPLY_CUFFS,
         START_CARRY,
@@ -27,10 +29,14 @@ public record CustodyTransition(
         REMOVE_BLINDFOLD,
         WAKE,
         RESOLVE_UNCONSCIOUS_DEADLINE,
+        RESOLVE_JAIL_DELIVERY_DEADLINE,
         DELIVER_TO_JAIL,
         REVIVE_IN_JAIL,
         RELEASE_RESTRAINT,
         RELEASE_CUSTODY,
+        RECOVER_CLEAR_ALL,
+        RECOVER_RELEASE_RESTRAINTS,
+        RECOVER_WAKE,
         DIE
     }
 
