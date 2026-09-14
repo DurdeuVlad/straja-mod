@@ -72,7 +72,11 @@ The NPC roles are:
   missions, incidents, notes for the Comisar. The Comisar reviews them at the
   same surface: accept, return-with-note (reopens submission), or call the
   author in. An overdue report can refuse duty start when
-  `reports.blockDutyWhenOverdue` is enabled. Patrol shifts **must** start and
+  `reports.blockDutyWhenOverdue` is enabled. Members can also **request an
+  audience with the Comisar** (§12) — one open request each, re-requesting
+  updates the reason; the online Comisar gets a coalesced notification and
+  resolves/dismisses with an optional note, delivered to the requester on
+  their next visit or login. Patrol shifts **must** start and
   end here — `/straja stop` away from the Secretary is refused for normal
   duty (free-duty ranks keep at-will stop). On duty start the guard's
   scoreboard team is captured and the `Straja` team is applied; the captured
@@ -171,7 +175,7 @@ on the next server start. Sections include `identity`, `timers`, `mission`,
 `cuffs`, `restraints`, `downed`, `arrestRewards`, `economy`, `salary`,
 `promotion`, `quiz`, `jailer`, `equipment`, `trainer`, `security`, `envelope`, `archive`,
 `rooms`, `fines`, `prison`, `audit`, `complaints`, `ranks`, `reports`,
-`debug`, and `testing`.
+`audiences`, `debug`, and `testing`.
 
 The `ranks` section also controls the §4 display prefix: every authorized
 member (including off-duty) shows `[Rank] Name` in chat and the TAB list,

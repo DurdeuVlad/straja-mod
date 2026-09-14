@@ -125,6 +125,9 @@ public class StrajaPolicies {
     // reports optionally block duty start at the Secretary.
     public int reportIntervalDays = 7;
     public boolean reportBlockDutyWhenOverdue = false;
+    // §12: Comisar notifications for new audience requests are coalesced —
+    // at most one tell per cooldown window regardless of request count.
+    public int audienceNotifyCooldownSeconds = 60;
 
     // §4: bracketed rank prefix on chat / TAB / nameplate — per-surface flags;
     // the composition uses the configurable rank display names.

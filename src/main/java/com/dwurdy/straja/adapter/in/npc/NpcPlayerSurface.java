@@ -21,7 +21,7 @@ final class NpcPlayerSurface {
             "archive-sheet-read", "archive-sheet-edit", "archive-recipients",
             "archive-sheet-submit", "archive-sheet-sign", "archive-sheet-copy",
             "archive-sheet-envelope", "archive-sheet-issue", "archive-sheet-revoke",
-            "report-review",
+            "report-review", "audience-review",
             "duty-checkpoint");
 
     enum RoleRoute { RECEPTIONIST, SECRETARY, JAILER, ARCHIVIST, TRAINER, RECRUITER, UNKNOWN }
@@ -489,6 +489,26 @@ final class NpcPlayerSurface {
                 case REVIEW_LIST -> actions.add(new ChatAction("Rapoarte în așteptare", "report-review-list"));
                 case REVIEW -> parameterizedActionId("report-review", id)
                         .ifPresent(a -> actions.add(new ChatAction("Verifică raportul " + id, a)));
+            }
+        }
+        return List.copyOf(actions);
+    }
+
+    /** Maps the trusted audience projection to clickable actions; pure and state-free. */
+    static List<ChatAction> audienceActions(
+            List<com.dwurdy.straja.application.port.in.AudienceUseCase.AvailableAction> available,
+            RoleRoute role) {
+        if (available == null || available.isEmpty() || role != RoleRoute.SECRETARY) return List.of();
+        var actions = new java.util.ArrayList<ChatAction>();
+        for (var entry : available) {
+            if (entry == null || entry.action() == null) continue;
+            String id = entry.requestId() == null ? "" : entry.requestId();
+            switch (entry.action()) {
+                case REQUEST -> actions.add(new ChatAction("Cere audiență la Comisar", "audience-request"));
+                case STATUS -> actions.add(new ChatAction("Cererea mea de audiență", "audience-status"));
+                case REVIEW_LIST -> actions.add(new ChatAction("Cereri de audiență", "audience-review-list"));
+                case REVIEW -> parameterizedActionId("audience-review", id)
+                        .ifPresent(a -> actions.add(new ChatAction("Decide cererea " + id, a)));
             }
         }
         return List.copyOf(actions);
