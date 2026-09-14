@@ -22,12 +22,14 @@ public final class FormSubmissionRouter {
     private final ArchiveRoleplayUseCase archive;
     private final com.dwurdy.straja.application.port.in.ReportUseCase reports;
     private final com.dwurdy.straja.application.port.in.AudienceUseCase audiences;
+    private final com.dwurdy.straja.application.port.in.AdminRoleplayUseCase admin;
 
     public FormSubmissionRouter(GuardRecruitmentUseCase guards, MissionRoleplayUseCase missions,
             ComplaintRoleplayUseCase complaints, FineRoleplayUseCase fines,
             ArchiveRoleplayUseCase archive,
             com.dwurdy.straja.application.port.in.ReportUseCase reports,
-            com.dwurdy.straja.application.port.in.AudienceUseCase audiences) {
+            com.dwurdy.straja.application.port.in.AudienceUseCase audiences,
+            com.dwurdy.straja.application.port.in.AdminRoleplayUseCase admin) {
         this.guards = guards;
         this.missions = missions;
         this.complaints = complaints;
@@ -35,6 +37,7 @@ public final class FormSubmissionRouter {
         this.archive = archive;
         this.reports = reports;
         this.audiences = audiences;
+        this.admin = admin;
     }
 
     public void submit(ServerPlayer player, FormSessionUseCase.Submission submission) {
@@ -153,6 +156,24 @@ public final class FormSubmissionRouter {
             case AUDIENCE_REVIEW ->
                     audiences.resolve(gateway, submission.recordId(), values.get("decision"),
                             values.get("note"));
+            case ADMIN_AUTHORIZE -> {
+                Integer rank = parseInt(values.get("rank"));
+                if (rank == null) {
+                    player.sendSystemMessage(net.minecraft.network.chat.Component
+                            .literal("Rangul trebuie să fie un număr (1-4)."));
+                    return;
+                }
+                admin.authorize(gateway, values.get("name"), rank);
+            }
+            case ADMIN_POLICY_SET ->
+                    admin.policySet(gateway, values.get("key"), values.get("value"));
+            case ADMIN_EMERGENCY_ALERT ->
+                    admin.emergencyAlert(gateway, values.get("message"));
+            case ADMIN_EMERGENCY_START -> {
+                Double multiplier = parseDouble(values.get("multiplier"));
+                Integer rounds = parseInt(values.get("rounds"));
+                admin.emergencyStart(gateway, multiplier, rounds, values.get("reason"));
+            }
             default -> {}
         }
     }
@@ -160,6 +181,14 @@ public final class FormSubmissionRouter {
     private static Integer parseInt(String raw) {
         try {
             return Integer.valueOf(Integer.parseInt(raw == null ? "" : raw.trim(), 10));
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private static Double parseDouble(String raw) {
+        try {
+            return Double.valueOf(Double.parseDouble(raw == null ? "" : raw.trim()));
         } catch (NumberFormatException e) {
             return null;
         }

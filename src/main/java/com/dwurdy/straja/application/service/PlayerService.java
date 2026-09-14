@@ -22,7 +22,14 @@ public class PlayerService implements com.dwurdy.straja.application.port.in.Play
     }
 
     public GuardState state(PlayerGateway player) {
-        return ctx.players().read(player.uuid());
+        GuardState state = ctx.players().read(player.uuid());
+        // §14: keep a display name on the record so the Comisar's roster can
+        // name members even when they are offline.
+        if (player.name() != null && !player.name().equals(state.lastKnownName)) {
+            state.lastKnownName = player.name();
+            ctx.players().write(player.uuid(), state);
+        }
+        return state;
     }
 
     public GuardState state(UUID uuid) {

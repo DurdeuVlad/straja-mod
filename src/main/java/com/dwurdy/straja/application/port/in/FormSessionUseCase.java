@@ -42,6 +42,10 @@ public interface FormSessionUseCase {
         REPORT_REVIEW("report-review"),
         AUDIENCE_REQUEST("audience-request"),
         AUDIENCE_REVIEW("audience-review"),
+        ADMIN_AUTHORIZE("admin-authorize"),
+        ADMIN_POLICY_SET("admin-policy-set"),
+        ADMIN_EMERGENCY_ALERT("admin-emergency-alert"),
+        ADMIN_EMERGENCY_START("admin-emergency-start"),
         OTHER_REQUEST("other-request");
 
         private final String id;

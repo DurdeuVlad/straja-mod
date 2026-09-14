@@ -108,6 +108,14 @@ The NPC roles are:
   full route laps — the shift snapshots its requirement at start, so ending
   the emergency mid-shift never strands a patrol. `end` restores the base
   rate; accrued salary is untouched. State persists across restarts.
+- **Comisar admin surface** (§14) — the Secretary gives the Comisar a
+  personnel desk: the full roster and the on-duty roster, per-member
+  dossiers, direct authorization at rank (skips application/exam for
+  experienced hires), promote/demote/suspend/fire/reinstate, plus live
+  YAML policy editing and the emergency controls. Member-scoped clicks
+  carry the member's UUID and are revalidated against current state
+  before dispatch — a stale or forged token cannot mutate a record.
+  Every mutation is audited; non-Comisar, non-op actors see nothing.
 - **Jailer** — custody, downed-state and sentence status, officer task
   accept/complete/arrest, and issues the cuffs item when permitted.
 - **Archivist** — folder read/issue, sheet authoring/edit/submit/sign,

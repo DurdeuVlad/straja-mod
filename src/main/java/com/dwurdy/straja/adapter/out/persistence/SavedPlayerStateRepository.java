@@ -36,4 +36,16 @@ public class SavedPlayerStateRepository extends JsonBackedStore implements Playe
     public void write(UUID playerId, GuardState state) {
         store().put(playerId.toString(), GSON.toJson(state));
     }
+
+    @Override
+    public java.util.Set<UUID> knownIds() {
+        java.util.Set<UUID> ids = new java.util.LinkedHashSet<>();
+        for (String key : store().keys()) {
+            if (key.endsWith("_corrupt_backup")) continue;
+            try {
+                ids.add(UUID.fromString(key));
+            } catch (IllegalArgumentException ignored) {}
+        }
+        return ids;
+    }
 }

@@ -75,6 +75,7 @@ public class GuardState {
     public long arrestRewardDay = -1;          // epochDay of arrestRewardDayTotal
     public int arrestRewardDayTotal = 0;
     public String lifecycle = "CIVIL";
+    public String lastKnownName = null;        // stamped by PlayerService on read (§14 roster display)
     public String runtimeBootId = null;
 
     /** Issued service equipment that must be returned at end of duty. */

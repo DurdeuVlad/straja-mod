@@ -11,4 +11,7 @@ public interface PlayerStateRepository {
     GuardState read(UUID playerId);
 
     void write(UUID playerId, GuardState state);
+
+    /** UUIDs with persisted state — backs the Comisar's personnel roster. */
+    java.util.Set<UUID> knownIds();
 }

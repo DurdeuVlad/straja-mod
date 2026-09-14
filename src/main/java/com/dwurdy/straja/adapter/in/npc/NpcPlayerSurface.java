@@ -22,6 +22,8 @@ final class NpcPlayerSurface {
             "archive-sheet-submit", "archive-sheet-sign", "archive-sheet-copy",
             "archive-sheet-envelope", "archive-sheet-issue", "archive-sheet-revoke",
             "report-review", "audience-review",
+            "admin-dossier", "admin-promote", "admin-demote", "admin-suspend",
+            "admin-fire", "admin-reinstate",
             "duty-checkpoint");
 
     enum RoleRoute { RECEPTIONIST, SECRETARY, JAILER, ARCHIVIST, TRAINER, RECRUITER, UNKNOWN }
@@ -513,6 +515,42 @@ final class NpcPlayerSurface {
                 case REVIEW_LIST -> actions.add(new ChatAction("Cereri de audiență", "audience-review-list"));
                 case REVIEW -> parameterizedActionId("audience-review", id)
                         .ifPresent(a -> actions.add(new ChatAction("Decide cererea " + id, a)));
+            }
+        }
+        return List.copyOf(actions);
+    }
+
+    /** §14 Comisar admin actions on the Secretary surface. */
+    static List<ChatAction> adminActions(
+            List<com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.AvailableAction> available) {
+        if (available == null || available.isEmpty()) return List.of();
+        var actions = new java.util.ArrayList<ChatAction>();
+        for (var entry : available) {
+            if (entry == null || entry.action() == null) continue;
+            String id = entry.memberId() == null ? "" : entry.memberId();
+            String name = entry.memberName() == null ? "" : entry.memberName();
+            switch (entry.action()) {
+                case PERSONNEL -> actions.add(new ChatAction("Personal Straja", "admin-personnel"));
+                case ROSTER_ACTIVE -> actions.add(new ChatAction("În serviciu acum", "admin-roster"));
+                case AUTHORIZE -> actions.add(new ChatAction("Autorizare directă", "admin-authorize"));
+                case DOSSIER -> parameterizedActionId("admin-dossier", id)
+                        .ifPresent(a -> actions.add(new ChatAction("Dosar: " + name, a)));
+                case PROMOTE -> parameterizedActionId("admin-promote", id)
+                        .ifPresent(a -> actions.add(new ChatAction("Promovează " + name, a)));
+                case DEMOTE -> parameterizedActionId("admin-demote", id)
+                        .ifPresent(a -> actions.add(new ChatAction("Retrogradează " + name, a)));
+                case SUSPEND -> parameterizedActionId("admin-suspend", id)
+                        .ifPresent(a -> actions.add(new ChatAction("Suspendă " + name, a)));
+                case FIRE -> parameterizedActionId("admin-fire", id)
+                        .ifPresent(a -> actions.add(new ChatAction("Revoacă " + name, a)));
+                case REINSTATE -> parameterizedActionId("admin-reinstate", id)
+                        .ifPresent(a -> actions.add(new ChatAction("Reintegrează " + name, a)));
+                case POLICIES -> actions.add(new ChatAction("Reguli live (YAML)", "admin-policies"));
+                case POLICY_SET -> actions.add(new ChatAction("Modifică o regulă", "admin-policy-set"));
+                case EMERGENCY_STATUS -> actions.add(new ChatAction("Stare de urgență", "admin-emergency-status"));
+                case EMERGENCY_ALERT -> actions.add(new ChatAction("Alertă de urgență", "admin-emergency-alert"));
+                case EMERGENCY_START -> actions.add(new ChatAction("Activează starea de urgență", "admin-emergency-start"));
+                case EMERGENCY_END -> actions.add(new ChatAction("Încheie starea de urgență", "admin-emergency-end"));
             }
         }
         return List.copyOf(actions);

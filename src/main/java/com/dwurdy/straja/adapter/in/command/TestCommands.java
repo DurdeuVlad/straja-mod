@@ -957,6 +957,54 @@ final class TestCommands {
                 .then(Commands.argument("id", StringArgumentType.word())
                         .executes(ctx -> run(ctx, runtime ->
                                 runtime.emergencyRoleplay().deliverUrgency(player(ctx, runtime))))));
+        // §14 Comisar admin surface
+        test.then(Commands.literal("admin-personnel")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(ctx -> run(ctx, runtime ->
+                                runtime.adminRoleplay().personnel(player(ctx, runtime))))));
+        test.then(Commands.literal("admin-roster")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(ctx -> run(ctx, runtime ->
+                                runtime.adminRoleplay().activeRoster(player(ctx, runtime))))));
+        test.then(Commands.literal("admin-actions")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(ctx -> run(ctx, runtime -> send(ctx,
+                                "actions=" + runtime.adminRoleplay()
+                                        .availableActions(player(ctx, runtime)).size())))));
+        test.then(Commands.literal("admin-dossier")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("member", StringArgumentType.word())
+                                .executes(ctx -> run(ctx, runtime ->
+                                        runtime.adminRoleplay().dossier(
+                                                player(ctx, runtime),
+                                                StringArgumentType.getString(ctx, "member")))))));
+        test.then(Commands.literal("admin-authorize")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("name", StringArgumentType.word())
+                                .then(Commands.argument("rank", IntegerArgumentType.integer(1, 4))
+                                        .executes(ctx -> run(ctx, runtime ->
+                                                runtime.adminRoleplay().authorize(
+                                                        player(ctx, runtime),
+                                                        StringArgumentType.getString(ctx, "name"),
+                                                        IntegerArgumentType.getInteger(ctx, "rank"))))))));
+        for (String op : new String[]{"promote", "demote", "suspend", "fire", "reinstate"}) {
+            test.then(Commands.literal("admin-" + op)
+                    .then(Commands.argument("id", StringArgumentType.word())
+                            .then(Commands.argument("member", StringArgumentType.word())
+                                    .executes(ctx -> run(ctx, runtime -> {
+                                        var admin = runtime.adminRoleplay();
+                                        var actor = player(ctx, runtime);
+                                        String member = StringArgumentType.getString(ctx, "member");
+                                        switch (op) {
+                                            case "promote" -> admin.promote(actor, member);
+                                            case "demote" -> admin.demote(actor, member);
+                                            case "suspend" -> admin.suspend(actor, member);
+                                            case "fire" -> admin.fire(actor, member);
+                                            case "reinstate" -> admin.reinstate(actor, member);
+                                            default -> {}
+                                        }
+                                    })))));
+        }
         test.then(Commands.literal("complaint-submit")
                 .then(Commands.argument("id", StringArgumentType.word())
                         .then(Commands.argument("accused", StringArgumentType.word())
