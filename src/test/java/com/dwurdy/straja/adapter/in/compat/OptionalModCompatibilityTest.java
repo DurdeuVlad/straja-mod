@@ -25,10 +25,34 @@ class OptionalModCompatibilityTest {
                 Set.of(OptionalModCompatibility.INCAPACITATED, OptionalModCompatibility.VAMPIRISM));
         var policies = new StrajaPolicies();
 
-        OptionalModCompatibility.applyFailSafe(profile, policies);
+        OptionalModCompatibility.applyFailSafe(profile, policies, true);
 
-        assertTrue(profile.genericDownedConflict());
+        assertTrue(profile.incapacitated());
+        assertTrue(profile.vampirism());
         assertTrue(profile.nativeCarryAllowed());
+        assertFalse(policies.downedEnabled);
+    }
+
+    @Test
+    void readyVampirismProviderKeepsStrajaDownedForNonVampires() {
+        var profile = OptionalModCompatibility.fromLoadedIds(
+                Set.of(OptionalModCompatibility.VAMPIRISM));
+        var policies = new StrajaPolicies();
+
+        OptionalModCompatibility.applyFailSafe(profile, policies, true);
+
+        assertFalse(profile.genericDownedConflict());
+        assertTrue(policies.downedEnabled);
+    }
+
+    @Test
+    void unavailableVampirismProviderFailsClosed() {
+        var profile = OptionalModCompatibility.fromLoadedIds(
+                Set.of(OptionalModCompatibility.VAMPIRISM));
+        var policies = new StrajaPolicies();
+
+        OptionalModCompatibility.applyFailSafe(profile, policies, false);
+
         assertFalse(policies.downedEnabled);
     }
 

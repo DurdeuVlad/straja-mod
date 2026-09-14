@@ -18,7 +18,8 @@ public final class OptionalModCompatibility {
     private OptionalModCompatibility() {}
 
     public record Profile(boolean incapacitated, boolean piggyback, boolean vampirism) {
-        public boolean genericDownedConflict() { return incapacitated || vampirism; }
+        /** Incapacitated is a whole-player replacement; Vampirism is actor-scoped. */
+        public boolean genericDownedConflict() { return incapacitated; }
         public boolean nativeCarryAllowed() { return !piggyback; }
         public boolean hasOptionalMods() { return incapacitated || piggyback || vampirism; }
 
@@ -50,9 +51,6 @@ public final class OptionalModCompatibility {
                     ? java.util.Optional.of(typed)
                     : java.util.Optional.empty();
         } catch (ReflectiveOperationException | LinkageError | SecurityException ignored) {
-            StrajaMod.LOGGER.error(
-                    "[Straja] Vampirism detected but its optional provider could not be loaded; "
-                            + "generic Straja downed ownership remains disabled");
             return java.util.Optional.empty();
         }
     }
@@ -71,9 +69,25 @@ public final class OptionalModCompatibility {
                 normalized.contains(VAMPIRISM));
     }
 
-    /** Disable generic Straja downed ownership while another provider is present. */
+    /**
+     * Applies the safe ownership boundary for optional custody providers.
+     * Vampirism is actor-scoped: its provider owns vampire DBNO, while Straja
+     * remains the owner for ordinary players when the exact adapter is ready.
+     */
     public static void applyFailSafe(Profile profile, StrajaPolicies policies) {
-        if (profile != null && policies != null && profile.genericDownedConflict()) {
+        boolean vampirismProviderReady = profile != null
+                && profile.vampirism()
+                && loadProvider(profile).isPresent();
+        applyFailSafe(profile, policies, vampirismProviderReady);
+    }
+
+    /** Explicit readiness variant used by deterministic policy tests. */
+    public static void applyFailSafe(Profile profile,
+                                     StrajaPolicies policies,
+                                     boolean vampirismProviderReady) {
+        if (profile != null && policies != null
+                && (profile.incapacitated()
+                || (profile.vampirism() && !vampirismProviderReady))) {
             policies.downedEnabled = false;
         }
     }
@@ -89,8 +103,14 @@ public final class OptionalModCompatibility {
                     + "until an exact integration is verified; use one downed provider only");
         }
         if (profile.vampirism()) {
-            StrajaMod.LOGGER.warn("[Straja] Vampirism detected: generic Straja downed ownership is disabled; "
-                    + "DBNO/resurrection and stake finishing remain Vampirism-owned");
+            if (loadProvider(profile).isPresent()) {
+                StrajaMod.LOGGER.info("[Straja] Vampirism provider loaded: vampire DBNO/resurrection and "
+                        + "stake finishing remain Vampirism-owned; Straja downed remains available for "
+                        + "non-vampires");
+            } else {
+                StrajaMod.LOGGER.error("[Straja] Vampirism detected but its optional provider could not be "
+                        + "loaded; generic Straja downed ownership remains disabled");
+            }
         }
         if (profile.piggyback()) {
             StrajaMod.LOGGER.warn("[Straja] Piggyback detected: Straja's crouch carry trigger is disabled "
