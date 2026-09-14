@@ -115,6 +115,22 @@ public class PlayerService implements com.dwurdy.straja.application.port.in.Play
         return state.duty && state.rank >= Rank.STAGIAR.level();
     }
 
+    /**
+     * §4: bracketed rank prefix for display surfaces. Authorized members keep
+     * it regardless of faction or duty state; civilians and former members
+     * (fired/resigned) show none. Suspended members keep the prefix — the
+     * suspension is itself a Straja status.
+     */
+    @Override
+    public String rankPrefixFor(PlayerGateway player) {
+        if (player == null) return null;
+        GuardState state = state(player);
+        if (state.fired || state.resigned) return null;
+        if (isCommissioner(player)) return "[" + ctx.policies().comisarTitle + "]";
+        if (state.rank < Rank.STAGIAR.level()) return null;
+        return "[" + ctx.policies().rankName(state.rank) + "]";
+    }
+
     @Override
     public boolean hasCapability(PlayerGateway player, Capability capability) {
         GuardState state = state(player);

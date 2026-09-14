@@ -87,6 +87,10 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.IntValue SALARY_ACTIVITY_GRACE_SECONDS;
     public static final ModConfigSpec.DoubleValue SALARY_ACTIVITY_MOVE_THRESHOLD;
     public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> RANK_NAMES;
+    public static final ModConfigSpec.BooleanValue RANK_PREFIX_CHAT;
+    public static final ModConfigSpec.BooleanValue RANK_PREFIX_TAB;
+    public static final ModConfigSpec.BooleanValue RANK_PREFIX_NAMEPLATE;
+    public static final ModConfigSpec.ConfigValue<String> COMISAR_TITLE;
     public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> PROMOTION_SERVICE_BLOCKS;
 
     public static final ModConfigSpec.IntValue FREE_DUTY_MIN_RANK;
@@ -318,6 +322,19 @@ public final class StrajaServerConfig {
                 .defineListAllowEmpty(List.of("names"),
                         StrajaPolicies.formatIntStringMap(defaults.rankNames),
                         () -> "1=Stagiar", StrajaServerConfig::isIntStringMapEntry);
+        RANK_PREFIX_CHAT = B.comment(
+                        "Show the [Rank] prefix on chat messages.")
+                .define("prefixChat", defaults.rankPrefixChat);
+        RANK_PREFIX_TAB = B.comment(
+                        "Show the [Rank] prefix in the TAB player list.")
+                .define("prefixTab", defaults.rankPrefixTab);
+        RANK_PREFIX_NAMEPLATE = B.comment(
+                        "Show the [Rank] prefix on the above-head nameplate.",
+                        "Overrides team styling on the plate while enabled.")
+                .define("prefixNameplate", defaults.rankPrefixNameplate);
+        COMISAR_TITLE = B.comment(
+                        "Display title for the commissioner prefix.")
+                .define("comisarTitle", defaults.comisarTitle);
         B.pop();
 
         B.push("promotion");
@@ -624,6 +641,10 @@ public final class StrajaServerConfig {
         p.salaryActivityMoveThreshold = SALARY_ACTIVITY_MOVE_THRESHOLD.get();
         p.rankNames = mapOrDefault(StrajaPolicies.parseIntStringMap(RANK_NAMES.get()),
                 defaults().rankNames);
+        p.rankPrefixChat = RANK_PREFIX_CHAT.get();
+        p.rankPrefixTab = RANK_PREFIX_TAB.get();
+        p.rankPrefixNameplate = RANK_PREFIX_NAMEPLATE.get();
+        p.comisarTitle = COMISAR_TITLE.get();
         p.promotionServiceBlocks = mapOrDefault(StrajaPolicies.parseIntMap(PROMOTION_SERVICE_BLOCKS.get()),
                 defaults().promotionServiceBlocks);
         p.freeDutyMinRank = FREE_DUTY_MIN_RANK.get();

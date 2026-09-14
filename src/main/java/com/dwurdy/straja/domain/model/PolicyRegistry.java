@@ -101,6 +101,11 @@ public final class PolicyRegistry {
         k("promotion.serviceBlocks", "promotionServiceBlocks", Kind.INT_MAP);
         // rank display names (§2: Stagiar/Străjer/Sergent/Inspector)
         k("rank.names", "rankNames", Kind.INT_STR_MAP);
+        // §4 rank prefix surfaces
+        k("rank.prefix.chat", "rankPrefixChat", Kind.BOOL);
+        k("rank.prefix.tab", "rankPrefixTab", Kind.BOOL);
+        k("rank.prefix.nameplate", "rankPrefixNameplate", Kind.BOOL);
+        k("rank.comisarTitle", "comisarTitle", Kind.STRING);
         // duty / faction
         k("duty.freeDutyMinRank", "freeDutyMinRank", Kind.INT);
         k("duty.nativeFactionMaxLength", "nativeFactionMaxLength", Kind.INT);

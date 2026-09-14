@@ -121,6 +121,13 @@ public class StrajaPolicies {
     public int freeDutyMinRank = 3;
     public int nativeFactionMaxLength = 40;
 
+    // §4: bracketed rank prefix on chat / TAB / nameplate — per-surface flags;
+    // the composition uses the configurable rank display names.
+    public boolean rankPrefixChat = true;
+    public boolean rankPrefixTab = true;
+    public boolean rankPrefixNameplate = false;
+    public String comisarTitle = "Comisar";
+
     // §7: normal shifts start and end at the Secretary — the player's
     // scoreboard team is captured on duty start, the operational Straja team
     // is applied, and the captured team is restored on duty end.
