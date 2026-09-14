@@ -3,6 +3,7 @@ package com.dwurdy.straja.adapter.in.event;
 import com.dwurdy.straja.adapter.in.npc.StrajaNpcEntity;
 import com.dwurdy.straja.adapter.in.item.PhysicalItemSurface;
 import com.dwurdy.straja.adapter.out.minecraft.MinecraftPlayerGateway;
+import com.dwurdy.straja.adapter.out.network.CustodyVisualSync;
 import com.dwurdy.straja.application.port.out.ItemView;
 import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.bootstrap.StrajaRuntime;
@@ -30,6 +31,7 @@ public final class StrajaEvents {
         runtime.serverGateway().tick();
         runtime.missionRoleplay().tick();
         runtime.custodyRoleplay().tick();
+        CustodyVisualSync.sync(runtime.custodyRoleplay().visualStates());
         runtime.prisonRoleplay().tick();
         runtime.fineRoleplay().tick();
         if (runtime.serverGateway().tickCount() % 20 != 0) return;
@@ -129,6 +131,7 @@ public final class StrajaEvents {
         var gateway = new MinecraftPlayerGateway(event.getEntity().getServer(), player.getUUID());
         runtime.guardDuty().recoverOnLogin(gateway);
         runtime.custodyRoleplay().recoverOnLogin(gateway);
+        CustodyVisualSync.syncToPlayer(player, runtime.custodyRoleplay().visualStates());
         runtime.prisonRoleplay().recoverOnLogin(gateway);
         runtime.complaintRoleplay().claimPendingRewards(gateway);
         runtime.missionRoleplay().deliverPendingRewards(gateway);
@@ -151,6 +154,7 @@ public final class StrajaEvents {
         if (runtime == null || !(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) return;
         var gateway = new MinecraftPlayerGateway(event.getEntity().getServer(), player.getUUID());
         runtime.custodyRoleplay().recoverOnLogout(gateway);
+        CustodyVisualSync.sync(runtime.custodyRoleplay().visualStates());
     }
 
     @SubscribeEvent
