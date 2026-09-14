@@ -14,6 +14,8 @@ import java.util.List;
  * without a second serializer.</p>
  */
 public class CustodyState {
+    private static final int MAX_LETHAL_EVENT_HISTORY = 32;
+
     public String playerId = "";
     public String playerUuid = "";
     public String playerName = "";
@@ -57,6 +59,39 @@ public class CustodyState {
 
     /** Last accepted transition identity; retries with this id are no-ops. */
     public String transitionId = "";
+
+    /** Last lethal-event identity/outcome; protects non-Straja provider claims. */
+    public String lastLethalEventId = "";
+    public String lastLethalOutcome = "";
+    public StateProvider lastLethalProvider = StateProvider.SYSTEM;
+
+    /** Bounded replay protection for lethal events older than the latest one. */
+    public List<String> lethalEventHistory = new ArrayList<>();
+    public List<String> lethalEventOwnedIds = new ArrayList<>();
+
+    public boolean hasLethalEvent(String eventId) {
+        return eventId != null && !eventId.isBlank()
+                && lethalEventHistory != null && lethalEventHistory.contains(eventId);
+    }
+
+    public boolean ownsLethalEvent(String eventId) {
+        return eventId != null && !eventId.isBlank()
+                && lethalEventOwnedIds != null && lethalEventOwnedIds.contains(eventId);
+    }
+
+    public void rememberLethalEvent(String eventId, boolean owned) {
+        if (eventId == null || eventId.isBlank()) return;
+        if (lethalEventHistory == null) lethalEventHistory = new ArrayList<>();
+        if (lethalEventOwnedIds == null) lethalEventOwnedIds = new ArrayList<>();
+        lethalEventHistory.remove(eventId);
+        lethalEventHistory.add(eventId);
+        lethalEventOwnedIds.remove(eventId);
+        if (owned) lethalEventOwnedIds.add(eventId);
+        while (lethalEventHistory.size() > MAX_LETHAL_EVENT_HISTORY) {
+            String removed = lethalEventHistory.remove(0);
+            lethalEventOwnedIds.remove(removed);
+        }
+    }
 
     /**
      * Returns structural violations without applying policy-specific rules.

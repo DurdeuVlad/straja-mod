@@ -3,15 +3,16 @@ package com.dwurdy.straja.application.service;
 import com.dwurdy.straja.application.StrajaContext;
 import com.dwurdy.straja.application.port.in.CustodyRoleplayUseCase;
 import com.dwurdy.straja.application.port.out.ItemView;
+import com.dwurdy.straja.application.port.out.LethalEventProvider;
 import com.dwurdy.straja.domain.model.CustodyStore;
 import com.dwurdy.straja.domain.model.CustodyState;
 import com.dwurdy.straja.domain.model.CustodyStatus;
 import com.dwurdy.straja.domain.model.CustodyTransition;
 import com.dwurdy.straja.domain.model.CustodyTransitionEngine;
-import com.dwurdy.straja.domain.model.DamageCategory;
 import com.dwurdy.straja.domain.model.LethalEventResolver;
 import com.dwurdy.straja.domain.model.PlayerCondition;
 import com.dwurdy.straja.domain.model.ItemSpec;
+import com.dwurdy.straja.domain.model.LethalEventResolver;
 import com.dwurdy.straja.domain.model.Rank;
 import com.dwurdy.straja.domain.model.RestraintStatus;
 import com.dwurdy.straja.domain.model.TransportStatus;
@@ -255,9 +256,11 @@ class CustodyServiceTest {
         assertEquals(com.dwurdy.straja.domain.model.CustodyStatus.HOSTAGE, state.custody);
         assertNull(state.downedDeadlineAt);
         assertFalse(custody.isDowned(civilian));
-        assertEquals(LethalEventResolver.Outcome.PROTECTED_BY_CUSTODY,
-                custody.resolveLethalEvent(civilian, guard, DamageCategory.ORDINARY,
-                        false, false, false).outcome());
+        assertEquals(LethalEventResolver.Outcome.STRAJA_CUSTODY_PROTECTION,
+                custody.resolveLethalEvent(civilian, new LethalEventResolver.Request(
+                        "rope-hit", "player", guard.uuid().toString(),
+                        LethalEventResolver.SourceKind.WEAPON, true, false,
+                        LethalEventResolver.ProviderSelection.none())).outcome());
     }
 
     @Test
@@ -481,26 +484,29 @@ class CustodyServiceTest {
 
     @Test
     void lethalResolverStartsDownedOnlyForTheStrajaOwner() {
-        var decision = custody.resolveLethalEvent(civilian, guard,
-                DamageCategory.ORDINARY, false, false, false);
+        var decision = custody.resolveLethalEvent(civilian, new LethalEventResolver.Request(
+                "lethal-owner", "player", guard.uuid().toString(),
+                LethalEventResolver.SourceKind.WEAPON, true, false,
+                LethalEventResolver.ProviderSelection.none()));
 
         assertEquals(LethalEventResolver.Outcome.STRAJA_DOWNED, decision.outcome());
-        assertTrue(decision.cancelVanillaDeath());
+        assertTrue(decision.ownsEvent());
         assertTrue(custody.isDowned(civilian));
-        assertTrue(audit.tail(20).stream().anyMatch(e -> "lethal_resolve".equals(e.action)
-                && "STRAJA_DOWNED".equals(e.result)
-                && e.details.contains("STRAJA_OWNS_DOWNED_TRANSITION")));
+        assertTrue(audit.tail(20).stream().anyMatch(e -> "lethal_event".equals(e.action)
+                && e.details.contains("outcome=STRAJA_DOWNED")));
     }
 
     @Test
     void lethalResolverLeavesSecondWeaponHitTerminalAndUnrestrained() {
         custody.startDowned(civilian, guard, "test");
 
-        var decision = custody.resolveLethalEvent(civilian, guard,
-                DamageCategory.SECOND_WEAPON_HIT, false, false, false);
+        var decision = custody.resolveLethalEvent(civilian, new LethalEventResolver.Request(
+                "second-weapon", "player", guard.uuid().toString(),
+                LethalEventResolver.SourceKind.WEAPON, true, false,
+                LethalEventResolver.ProviderSelection.none()));
 
-        assertEquals(LethalEventResolver.Outcome.STRAJA_DEATH, decision.outcome());
-        assertTrue(!decision.cancelVanillaDeath());
+        assertEquals(LethalEventResolver.Outcome.HARD_DEATH, decision.outcome());
+        assertTrue(!decision.ownsEvent());
         assertTrue(custody.isDowned(civilian), "the death event owns cleanup after it fires");
     }
 
@@ -553,6 +559,136 @@ class CustodyServiceTest {
         custody.accept(civilian, req.id);
         var outcome = custody.batonStrike(guard, civilian, 6, 0, 8);
         assertEquals("already_cuffed", outcome.reason());
+    }
+
+    @Test
+    void secondLethalBatonHitCanTerminateAnUnrestrainedDownedPlayer() {
+        hold(guard, CustodyService.BATON);
+        custody.startDowned(civilian, guard, "first-hit");
+
+        var outcome = custody.batonStrike(guard, civilian, 1, 0, 2);
+
+        assertEquals(CustodyRoleplayUseCase.DamageAction.ALLOW_LETHAL, outcome.action());
+        assertEquals(PlayerCondition.DEAD,
+                ctx.custody().read().states.get(civilian.uuid().toString()).condition);
+    }
+
+    @Test
+    void normalLethalEventUsesCanonicalDeadlineAndDuplicateIsNoOp() {
+        var request = new LethalEventResolver.Request(
+                "hit-1", "player", guard.uuid().toString(),
+                LethalEventResolver.SourceKind.WEAPON, true, false,
+                LethalEventResolver.ProviderSelection.none());
+        var decision = custody.resolveLethalEvent(civilian, request);
+
+        assertEquals(LethalEventResolver.Outcome.STRAJA_DOWNED, decision.outcome());
+        var state = ctx.custody().read().states.get(civilian.uuid().toString());
+        assertEquals(clock.now + 60_000L, state.downedDeadlineAt,
+                "DC-002 must retain an absolute persisted deadline");
+        assertEquals(state.downedDeadlineAt,
+                ctx.custody().read().downed.get(civilian.uuid().toString()).wakesAt);
+        assertEquals("hit-1", state.lastLethalEventId);
+
+        var replay = custody.resolveLethalEvent(civilian, request);
+        assertEquals(LethalEventResolver.Outcome.DUPLICATE, replay.outcome());
+        assertTrue(replay.idempotent());
+        assertTrue(replay.ownsEvent());
+        assertEquals(1, audit.tail(20).stream()
+                .filter(e -> "lethal_event".equals(e.action)).count());
+    }
+
+    @Test
+    void restrainedLethalEventIsProtectedAndDoesNotKill() {
+        custody.requestCuffs(guard, civilian);
+        var req = ctx.custody().read().cuffRequests.values().iterator().next();
+        assertTrue(custody.accept(civilian, req.id));
+        civilian.setHealth(1);
+
+        var decision = custody.resolveLethalEvent(civilian, new LethalEventResolver.Request(
+                "restrained-hit", "player", guard.uuid().toString(),
+                LethalEventResolver.SourceKind.WEAPON, true, false,
+                LethalEventResolver.ProviderSelection.none()));
+        assertEquals(LethalEventResolver.Outcome.STRAJA_CUSTODY_PROTECTION, decision.outcome());
+        assertTrue(decision.ownsEvent());
+        assertEquals(1, civilian.health);
+        assertEquals(PlayerCondition.CONSCIOUS_RESTRAINED,
+                ctx.custody().read().states.get(civilian.uuid().toString()).condition);
+    }
+
+    @Test
+    void vampireProviderClaimNeverCreatesStrajaDownedState() {
+        var claimed = new java.util.concurrent.atomic.AtomicBoolean();
+        var providerCustody = new CustodyService(ctx, players, audit,
+                new LethalEventProvider() {
+                    @Override
+                    public LethalEventResolver.ProviderSelection offer(
+                            com.dwurdy.straja.application.port.out.PlayerGateway target,
+                            String sourceId) {
+                        return new LethalEventResolver.ProviderSelection(
+                                com.dwurdy.straja.domain.model.StateProvider.VAMPIRISM, true);
+                    }
+
+                    @Override
+                    public boolean claim(com.dwurdy.straja.application.port.out.PlayerGateway target,
+                                         String sourceId, String eventId) {
+                        claimed.set(true);
+                        return true;
+                    }
+                });
+        var decision = providerCustody.resolveLethalEvent(civilian, new LethalEventResolver.Request(
+                "vampire-hit", "player", guard.uuid().toString(),
+                LethalEventResolver.SourceKind.WEAPON, true, false,
+                LethalEventResolver.ProviderSelection.none()));
+        assertEquals(LethalEventResolver.Outcome.VAMPIRISM_DBNO, decision.outcome());
+        assertTrue(decision.ownsEvent());
+        assertFalse(providerCustody.isDowned(civilian));
+        var state = ctx.custody().read().states.get(civilian.uuid().toString());
+        assertEquals(PlayerCondition.ALIVE, state.condition);
+        assertEquals("vampire-hit", state.lastLethalEventId);
+        assertTrue(claimed.get(), "the selected provider receives the event identity");
+    }
+
+    @Test
+    void failedProviderClaimFallsBackToVanillaDeath() {
+        var providerCustody = new CustodyService(ctx, players, audit,
+                (target, sourceId) -> new LethalEventResolver.ProviderSelection(
+                        com.dwurdy.straja.domain.model.StateProvider.VAMPIRISM, true));
+
+        var decision = providerCustody.resolveLethalEvent(civilian, new LethalEventResolver.Request(
+                "vampire-failed", "player", guard.uuid().toString(),
+                LethalEventResolver.SourceKind.WEAPON, true, false,
+                LethalEventResolver.ProviderSelection.none()));
+
+        assertEquals(LethalEventResolver.Outcome.VANILLA_DEATH, decision.outcome());
+        assertFalse(decision.ownsEvent());
+        assertFalse(providerCustody.isDowned(civilian));
+        assertEquals(PlayerCondition.DEAD,
+                ctx.custody().read().states.get(civilian.uuid().toString()).condition);
+    }
+
+    @Test
+    void exceptionalAndSecondWeaponEventsResolveToOneDeath() {
+        var first = new LethalEventResolver.Request(
+                "first-hit", "player", guard.uuid().toString(),
+                LethalEventResolver.SourceKind.WEAPON, true, false,
+                LethalEventResolver.ProviderSelection.none());
+        assertEquals(LethalEventResolver.Outcome.STRAJA_DOWNED,
+                custody.resolveLethalEvent(civilian, first).outcome());
+        var second = new LethalEventResolver.Request(
+                "second-hit", "player", guard.uuid().toString(),
+                LethalEventResolver.SourceKind.WEAPON, true, false,
+                LethalEventResolver.ProviderSelection.none());
+        var death = custody.resolveLethalEvent(civilian, second);
+        assertEquals(LethalEventResolver.Outcome.HARD_DEATH, death.outcome());
+        assertFalse(death.ownsEvent());
+        assertEquals(PlayerCondition.DEAD,
+                ctx.custody().read().states.get(civilian.uuid().toString()).condition);
+
+        var replay = custody.resolveLethalEvent(civilian, second);
+        assertEquals(LethalEventResolver.Outcome.DUPLICATE, replay.outcome());
+        assertFalse(replay.ownsEvent(), "a repeated hard death must not cancel vanilla death");
+        assertEquals(2, audit.tail(30).stream()
+                .filter(e -> "lethal_event".equals(e.action)).count());
     }
 
     @Test

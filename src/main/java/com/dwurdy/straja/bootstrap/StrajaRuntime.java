@@ -133,7 +133,8 @@ public final class StrajaRuntime {
         this.guards = new GuardService(ctx, players, audit, equipment, this::bootId);
         this.npcs = new com.dwurdy.straja.application.service.NpcAdminService(ctx);
         this.missions = new com.dwurdy.straja.application.service.MissionService(ctx, players, audit);
-        this.custody = new com.dwurdy.straja.application.service.CustodyService(ctx, players, audit);
+        this.custody = new com.dwurdy.straja.application.service.CustodyService(
+                ctx, players, audit, com.dwurdy.straja.application.port.out.LethalEventProvider.discover());
         this.prison = new com.dwurdy.straja.application.service.PrisonService(ctx, players, audit, custody);
         this.fines = new com.dwurdy.straja.application.service.FineService(ctx, players, audit, prison);
         this.complaints = new com.dwurdy.straja.application.service.ComplaintService(ctx, players, audit);

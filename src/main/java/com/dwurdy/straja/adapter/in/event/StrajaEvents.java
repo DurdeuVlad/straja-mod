@@ -5,14 +5,19 @@ import com.dwurdy.straja.adapter.in.item.PhysicalItemSurface;
 import com.dwurdy.straja.adapter.out.minecraft.MinecraftPlayerGateway;
 import com.dwurdy.straja.application.port.out.ItemView;
 import com.dwurdy.straja.application.port.out.PlayerGateway;
+import com.dwurdy.straja.application.port.in.CustodyRoleplayUseCase;
 import com.dwurdy.straja.bootstrap.StrajaRuntime;
 import com.dwurdy.straja.domain.model.Capability;
+import com.dwurdy.straja.domain.model.LethalEventResolver;
 import net.minecraft.network.chat.Component;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.damagesource.DamageSource;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
+import java.util.HashMap;
+import java.util.Map;
 
 
 /**
@@ -21,6 +26,24 @@ import net.neoforged.neoforge.event.tick.ServerTickEvent;
  * delegated to application services.
  */
 public final class StrajaEvents {
+    private static final long PENDING_DEATH_TTL_TICKS = 2;
+
+    private record PendingDeath(String eventId, DamageSource damageSource,
+                                String sourceId, String actorId, long createdAtTick,
+                                long expiresAtTick) {
+        private boolean matches(DamageSource source, String sourceMessageId,
+                                String actor, long currentTick) {
+            if (currentTick > expiresAtTick) return false;
+            if (damageSource != null && source == damageSource) return true;
+            return createdAtTick == currentTick
+                    && sourceId != null && sourceId.equals(sourceMessageId)
+                    && actorId != null && actorId.equals(actor);
+        }
+    }
+
+    private final Map<String, PendingDeath> pendingDeathEventIds = new HashMap<>();
+    private long lethalEventSequence;
+
     public StrajaEvents() {}
 
     @SubscribeEvent
@@ -28,6 +51,8 @@ public final class StrajaEvents {
         StrajaRuntime runtime = StrajaRuntime.get();
         if (runtime == null) return;
         runtime.serverGateway().tick();
+        long tick = runtime.serverGateway().tickCount();
+        pendingDeathEventIds.values().removeIf(pending -> pending.expiresAtTick() < tick);
         runtime.missionRoleplay().tick();
         runtime.custodyRoleplay().tick();
         runtime.prisonRoleplay().tick();
@@ -162,10 +187,9 @@ public final class StrajaEvents {
     }
 
     /**
-     * Classifies damage before it can resolve. The custody service owns the
-     * one-outcome decision; this adapter only translates the NeoForge event
-     * into domain inputs and cancels the event when a non-vanilla provider
-     * owns it.
+     * Server-side damage gate. Lethal player damage is classified once and
+     * routed through the custody resolver before vanilla can apply death.
+     * Non-lethal baton hits are capped so the mechanic can never kill.
      */
     @SubscribeEvent
     public void onIncomingDamage(net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent event) {
@@ -174,64 +198,55 @@ public final class StrajaEvents {
         if (!(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer target)) return;
         var targetGateway = new MinecraftPlayerGateway(target.getServer(), target.getUUID());
         var attackerEntity = event.getSource().getEntity();
-        var attacker = attackerEntity instanceof net.minecraft.server.level.ServerPlayer player
-                ? player : null;
-        var attackerGateway = attacker == null
-                ? null : new MinecraftPlayerGateway(attacker.getServer(), attacker.getUUID());
-        if (attackerGateway != null
-                && runtime.custodyRoleplay().actionBlocked(attackerGateway, "combat")) {
-            event.setCanceled(true);
-            return;
-        }
-
-        // Baton behavior remains a distinct non-lethal weapon flow. It owns
-        // its event before the general lethal resolver can see it.
-        if (attackerGateway != null) {
-            var baton = runtime.custodyRoleplay().batonStrike(attackerGateway, targetGateway,
-                    target.getHealth(), target.getAbsorptionAmount(), event.getAmount());
-            switch (baton.action()) {
-                case CANCEL -> { event.setCanceled(true); return; }
-                case ALLOW_NONLETHAL -> {
-                    event.setAmount((float) runtime.custodyRoleplay()
+        if (attackerEntity instanceof net.minecraft.server.level.ServerPlayer attacker) {
+            var attackerGateway = new MinecraftPlayerGateway(attacker.getServer(), attacker.getUUID());
+            // A restrained attacker cannot deal damage.
+            if (runtime.custodyRoleplay().actionBlocked(attackerGateway, "combat")) {
+                event.setCanceled(true);
+                return;
+            }
+            // Baton damage has its own non-lethal cap, but lethal baton hits
+            // enter the same resolver through CustodyService.batonStrike.
+            if (CustodyRoleplayUseCase.BATON.equals(attackerGateway.mainHand().id())) {
+                var outcome = runtime.custodyRoleplay().batonStrike(attackerGateway, targetGateway,
+                        target.getHealth(), target.getAbsorptionAmount(), event.getAmount());
+                switch (outcome.action()) {
+                    case CANCEL -> event.setCanceled(true);
+                    case ALLOW_NONLETHAL -> event.setAmount((float) runtime.custodyRoleplay()
                             .capBatonDamage(target.getHealth(), target.getAbsorptionAmount()));
-                    return;
+                    case ALLOW_LETHAL -> { /* resolver already persisted DEAD */ }
+                    default -> {}
                 }
-                default -> {}
+                return;
             }
         }
 
-        boolean downed = runtime.custodyRoleplay().isDowned(targetGateway);
-        boolean weaponHit = attacker != null && isWeaponHit(attacker);
-        boolean explicitHardKill = attacker != null && isExplicitHardKill(attacker);
         boolean lethal = target.getHealth() > 0
                 && event.getAmount() >= target.getHealth() + target.getAbsorptionAmount();
-        if (!downed && !lethal && !explicitHardKill) return;
-
-        var category = explicitHardKill ? com.dwurdy.straja.domain.model.DamageCategory.EXCEPTIONAL
-                : downed && weaponHit
-                ? com.dwurdy.straja.domain.model.DamageCategory.SECOND_WEAPON_HIT
-                : weaponHit
-                ? com.dwurdy.straja.domain.model.DamageCategory.ORDINARY
-                : com.dwurdy.straja.domain.model.DamageCategory.NON_WEAPON;
-        // DC-005 supplies the optional provider flags. False is the safe
-        // absence case and guarantees no accidental Straja/Vampirism overlap.
-        var decision = runtime.custodyRoleplay().resolveLethalEvent(
-                targetGateway, attackerGateway, category, explicitHardKill, false, false);
-        switch (decision.outcome()) {
-            case PROTECTED_BY_CUSTODY, VAMPIRISM_DBNO, VAMPIRISM_PRESERVE,
-                    STRAJA_DOWNED, IGNORED_TERMINAL -> event.setCanceled(true);
-            case HARD_KILL, STRAJA_DEATH -> event.setAmount((float) Math.max(
-                    event.getAmount(), target.getHealth() + target.getAbsorptionAmount()));
-            case VANILLA_DEATH -> { /* vanilla death proceeds */ }
+        boolean hardKill = isExplicitHardKill(attackerEntity);
+        if (lethal || hardKill) {
+            var request = lethalRequest(runtime, target, event.getSource());
+            var decision = runtime.custodyRoleplay().resolveLethalEvent(
+                    targetGateway, request);
+            rememberPendingDeath(runtime, target, event.getSource(), request, decision);
+            if (!decision.cancelVanillaDeath() && hardKill
+                    && (decision.outcome() == LethalEventResolver.Outcome.HARD_DEATH
+                    || decision.outcome() == LethalEventResolver.Outcome.VANILLA_DEATH)) {
+                event.setAmount((float) Math.max(
+                        event.getAmount(), target.getHealth() + target.getAbsorptionAmount()));
+            }
+            if (decision.ownsEvent()) event.setCanceled(true);
+            return;
+        }
+        // A defeated player remains protected from incidental non-lethal hits.
+        if (runtime.custodyRoleplay().isDowned(targetGateway)) {
+            event.setCanceled(true);
         }
     }
 
-    private static boolean isWeaponHit(net.minecraft.server.level.ServerPlayer attacker) {
-        return !attacker.getMainHandItem().isEmpty()
-                && attacker.getMainHandItem().isDamageableItem();
-    }
-
-    private static boolean isExplicitHardKill(net.minecraft.server.level.ServerPlayer attacker) {
+    private static boolean isExplicitHardKill(Object attackerEntity) {
+        if (!(attackerEntity instanceof net.minecraft.server.level.ServerPlayer attacker)
+                || attacker.getMainHandItem().isEmpty()) return false;
         String itemId = BuiltInRegistries.ITEM.getKey(attacker.getMainHandItem().getItem()).toString();
         return itemId.endsWith(":stake") || itemId.equals("straja:execution_weapon");
     }
@@ -475,6 +490,78 @@ public final class StrajaEvents {
         runtime.fineRoleplay().createJailerAssaultMission(gateway, npc.getStringUUID(), outcome);
     }
 
+    private LethalEventResolver.Request lethalRequest(
+            StrajaRuntime runtime, net.minecraft.server.level.ServerPlayer target,
+            DamageSource source) {
+        return lethalRequest(runtime, target, source, nextLethalEventId(runtime, target, source));
+    }
+
+    private LethalEventResolver.Request lethalRequest(
+            StrajaRuntime runtime, net.minecraft.server.level.ServerPlayer target,
+            DamageSource source, String eventId) {
+        String sourceId = source == null ? "unknown" : source.getMsgId();
+        if (sourceId == null || sourceId.isBlank()) sourceId = "unknown";
+        String actorId = source == null || source.getEntity() == null
+                ? "" : source.getEntity().getUUID().toString();
+        boolean hardKill = java.util.Set.of(
+                "outOfWorld", "genericKill", "intentionalGameDesign").contains(sourceId)
+                || isExplicitHardKill(source == null ? null : source.getEntity());
+        LethalEventResolver.SourceKind kind = hardKill
+                ? LethalEventResolver.SourceKind.EXCEPTIONAL
+                : source != null && (source.getDirectEntity() != null || source.getEntity() != null)
+                        ? LethalEventResolver.SourceKind.WEAPON
+                        : LethalEventResolver.SourceKind.NON_WEAPON;
+        return new LethalEventResolver.Request(eventId, sourceId, actorId, kind,
+                true, hardKill, LethalEventResolver.ProviderSelection.none());
+    }
+
+    private String nextLethalEventId(StrajaRuntime runtime,
+                                     net.minecraft.server.level.ServerPlayer target,
+                                     DamageSource source) {
+        String sourceId = source == null || source.getMsgId() == null
+                ? "unknown" : source.getMsgId();
+        return "lethal:" + target.getUUID() + ":"
+                + runtime.serverGateway().tickCount() + ":" + (++lethalEventSequence)
+                + ":" + sourceId;
+    }
+
+    private String lethalEventKey(net.minecraft.server.level.ServerPlayer target) {
+        // Keep the identity across server ticks. A subsequent lethal hit for
+        // the same target overwrites this slot with its newer event id.
+        return target.getUUID().toString();
+    }
+
+    private void rememberPendingDeath(StrajaRuntime runtime,
+                                      net.minecraft.server.level.ServerPlayer target,
+                                      DamageSource damageSource,
+                                      LethalEventResolver.Request request,
+                                      LethalEventResolver.Decision decision) {
+        if (decision.outcome() != LethalEventResolver.Outcome.DUPLICATE) {
+            // Keep ownership identity for a defensive late death callback as
+            // well as for a genuine vanilla death callback. This prevents a
+            // cancelled downing/provider event from being reclassified as a
+            // second weapon hit.
+            pendingDeathEventIds.put(lethalEventKey(target),
+                    new PendingDeath(request.eventId(), damageSource, request.sourceId(),
+                            request.actorId(), runtime.serverGateway().tickCount(),
+                            runtime.serverGateway().tickCount() + PENDING_DEATH_TTL_TICKS));
+        }
+    }
+
+    private LethalEventResolver.Request lethalDeathRequest(
+            StrajaRuntime runtime, net.minecraft.server.level.ServerPlayer target,
+            DamageSource source) {
+        PendingDeath pending = pendingDeathEventIds.remove(lethalEventKey(target));
+        String sourceId = source == null || source.getMsgId() == null
+                ? "unknown" : source.getMsgId();
+        String actorId = source == null || source.getEntity() == null
+                ? "" : source.getEntity().getUUID().toString();
+        return pending == null || !pending.matches(source, sourceId, actorId,
+                runtime.serverGateway().tickCount())
+                ? lethalRequest(runtime, target, source)
+                : lethalRequest(runtime, target, source, pending.eventId());
+    }
+
     /**
      * Jailer death escalates the assault mission; a wanted suspect's death at a
      * guard's hand closes the arrest task with the reduced death bounty.
@@ -483,9 +570,17 @@ public final class StrajaEvents {
     public void onEntityDeath(net.neoforged.neoforge.event.entity.living.LivingDeathEvent event) {
         StrajaRuntime runtime = StrajaRuntime.get();
         if (runtime == null || event.getEntity().level().isClientSide()) return;
-        // Custody always recovers a dying player's restraint state first.
         if (event.getEntity() instanceof net.minecraft.server.level.ServerPlayer victim) {
             var victimGateway = new MinecraftPlayerGateway(victim.getServer(), victim.getUUID());
+            var decision = runtime.custodyRoleplay().resolveLethalEvent(
+                    victimGateway, lethalDeathRequest(runtime, victim, event.getSource()));
+            // A provider-owned or established-custody event must not fall
+            // through to vanilla death or death-side reward handling.
+            if (decision.ownsEvent()) {
+                event.setCanceled(true);
+                return;
+            }
+            // Custody always recovers a genuinely accepted player death.
             runtime.custodyRoleplay().recoverAfterDeath(victimGateway);
         }
         if (!(event.getSource().getEntity() instanceof net.minecraft.server.level.ServerPlayer attacker)) return;

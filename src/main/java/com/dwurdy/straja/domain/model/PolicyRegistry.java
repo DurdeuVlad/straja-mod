@@ -92,6 +92,7 @@ public final class PolicyRegistry {
         k("custody.ordinaryDamageBehavior", "ordinaryDamageBehavior", Kind.DAMAGE_BEHAVIOR);
         k("custody.nonWeaponDamageBehavior", "nonWeaponDamageBehavior", Kind.DAMAGE_BEHAVIOR);
         k("custody.exceptionalDamageBehavior", "exceptionalDamageBehavior", Kind.DAMAGE_BEHAVIOR);
+        k("custody.hardKillEnabled", "hardKillEnabled", Kind.BOOL);
         k("custody.criminalRopeEnabled", "criminalRopeEnabled", Kind.BOOL);
         k("custody.criminalCutterEnabled", "criminalCutterEnabled", Kind.BOOL);
         k("custody.policeCuffsEnabled", "policeCuffsEnabled", Kind.BOOL);

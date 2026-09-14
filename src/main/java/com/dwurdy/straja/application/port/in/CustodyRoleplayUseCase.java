@@ -1,12 +1,13 @@
 package com.dwurdy.straja.application.port.in;
 
 import com.dwurdy.straja.application.port.out.PlayerGateway;
-import com.dwurdy.straja.domain.model.DamageCategory;
 import com.dwurdy.straja.domain.model.LethalEventResolver;
 import java.util.List;
 
 /** Player-facing custody surface: cuff requests, restraint, downed and recovery. */
 public interface CustodyRoleplayUseCase {
+    String BATON = "straja:baton";
+
     enum Action {
         ACCEPT_REQUEST,
         REFUSE_REQUEST,
@@ -21,7 +22,8 @@ public interface CustodyRoleplayUseCase {
     enum DamageAction {
         NOT_BATON,
         CANCEL,
-        ALLOW_NONLETHAL
+        ALLOW_NONLETHAL,
+        ALLOW_LETHAL
     }
 
     record DamageDecision(DamageAction action, String reason) {}
@@ -60,16 +62,11 @@ public interface CustodyRoleplayUseCase {
             double absorption,
             double damage);
 
-    double capBatonDamage(double health, double absorption);
-
-    /** Resolves one potentially lethal event without allowing provider overlap. */
+    /** Resolves one server-classified lethal event before vanilla death runs. */
     LethalEventResolver.Decision resolveLethalEvent(
-            PlayerGateway target,
-            PlayerGateway source,
-            DamageCategory category,
-            boolean explicitHardKill,
-            boolean vampireEligible,
-            boolean vampireDbnoActive);
+            PlayerGateway target, LethalEventResolver.Request request);
+
+    double capBatonDamage(double health, double absorption);
 
     boolean actionBlocked(PlayerGateway player, String action);
 

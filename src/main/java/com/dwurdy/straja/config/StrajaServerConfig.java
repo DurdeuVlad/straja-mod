@@ -78,6 +78,7 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.ConfigValue<String> ORDINARY_DAMAGE_BEHAVIOR;
     public static final ModConfigSpec.ConfigValue<String> NON_WEAPON_DAMAGE_BEHAVIOR;
     public static final ModConfigSpec.ConfigValue<String> EXCEPTIONAL_DAMAGE_BEHAVIOR;
+    public static final ModConfigSpec.BooleanValue HARD_KILL_ENABLED;
     public static final ModConfigSpec.BooleanValue CRIMINAL_ROPE_ENABLED;
     public static final ModConfigSpec.BooleanValue CRIMINAL_CUTTER_ENABLED;
     public static final ModConfigSpec.BooleanValue POLICE_CUFFS_ENABLED;
@@ -331,6 +332,7 @@ public final class StrajaServerConfig {
                 StrajaServerConfig::isDamageBehavior);
         EXCEPTIONAL_DAMAGE_BEHAVIOR = B.define("exceptionalDamageBehavior", defaults.exceptionalDamageBehavior,
                 StrajaServerConfig::isDamageBehavior);
+        HARD_KILL_ENABLED = B.define("hardKillEnabled", defaults.hardKillEnabled);
         CRIMINAL_ROPE_ENABLED = B.define("criminalRopeEnabled", defaults.criminalRopeEnabled);
         CRIMINAL_CUTTER_ENABLED = B.define("criminalCutterEnabled", defaults.criminalCutterEnabled);
         POLICE_CUFFS_ENABLED = B.define("policeCuffsEnabled", defaults.policeCuffsEnabled);
@@ -754,6 +756,7 @@ public final class StrajaServerConfig {
         p.ordinaryDamageBehavior = ORDINARY_DAMAGE_BEHAVIOR.get();
         p.nonWeaponDamageBehavior = NON_WEAPON_DAMAGE_BEHAVIOR.get();
         p.exceptionalDamageBehavior = EXCEPTIONAL_DAMAGE_BEHAVIOR.get();
+        p.hardKillEnabled = HARD_KILL_ENABLED.get();
         p.criminalRopeEnabled = CRIMINAL_ROPE_ENABLED.get();
         p.criminalCutterEnabled = CRIMINAL_CUTTER_ENABLED.get();
         p.policeCuffsEnabled = POLICE_CUFFS_ENABLED.get();

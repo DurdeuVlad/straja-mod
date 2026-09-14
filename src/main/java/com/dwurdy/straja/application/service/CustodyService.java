@@ -3,6 +3,7 @@ package com.dwurdy.straja.application.service;
 import com.dwurdy.straja.application.StrajaContext;
 import com.dwurdy.straja.application.port.in.CustodyRoleplayUseCase;
 import com.dwurdy.straja.application.port.out.ItemView;
+import com.dwurdy.straja.application.port.out.LethalEventProvider;
 import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.domain.model.Capability;
 import com.dwurdy.straja.domain.model.CustodyDeadlineEngine;
@@ -11,7 +12,6 @@ import com.dwurdy.straja.domain.model.CustodyStore;
 import com.dwurdy.straja.domain.model.CustodyStatus;
 import com.dwurdy.straja.domain.model.CustodyTransition;
 import com.dwurdy.straja.domain.model.CustodyTransitionEngine;
-import com.dwurdy.straja.domain.model.DamageCategory;
 import com.dwurdy.straja.domain.model.ItemSpec;
 import com.dwurdy.straja.domain.model.LethalEventResolver;
 import com.dwurdy.straja.domain.model.Rank;
@@ -46,11 +46,18 @@ public class CustodyService implements CustodyRoleplayUseCase {
     private final StrajaContext ctx;
     private final PlayerService players;
     private final AuditService audit;
+    private final LethalEventProvider lethalProvider;
 
     public CustodyService(StrajaContext ctx, PlayerService players, AuditService audit) {
+        this(ctx, players, audit, LethalEventProvider.none());
+    }
+
+    public CustodyService(StrajaContext ctx, PlayerService players, AuditService audit,
+                          LethalEventProvider lethalProvider) {
         this.ctx = ctx;
         this.players = players;
         this.audit = audit;
+        this.lethalProvider = lethalProvider == null ? LethalEventProvider.none() : lethalProvider;
     }
 
     private long now() { return ctx.clock().nowMillis(); }
@@ -1457,6 +1464,146 @@ public class CustodyService implements CustodyRoleplayUseCase {
     // ------------------------------------------------------------ downed
 
     public CustodyStore.DownedRecord startDowned(PlayerGateway player, PlayerGateway source, String reason) {
+        return startDowned(player, source, reason, null, true);
+    }
+
+    /**
+     * Resolves one server-classified lethal event. The provider boundary is
+     * queried before the pure precedence table is applied; optional provider
+     * failures fall back to the Straja/vanilla policy path.
+     */
+    @Override
+    public LethalEventResolver.Decision resolveLethalEvent(
+            PlayerGateway target, LethalEventResolver.Request request) {
+        if (target == null || request == null) {
+            return new LethalEventResolver.Decision(
+                    LethalEventResolver.Outcome.INVALID, null, null,
+                    StateProvider.SYSTEM, "INVALID_INPUT", true, false);
+        }
+        var store = store();
+        boolean imported = importLegacyProjections(store);
+        String playerKey = key(target);
+        CustodyState state = store.states.get(playerKey);
+        if (state == null) state = newCanonicalState(target);
+
+        // Do not even query an optional provider for a replay or death hook;
+        // an idempotent callback must have no provider side effects.
+        if (request.lethal() && (request.eventId().equals(state.transitionId)
+                || request.eventId().equals(state.lastLethalEventId)
+                || state.hasLethalEvent(request.eventId())
+                || state.condition == PlayerCondition.DEAD)) {
+            var duplicate = LethalEventResolver.resolve(
+                    state, request.withProvider(LethalEventResolver.ProviderSelection.none()),
+                    ctx.policies());
+            if (imported) ctx.custody().write(store);
+            return duplicate;
+        }
+
+        LethalEventResolver.ProviderSelection offer = LethalEventResolver.ProviderSelection.none();
+        if (request.lethal()) {
+            try {
+                var supplied = lethalProvider.offer(target, request.sourceId());
+                if (supplied != null) offer = supplied;
+            } catch (RuntimeException ignored) {
+                // An absent/broken optional provider must never make the
+                // server lose the event; resolver fallback remains authoritative.
+            }
+        }
+        var decision = LethalEventResolver.resolve(state, request.withProvider(offer), ctx.policies());
+        if (!decision.terminal() || decision.outcome() == LethalEventResolver.Outcome.DUPLICATE) {
+            if (imported) ctx.custody().write(store);
+            return decision;
+        }
+
+        if (decision.outcome() == LethalEventResolver.Outcome.VAMPIRISM_DBNO
+                || decision.outcome() == LethalEventResolver.Outcome.EXPLICIT_PROVIDER) {
+            boolean claimed = false;
+            try {
+                claimed = lethalProvider.claim(target, request.sourceId(), request.eventId());
+            } catch (RuntimeException ignored) {
+                // Provider failure must not leave a cancelled hit with no
+                // provider state; the vanilla fallback below remains live.
+            }
+            if (!claimed) {
+                decision = new LethalEventResolver.Decision(
+                        LethalEventResolver.Outcome.VANILLA_DEATH,
+                        request.sourceKind(), request.policyCategory(), StateProvider.SYSTEM,
+                        "PROVIDER_CLAIM_FAILED_ALLOW_VANILLA", false, false);
+            }
+        }
+
+        String eventId = request.eventId();
+        switch (decision.outcome()) {
+            case STRAJA_DOWNED -> {
+                PlayerGateway source = request.actorId().isEmpty()
+                        ? null : ctx.server().findPlayer(request.actorId());
+                var record = startDowned(target, source,
+                        request.sourceId().isEmpty() ? "lethal_event" : request.sourceId(),
+                        eventId, false);
+                if (record == null) {
+                    audit.record("lethal_event", request.actorId(), request.actorId(),
+                            target.name(), uuidOf(target), "REFUSED", "downed_transition_rejected");
+                    return decision;
+                }
+                // startDowned owns its own read/write cycle, so reload the
+                // aggregate before recording the lethal-event marker.
+                var acceptedStore = store();
+                CustodyState accepted = acceptedStore.states.get(playerKey);
+                rememberLethal(accepted, request, decision);
+                acceptedStore.states.put(playerKey, accepted);
+                ctx.custody().write(acceptedStore);
+                auditLethal(target, request, decision);
+            }
+            case HARD_DEATH, VANILLA_DEATH -> {
+                var transition = new CustodyTransition(
+                        eventId, CustodyTransition.Action.DIE, now(),
+                        request.actorId(), "", "", StateProvider.NATIVE,
+                        request.sourceId().isEmpty() ? "lethal_event" : request.sourceId(), 0);
+                var result = CustodyTransitionEngine.apply(state, transition, ctx.policies());
+                if (!result.ok() && !result.idempotent()) {
+                    audit.record("lethal_event", request.actorId(), request.actorId(),
+                            target.name(), uuidOf(target), "REFUSED",
+                            "death_transition_rejected code=" + result.code());
+                    return decision;
+                }
+                rememberLethal(state, request, decision);
+                store.states.put(playerKey, state);
+                ctx.custody().write(store);
+                auditLethal(target, request, decision);
+            }
+            case STRAJA_CUSTODY_PROTECTION, VAMPIRISM_DBNO, EXPLICIT_PROVIDER -> {
+                rememberLethal(state, request, decision);
+                store.states.put(playerKey, state);
+                ctx.custody().write(store);
+                auditLethal(target, request, decision);
+            }
+            default -> { /* terminal() filters these values */ }
+        }
+        return decision;
+    }
+
+    private void auditLethal(PlayerGateway target, LethalEventResolver.Request request,
+                             LethalEventResolver.Decision decision) {
+        audit.record("lethal_event", request.actorId(), request.actorId(),
+                target.name(), uuidOf(target), "SUCCESS",
+                "eventId=" + request.eventId()
+                        + " outcome=" + decision.outcome().name()
+                        + " provider=" + decision.provider().name()
+                        + " source=" + request.sourceId());
+    }
+
+    private static void rememberLethal(CustodyState state,
+                                       LethalEventResolver.Request request,
+                                       LethalEventResolver.Decision decision) {
+        state.lastLethalEventId = request.eventId();
+        state.lastLethalOutcome = decision.outcome().name();
+        state.lastLethalProvider = decision.provider();
+        state.rememberLethalEvent(request.eventId(), decision.ownsEvent());
+    }
+
+    private CustodyStore.DownedRecord startDowned(PlayerGateway player, PlayerGateway source,
+                                                    String reason, String requestedTransitionId,
+                                                    boolean auditDownedStart) {
         if (!ctx.policies().downedEnabled) return null;
         var store = store();
         String playerKey = key(player);
@@ -1474,8 +1621,10 @@ public class CustodyService implements CustodyRoleplayUseCase {
         var downedAction = canonical.condition == PlayerCondition.CONSCIOUS_RESTRAINED
                 ? CustodyTransition.Action.ENTER_UNCONSCIOUS_CUSTODY
                 : CustodyTransition.Action.ENTER_DOWNED;
+        String transitionId = requestedTransitionId == null || requestedTransitionId.isBlank()
+                ? "rp007:downed:" + playerKey + ":" + startedAt : requestedTransitionId;
         var canonicalResult = CustodyTransitionEngine.apply(canonical,
-                new CustodyTransition("rp007:downed:" + playerKey + ":" + startedAt,
+                new CustodyTransition(transitionId,
                         downedAction, startedAt,
                         source == null ? "system" : uuidOf(source),
                         "", "", StateProvider.NATIVE,
@@ -1492,7 +1641,12 @@ public class CustodyService implements CustodyRoleplayUseCase {
         record.z = player.z();
         record.startedAt = startedAt;
         long cooldown = Math.max(5, ctx.policies().downedCooldownSeconds) * 1000L;
-        record.wakesAt = startedAt + cooldown;
+        long canonicalDeadline = canonical.downedDeadlineAt != null
+                ? canonical.downedDeadlineAt
+                : canonical.unconsciousCustodyDeadlineAt != null
+                        ? canonical.unconsciousCustodyDeadlineAt
+                        : startedAt + cooldown;
+        record.wakesAt = canonicalDeadline;
         record.source = source == null ? "" : source.name();
         record.sourceUuid = source == null ? "" : uuidOf(source);
         record.reason = reason == null ? "knockout" : reason;
@@ -1502,10 +1656,13 @@ public class CustodyService implements CustodyRoleplayUseCase {
         player.closeMenu();
         player.applyEffect("minecraft:slowness",
                 Math.max(20, ctx.policies().downedSlownessTicks), ctx.policies().downedSlownessAmplifier);
-        player.tell("Ai leșinat. Te vei trezi peste " + (cooldown / 1000) + " secunde în același loc.");
+        long remainingSeconds = Math.max(1, (canonicalDeadline - startedAt) / 1000L);
+        player.tell("Ai leșinat. Te vei trezi peste " + remainingSeconds + " secunde în același loc.");
         if (source != null) source.tell(player.name() + " a leșinat și nu poate fi ucis de mecanica Străjii.");
-        audit.record("downed_start", record.source, record.sourceUuid,
-                player.name(), record.targetUuid, "SUCCESS", record.reason);
+        if (auditDownedStart) {
+            audit.record("downed_start", record.source, record.sourceUuid,
+                    player.name(), record.targetUuid, "SUCCESS", record.reason);
+        }
         return record;
     }
 
@@ -1881,21 +2038,49 @@ public class CustodyService implements CustodyRoleplayUseCase {
             issuer.tell(target.name() + " este deja legat; bastonul nu mai poate porni un al doilea flow.");
             return new DamageDecision(DamageAction.CANCEL, "already_bound");
         }
-        if (isDowned(target)) {
-            issuer.tell(target.name() + " este deja inconștient. Nu mai poate primi lovituri.");
-            audit.record("baton_knockout", issuer.name(), uuidOf(issuer),
-                    target.name(), uuidOf(target), "REFUSED", "already_downed");
-            return new DamageDecision(DamageAction.CANCEL, "already_downed");
-        }
         boolean lethal = targetHealth > 0 && damage >= targetHealth + targetAbsorption;
+        if (isDowned(target)) {
+            if (!lethal) {
+                issuer.tell(target.name() + " este deja inconștient. Nu mai poate primi lovituri.");
+                audit.record("baton_knockout", issuer.name(), uuidOf(issuer),
+                        target.name(), uuidOf(target), "REFUSED", "already_downed");
+                return new DamageDecision(DamageAction.CANCEL, "already_downed");
+            }
+            // A second lethal weapon hit is a distinct event. It may terminate
+            // an unrestrained downed player, but it can never start another
+            // Straja downed/custody flow.
+            var resolution = resolveLethalEvent(target, new LethalEventResolver.Request(
+                    ctx.ids().newId("lethal-baton"), BATON,
+                    uuidOf(issuer), LethalEventResolver.SourceKind.WEAPON,
+                    true, false, LethalEventResolver.ProviderSelection.none()));
+            if (resolution.outcome() == LethalEventResolver.Outcome.HARD_DEATH
+                    || resolution.outcome() == LethalEventResolver.Outcome.VANILLA_DEATH) {
+                return new DamageDecision(DamageAction.ALLOW_LETHAL, "second_weapon_hit_death");
+            }
+            return new DamageDecision(DamageAction.CANCEL,
+                    "lethal_outcome_" + resolution.outcome().name().toLowerCase());
+        }
         if (!lethal) {
             // Non-lethal hit passes through; the adapter caps damage so a baton
             // hit alone can never drop the target below 1 health.
             return new DamageDecision(DamageAction.ALLOW_NONLETHAL, "nonlethal");
         }
-        // Lethal strike is converted into a knockout.
-        target.setHealth(1);
-        startDowned(target, issuer, "baton_lethal_hit");
+        // Lethal baton damage still goes through the single resolver. The
+        // adapter/service-specific surrender request is emitted only after
+        // that resolver selected Straja downed.
+        var resolution = resolveLethalEvent(target, new LethalEventResolver.Request(
+                "lethal:baton:" + key(target) + ":" + now(), BATON,
+                uuidOf(issuer), LethalEventResolver.SourceKind.WEAPON,
+                true, false, LethalEventResolver.ProviderSelection.none()));
+        if (resolution.outcome() == LethalEventResolver.Outcome.HARD_DEATH
+                || resolution.outcome() == LethalEventResolver.Outcome.VANILLA_DEATH) {
+            return new DamageDecision(DamageAction.ALLOW_LETHAL,
+                    "lethal_outcome_" + resolution.outcome().name().toLowerCase());
+        }
+        if (resolution.outcome() != LethalEventResolver.Outcome.STRAJA_DOWNED) {
+            return new DamageDecision(DamageAction.CANCEL,
+                    "lethal_outcome_" + resolution.outcome().name().toLowerCase());
+        }
         if (!hasItem(issuer, CUFFS)) {
             issuer.tell("Lovitura a fost un knockout, dar nu ai Cătușe în inventar; ținta rămâne inconștientă.");
             target.tell("Bastonul te-a doborât, dar gardianul nu avea Cătușe disponibile.");
@@ -1910,67 +2095,6 @@ public class CustodyService implements CustodyRoleplayUseCase {
     /** Maximum baton damage so the hit never kills on its own. */
     public double capBatonDamage(double health, double absorption) {
         return Math.max(0, health + absorption - 1);
-    }
-
-    /**
-     * Resolves one potentially lethal event and starts Straja downed only when
-     * Straja is the selected owner. Provider flags are supplied by optional
-     * compatibility adapters; false is the safe absence case.
-     */
-    @Override
-    public LethalEventResolver.Decision resolveLethalEvent(
-            PlayerGateway target,
-            PlayerGateway source,
-            DamageCategory category,
-            boolean explicitHardKill,
-            boolean vampireEligible,
-            boolean vampireDbnoActive) {
-        if (target == null) {
-            return LethalEventResolver.resolve(null, ctx.policies());
-        }
-        var store = store();
-        String targetKey = key(target);
-        CustodyState state = store.states.get(targetKey);
-        if (state == null) {
-            state = newCanonicalState(target);
-            if (store.downed.containsKey(targetKey)) {
-                state.condition = PlayerCondition.DOWNED;
-            }
-            var cuffed = store.cuffed.containsKey(targetKey);
-            var bound = store.bound.containsKey(targetKey);
-            if (cuffed) {
-                state.custody = CustodyStatus.ARRESTED;
-                state.restraint = RestraintStatus.CUFFED;
-            } else if (bound) {
-                state.custody = CustodyStatus.HOSTAGE;
-                state.restraint = RestraintStatus.ROPE_BOUND;
-            }
-        }
-        var context = new LethalEventResolver.Context(
-                state.condition, state.custody, state.restraint, category,
-                explicitHardKill, vampireEligible, vampireDbnoActive);
-        var decision = LethalEventResolver.resolve(context, ctx.policies());
-        if (decision.outcome() != LethalEventResolver.Outcome.STRAJA_DOWNED) {
-            audit.record("lethal_resolve",
-                    source == null ? "system" : source.name(),
-                    source == null ? "" : uuidOf(source),
-                    target.name(), uuidOf(target), decision.outcome().name(),
-                    "code=" + decision.code());
-            return decision;
-        }
-        var record = startDowned(target, source, "lethal_damage");
-        if (record == null) {
-            decision = new LethalEventResolver.Decision(
-                    LethalEventResolver.Outcome.VANILLA_DEATH,
-                    "STRAJA_DOWNED_TRANSITION_FAILED",
-                    false);
-        }
-        audit.record("lethal_resolve",
-                source == null ? "system" : source.name(),
-                source == null ? "" : uuidOf(source),
-                target.name(), uuidOf(target), decision.outcome().name(),
-                "code=" + decision.code());
-        return decision;
     }
 
     // ------------------------------------------------------------ action locks

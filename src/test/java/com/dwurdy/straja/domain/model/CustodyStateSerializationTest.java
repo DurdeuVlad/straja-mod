@@ -38,6 +38,11 @@ class CustodyStateSerializationTest {
         state.custodyActorId = "guard";
         state.destination = "castle-jail";
         state.transitionId = "transition-7";
+        state.lastLethalEventId = "lethal-7";
+        state.lastLethalOutcome = "VAMPIRISM_DBNO";
+        state.lastLethalProvider = StateProvider.VAMPIRISM;
+        state.rememberLethalEvent("lethal-7", true);
+        state.rememberLethalEvent("lethal-6", false);
 
         var loaded = gson.fromJson(gson.toJson(state), CustodyState.class);
         assertEquals(state.playerId, loaded.playerId);
@@ -66,6 +71,11 @@ class CustodyStateSerializationTest {
         assertEquals(state.custodyActorId, loaded.custodyActorId);
         assertEquals(state.destination, loaded.destination);
         assertEquals(state.transitionId, loaded.transitionId);
+        assertEquals(state.lastLethalEventId, loaded.lastLethalEventId);
+        assertEquals(state.lastLethalOutcome, loaded.lastLethalOutcome);
+        assertEquals(state.lastLethalProvider, loaded.lastLethalProvider);
+        assertEquals(state.lethalEventHistory, loaded.lethalEventHistory);
+        assertEquals(state.lethalEventOwnedIds, loaded.lethalEventOwnedIds);
     }
 
     @Test

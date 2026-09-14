@@ -86,10 +86,14 @@ public class StrajaPolicies {
     public int jailDeliveryDeadlineSeconds = 300;
     public boolean jailAutomaticRevivalEnabled = true;
     public int jailAutomaticRevivalDelaySeconds = 30;
-    public String secondWeaponHitBehavior = "PRESERVE_DOWNED";
-    public String ordinaryDamageBehavior = "ALLOW";
-    public String nonWeaponDamageBehavior = "ALLOW";
+    /** A second weapon hit is an explicit terminal escalation for an unrestrained downed player. */
+    public String secondWeaponHitBehavior = "KILL";
+    /** Ordinary/non-weapon lethal damage converts a free eligible player to downed. */
+    public String ordinaryDamageBehavior = "PRESERVE_DOWNED";
+    public String nonWeaponDamageBehavior = "PRESERVE_DOWNED";
     public String exceptionalDamageBehavior = "KILL";
+    /** Explicit execution/hard-kill events must be enabled by server policy. */
+    public boolean hardKillEnabled = true;
     public boolean criminalRopeEnabled = true;
     public boolean criminalCutterEnabled = true;
     public boolean policeCuffsEnabled = true;

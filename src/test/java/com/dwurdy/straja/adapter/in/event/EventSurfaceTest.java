@@ -46,6 +46,29 @@ class EventSurfaceTest {
     }
 
     @Test
+    void routesLethalDamageThroughOneResolverBeforeDeathRecovery() throws IOException {
+        String src = source();
+        assertTrue(src.contains("lethalRequest"),
+                "the adapter must classify the damage source before resolution");
+        assertTrue(src.contains("resolveLethalEvent"),
+                "incoming and terminal lethal events must use the same resolver");
+        assertTrue(src.contains("decision.ownsEvent()"),
+                "vanilla death must be cancelled only for the selected owner");
+        assertTrue(src.contains("PENDING_DEATH_TTL_TICKS"),
+                "late death callbacks need a bounded identity retention window");
+        assertTrue(src.contains("PendingDeath"),
+                "pending death identity must survive a server tick boundary");
+        assertTrue(src.contains("target.getUUID().toString()"),
+                "pending death identity must not be keyed by the current tick");
+        assertTrue(src.contains("source == damageSource"),
+                "delayed death callbacks must correlate the original damage object");
+        assertTrue(src.contains("createdAtTick == currentTick"),
+                "signature fallback must not span unrelated server ticks");
+        assertTrue(src.contains("currentTick > expiresAtTick"),
+                "identity matching must enforce expiry before tick cleanup runs");
+    }
+
+    @Test
     void loginRecoveryCoversEveryPersistedAggregateThroughPorts() throws IOException {
         String src = source();
         assertTrue(src.contains("guardDuty().recoverOnLogin"),

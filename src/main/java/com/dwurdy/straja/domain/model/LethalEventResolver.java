@@ -1,138 +1,229 @@
 package com.dwurdy.straja.domain.model;
 
 /**
- * Pure precedence resolver for a single potentially lethal damage event.
+ * Pure precedence table for a lethal event.
  *
- * <p>The resolver deliberately knows nothing about NeoForge, Vampirism, or
- * player entities.  The adapter supplies the already-classified source and
- * the provider eligibility flags; the returned outcome tells the application
- * layer which owner may resolve the event.</p>
+ * <p>The resolver deliberately consumes facts supplied by an adapter. It
+ * does not inspect Minecraft damage sources or optional-provider internals;
+ * the adapter/provider boundary must classify those facts before the state
+ * transition is applied.</p>
  */
 public final class LethalEventResolver {
     private LethalEventResolver() {}
 
-    public enum Outcome {
-        /** A normal hit is absorbed by established Straja custody. */
-        PROTECTED_BY_CUSTODY,
-        /** The configured hard-kill source owns the terminal result. */
-        HARD_KILL,
-        /** The optional Vampirism provider owns the DBNO transition. */
-        VAMPIRISM_DBNO,
-        /** Vampirism already owns DBNO; the hit must not finish it normally. */
-        VAMPIRISM_PRESERVE,
-        /** Straja owns the temporary downed transition. */
-        STRAJA_DOWNED,
-        /** Straja owns a terminal result for an already downed target. */
-        STRAJA_DEATH,
-        /** No provider claimed the event, so vanilla death may proceed. */
-        VANILLA_DEATH,
-        /** The target is already terminal; the duplicate event is ignored. */
-        IGNORED_TERMINAL
+    /** Source classification performed by the server-side event adapter. */
+    public enum SourceKind {
+        WEAPON,
+        NON_WEAPON,
+        EXCEPTIONAL
     }
 
-    public record Context(
-            PlayerCondition condition,
-            CustodyStatus custody,
-            RestraintStatus restraint,
-            DamageCategory category,
-            boolean explicitHardKill,
-            boolean vampireEligible,
-            boolean vampireDbnoActive) {
-        public Context {
-            condition = condition == null ? PlayerCondition.ALIVE : condition;
-            custody = custody == null ? CustodyStatus.FREE : custody;
-            restraint = restraint == null ? RestraintStatus.NONE : restraint;
-            category = category == null ? DamageCategory.ORDINARY : category;
+    /** Exactly one terminal/control outcome is selected for one event. */
+    public enum Outcome {
+        NOT_LETHAL,
+        STRAJA_CUSTODY_PROTECTION,
+        VAMPIRISM_DBNO,
+        EXPLICIT_PROVIDER,
+        STRAJA_DOWNED,
+        HARD_DEATH,
+        VANILLA_DEATH,
+        DUPLICATE,
+        INVALID
+    }
+
+    /** Optional provider claim; absent optional mods are represented by none(). */
+    public record ProviderSelection(StateProvider provider, boolean eligible) {
+        public ProviderSelection {
+            provider = provider == null ? StateProvider.SYSTEM : provider;
+        }
+
+        public static ProviderSelection none() {
+            return new ProviderSelection(StateProvider.SYSTEM, false);
+        }
+
+        public boolean selected() {
+            return eligible && provider != StateProvider.SYSTEM
+                    && provider != StateProvider.NATIVE
+                    && provider != StateProvider.UNKNOWN;
         }
     }
 
-    public record Decision(Outcome outcome, String code, boolean cancelVanillaDeath) {
+    /** Facts needed to classify a server-side event before mutating state. */
+    public record Request(
+            String eventId,
+            String sourceId,
+            String actorId,
+            SourceKind sourceKind,
+            boolean lethal,
+            boolean hardKillRequested,
+            ProviderSelection provider) {
+        public Request {
+            eventId = eventId == null ? "" : eventId.trim();
+            sourceId = sourceId == null ? "" : sourceId.trim();
+            actorId = actorId == null ? "" : actorId.trim();
+            provider = provider == null ? ProviderSelection.none() : provider;
+        }
+
+        public Request withProvider(ProviderSelection selection) {
+            return new Request(eventId, sourceId, actorId, sourceKind, lethal,
+                    hardKillRequested, selection);
+        }
+
+        public DamageCategory policyCategory() {
+            if (sourceKind == null) return null;
+            return switch (sourceKind) {
+                case WEAPON -> DamageCategory.ORDINARY;
+                case NON_WEAPON -> DamageCategory.NON_WEAPON;
+                case EXCEPTIONAL -> DamageCategory.EXCEPTIONAL;
+            };
+        }
+    }
+
+    /** Resolver result; cancel means the selected Straja/provider owns the event. */
+    public record Decision(
+            Outcome outcome,
+            SourceKind sourceKind,
+            DamageCategory policyCategory,
+            StateProvider provider,
+            String code,
+            boolean cancelVanillaDeath,
+            boolean idempotent) {
         public Decision {
-            outcome = outcome == null ? Outcome.VANILLA_DEATH : outcome;
+            outcome = outcome == null ? Outcome.INVALID : outcome;
+            provider = provider == null ? StateProvider.SYSTEM : provider;
             code = code == null ? "" : code;
         }
 
+        public boolean ownsEvent() {
+            return cancelVanillaDeath;
+        }
+
         public boolean terminal() {
-            return outcome == Outcome.HARD_KILL
-                    || outcome == Outcome.STRAJA_DEATH
+            return outcome == Outcome.STRAJA_DOWNED
+                    || outcome == Outcome.VAMPIRISM_DBNO
+                    || outcome == Outcome.EXPLICIT_PROVIDER
+                    || outcome == Outcome.HARD_DEATH
                     || outcome == Outcome.VANILLA_DEATH;
         }
     }
 
-    /** Resolves one event.  Callers must not apply more than this outcome. */
-    public static Decision resolve(Context event, StrajaPolicies policies) {
-        if (event == null || policies == null) {
-            return new Decision(Outcome.VANILLA_DEATH, "INVALID_INPUT", false);
+    /** Applies issue-41 precedence without touching or mutating state. */
+    public static Decision resolve(CustodyState state, Request request,
+                                   StrajaPolicies policies) {
+        if (state == null || request == null || policies == null
+                || request.sourceKind() == null || request.eventId().isEmpty()) {
+            return invalid(request, "INVALID_INPUT");
         }
-        if (event.condition() == PlayerCondition.DEAD) {
-            return new Decision(Outcome.IGNORED_TERMINAL, "ALREADY_DEAD", true);
+        if (!state.wellFormed()) {
+            return invalid(request, "MALFORMED_STATE");
+        }
+        if (!request.lethal()) {
+            return decision(Outcome.NOT_LETHAL, request, StateProvider.SYSTEM,
+                    "NOT_LETHAL", false, false);
+        }
+        if (request.eventId().equals(state.transitionId)
+                || request.eventId().equals(state.lastLethalEventId)
+                || state.hasLethalEvent(request.eventId())) {
+            boolean owns = state.ownsLethalEvent(request.eventId())
+                    || request.eventId().equals(state.lastLethalEventId)
+                    && ownsPreviousEvent(state);
+            return decision(Outcome.DUPLICATE, request, state.lastLethalProvider,
+                    "DUPLICATE_EVENT", owns, true);
+        }
+        if (state.condition == PlayerCondition.DEAD) {
+            return decision(Outcome.DUPLICATE, request, state.provider,
+                    "ALREADY_DEAD", false, true);
         }
 
-        boolean custodyEstablished = event.custody() != CustodyStatus.FREE
-                || event.restraint() != RestraintStatus.NONE;
-
-        // Custody protects against ordinary damage.  An explicitly classified
-        // execution remains available as a separate, auditable exception.
-        if (custodyEstablished && !event.explicitHardKill()) {
-            return new Decision(Outcome.PROTECTED_BY_CUSTODY,
-                    "CUSTODY_PROTECTS_FROM_ORDINARY_DAMAGE", true);
+        // Existing Straja custody is the first protection boundary. Explicit
+        // hard-kill policy is evaluated immediately after that boundary.
+        boolean establishedCustody = state.restraint != RestraintStatus.NONE
+                || state.condition == PlayerCondition.CONSCIOUS_RESTRAINED
+                || state.condition == PlayerCondition.UNCONSCIOUS_CUSTODY
+                || state.custody != CustodyStatus.FREE;
+        if (establishedCustody && request.hardKillRequested()) {
+            return decision(Outcome.STRAJA_CUSTODY_PROTECTION, request, StateProvider.NATIVE,
+                    "CUSTODY_PRECEDENCE_PROTECTION", true, false);
+        }
+        if (establishedCustody) {
+            return policyDecision(request, policies.damageBehavior(request.policyCategory()),
+                    "CUSTODY_POLICY");
+        }
+        if (request.hardKillRequested() && policies.hardKillEnabled) {
+            return decision(Outcome.HARD_DEATH, request, StateProvider.SYSTEM,
+                    "EXPLICIT_HARD_KILL", false, false);
         }
 
-        if (event.explicitHardKill()) {
-            return policies.damageBehavior(DamageCategory.EXCEPTIONAL) == DamageBehavior.CANCEL
-                    ? new Decision(Outcome.PROTECTED_BY_CUSTODY, "HARD_KILL_DISABLED", true)
-                    : new Decision(Outcome.HARD_KILL, "EXPLICIT_HARD_KILL", false);
+        // An optional provider can claim this event only after hard-kill
+        // precedence and before Straja's own downed provider.
+        if (request.provider().selected()) {
+            Outcome providerOutcome = request.provider().provider() == StateProvider.VAMPIRISM
+                    ? Outcome.VAMPIRISM_DBNO : Outcome.EXPLICIT_PROVIDER;
+            return decision(providerOutcome, request, request.provider().provider(),
+                    "PROVIDER_SELECTED", true, false);
         }
 
-        // A provider that already owns DBNO must receive normal follow-up hits
-        // without Straja creating a second downed state.
-        if (event.vampireDbnoActive()) {
-            return new Decision(Outcome.VAMPIRISM_PRESERVE,
-                    "VAMPIRISM_DBNO_ALREADY_ACTIVE", true);
-        }
-        if (event.vampireEligible()) {
-            return new Decision(Outcome.VAMPIRISM_DBNO,
-                    "VAMPIRISM_PROVIDER_OWNS_DBNO", true);
+        if (state.condition == PlayerCondition.DOWNED
+                && state.restraint == RestraintStatus.NONE
+                && request.sourceKind() == SourceKind.WEAPON) {
+            return policyDecision(request,
+                    policies.damageBehavior(DamageCategory.SECOND_WEAPON_HIT),
+                    "SECOND_WEAPON_HIT_POLICY");
         }
 
         // An active resuscitation is a protected hand-off: ordinary damage
         // cannot finish the target while a rescuer is actively bringing them
         // back. Interruption is handled by the application lifecycle flow.
-        if (event.condition() == PlayerCondition.RESUSCITATING) {
-            return new Decision(Outcome.PROTECTED_BY_CUSTODY,
-                    "RESUSCITATION_DAMAGE_PRESERVED", true);
+        if (state.condition == PlayerCondition.RESUSCITATING) {
+            return decision(Outcome.STRAJA_CUSTODY_PROTECTION, request, StateProvider.NATIVE,
+                    "RESUSCITATION_DAMAGE_PRESERVED", true, false);
         }
 
-        boolean downedOrResuscitating = event.condition() == PlayerCondition.DOWNED
-                || event.condition() == PlayerCondition.RESUSCITATING;
-        if (downedOrResuscitating) {
-            if (event.category() == DamageCategory.SECOND_WEAPON_HIT) {
-                return new Decision(Outcome.STRAJA_DEATH,
-                        "SECOND_WEAPON_HIT_FINISHES_UNRESTRAINED_DOWNED", false);
-            }
-            DamageBehavior behavior = policies.damageBehavior(event.category());
-            if (behavior == DamageBehavior.CANCEL || behavior == DamageBehavior.PRESERVE_DOWNED) {
-                return new Decision(Outcome.PROTECTED_BY_CUSTODY,
-                        "DOWNED_DAMAGE_PRESERVED", true);
-            }
-            if (behavior == DamageBehavior.KILL) {
-                return new Decision(Outcome.STRAJA_DEATH,
-                        "CONFIGURED_DOWNED_DAMAGE_KILL", false);
-            }
-            return new Decision(Outcome.PROTECTED_BY_CUSTODY,
-                    "DOWNED_DAMAGE_DOES_NOT_CREATE_SECOND_STATE", true);
+        DamageBehavior behavior = policies.damageBehavior(request.policyCategory());
+        if (state.condition == PlayerCondition.ALIVE && policies.downedEnabled
+                && (behavior == DamageBehavior.PRESERVE_DOWNED
+                || behavior == DamageBehavior.CONVERT_TO_DOWNED)) {
+            return decision(Outcome.STRAJA_DOWNED, request, StateProvider.NATIVE,
+                    "DOWNED_POLICY", true, false);
         }
+        return policyDecision(request, behavior, "DAMAGE_POLICY");
+    }
 
-        DamageBehavior behavior = policies.damageBehavior(event.category());
-        if (behavior == DamageBehavior.CANCEL) {
-            return new Decision(Outcome.PROTECTED_BY_CUSTODY, "DAMAGE_CANCELLED_BY_POLICY", true);
-        }
-        if (behavior == DamageBehavior.KILL) {
-            return new Decision(Outcome.VANILLA_DEATH, "DAMAGE_KILL_POLICY", false);
-        }
-        if (policies.downedEnabled) {
-            return new Decision(Outcome.STRAJA_DOWNED, "STRAJA_OWNS_DOWNED_TRANSITION", true);
-        }
-        return new Decision(Outcome.VANILLA_DEATH, "STRAJA_DOWNED_DISABLED", false);
+    private static Decision policyDecision(Request request, DamageBehavior behavior,
+                                           String prefix) {
+        if (behavior == null) behavior = DamageBehavior.CANCEL;
+        return switch (behavior) {
+            case PRESERVE_DOWNED, CANCEL -> decision(
+                    Outcome.STRAJA_CUSTODY_PROTECTION, request, StateProvider.NATIVE,
+                    prefix + "_PRESERVE", true, false);
+            case CONVERT_TO_DOWNED -> decision(
+                    Outcome.STRAJA_DOWNED, request, StateProvider.NATIVE,
+                    prefix + "_DOWNED", true, false);
+            case KILL -> decision(
+                    Outcome.HARD_DEATH, request, StateProvider.SYSTEM,
+                    prefix + "_KILL", false, false);
+            case ALLOW -> decision(
+                    Outcome.VANILLA_DEATH, request, StateProvider.SYSTEM,
+                    prefix + "_ALLOW", false, false);
+        };
+    }
+
+    private static Decision decision(Outcome outcome, Request request,
+                                     StateProvider provider, String code,
+                                     boolean cancel, boolean idempotent) {
+        return new Decision(outcome, request == null ? null : request.sourceKind(),
+                request == null ? null : request.policyCategory(), provider,
+                code, cancel, idempotent);
+    }
+
+    private static Decision invalid(Request request, String code) {
+        return decision(Outcome.INVALID, request, StateProvider.SYSTEM, code, true, false);
+    }
+
+    private static boolean ownsPreviousEvent(CustodyState state) {
+        return Outcome.STRAJA_DOWNED.name().equals(state.lastLethalOutcome)
+                || Outcome.STRAJA_CUSTODY_PROTECTION.name().equals(state.lastLethalOutcome)
+                || Outcome.VAMPIRISM_DBNO.name().equals(state.lastLethalOutcome)
+                || Outcome.EXPLICIT_PROVIDER.name().equals(state.lastLethalOutcome);
     }
 }

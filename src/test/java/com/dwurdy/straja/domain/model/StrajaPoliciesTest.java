@@ -42,9 +42,9 @@ class StrajaPoliciesTest {
         assertEquals(120, p.unconsciousCustodyDurationSeconds);
         assertEquals(300, p.jailDeliveryDeadlineSeconds);
         assertTrue(p.jailAutomaticRevivalEnabled);
-        assertEquals("PRESERVE_DOWNED", p.secondWeaponHitBehavior);
-        assertEquals("ALLOW", p.ordinaryDamageBehavior);
-        assertEquals("ALLOW", p.nonWeaponDamageBehavior);
+        assertEquals("KILL", p.secondWeaponHitBehavior);
+        assertEquals("PRESERVE_DOWNED", p.ordinaryDamageBehavior);
+        assertEquals("PRESERVE_DOWNED", p.nonWeaponDamageBehavior);
         assertEquals("KILL", p.exceptionalDamageBehavior);
         assertTrue(p.criminalRopeEnabled);
         assertTrue(p.criminalCutterEnabled);
@@ -57,7 +57,7 @@ class StrajaPoliciesTest {
         assertEquals("CLEAR_ALL", p.deathRecoveryBehavior);
         assertEquals("RELEASE_TRANSPORT", p.dimensionChangeRecoveryBehavior);
         assertEquals("RELEASE_TRANSPORT", p.missingDestinationRecoveryBehavior);
-        assertEquals(DamageBehavior.PRESERVE_DOWNED,
+        assertEquals(DamageBehavior.KILL,
                 p.damageBehavior(DamageCategory.SECOND_WEAPON_HIT));
         assertEquals(DamageBehavior.KILL, p.damageBehavior(DamageCategory.EXCEPTIONAL));
         assertEquals(RecoveryBehavior.CLEAR_ALL, p.recoveryBehavior(RecoveryEvent.DEATH));
