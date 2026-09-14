@@ -93,6 +93,15 @@ description='''${mod_description}'''
     ordering="AFTER"
     side="BOTH"
 
+# Vampirism owns vampire DBNO/resurrection and stake finishing when present.
+# Straja loads its adapter reflectively and remains usable without Vampirism.
+[[dependencies.${mod_id}]]
+    modId="vampirism"
+    type="optional"
+    versionRange="[1.10.13,)"
+    ordering="AFTER"
+    side="BOTH"
+
 # Ady's Decorations is the default source of physical coin items for salaries,
 # fines and rewards. Optional: any item IDs may be configured under [economy].
 [[dependencies.${mod_id}]]

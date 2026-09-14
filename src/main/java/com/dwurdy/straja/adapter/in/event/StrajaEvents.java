@@ -2,6 +2,9 @@ package com.dwurdy.straja.adapter.in.event;
 
 import com.dwurdy.straja.adapter.in.npc.NpcRoles;
 import com.dwurdy.straja.adapter.in.npc.StrajaNpcEntity;
+import com.dwurdy.straja.adapter.in.compat.OptionalCustodyProvider;
+import com.dwurdy.straja.adapter.in.compat.OptionalModCompatibility;
+import com.dwurdy.straja.adapter.in.compat.VampirismOwnershipPolicy;
 import com.dwurdy.straja.adapter.in.item.AdminToolSurface;
 import com.dwurdy.straja.adapter.in.item.PhysicalItemSurface;
 import com.dwurdy.straja.adapter.in.form.FormSessionBridge;
@@ -16,6 +19,7 @@ import com.dwurdy.straja.domain.model.Capability;
 import net.minecraft.network.chat.Component;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.bus.api.EventPriority;
 import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
@@ -37,8 +41,11 @@ public final class StrajaEvents {
     private final java.util.Map<java.util.UUID, Long> toolClickHandledAt = new java.util.HashMap<>();
     private final java.util.Set<java.util.UUID> giveUpOffered = new java.util.HashSet<>();
     private final java.util.Map<java.util.UUID, String> giveUpSessionIds = new java.util.HashMap<>();
+    private final OptionalCustodyProvider optionalCustodyProvider;
 
-    public StrajaEvents() {}
+    public StrajaEvents() {
+        this.optionalCustodyProvider = OptionalModCompatibility.loadProvider().orElse(null);
+    }
 
     @SubscribeEvent
     public void onServerTick(ServerTickEvent.Post event) {
@@ -243,7 +250,7 @@ public final class StrajaEvents {
      * into domain inputs and cancels the event when a non-vanilla provider
      * owns it.
      */
-    @SubscribeEvent
+    @SubscribeEvent(priority = EventPriority.NORMAL)
     public void onIncomingDamage(net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent event) {
         StrajaRuntime runtime = StrajaRuntime.get();
         if (runtime == null || event.getEntity().level().isClientSide()) return;
@@ -279,6 +286,16 @@ public final class StrajaEvents {
         boolean downed = runtime.custodyRoleplay().isDowned(targetGateway);
         boolean weaponHit = attacker != null && isWeaponHit(attacker);
         boolean explicitHardKill = attacker != null && isExplicitHardKill(attacker);
+        OptionalCustodyProvider.ProviderState providerState = optionalCustodyProvider == null
+                ? OptionalCustodyProvider.ProviderState.NONE
+                : optionalCustodyProvider.inspect(target);
+        var providerAction = VampirismOwnershipPolicy.incomingDamageAction(
+                providerState, explicitHardKill);
+        if (providerAction
+                == VampirismOwnershipPolicy.IncomingDamageAction.CANCEL_PROVIDER_DBNO_FOLLOW_UP) {
+            event.setCanceled(true);
+            return;
+        }
         boolean lethal = target.getHealth() > 0
                 && event.getAmount() >= target.getHealth() + target.getAbsorptionAmount();
         if (!downed && !lethal && !explicitHardKill) return;
@@ -292,13 +309,18 @@ public final class StrajaEvents {
         // DC-005 supplies the optional provider flags. False is the safe
         // absence case and guarantees no accidental Straja/Vampirism overlap.
         var decision = runtime.custodyRoleplay().resolveLethalEvent(
-                targetGateway, attackerGateway, category, explicitHardKill, false, false);
-        switch (decision.outcome()) {
-            case PROTECTED_BY_CUSTODY, VAMPIRISM_DBNO, VAMPIRISM_PRESERVE,
-                    STRAJA_DOWNED, IGNORED_TERMINAL -> event.setCanceled(true);
+                targetGateway, attackerGateway, category, explicitHardKill,
+                providerState.eligibleForDbno(), providerState.dbnoActive());
+        if (VampirismOwnershipPolicy.cancelIncomingDamage(decision.outcome())) {
+            event.setCanceled(true);
+        } else {
+            switch (decision.outcome()) {
             case HARD_KILL, STRAJA_DEATH -> event.setAmount((float) Math.max(
                     event.getAmount(), target.getHealth() + target.getAbsorptionAmount()));
             case VANILLA_DEATH -> { /* vanilla death proceeds */ }
+                case VAMPIRISM_DBNO -> { /* allow Vampirism's LivingDeath DBNO handoff */ }
+                default -> { /* cancellation handled above */ }
+            }
         }
     }
 

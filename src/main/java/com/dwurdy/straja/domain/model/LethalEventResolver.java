@@ -92,7 +92,9 @@ public final class LethalEventResolver {
         }
         if (event.vampireEligible()) {
             return new Decision(Outcome.VAMPIRISM_DBNO,
-                    "VAMPIRISM_PROVIDER_OWNS_DBNO", true);
+                    // The initial lethal hit must reach Vampirism's later
+                    // LivingDeath hook, which creates DBNO and cancels death.
+                    "VAMPIRISM_PROVIDER_OWNS_DBNO", false);
         }
 
         // An active resuscitation is a protected hand-off: ordinary damage
