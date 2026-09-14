@@ -54,11 +54,14 @@ Straja is roleplay-first. Normal players and officers use native Straja NPCs,
 physical items, clickable chat prompts, and native form screens in the world.
 The NPC roles are:
 
-- **Receptionist** — rules, status, complaint
-  submission/confirmation/withdrawal, fine payment/refusal/appeals, room
-  status/release, native-faction declaration.
-- **Trainer (Instructor)** — recruiting and quizzes (recruitment + rank
-  modules), service-block points and progress, self-service rank-ups for
+- **Receptionist** — records the Straja application ("Depune cererea"),
+  rules, status, complaint submission/confirmation/withdrawal, fine
+  payment/refusal/appeals, room status/release, native-faction declaration.
+- **Recruiter (Recrutor)** — the admission exam: only applicants recorded at
+  Recepție (or commissioner-invited recruits) may answer; passing authorizes
+  the applicant as Stagiar.
+- **Trainer (Instructor)** — post-admission progression only: training
+  modules, service-block points and progress, self-service rank-ups for
   configured ranks, and the physical training manual
   (`straja:training_manual`) — right-click it to read the rules.
 - **Secretary** — duty self-service (start/checkpoint/stop, salary, coins,

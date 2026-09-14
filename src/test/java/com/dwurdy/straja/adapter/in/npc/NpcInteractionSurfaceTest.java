@@ -127,31 +127,52 @@ class NpcInteractionSurfaceTest {
     }
 
     @Test
-    void receptionistNoLongerOffersRecruitmentButTrainerDoes() {
+    void applicationAtReceptionistExamAtRecruiterTrainingAtInstructor() {
         var receptionist = NpcPlayerSurface.surfaceFor(NpcRoles.RECEPTIONIST);
-        assertTrue(receptionist.actions().stream()
-                        .noneMatch(a -> a.actionId().equals("recruit") || a.actionId().equals("quiz-answer")),
-                "recruitment and quizzes moved to the trainer");
+        var receptionistIds = receptionist.actions().stream()
+                .map(NpcPlayerSurface.ChatAction::actionId).toList();
+        assertTrue(receptionistIds.contains("application-submit"),
+                "the receptionist records the application (§5)");
+        assertTrue(receptionistIds.stream()
+                        .noneMatch(a -> a.equals("recruit") || a.equals("quiz-answer")),
+                "the exam moved to the recruiter");
+
+        var recruiter = NpcPlayerSurface.surfaceFor(NpcRoles.RECRUITER);
+        assertEquals(NpcPlayerSurface.RoleRoute.RECRUITER, recruiter.route());
+        var recruiterIds = recruiter.actions().stream()
+                .map(NpcPlayerSurface.ChatAction::actionId).toList();
+        assertTrue(recruiterIds.containsAll(java.util.List.of("recruit", "quiz-answer")),
+                "the recruiter runs the admission exam");
 
         var trainer = NpcPlayerSurface.surfaceFor(NpcRoles.TRAINER);
-        var ids = trainer.actions().stream().map(NpcPlayerSurface.ChatAction::actionId).toList();
-        assertTrue(ids.containsAll(java.util.List.of(
-                "recruit", "quiz-answer", "training-progress", "training-manual")));
+        var trainerIds = trainer.actions().stream().map(NpcPlayerSurface.ChatAction::actionId).toList();
+        assertTrue(trainerIds.containsAll(java.util.List.of("training-progress", "training-manual")));
+        assertTrue(trainerIds.stream().noneMatch(a -> a.equals("recruit") || a.equals("quiz-answer")),
+                "the trainer no longer offers the entry exam");
     }
 
     @Test
     void trainingActionsEmitPromotionOnlyWhenEligible() {
         var eligible = NpcPlayerSurface.trainingActions(
                 new com.dwurdy.straja.application.port.in.GuardRecruitmentUseCase.TrainingView(
-                        1, 60, 2, 60, true, false));
+                        1, 60, 2, 60, true, false, 0));
         assertEquals(java.util.List.of("training-promote"),
                 eligible.stream().map(NpcPlayerSurface.ChatAction::actionId).toList());
 
         var blocked = NpcPlayerSurface.trainingActions(
                 new com.dwurdy.straja.application.port.in.GuardRecruitmentUseCase.TrainingView(
-                        1, 30, 2, 60, false, false));
+                        1, 30, 2, 60, false, false, 0));
         assertTrue(blocked.isEmpty());
         assertTrue(NpcPlayerSurface.trainingActions(null).isEmpty());
+    }
+
+    @Test
+    void trainingActionsMintModuleQuizOnlyWithPendingModules() {
+        var training = NpcPlayerSurface.trainingActions(
+                new com.dwurdy.straja.application.port.in.GuardRecruitmentUseCase.TrainingView(
+                        2, 30, null, null, false, true, 2));
+        assertEquals(java.util.List.of("quiz-answer"),
+                training.stream().map(NpcPlayerSurface.ChatAction::actionId).toList());
     }
 
     private static com.dwurdy.straja.application.port.in.GuardDutyUseCase.DutyView view(

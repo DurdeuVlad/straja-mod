@@ -25,8 +25,10 @@ public final class NpcRoles {
     public static final String JAILER = "jailer";
     public static final String ARCHIVIST = "archivist";
     public static final String TRAINER = "trainer";
+    public static final String RECRUITER = "recruiter";
 
-    private static final Set<String> KNOWN = Set.of(RECEPTIONIST, SECRETARY, JAILER, ARCHIVIST, TRAINER);
+    private static final Set<String> KNOWN =
+            Set.of(RECEPTIONIST, SECRETARY, JAILER, ARCHIVIST, TRAINER, RECRUITER);
 
     private NpcRoles() {}
 
@@ -84,6 +86,7 @@ public final class NpcRoles {
         switch (actionId) {
             case "rules" -> runtime.guardDuty().showRules(gw);
             case "guard-status" -> runtime.guardDuty().showStatus(gw);
+            case "application-submit" -> runtime.guardRecruitment().applyForStraja(gw);
             case "recruit" -> runtime.guardRecruitment().recruit(gw);
             case "quiz-answer" -> openQuizForm(player, level, runtime, gw);
             case "training-progress" -> runtime.guardRecruitment().showProgress(gw);

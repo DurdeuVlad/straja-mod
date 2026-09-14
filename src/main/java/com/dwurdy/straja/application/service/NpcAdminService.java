@@ -21,11 +21,12 @@ public class NpcAdminService implements NpcRegistryUseCase {
     public static final String JAILER = "jailer";
     public static final String ARCHIVIST = "archivist";
     public static final String TRAINER = "trainer";
+    public static final String RECRUITER = "recruiter";
     public static final Set<String> KNOWN_ROLES =
-            Set.of(RECEPTIONIST, SECRETARY, JAILER, ARCHIVIST, TRAINER);
+            Set.of(RECEPTIONIST, SECRETARY, JAILER, ARCHIVIST, TRAINER, RECRUITER);
     /** Deterministic order for guided setup (checklist display + batch spawn). */
     public static final List<String> ROLE_ORDER =
-            List.of(RECEPTIONIST, SECRETARY, TRAINER, JAILER, ARCHIVIST);
+            List.of(RECEPTIONIST, RECRUITER, SECRETARY, TRAINER, JAILER, ARCHIVIST);
 
     private final StrajaContext ctx;
 

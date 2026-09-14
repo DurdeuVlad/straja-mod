@@ -13,6 +13,9 @@ import java.util.Map;
 public class GuardState {
     public int rank = 0;
     public boolean invited = false;
+    public String applicationState = "NONE";    // NONE | APPLIED | AUTHORIZED (§5/§6 flow)
+    public Long appliedAt = null;
+    public String applicationRecordedBy = null;
     public int quizIndex = 0;
     public boolean quizPassed = false;
     public Long quizCooldownAt = null;

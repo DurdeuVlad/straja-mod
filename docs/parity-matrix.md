@@ -54,7 +54,8 @@ Test suite: **331 unit tests** (`gradlew test --rerun-tasks`, all green) across
 
 | Feature | Status | Evidence / notes |
 |---|---|---|
-| Civil → application (recruit) | PASS | `unit:GuardServiceTest`; `rcon:` virtual player recruited |
+| Civil → application at Recepție (§5) | PASS | `unit:GuardServiceTest.applicationFlowAuthorizesThroughRecruiterQuiz`, `invitedApplicantSkipsTheApplicationStep`, `firedAndAuthorizedCannotApply`; `rcon:` `apply` → APPLIED → quiz → AUTHORIZED/Stagiar |
+| Admission exam at Recrutor (§6) | PASS | `unit:NpcInteractionSurfaceTest.applicationAtReceptionistExamAtRecruiterTrainingAtInstructor`; `rcon:` no application → directed to Recepție |
 | Invitations (invite/accept/decline) | PASS | `unit:GuardServiceTest` |
 | Progressive quiz (shuffled order, cooldown) | PASS | `unit:GuardServiceTest` answers dynamic `quizOrder` |
 | Rank progression (promote/demote rules) | PASS | `unit:GuardServiceTest`; `rcon:` `set-rank` |
@@ -97,7 +98,7 @@ Test suite: **331 unit tests** (`gradlew test --rerun-tasks`, all green) across
 | Persistent UUID + explicit role ID | PASS | `code:NpcRegistry` + `EntityJoinLevelEvent` resync; `rcon:` registry survives restart |
 | Roleplay-first NPC player surface | PASS | `unit:NpcInteractionSurfaceTest` + `code:NpcRoles` — native NPC interaction presents clickable chat actions for the full player journey; client live UAT still needed for rendered behavior |
 | Native server-authoritative forms | PASS | `unit:FormSessionServiceTest` + `unit:FormPayloadSurfaceTest` + `code:StrajaFormMenu`/`StrajaFormScreen` — owner-bound, allowlisted, expiring, one-use sessions with bounded fields; quiz, mission report/fail, complaint submit/report/withdraw, appeal/review, archive sheet edit flows |
-| Roles: receptionist/secretary/jailer/archivist/trainer | PASS | `code:NpcRoles` — receptionist: rules, status, fines, rooms, native faction, complaints; trainer: recruiting quiz, training modules, service-block progress, self-service rank-ups, physical theory manual; secretary: duty self-service, missions, Order Carnet, investigation reports; jailer: custody/downed/sentence status, officer tasks, cuffs item; archivist: folders, sheets, copies, envelopes, documents |
+| Roles: receptionist/recruiter/secretary/jailer/archivist/trainer | PASS | `code:NpcRoles` — receptionist: application intake, rules, status, fines, rooms, native faction, complaints; recruiter: admission exam → Stagiar; trainer: training modules, service-block progress, self-service rank-ups, physical theory manual; secretary: duty self-service, missions, Order Carnet, investigation reports; jailer: custody/downed/sentence status, officer tasks, cuffs item; archivist: folders, sheets, copies, envelopes, documents |
 | NPC admin commands | PASS | `rcon:` `npc list/spawn/assign/set-name/set-skin/remove` — registry-targeted, console-safe |
 | NPC interaction → application services | PASS | `code:NpcInteractionService` → `NpcRoles` → inbound `*RoleplayUseCase` ports only; state-aware actions use short-lived, one-use, TTL-expiring, player-bound tokens; text actions open native form sessions. `unit:ArchitectureBoundaryTest` bars concrete services/persistence from player-facing adapters |
 | Jailer damage → assault mission | PASS | `code:` jailer takes real damage (`StrajaNpcEntity.isInvulnerable`/`hurt` → `jailerMayTakeDamage` → `LivingDamageEvent.Post`/`LivingDeathEvent` → `createJailerAssaultMission`); `unit:CivicServiceTest.jailerAssaultCreatesUrgentMissionAndUpgradesSeverity`; `unit:StrajaPoliciesTest.jailerDamageAllowed*` (guard-immunity truth table) |

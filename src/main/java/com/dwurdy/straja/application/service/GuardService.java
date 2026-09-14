@@ -232,16 +232,62 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         players.save(target.uuid(), state);
         audit.record("invite", actor.name(), actor.uuid().toString(),
                 target.name(), target.uuid().toString(), "SUCCESS", "invited");
-        target.tell("Ai fost invitat în Straja Castelului. Vorbește cu Instructorul pentru quiz și manual.");
+        target.tell("Ai fost invitat în Straja Castelului. Prezintă-te la Recrutor pentru examen, apoi la Instructor pentru instruire.");
         actor.tell("Invitația a fost trimisă lui " + target.name() + ".");
         return true;
+    }
+
+    /** §6: the admission quiz opens for applicants (Recepție) and invited recruits (Comisar bypass). */
+    private boolean admissionEligible(GuardState state) {
+        return !state.fired && (state.invited || "APPLIED".equals(state.applicationState));
+    }
+
+    private String admissionGate(GuardState state) {
+        return state.fired ? coreError("fired")
+                : "Depune mai întâi cererea la Recepție, apoi prezintă-te la Recrutor pentru examen.";
+    }
+
+    @Override
+    public void applyForStraja(PlayerGateway player) {
+        GuardState state = players.state(player);
+        if (state.fired) {
+            player.tell(coreError("fired"));
+            return;
+        }
+        if (state.resigned || state.resignationPending) {
+            player.tell("Demisia ta este pe rol sau în cooldown — cererea nu se depune la Recepție. Vorbește cu Comisaru'.");
+            return;
+        }
+        if (state.suspended) {
+            player.tell(coreError("suspended"));
+            return;
+        }
+        if (state.rank >= Rank.STAGIAR.level() || state.quizPassed) {
+            player.tell("Ești deja " + ctx.policies().rankName(state.rank) + ".");
+            return;
+        }
+        if (state.invited) {
+            player.tell("Ai deja o invitație de la Comisar — prezintă-te direct la Recrutor pentru examen.");
+            return;
+        }
+        if ("APPLIED".equals(state.applicationState)) {
+            player.tell("Cererea ta este deja înregistrată. Prezintă-te la Recrutor pentru examen.");
+            return;
+        }
+        state.applicationState = "APPLIED";
+        state.appliedAt = now();
+        state.applicationRecordedBy = player.name();
+        players.save(player.uuid(), state);
+        audit.record("application", player.name(), player.uuid().toString(),
+                player.name(), player.uuid().toString(), "SUCCESS", "applied");
+        player.tell("Cerere înregistrată la Recepție. Prezintă-te la Recrutor pentru examenul de admitere.");
     }
 
     @Override
     public void recruit(PlayerGateway player) {
         GuardState state = players.state(player);
-        if (!state.invited || state.fired) {
-            player.tell("Nu ai invitație activă. Vorbește cu Instructorul sau cu Comisaru'.");
+        if (!admissionEligible(state)) {
+            player.tell(admissionGate(state));
             return;
         }
         if (state.rank >= Rank.STAGIAR.level()) {
@@ -250,8 +296,8 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         }
         var question = ensureQuizOrder(state);
         players.save(player.uuid(), state);
-        player.tell("Recrutarea se face la Instructor, pas cu pas. "
-                + (question != null ? question.question() : "Revino la Instructor pentru următoarea întrebare."));
+        player.tell("Examenul se susține la Recrutor, pas cu pas. "
+                + (question != null ? question.question() : "Revino la Recrutor pentru următoarea întrebare."));
     }
 
     /**
@@ -357,11 +403,11 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
                 : null;
     }
 
-    /** /straja quiz <answer>: initial quiz below JUNIOR, training modules after. */
+    /** /straja quiz <answer>: admission quiz below Stagiar, training modules after. */
     public void quiz(PlayerGateway player, String answer) {
         GuardState state = players.state(player);
-        if (!state.invited || state.fired) {
-            player.tell("Ai nevoie de o invitație de la Comisaru'.");
+        if (!admissionEligible(state)) {
+            player.tell(admissionGate(state));
             return;
         }
         if (state.resigned) {
@@ -391,8 +437,8 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
     @Override
     public Optional<QuizPrompt> currentQuizPrompt(PlayerGateway player) {
         GuardState state = players.state(player);
-        if (!state.invited || state.fired) {
-            player.tell("Ai nevoie de o invitație de la Comisaru'.");
+        if (!admissionEligible(state)) {
+            player.tell(admissionGate(state));
             return Optional.empty();
         }
         if (state.resigned) {
@@ -423,8 +469,8 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
     @Override
     public boolean answerQuiz(PlayerGateway player, String expectedQuestionId, String answer) {
         GuardState state = players.state(player);
-        if (!state.invited || state.fired) {
-            player.tell("Ai nevoie de o invitație de la Comisaru'.");
+        if (!admissionEligible(state)) {
+            player.tell(admissionGate(state));
             return false;
         }
         if (state.resigned) {
@@ -459,6 +505,8 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
     private void promoteToStagiar(PlayerGateway player, GuardState state) {
         state.quizPassed = true;
         state.rank = Rank.STAGIAR.level();
+        state.applicationState = "AUTHORIZED";
+        state.invited = true;
         players.save(player.uuid(), state);
         roomAutoAssign.onPromotedToGuard(player);
         player.tell("Quiz promovat. Ai devenit Stagiar.");
@@ -472,6 +520,8 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             if (state.quizIndex >= ctx.policies().quiz.size()) {
                 state.quizPassed = true;
                 state.rank = Rank.STAGIAR.level();
+                state.applicationState = "AUTHORIZED";
+                state.invited = true;
                 state.kitClaimedRank = 0;
                 players.save(player.uuid(), state);
                 roomAutoAssign.onPromotedToGuard(player);
@@ -611,7 +661,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             }
         }
         return new TrainingView(state.rank, state.serviceBlocks, nextRank, required, canPromote,
-                hasManual(player));
+                hasManual(player), state.rank >= Rank.STAGIAR.level() ? pendingModules(state).size() : 0);
     }
 
     private boolean promotableState(GuardState state) {
@@ -1171,6 +1221,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         state.fired = false;
         state.suspended = false;
         state.quizPassed = true;
+        state.applicationState = "AUTHORIZED";
         state.quizIndex = ctx.policies().quiz.size();
         state.kitClaimedRank = 0;
         state.regearPending = false;
@@ -1418,6 +1469,8 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         aliases.put("reception", "receptionist");
         aliases.put("secretary", "secretary");
         aliases.put("secretara", "secretary");
+        aliases.put("recruiter", "recruiter");
+        aliases.put("recrutor", "recruiter");
         aliases.put("prison-release", "prisonRelease");
         aliases.put("release", "prisonRelease");
         aliases.put("infirmary", "infirmary");

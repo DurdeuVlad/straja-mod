@@ -138,7 +138,7 @@ class GuardServiceTest {
     void uninvitedCannotQuiz() {
         TestPlayer p = server.add("stranger");
         guards.quiz(p, "disciplina");
-        assertTrue(p.told("invitație"));
+        assertTrue(p.told("Recepție"), "no application → directed to Recepție");
         assertEquals(0, players.state(p.uuid()).quizIndex);
     }
 
@@ -203,7 +203,7 @@ class GuardServiceTest {
     void promptRequiresEligibleStatus() {
         TestPlayer stranger = server.add("stranger");
         assertTrue(guards.currentQuizPrompt(stranger).isEmpty());
-        assertTrue(stranger.told("invitație"));
+        assertTrue(stranger.told("Recepție"));
 
         TestPlayer p = invitedRecruit();
         var state = players.state(p.uuid());
@@ -1282,6 +1282,67 @@ class GuardServiceTest {
         assertEquals("Straja", factions.teamOf(p));
         guards.stopDuty(p);
         assertNull(factions.teamOf(p));
+    }
+
+    // ------------------------------------------------------------ §5/§6 application flow
+
+    private void answerAdmissionQuiz(TestPlayer p) {
+        for (int i = 0; i < ctx.policies().quiz.size(); i++) {
+            var prompt = guards.currentQuizPrompt(p).orElseThrow();
+            var question = ctx.policies().quiz.stream()
+                    .filter(q -> q.id().equals(prompt.questionId())).findFirst().orElseThrow();
+            guards.answerQuiz(p, prompt.questionId(), question.answers().get(0));
+        }
+    }
+
+    @Test
+    void applicationFlowAuthorizesThroughRecruiterQuiz() {
+        TestPlayer p = server.add("applicant");
+
+        guards.recruit(p);
+        assertFalse(players.state(p.uuid()).invited);
+        assertTrue(p.told("Recepție"), "no application → directed to Recepție");
+
+        guards.applyForStraja(p);
+        var state = players.state(p.uuid());
+        assertEquals("APPLIED", state.applicationState);
+        assertNotNull(state.appliedAt);
+        assertEquals("applicant", state.applicationRecordedBy);
+
+        guards.applyForStraja(p);
+        assertTrue(p.told("deja înregistrată"), "re-applying while APPLIED is an idempotent tell");
+
+        answerAdmissionQuiz(p);
+        state = players.state(p.uuid());
+        assertEquals(Rank.STAGIAR.level(), state.rank);
+        assertEquals("AUTHORIZED", state.applicationState);
+        assertTrue(state.invited, "authorization enters the Straja pipeline");
+    }
+
+    @Test
+    void invitedApplicantSkipsTheApplicationStep() {
+        TestPlayer p = invitedRecruit();
+        guards.applyForStraja(p);
+        assertTrue(p.told("invitație"), "invited recruits are sent straight to the Recrutor");
+        guards.recruit(p);
+        answerAdmissionQuiz(p);
+        assertEquals(Rank.STAGIAR.level(), players.state(p.uuid()).rank);
+    }
+
+    @Test
+    void firedAndAuthorizedCannotApply() {
+        TestPlayer p = guardAtRank(Rank.STAGIAR.level());
+        guards.applyForStraja(p);
+        assertTrue(p.told("Ești deja"), "guards cannot re-apply");
+
+        var state = players.state(p.uuid());
+        state.fired = true;
+        state.rank = 0;
+        players.save(p.uuid(), state);
+        guards.applyForStraja(p);
+        assertTrue(p.told("îndepărtat"));
+        assertEquals("AUTHORIZED", players.state(p.uuid()).applicationState,
+                "the recorded chain stays intact even after firing");
     }
 
     @Test

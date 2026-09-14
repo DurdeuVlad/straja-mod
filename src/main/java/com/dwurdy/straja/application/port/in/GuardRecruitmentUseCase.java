@@ -4,11 +4,12 @@ import com.dwurdy.straja.application.port.out.PlayerGateway;
 import java.util.Optional;
 
 /**
- * Inbound port for the trainer ("Instructorul"): recruiting quizzes,
- * training modules, service-block progress, promotion requests and the
- * physical theory manual. The prompt carries the server-selected persisted
- * question ID; answers are bound to that ID so a stale or foreign form can
- * never advance the quiz.
+ * Inbound port for the recruitment chain (§5/§6): the receptionist records
+ * the application, the recruiter ("Recrutorul") runs the admission quiz, and
+ * the trainer ("Instructorul") owns training modules, service-block progress,
+ * promotion requests and the physical theory manual. The prompt carries the
+ * server-selected persisted question ID; answers are bound to that ID so a
+ * stale or foreign form can never advance the quiz.
  */
 public interface GuardRecruitmentUseCase {
     record QuizPrompt(String questionId, String title, String question, int maxLength) {}
@@ -20,13 +21,20 @@ public interface GuardRecruitmentUseCase {
      * when the next rank has no configured threshold.
      */
     record TrainingView(int rank, long serviceBlocks, Integer nextRank, Integer requiredBlocks,
-                        boolean canPromote, boolean hasManual) {}
+                        boolean canPromote, boolean hasManual, int pendingModules) {}
 
     Optional<QuizPrompt> currentQuizPrompt(PlayerGateway player);
 
     boolean answerQuiz(PlayerGateway player, String expectedQuestionId, String answer);
 
-    /** Trainer "join the guard" action — invitation/state checks stay in the service. */
+    /**
+     * Receptionist "Depune cererea" action (§5): records the application and
+     * directs the applicant to the Recrutor. Idempotent — re-applying while
+     * APPLIED is a no-op tell; invited/guarded/fired states stay explicit.
+     */
+    void applyForStraja(PlayerGateway player);
+
+    /** Recruiter "join the guard" action — application/invitation checks stay in the service. */
     void recruit(PlayerGateway player);
 
     /** Trainer projection used to mint the state-aware promotion button. */
