@@ -62,7 +62,6 @@ public class StrajaPolicies {
     public List<String> genericKeyTokens = new ArrayList<>(List.of("key", "keycard", "lockpick"));
 
     // restraints
-    public boolean ropeRequiresCuffs = true;
     public int ropeSlownessTicks = 40;
     public int ropeSlownessAmplifier = 1;
     public int headSackBlindnessTicks = 40;
@@ -70,12 +69,79 @@ public class StrajaPolicies {
 
     // downed
     public boolean downedEnabled = true;
+    /** Canonical downed deadline; downedCooldownSeconds remains a legacy alias. */
+    public int downedDurationSeconds = 60;
     public int downedCooldownSeconds = 60;
     public boolean downedFreezeInPlace = true;
     public boolean downedActionLock = true;
     public int downedSlownessTicks = 40;
     public int downedSlownessAmplifier = 255;
     public double downedWakeHealthRatio = 0.5;
+
+    // downed/custody domain contract — consumed by CustodyTransitionEngine.
+    public int carryTransportDeadlineSeconds = 120;
+    public int resuscitationTimeoutSeconds = 30;
+    public int resuscitationProgressPercent = 100;
+    public int unconsciousCustodyDurationSeconds = 120;
+    public int jailDeliveryDeadlineSeconds = 300;
+    public boolean jailAutomaticRevivalEnabled = true;
+    public int jailAutomaticRevivalDelaySeconds = 30;
+    public String secondWeaponHitBehavior = "PRESERVE_DOWNED";
+    public String ordinaryDamageBehavior = "ALLOW";
+    public String nonWeaponDamageBehavior = "ALLOW";
+    public String exceptionalDamageBehavior = "KILL";
+    public boolean criminalRopeEnabled = true;
+    public boolean criminalCutterEnabled = true;
+    public boolean policeCuffsEnabled = true;
+    public boolean universalKeyEnabled = true;
+    public boolean blackSackApplicationEnabled = true;
+    public boolean blackSackRemovalEnabled = true;
+    public boolean blackSackSelfRemoval = true;
+    public String logoutRecoveryBehavior = "RETAIN";
+    public String restartRecoveryBehavior = "RETAIN";
+    public String deathRecoveryBehavior = "CLEAR_ALL";
+    public String dimensionChangeRecoveryBehavior = "RELEASE_TRANSPORT";
+    public String missingDestinationRecoveryBehavior = "RELEASE_TRANSPORT";
+
+    /** Typed accessors keep adapters from interpreting raw config strings. */
+    public DamageBehavior damageBehavior(DamageCategory category) {
+        if (category == null) return DamageBehavior.CANCEL;
+        return switch (category) {
+            case SECOND_WEAPON_HIT -> parseDamage(secondWeaponHitBehavior, DamageBehavior.PRESERVE_DOWNED);
+            case ORDINARY -> parseDamage(ordinaryDamageBehavior, DamageBehavior.ALLOW);
+            case NON_WEAPON -> parseDamage(nonWeaponDamageBehavior, DamageBehavior.ALLOW);
+            case EXCEPTIONAL -> parseDamage(exceptionalDamageBehavior, DamageBehavior.KILL);
+        };
+    }
+
+    public RecoveryBehavior recoveryBehavior(RecoveryEvent event) {
+        if (event == null) return RecoveryBehavior.CLEAR_ALL;
+        return switch (event) {
+            case LOGOUT -> parseRecovery(logoutRecoveryBehavior, RecoveryBehavior.RETAIN);
+            case RESTART -> parseRecovery(restartRecoveryBehavior, RecoveryBehavior.RETAIN);
+            case DEATH -> parseRecovery(deathRecoveryBehavior, RecoveryBehavior.CLEAR_ALL);
+            case DIMENSION_CHANGE -> parseRecovery(dimensionChangeRecoveryBehavior,
+                    RecoveryBehavior.RELEASE_TRANSPORT);
+            case MISSING_DESTINATION -> parseRecovery(missingDestinationRecoveryBehavior,
+                    RecoveryBehavior.RELEASE_TRANSPORT);
+        };
+    }
+
+    private static DamageBehavior parseDamage(String raw, DamageBehavior fallback) {
+        try {
+            return DamageBehavior.valueOf(raw == null ? "" : raw.trim().toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            return fallback;
+        }
+    }
+
+    private static RecoveryBehavior parseRecovery(String raw, RecoveryBehavior fallback) {
+        try {
+            return RecoveryBehavior.valueOf(raw == null ? "" : raw.trim().toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            return fallback;
+        }
+    }
 
     // arrest rewards
     public int arrestRewardMinimum = 25;

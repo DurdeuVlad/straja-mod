@@ -87,6 +87,7 @@ public final class Fakes {
     // ---------------------------------------------------------------- player
 
     public static final class TestPlayer implements PlayerGateway {
+        public TestServer server;
         public final UUID uuid;
         public String name;
         public boolean online = true;
@@ -96,8 +97,11 @@ public final class Fakes {
         public double health = 20, maxHealth = 20, absorption;
         public final TestInventory inventory;
         public final List<String> messages = new ArrayList<>();
+        public final List<String> actionbarMessages = new ArrayList<>();
         public int selectedSlot = -1;
         public final List<String> effects = new ArrayList<>();
+        public UUID vehicleUuid;
+        public UUID passengerUuid;
         /** When > 0, the next N giveVerified calls fail as if delivery broke. */
         public int failVerifiedCalls;
 
@@ -120,6 +124,7 @@ public final class Fakes {
         @Override public double absorption() { return absorption; }
         @Override public void setHealth(double value) { health = value; }
         @Override public void tell(String text) { messages.add(text); }
+        @Override public void actionbar(String text) { actionbarMessages.add(text); }
         @Override public boolean give(ItemSpec item) {
             return inventory.insert(new ItemView(item.id(), item.count(), 64, item.customData()));
         }
@@ -141,6 +146,23 @@ public final class Fakes {
         @Override public void teleport(String dim, double tx, double ty, double tz) {
             dimension = dim; x = tx; y = ty; z = tz;
         }
+        @Override public boolean startRiding(UUID vehicle) {
+            TestPlayer carrier = server == null || vehicle == null ? null : server.players.get(vehicle);
+            if (carrier == null || carrier == this || carrier.passengerUuid != null) return false;
+            vehicleUuid = vehicle;
+            carrier.passengerUuid = uuid;
+            return true;
+        }
+        @Override public void stopRiding() {
+            TestPlayer carrier = server == null || vehicleUuid == null ? null : server.players.get(vehicleUuid);
+            if (carrier != null && uuid.equals(carrier.passengerUuid)) carrier.passengerUuid = null;
+            vehicleUuid = null;
+        }
+        @Override public boolean isPassenger() { return vehicleUuid != null; }
+        @Override public boolean isPassengerOf(UUID vehicle) { return vehicle != null && vehicle.equals(vehicleUuid); }
+        @Override public boolean hasPassenger(UUID passenger) {
+            return passenger != null && passenger.equals(passengerUuid);
+        }
         public String lastMessage() { return messages.isEmpty() ? "" : messages.get(messages.size() - 1); }
         public boolean told(String fragment) {
             return messages.stream().anyMatch(m -> m.contains(fragment));
@@ -155,6 +177,7 @@ public final class Fakes {
 
         public TestPlayer add(String name) {
             TestPlayer player = new TestPlayer(name, 36);
+            player.server = this;
             players.put(player.uuid, player);
             return player;
         }

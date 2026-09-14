@@ -57,7 +57,6 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.IntValue ROPE_SLOWNESS_TICKS;
     public static final ModConfigSpec.IntValue ROPE_SLOWNESS_AMPLIFIER;
     public static final ModConfigSpec.IntValue HEAD_SACK_BLINDNESS_TICKS;
-    public static final ModConfigSpec.BooleanValue ROPE_REQUIRES_CUFFS;
     public static final ModConfigSpec.BooleanValue RESTRAINT_ACTION_LOCK;
 
     public static final ModConfigSpec.BooleanValue DOWNED_ENABLED;
@@ -67,6 +66,30 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.DoubleValue DOWNED_WAKE_HEALTH_RATIO;
     public static final ModConfigSpec.BooleanValue DOWNED_FREEZE_IN_PLACE;
     public static final ModConfigSpec.BooleanValue DOWNED_ACTION_LOCK;
+
+    public static final ModConfigSpec.IntValue CARRY_TRANSPORT_DEADLINE_SECONDS;
+    public static final ModConfigSpec.IntValue RESUSCITATION_TIMEOUT_SECONDS;
+    public static final ModConfigSpec.IntValue RESUSCITATION_PROGRESS_PERCENT;
+    public static final ModConfigSpec.IntValue UNCONSCIOUS_CUSTODY_DURATION_SECONDS;
+    public static final ModConfigSpec.IntValue JAIL_DELIVERY_DEADLINE_SECONDS;
+    public static final ModConfigSpec.BooleanValue JAIL_AUTOMATIC_REVIVAL_ENABLED;
+    public static final ModConfigSpec.IntValue JAIL_AUTOMATIC_REVIVAL_DELAY_SECONDS;
+    public static final ModConfigSpec.ConfigValue<String> SECOND_WEAPON_HIT_BEHAVIOR;
+    public static final ModConfigSpec.ConfigValue<String> ORDINARY_DAMAGE_BEHAVIOR;
+    public static final ModConfigSpec.ConfigValue<String> NON_WEAPON_DAMAGE_BEHAVIOR;
+    public static final ModConfigSpec.ConfigValue<String> EXCEPTIONAL_DAMAGE_BEHAVIOR;
+    public static final ModConfigSpec.BooleanValue CRIMINAL_ROPE_ENABLED;
+    public static final ModConfigSpec.BooleanValue CRIMINAL_CUTTER_ENABLED;
+    public static final ModConfigSpec.BooleanValue POLICE_CUFFS_ENABLED;
+    public static final ModConfigSpec.BooleanValue UNIVERSAL_KEY_ENABLED;
+    public static final ModConfigSpec.BooleanValue BLACK_SACK_APPLICATION_ENABLED;
+    public static final ModConfigSpec.BooleanValue BLACK_SACK_REMOVAL_ENABLED;
+    public static final ModConfigSpec.BooleanValue BLACK_SACK_SELF_REMOVAL;
+    public static final ModConfigSpec.ConfigValue<String> LOGOUT_RECOVERY_BEHAVIOR;
+    public static final ModConfigSpec.ConfigValue<String> RESTART_RECOVERY_BEHAVIOR;
+    public static final ModConfigSpec.ConfigValue<String> DEATH_RECOVERY_BEHAVIOR;
+    public static final ModConfigSpec.ConfigValue<String> DIMENSION_CHANGE_RECOVERY_BEHAVIOR;
+    public static final ModConfigSpec.ConfigValue<String> MISSING_DESTINATION_RECOVERY_BEHAVIOR;
 
     public static final ModConfigSpec.IntValue ARREST_REWARD_MIN;
     public static final ModConfigSpec.IntValue ARREST_REWARD_MAX;
@@ -271,7 +294,6 @@ public final class StrajaServerConfig {
         ROPE_SLOWNESS_TICKS = B.defineInRange("ropeSlownessTicks", 40, 1, 1200);
         ROPE_SLOWNESS_AMPLIFIER = B.defineInRange("ropeSlownessAmplifier", 1, 0, 255);
         HEAD_SACK_BLINDNESS_TICKS = B.defineInRange("headSackBlindnessTicks", 40, 1, 1200);
-        ROPE_REQUIRES_CUFFS = B.define("ropeRequiresCuffs", true);
         RESTRAINT_ACTION_LOCK = B.define("actionLock", true);
         B.pop();
 
@@ -283,6 +305,56 @@ public final class StrajaServerConfig {
         DOWNED_WAKE_HEALTH_RATIO = B.defineInRange("wakeHealthRatio", 0.5, 0.0, 1.0);
         DOWNED_FREEZE_IN_PLACE = B.define("freezeInPlace", true);
         DOWNED_ACTION_LOCK = B.define("actionLock", true);
+        B.pop();
+
+        B.push("custody");
+        CARRY_TRANSPORT_DEADLINE_SECONDS = B.comment(
+                        "Maximum time a carried player may remain in transport without delivery.")
+                .defineInRange("carryTransportDeadlineSeconds", defaults.carryTransportDeadlineSeconds, 1, 86400);
+        RESUSCITATION_TIMEOUT_SECONDS = B.defineInRange(
+                "resuscitationTimeoutSeconds", defaults.resuscitationTimeoutSeconds, 1, 3600);
+        RESUSCITATION_PROGRESS_PERCENT = B.defineInRange(
+                "resuscitationProgressPercent", defaults.resuscitationProgressPercent, 1, 100);
+        UNCONSCIOUS_CUSTODY_DURATION_SECONDS = B.defineInRange(
+                "unconsciousCustodyDurationSeconds", defaults.unconsciousCustodyDurationSeconds, 1, 86400);
+        JAIL_DELIVERY_DEADLINE_SECONDS = B.defineInRange(
+                "jailDeliveryDeadlineSeconds", defaults.jailDeliveryDeadlineSeconds, 1, 86400);
+        JAIL_AUTOMATIC_REVIVAL_ENABLED = B.define(
+                "jailAutomaticRevivalEnabled", defaults.jailAutomaticRevivalEnabled);
+        JAIL_AUTOMATIC_REVIVAL_DELAY_SECONDS = B.defineInRange(
+                "jailAutomaticRevivalDelaySeconds", defaults.jailAutomaticRevivalDelaySeconds, 1, 86400);
+        SECOND_WEAPON_HIT_BEHAVIOR = B.define("secondWeaponHitBehavior", defaults.secondWeaponHitBehavior,
+                StrajaServerConfig::isDamageBehavior);
+        ORDINARY_DAMAGE_BEHAVIOR = B.define("ordinaryDamageBehavior", defaults.ordinaryDamageBehavior,
+                StrajaServerConfig::isDamageBehavior);
+        NON_WEAPON_DAMAGE_BEHAVIOR = B.define("nonWeaponDamageBehavior", defaults.nonWeaponDamageBehavior,
+                StrajaServerConfig::isDamageBehavior);
+        EXCEPTIONAL_DAMAGE_BEHAVIOR = B.define("exceptionalDamageBehavior", defaults.exceptionalDamageBehavior,
+                StrajaServerConfig::isDamageBehavior);
+        CRIMINAL_ROPE_ENABLED = B.define("criminalRopeEnabled", defaults.criminalRopeEnabled);
+        CRIMINAL_CUTTER_ENABLED = B.define("criminalCutterEnabled", defaults.criminalCutterEnabled);
+        POLICE_CUFFS_ENABLED = B.define("policeCuffsEnabled", defaults.policeCuffsEnabled);
+        UNIVERSAL_KEY_ENABLED = B.define("universalKeyEnabled", defaults.universalKeyEnabled);
+        BLACK_SACK_APPLICATION_ENABLED = B.define(
+                "blackSackApplicationEnabled", defaults.blackSackApplicationEnabled);
+        BLACK_SACK_REMOVAL_ENABLED = B.define(
+                "blackSackRemovalEnabled", defaults.blackSackRemovalEnabled);
+        BLACK_SACK_SELF_REMOVAL = B.define("blackSackSelfRemoval", defaults.blackSackSelfRemoval);
+        B.pop();
+
+        B.push("recovery");
+        LOGOUT_RECOVERY_BEHAVIOR = B.define("logout", defaults.logoutRecoveryBehavior,
+                StrajaServerConfig::isRecoveryBehavior);
+        RESTART_RECOVERY_BEHAVIOR = B.define("restart", defaults.restartRecoveryBehavior,
+                StrajaServerConfig::isRecoveryBehavior);
+        DEATH_RECOVERY_BEHAVIOR = B.define("death", defaults.deathRecoveryBehavior,
+                StrajaServerConfig::isRecoveryBehavior);
+        DIMENSION_CHANGE_RECOVERY_BEHAVIOR = B.define(
+                "dimensionChange", defaults.dimensionChangeRecoveryBehavior,
+                StrajaServerConfig::isRecoveryBehavior);
+        MISSING_DESTINATION_RECOVERY_BEHAVIOR = B.define(
+                "missingDestination", defaults.missingDestinationRecoveryBehavior,
+                StrajaServerConfig::isRecoveryBehavior);
         B.pop();
 
         B.push("arrestRewards");
@@ -659,7 +731,6 @@ public final class StrajaServerConfig {
         p.ropeSlownessTicks = ROPE_SLOWNESS_TICKS.get();
         p.ropeSlownessAmplifier = ROPE_SLOWNESS_AMPLIFIER.get();
         p.headSackBlindnessTicks = HEAD_SACK_BLINDNESS_TICKS.get();
-        p.ropeRequiresCuffs = ROPE_REQUIRES_CUFFS.get();
         p.restraintActionLock = RESTRAINT_ACTION_LOCK.get();
 
         p.downedEnabled = DOWNED_ENABLED.get();
@@ -669,6 +740,32 @@ public final class StrajaServerConfig {
         p.downedWakeHealthRatio = DOWNED_WAKE_HEALTH_RATIO.get();
         p.downedFreezeInPlace = DOWNED_FREEZE_IN_PLACE.get();
         p.downedActionLock = DOWNED_ACTION_LOCK.get();
+        p.downedDurationSeconds = DOWNED_COOLDOWN_SECONDS.get();
+        p.downedCooldownSeconds = DOWNED_COOLDOWN_SECONDS.get();
+
+        p.carryTransportDeadlineSeconds = CARRY_TRANSPORT_DEADLINE_SECONDS.get();
+        p.resuscitationTimeoutSeconds = RESUSCITATION_TIMEOUT_SECONDS.get();
+        p.resuscitationProgressPercent = RESUSCITATION_PROGRESS_PERCENT.get();
+        p.unconsciousCustodyDurationSeconds = UNCONSCIOUS_CUSTODY_DURATION_SECONDS.get();
+        p.jailDeliveryDeadlineSeconds = JAIL_DELIVERY_DEADLINE_SECONDS.get();
+        p.jailAutomaticRevivalEnabled = JAIL_AUTOMATIC_REVIVAL_ENABLED.get();
+        p.jailAutomaticRevivalDelaySeconds = JAIL_AUTOMATIC_REVIVAL_DELAY_SECONDS.get();
+        p.secondWeaponHitBehavior = SECOND_WEAPON_HIT_BEHAVIOR.get();
+        p.ordinaryDamageBehavior = ORDINARY_DAMAGE_BEHAVIOR.get();
+        p.nonWeaponDamageBehavior = NON_WEAPON_DAMAGE_BEHAVIOR.get();
+        p.exceptionalDamageBehavior = EXCEPTIONAL_DAMAGE_BEHAVIOR.get();
+        p.criminalRopeEnabled = CRIMINAL_ROPE_ENABLED.get();
+        p.criminalCutterEnabled = CRIMINAL_CUTTER_ENABLED.get();
+        p.policeCuffsEnabled = POLICE_CUFFS_ENABLED.get();
+        p.universalKeyEnabled = UNIVERSAL_KEY_ENABLED.get();
+        p.blackSackApplicationEnabled = BLACK_SACK_APPLICATION_ENABLED.get();
+        p.blackSackRemovalEnabled = BLACK_SACK_REMOVAL_ENABLED.get();
+        p.blackSackSelfRemoval = BLACK_SACK_SELF_REMOVAL.get();
+        p.logoutRecoveryBehavior = LOGOUT_RECOVERY_BEHAVIOR.get();
+        p.restartRecoveryBehavior = RESTART_RECOVERY_BEHAVIOR.get();
+        p.deathRecoveryBehavior = DEATH_RECOVERY_BEHAVIOR.get();
+        p.dimensionChangeRecoveryBehavior = DIMENSION_CHANGE_RECOVERY_BEHAVIOR.get();
+        p.missingDestinationRecoveryBehavior = MISSING_DESTINATION_RECOVERY_BEHAVIOR.get();
 
         p.arrestRewardMinimum = ARREST_REWARD_MIN.get();
         p.arrestRewardMaximum = ARREST_REWARD_MAX.get();
@@ -823,6 +920,18 @@ public final class StrajaServerConfig {
 
     private static boolean isItemId(Object o) {
         return o instanceof String s && ResourceLocation.tryParse(s) != null;
+    }
+
+    private static boolean isDamageBehavior(Object o) {
+        return o instanceof String s && java.util.Arrays.stream(
+                com.dwurdy.straja.domain.model.DamageBehavior.values())
+                .anyMatch(value -> value.name().equalsIgnoreCase(s.trim()));
+    }
+
+    private static boolean isRecoveryBehavior(Object o) {
+        return o instanceof String s && java.util.Arrays.stream(
+                com.dwurdy.straja.domain.model.RecoveryBehavior.values())
+                .anyMatch(value -> value.name().equalsIgnoreCase(s.trim()));
     }
 
     private static boolean isIntMapEntry(Object o) {
