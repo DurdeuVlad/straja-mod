@@ -119,6 +119,27 @@ class CustodyServiceTest {
         assertTrue(visual.blindfolded());
     }
 
+    @Test
+    void custodyStatusUsesActionbarAndEmitsEachTimerWarningOnce() {
+        assertNotNull(custody.startDowned(civilian, guard, "test"));
+        custody.tick();
+        assertTrue(civilian.actionbarMessages.stream().anyMatch(message ->
+                message.contains("Leșinat") && message.contains("revenire")));
+
+        int chatBeforeWarning = civilian.messages.size();
+        clock.advance(31_100L);
+        custody.tick();
+        custody.tick();
+        long thirtySecondWarnings = civilian.messages.stream()
+                .filter(message -> message.contains("30 secunde"))
+                .count();
+        assertEquals(1, thirtySecondWarnings,
+                "repeated ticks must not repeat a threshold warning");
+        assertEquals(chatBeforeWarning + 1, civilian.messages.size());
+        assertTrue(civilian.actionbarMessages.get(civilian.actionbarMessages.size() - 1)
+                .contains("29s"));
+    }
+
     // ------------------------------------------------------------ cuff consent
 
     @Test
@@ -445,6 +466,7 @@ class CustodyServiceTest {
         assertTrue(custody.isDowned(civilian));
         assertTrue(state.downedDeadlineAt > clock.now);
         assertNull(civilian.vehicleUuid);
+        assertTrue(civilian.told("Transportul a expirat"));
     }
 
     @Test
@@ -518,6 +540,7 @@ class CustodyServiceTest {
         assertTrue(custody.isBound(civilian));
         assertTrue(custody.actionBlocked(civilian, "interact"),
                 "waking does not permit self-release or restrained actions");
+        assertTrue(civilian.told("Ai recăpătat controlul"));
     }
 
     @Test
@@ -730,6 +753,7 @@ class CustodyServiceTest {
         clock.advance(1);
         custody.tick();
         assertEquals(PlayerCondition.DEAD, ctx.custody().read().states.get(state.playerId).condition);
+        assertTrue(civilian.told("Timpul de inconștiență a expirat"));
         custody.tick();
         assertEquals(PlayerCondition.DEAD, ctx.custody().read().states.get(state.playerId).condition);
     }

@@ -46,6 +46,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
     private final StrajaContext ctx;
     private final PlayerService players;
     private final AuditService audit;
+    private final CustodyMessageProjector messageProjector = new CustodyMessageProjector();
 
     public CustodyService(StrajaContext ctx, PlayerService players, AuditService audit) {
         this.ctx = ctx;
@@ -943,7 +944,15 @@ public class CustodyService implements CustodyRoleplayUseCase {
             }
         }
         for (int pass = 0; pass < 8; pass++) {
+            var entries = new ArrayList<>(store.states.entrySet());
             var sweep = CustodyDeadlineEngine.tick(store, now(), ctx.policies());
+            for (int i = 0; i < Math.min(entries.size(), sweep.evaluations().size()); i++) {
+                var evaluation = sweep.evaluations().get(i);
+                if (evaluation.changed() && evaluation.type() != null
+                        && evaluation.type() != CustodyDeadlineEngine.DeadlineType.RESUSCITATION_TIMEOUT) {
+                    announceDeadlineResolution(entries.get(i).getValue(), evaluation.type());
+                }
+            }
             changed |= projectCanonicalStates(store);
             if (!sweep.changed()) break;
             changed = true;
@@ -963,6 +972,26 @@ public class CustodyService implements CustodyRoleplayUseCase {
             }
         }
         return changed;
+    }
+
+    private void announceDeadlineResolution(CustodyState state,
+                                             CustodyDeadlineEngine.DeadlineType type) {
+        if (state == null) return;
+        var target = findStored(state.playerUuid, state.playerName);
+        if (target == null) return;
+        switch (type) {
+            case DOWNED_DEATH -> target.tell(
+                    "Timpul de inconștiență a expirat. Ai murit.");
+            case TRANSPORT -> target.tell(
+                    "Transportul a expirat. Ai fost lăsat jos și timerul tău continuă.");
+            case UNCONSCIOUS_CUSTODY -> target.tell(
+                    "Ai recăpătat controlul. Restricția rămâne până când alt jucător te eliberează.");
+            case JAIL_DELIVERY -> target.tell(
+                    "Termenul de predare la închisoare a expirat. Arestarea a fost anulată.");
+            case JAIL_REVIVAL -> target.tell(
+                    "Ai fost readus la conștiență în închisoare. Restricția rămâne activă.");
+            case RESUSCITATION_TIMEOUT -> { /* emitted by the resuscitation path above */ }
+        }
     }
 
     /** Restart recovery preserves absolute deadlines and resolves anything
@@ -1050,6 +1079,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
         }
         deliverPendingKeys(player);
         deliverPendingItems(player);
+        messageProjector.sync(List.of(player), store(), now());
     }
 
     /** Logout recovery: drops only transient cuff/surrender requests. */
@@ -2279,6 +2309,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
                     Math.max(20, ctx.policies().downedSlownessTicks), ctx.policies().downedSlownessAmplifier);
         }
         if (changed) ctx.custody().write(store);
+        messageProjector.sync(ctx.server().onlinePlayers(), store, now());
     }
 
     private static String uuidOf(PlayerGateway p) {
