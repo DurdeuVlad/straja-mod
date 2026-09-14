@@ -512,6 +512,63 @@ class NpcInteractionSurfaceTest {
                                 .AvailableAction(null, "A-1"), null)).isEmpty());
     }
 
+    private static com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.AvailableAction
+            adminAction(com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.Action action,
+                        String memberId, String memberName) {
+        return new com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.AvailableAction(
+                action, memberId, memberName);
+    }
+
+    @Test
+    void adminActionsMapperEmitsExactIds() {
+        String member = UUID.randomUUID().toString();
+        var actions = NpcPlayerSurface.adminActions(java.util.List.of(
+                adminAction(com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.Action.PERSONNEL, "", ""),
+                adminAction(com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.Action.ROSTER_ACTIVE, "", ""),
+                adminAction(com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.Action.AUTHORIZE, "", ""),
+                adminAction(com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.Action.DOSSIER, member, "g1"),
+                adminAction(com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.Action.PROMOTE, member, "g1"),
+                adminAction(com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.Action.DEMOTE, member, "g1"),
+                adminAction(com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.Action.SUSPEND, member, "g1"),
+                adminAction(com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.Action.FIRE, member, "g1"),
+                adminAction(com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.Action.REINSTATE, member, "g1"),
+                adminAction(com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.Action.POLICIES, "", ""),
+                adminAction(com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.Action.POLICY_SET, "", ""),
+                adminAction(com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.Action.EMERGENCY_STATUS, "", ""),
+                adminAction(com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.Action.EMERGENCY_ALERT, "", ""),
+                adminAction(com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.Action.EMERGENCY_START, "", ""),
+                adminAction(com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.Action.EMERGENCY_END, "", "")));
+        assertEquals(java.util.List.of(
+                        "admin-personnel", "admin-roster", "admin-authorize",
+                        "admin-dossier:" + member, "admin-promote:" + member,
+                        "admin-demote:" + member, "admin-suspend:" + member,
+                        "admin-fire:" + member, "admin-reinstate:" + member,
+                        "admin-policies", "admin-policy-set",
+                        "admin-emergency-status", "admin-emergency-alert",
+                        "admin-emergency-start", "admin-emergency-end"),
+                actions.stream().map(NpcPlayerSurface.ChatAction::actionId).toList());
+    }
+
+    @Test
+    void adminActionsRejectMalformedIdsAndContainNoTypedCommands() {
+        var actions = NpcPlayerSurface.adminActions(java.util.Arrays.asList(
+                adminAction(com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.Action.DOSSIER, "bad id", "x"),
+                adminAction(com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.Action.FIRE, "", "x"),
+                adminAction(com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.Action.PROMOTE, null, "x"),
+                adminAction(com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.Action.PERSONNEL, "", ""),
+                adminAction(null, "A-1", "x"),
+                null));
+        assertEquals(java.util.List.of("admin-personnel"),
+                actions.stream().map(NpcPlayerSurface.ChatAction::actionId).toList(),
+                "member-scoped actions with unusable ids must be dropped");
+        for (var action : actions) {
+            assertFalse(action.label().contains("/straja"),
+                    () -> action.label() + " must not reference typed commands");
+        }
+        assertTrue(NpcPlayerSurface.adminActions(null).isEmpty());
+        assertTrue(NpcPlayerSurface.adminActions(java.util.List.of()).isEmpty());
+    }
+
     @Test
     void dutyActionsContainNoTypedCommandsOrAdminActions() {
         var actions = NpcPlayerSurface.dutyActions(

@@ -794,6 +794,8 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         state.rank = nextRank;
         state.kitClaimedRank = 0;
         players.save(target.uuid(), state);
+        audit.record("promote", actor.name(), actor.uuid().toString(),
+                target.name(), target.uuid().toString(), "SUCCESS", "rank=" + nextRank);
         target.tell("Promovare: " + ctx.policies().rankName(nextRank) + ".");
         actor.tell(target.name() + " a fost promovat la " + ctx.policies().rankName(nextRank) + ".");
     }
@@ -847,6 +849,44 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
                 target.name(), target.uuid().toString(), "SUCCESS", "suspended");
         target.tell("Ai fost suspendat din Strajă.");
         actor.tell(target.name() + " a fost suspendat.");
+    }
+
+    /**
+     * §14: the Comisar authorizes an experienced person directly at a rank,
+     * skipping application/exam — the personnel equivalent of a field
+     * commission. Only civilians qualify; existing or former members go
+     * through promote/reinstate instead.
+     */
+    public boolean authorizeAt(PlayerGateway actor, PlayerGateway target, int rank) {
+        if (!players.isCommissioner(actor) && !actor.isOp()) {
+            actor.tell("Autorizarea directă este decizia Comisarului.");
+            return false;
+        }
+        if (target == null) {
+            actor.tell("Jucătorul nu este online sau nu există.");
+            return false;
+        }
+        if (rank < Rank.STAGIAR.level() || rank > Rank.INSPECTOR.level()) {
+            actor.tell("Rang invalid. Folosește un rang între Stagiar și Inspector.");
+            return false;
+        }
+        GuardState state = players.state(target);
+        if (state.rank > 0 || state.fired || state.resigned || state.suspended) {
+            actor.tell(target.name() + " are deja o fișă Straja — folosește promovare/reintegrare.");
+            return false;
+        }
+        state.rank = rank;
+        state.invited = true;
+        state.applicationState = "AUTHORIZED";
+        state.applicationRecordedBy = actor.name();
+        players.save(target.uuid(), state);
+        roomAutoAssign.onPromotedToGuard(target);
+        audit.record("personnel_authorize", actor.name(), actor.uuid().toString(),
+                target.name(), target.uuid().toString(), "SUCCESS", "rank=" + rank);
+        target.tell("Comisarul te-a autorizat direct în Strajă ca "
+                + ctx.policies().rankName(rank) + ".");
+        actor.tell(target.name() + " autorizat direct ca " + ctx.policies().rankName(rank) + ".");
+        return true;
     }
 
     public boolean reinstate(PlayerGateway actor, PlayerGateway target) {

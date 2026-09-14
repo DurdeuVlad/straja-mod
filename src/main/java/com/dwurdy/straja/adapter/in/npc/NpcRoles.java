@@ -144,6 +144,19 @@ public final class NpcRoles {
             case "audience-request" -> openAudienceRequestForm(player, runtime, gw);
             case "audience-status" -> runtime.audienceRoleplay().status(gw);
             case "audience-review-list" -> runtime.audienceRoleplay().listForReview(gw);
+            case "admin-personnel" -> runtime.adminRoleplay().personnel(gw);
+            case "admin-roster" -> runtime.adminRoleplay().activeRoster(gw);
+            case "admin-authorize" -> openAdminForm(player, runtime, gw,
+                    com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.Action.AUTHORIZE, "");
+            case "admin-policies" -> runtime.adminRoleplay().policyList(gw);
+            case "admin-policy-set" -> openAdminForm(player, runtime, gw,
+                    com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.Action.POLICY_SET, "");
+            case "admin-emergency-status" -> runtime.adminRoleplay().emergencyStatus(gw);
+            case "admin-emergency-alert" -> openAdminForm(player, runtime, gw,
+                    com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.Action.EMERGENCY_ALERT, "");
+            case "admin-emergency-start" -> openAdminForm(player, runtime, gw,
+                    com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.Action.EMERGENCY_START, "");
+            case "admin-emergency-end" -> runtime.adminRoleplay().emergencyEnd(gw);
             default -> { return false; }
         }
         return true;
@@ -217,6 +230,12 @@ public final class NpcRoles {
                     com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase.Action.ISSUE_DOCUMENT, id);
             case "report-review" -> openReportReviewForm(player, runtime, gw, id);
             case "audience-review" -> openAudienceReviewForm(player, runtime, gw, id);
+            case "admin-dossier" -> runtime.adminRoleplay().dossier(gw, id);
+            case "admin-promote" -> runtime.adminRoleplay().promote(gw, id);
+            case "admin-demote" -> runtime.adminRoleplay().demote(gw, id);
+            case "admin-suspend" -> runtime.adminRoleplay().suspend(gw, id);
+            case "admin-fire" -> runtime.adminRoleplay().fire(gw, id);
+            case "admin-reinstate" -> runtime.adminRoleplay().reinstate(gw, id);
             default -> { return false; }
         }
         return true;
@@ -462,6 +481,50 @@ public final class NpcRoles {
         return true;
     }
 
+    private static boolean openAdminForm(Player player,
+                                         com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                         com.dwurdy.straja.application.port.out.PlayerGateway gw,
+                                         com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.Action required,
+                                         String recordId) {
+        boolean stillAvailable = runtime.adminRoleplay().availableActions(gw).stream()
+                .anyMatch(a -> a.action() == required);
+        if (!stillAvailable) {
+            player.sendSystemMessage(Component.literal(
+                    "[Straja] Doar Comisarul poate folosi interfața administrativă."));
+            return true;
+        }
+        if (!(player instanceof ServerPlayer serverPlayer)) return true;
+        FormSessionUseCase.Request request = switch (required) {
+            case AUTHORIZE -> new FormSessionUseCase.Request(
+                    FormSessionUseCase.Action.ADMIN_AUTHORIZE, "",
+                    "Autorizare directă", "Numele jucătorului și rangul (1=Stagiar … 4=Inspector).",
+                    java.util.List.of(
+                            new FormSessionUseCase.Field("name", "Nume jucător", 32, false),
+                            new FormSessionUseCase.Field("rank", "Rang (1-4)", 2, false)));
+            case POLICY_SET -> new FormSessionUseCase.Request(
+                    FormSessionUseCase.Action.ADMIN_POLICY_SET, "",
+                    "Modifică o regulă", "Cheia din lista de reguli și noua valoare.",
+                    java.util.List.of(
+                            new FormSessionUseCase.Field("key", "Cheie", 80, false),
+                            new FormSessionUseCase.Field("value", "Valoare", 200, false)));
+            case EMERGENCY_ALERT -> new FormSessionUseCase.Request(
+                    FormSessionUseCase.Action.ADMIN_EMERGENCY_ALERT, "",
+                    "Alertă de urgență", "Mesajul ajunge la toți membrii online și la cei care se conectează cât e activă.",
+                    java.util.List.of(new FormSessionUseCase.Field("message", "Mesaj", 240, true)));
+            case EMERGENCY_START -> new FormSessionUseCase.Request(
+                    FormSessionUseCase.Action.ADMIN_EMERGENCY_START, "",
+                    "Stare de urgență", "Multiplicator de plată și runde obligatorii (gol = valorile configurate).",
+                    java.util.List.of(
+                            new FormSessionUseCase.Field("multiplier", "Multiplicator plată", 6, false),
+                            new FormSessionUseCase.Field("rounds", "Runde obligatorii", 4, false),
+                            new FormSessionUseCase.Field("reason", "Motiv", 240, false)));
+            default -> null;
+        };
+        if (request == null) return true;
+        FormSessionBridge.open(serverPlayer, request);
+        return true;
+    }
+
     private static boolean openReportReviewForm(Player player,
                                                 com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
                                                 com.dwurdy.straja.application.port.out.PlayerGateway gw,
@@ -604,7 +667,25 @@ public final class NpcRoles {
                     .stream().anyMatch(a -> a.action()
                             == com.dwurdy.straja.application.port.in.AudienceUseCase.Action.REVIEW
                             && id.equals(a.requestId()));
+            case "admin-dossier", "admin-promote", "admin-demote", "admin-suspend",
+                    "admin-fire", "admin-reinstate" -> {
+                var expected = adminActionFor(operation);
+                yield expected != null && runtime.adminRoleplay().isStillValid(player, expected, id);
+            }
             default -> false;
+        };
+    }
+
+    private static com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.Action
+            adminActionFor(String operation) {
+        return switch (operation) {
+            case "admin-dossier" -> com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.Action.DOSSIER;
+            case "admin-promote" -> com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.Action.PROMOTE;
+            case "admin-demote" -> com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.Action.DEMOTE;
+            case "admin-suspend" -> com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.Action.SUSPEND;
+            case "admin-fire" -> com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.Action.FIRE;
+            case "admin-reinstate" -> com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.Action.REINSTATE;
+            default -> null;
         };
     }
 
@@ -706,6 +787,8 @@ public final class NpcRoles {
                 actions.addAll(NpcPlayerSurface.audienceActions(
                         runtime.audienceRoleplay().availableActions(gateway),
                         NpcPlayerSurface.RoleRoute.SECRETARY));
+                actions.addAll(NpcPlayerSurface.adminActions(
+                        runtime.adminRoleplay().availableActions(gateway)));
             }
             case JAILER -> actions.addAll(NpcPlayerSurface.custodyActions(
                     runtime.custodyRoleplay().availableActions(gateway)));
