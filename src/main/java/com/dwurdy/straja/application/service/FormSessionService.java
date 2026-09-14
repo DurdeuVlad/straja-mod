@@ -34,7 +34,7 @@ public class FormSessionService implements FormSessionUseCase {
     private static final Set<Action> RECORDLESS = EnumSet.of(
             Action.COMPLAINT_SUBMIT, Action.MISSION_DRAFT_WRITE, Action.MISSION_DRAFT_SCOPE,
             Action.FINE_DRAFT, Action.FINE_WARRANT, Action.ARCHIVE_FOLDER_CREATE,
-            Action.OTHER_REQUEST);
+            Action.GIVE_UP, Action.OTHER_REQUEST);
 
     private final Clock clock;
     private final IdGenerator ids;
@@ -55,7 +55,7 @@ public class FormSessionService implements FormSessionUseCase {
         if (request.prompt() == null || request.prompt().length() > MAX_PROMPT) {
             return Optional.empty();
         }
-        List<Field> fields = validFields(request.fields());
+        List<Field> fields = validFields(request.action(), request.fields());
         if (fields == null) return Optional.empty();
 
         String sessionId = ids.token();
@@ -103,8 +103,9 @@ public class FormSessionService implements FormSessionUseCase {
         return recordId != null && SAFE_ID.matcher(recordId).matches() ? recordId : null;
     }
 
-    private static List<Field> validFields(List<Field> fields) {
-        if (fields == null || fields.isEmpty() || fields.size() > MAX_FIELDS) return null;
+    private static List<Field> validFields(Action action, List<Field> fields) {
+        if (fields == null || fields.size() > MAX_FIELDS) return null;
+        if (fields.isEmpty()) return action == Action.GIVE_UP ? List.of() : null;
         Set<String> seen = new HashSet<>();
         for (Field field : fields) {
             if (field == null || field.id() == null

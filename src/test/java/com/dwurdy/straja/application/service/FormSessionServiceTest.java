@@ -48,6 +48,11 @@ class FormSessionServiceTest {
         return request(Action.OTHER_REQUEST, "");
     }
 
+    private static Request giveUp() {
+        return new Request(Action.GIVE_UP, "", "Renunță",
+                "Confirmi renunțarea?", List.of());
+    }
+
     // ------------------------------------------------------------ open/submit
 
     @Test
@@ -74,6 +79,20 @@ class FormSessionServiceTest {
         View view = forms.open(owner, recordless()).orElseThrow();
         assertTrue(forms.submit(owner, view.sessionId(), Map.of("details", "x")).isPresent());
         assertTrue(forms.submit(owner, view.sessionId(), Map.of("details", "x")).isEmpty());
+    }
+
+    @Test
+    void giveUpIsTheOnlyZeroFieldSessionAndRemainsOwnerBoundAndOneUse() {
+        View view = forms.open(owner, giveUp()).orElseThrow();
+        assertTrue(view.fields().isEmpty());
+        assertTrue(forms.submit(other, view.sessionId(), Map.of()).isEmpty(),
+                "a foreign player cannot consume a give-up session");
+        assertTrue(forms.submit(owner, view.sessionId(), Map.of()).isPresent());
+        assertTrue(forms.submit(owner, view.sessionId(), Map.of()).isEmpty(),
+                "give-up sessions are one-use");
+
+        assertTrue(forms.open(owner, new Request(Action.OTHER_REQUEST, "", "T", "P", List.of())).isEmpty(),
+                "ordinary forms may not become zero-field sessions");
     }
 
     @Test

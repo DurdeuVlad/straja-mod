@@ -59,7 +59,7 @@ public class StrajaFormMenu extends AbstractContainerMenu {
         String title = buf.readUtf(MAX_TITLE);
         String prompt = buf.readUtf(MAX_PROMPT);
         int count = buf.readVarInt();
-        if (count < 1 || count > MAX_FIELDS) {
+        if (count < 0 || count > MAX_FIELDS) {
             throw new IllegalArgumentException("form field count out of bounds: " + count);
         }
         List<Field> fields = new ArrayList<>(count);

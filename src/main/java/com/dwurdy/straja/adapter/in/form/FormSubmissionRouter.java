@@ -24,6 +24,7 @@ public final class FormSubmissionRouter {
     private final com.dwurdy.straja.application.port.in.AudienceUseCase audiences;
     private final com.dwurdy.straja.application.port.in.AdminRoleplayUseCase admin;
     private final com.dwurdy.straja.application.port.in.AdminToolsUseCase adminTools;
+    private final com.dwurdy.straja.application.port.in.CustodyRoleplayUseCase custody;
 
     public FormSubmissionRouter(GuardRecruitmentUseCase guards, MissionRoleplayUseCase missions,
             ComplaintRoleplayUseCase complaints, FineRoleplayUseCase fines,
@@ -31,7 +32,8 @@ public final class FormSubmissionRouter {
             com.dwurdy.straja.application.port.in.ReportUseCase reports,
             com.dwurdy.straja.application.port.in.AudienceUseCase audiences,
             com.dwurdy.straja.application.port.in.AdminRoleplayUseCase admin,
-            com.dwurdy.straja.application.port.in.AdminToolsUseCase adminTools) {
+            com.dwurdy.straja.application.port.in.AdminToolsUseCase adminTools,
+            com.dwurdy.straja.application.port.in.CustodyRoleplayUseCase custody) {
         this.guards = guards;
         this.missions = missions;
         this.complaints = complaints;
@@ -41,6 +43,7 @@ public final class FormSubmissionRouter {
         this.audiences = audiences;
         this.admin = admin;
         this.adminTools = adminTools;
+        this.custody = custody;
     }
 
     public void submit(ServerPlayer player, FormSessionUseCase.Submission submission) {
@@ -184,6 +187,12 @@ public final class FormSubmissionRouter {
             case TOOL_NPC_SKIN -> {
                 adminTools.npcSetSkin(gateway, submission.recordId(), values.get("skin"));
                 reflectNpc(player, submission.recordId(), false);
+            }
+            case GIVE_UP -> {
+                if (!custody.giveUp(gateway, true)) {
+                    player.sendSystemMessage(net.minecraft.network.chat.Component.translatable(
+                            "straja.give_up.stale"));
+                }
             }
             default -> {}
         }

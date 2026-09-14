@@ -4,8 +4,11 @@ import com.dwurdy.straja.adapter.in.npc.NpcRoles;
 import com.dwurdy.straja.adapter.in.npc.StrajaNpcEntity;
 import com.dwurdy.straja.adapter.in.item.AdminToolSurface;
 import com.dwurdy.straja.adapter.in.item.PhysicalItemSurface;
+import com.dwurdy.straja.adapter.in.form.FormSessionBridge;
+import com.dwurdy.straja.adapter.in.form.StrajaFormMenu;
 import com.dwurdy.straja.adapter.out.minecraft.MinecraftPlayerGateway;
 import com.dwurdy.straja.adapter.out.network.CustodyVisualSync;
+import com.dwurdy.straja.application.port.in.FormSessionUseCase;
 import com.dwurdy.straja.application.port.out.ItemView;
 import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.bootstrap.StrajaRuntime;
@@ -21,7 +24,8 @@ import net.neoforged.neoforge.event.tick.ServerTickEvent;
 /**
  * NeoForge event adapter: server lifecycle, per-tick duty timers, and
  * login-time restart recovery. No business rules live here — everything is
- * delegated to application services.
+ * delegated to application services. The give-up form is a one-off
+ * presentation of the custody port's read-only eligibility result.
  */
 public final class StrajaEvents {
     /**
@@ -31,6 +35,8 @@ public final class StrajaEvents {
      * template clear) on top of the action that was just handled.
      */
     private final java.util.Map<java.util.UUID, Long> toolClickHandledAt = new java.util.HashMap<>();
+    private final java.util.Set<java.util.UUID> giveUpOffered = new java.util.HashSet<>();
+    private final java.util.Map<java.util.UUID, String> giveUpSessionIds = new java.util.HashMap<>();
 
     public StrajaEvents() {}
 
@@ -52,12 +58,61 @@ public final class StrajaEvents {
         }
         for (var sp : event.getServer().getPlayerList().getPlayers()) {
             refreshRankNameplate(runtime, sp);
+            refreshGiveUpOffer(runtime, sp);
         }
         if (runtime.policies().testCommandsEnabled && runtime.policies().isLocalEnvironment()) {
             for (var virtual : runtime.testPlayers().all()) {
                 runtime.guardDuty().tickPlayerDuty(virtual);
             }
         }
+    }
+
+    /**
+     * Opens the give-up confirmation once for an eligible downed period. The
+     * offer marker survives a client Cancel, while becoming ineligible clears
+     * both the marker and any still-open give-up session so a later ordinary
+     * downed period can offer it again.
+     */
+    private void refreshGiveUpOffer(StrajaRuntime runtime,
+                                    net.minecraft.server.level.ServerPlayer player) {
+        java.util.UUID playerId = player.getUUID();
+        var gateway = new MinecraftPlayerGateway(player.getServer(), playerId);
+        if (!runtime.custodyRoleplay().giveUpEligibility(gateway).eligible()) {
+            clearGiveUpOffer(player);
+            return;
+        }
+
+        if (giveUpOffered.add(playerId)) {
+            player.displayClientMessage(Component.translatable("straja.give_up.available"), true);
+            var opened = FormSessionBridge.open(player, new FormSessionUseCase.Request(
+                    FormSessionUseCase.Action.GIVE_UP, "",
+                    "Renunță",
+                    "Confirmi renunțarea? Starea de leșin se încheie și vei muri.",
+                    java.util.List.of()));
+            opened.ifPresent(view -> giveUpSessionIds.put(playerId, view.sessionId()));
+        } else {
+            String sessionId = giveUpSessionIds.get(playerId);
+            if (sessionId != null
+                    && (!(player.containerMenu instanceof StrajaFormMenu menu)
+                    || !sessionId.equals(menu.view().sessionId()))) {
+                // The native form's removed callback already consumed the
+                // session on Cancel; forget only the live-menu bookkeeping.
+                giveUpSessionIds.remove(playerId);
+            }
+        }
+    }
+
+    private void clearGiveUpOffer(net.minecraft.server.level.ServerPlayer player) {
+        java.util.UUID playerId = player.getUUID();
+        String sessionId = giveUpSessionIds.remove(playerId);
+        if (sessionId != null) {
+            FormSessionBridge.cancelSession(playerId, sessionId);
+            if (player.containerMenu instanceof StrajaFormMenu menu
+                    && sessionId.equals(menu.view().sessionId())) {
+                player.closeContainer();
+            }
+        }
+        giveUpOffered.remove(playerId);
     }
 
     /** §4: bracketed rank prefix on chat sender names. */
@@ -162,6 +217,7 @@ public final class StrajaEvents {
     public void onLogout(PlayerEvent.PlayerLoggedOutEvent event) {
         StrajaRuntime runtime = StrajaRuntime.get();
         if (runtime == null || !(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) return;
+        clearGiveUpOffer(player);
         var gateway = new MinecraftPlayerGateway(event.getEntity().getServer(), player.getUUID());
         runtime.custodyRoleplay().recoverOnLogout(gateway);
         // Pending admin-tool state (routes, corners, templates) never survives logout.

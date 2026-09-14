@@ -48,6 +48,7 @@ public interface FormSessionUseCase {
         ADMIN_EMERGENCY_START("admin-emergency-start"),
         TOOL_NPC_NAME("tool-npc-name"),
         TOOL_NPC_SKIN("tool-npc-skin"),
+        GIVE_UP("give-up"),
         OTHER_REQUEST("other-request");
 
         private final String id;
