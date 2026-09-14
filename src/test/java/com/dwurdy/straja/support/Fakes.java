@@ -319,6 +319,7 @@ public final class Fakes {
                 new SavedStores.Rooms(access),
                 new SavedStores.Complaints(access),
                 new SavedStores.Reports(access),
+                new SavedStores.Audiences(access),
                 new SavedStores.Custody(access),
                 new SavedStores.Archive(access),
                 new SavedStores.Npcs(access),

@@ -104,6 +104,7 @@ public final class PolicyRegistry {
         // §11 activity reports
         k("reports.intervalDays", "reportIntervalDays", Kind.INT);
         k("reports.blockDutyWhenOverdue", "reportBlockDutyWhenOverdue", Kind.BOOL);
+        k("audiences.notifyCooldownSeconds", "audienceNotifyCooldownSeconds", Kind.INT);
         // §4 rank prefix surfaces
         k("rank.prefix.chat", "rankPrefixChat", Kind.BOOL);
         k("rank.prefix.tab", "rankPrefixTab", Kind.BOOL);

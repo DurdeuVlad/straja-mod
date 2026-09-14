@@ -21,17 +21,20 @@ public final class FormSubmissionRouter {
     private final FineRoleplayUseCase fines;
     private final ArchiveRoleplayUseCase archive;
     private final com.dwurdy.straja.application.port.in.ReportUseCase reports;
+    private final com.dwurdy.straja.application.port.in.AudienceUseCase audiences;
 
     public FormSubmissionRouter(GuardRecruitmentUseCase guards, MissionRoleplayUseCase missions,
             ComplaintRoleplayUseCase complaints, FineRoleplayUseCase fines,
             ArchiveRoleplayUseCase archive,
-            com.dwurdy.straja.application.port.in.ReportUseCase reports) {
+            com.dwurdy.straja.application.port.in.ReportUseCase reports,
+            com.dwurdy.straja.application.port.in.AudienceUseCase audiences) {
         this.guards = guards;
         this.missions = missions;
         this.complaints = complaints;
         this.fines = fines;
         this.archive = archive;
         this.reports = reports;
+        this.audiences = audiences;
     }
 
     public void submit(ServerPlayer player, FormSessionUseCase.Submission submission) {
@@ -141,6 +144,11 @@ public final class FormSubmissionRouter {
                             values.get("incidents"), values.get("notes"));
             case REPORT_REVIEW ->
                     reports.review(gateway, submission.recordId(), values.get("decision"),
+                            values.get("note"));
+            case AUDIENCE_REQUEST ->
+                    audiences.request(gateway, values.get("reason"));
+            case AUDIENCE_REVIEW ->
+                    audiences.resolve(gateway, submission.recordId(), values.get("decision"),
                             values.get("note"));
             default -> {}
         }

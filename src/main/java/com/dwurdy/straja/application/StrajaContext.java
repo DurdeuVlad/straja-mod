@@ -23,6 +23,7 @@ public record StrajaContext(
         RoomRepository rooms,
         ComplaintRepository complaints,
         ReportRepository reports,
+        AudienceRepository audiences,
         CustodyRepository custody,
         ArchiveRepository archive,
         NpcRepository npcs,

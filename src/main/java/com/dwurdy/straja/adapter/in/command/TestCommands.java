@@ -819,6 +819,32 @@ final class TestCommands {
                                                                 StringArgumentType.getString(ctx, "report"),
                                                                 StringArgumentType.getString(ctx, "decision"),
                                                                 StringArgumentType.getString(ctx, "note"))))))))));
+        test.then(Commands.literal("audience-request")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("reason", StringArgumentType.greedyString())
+                                .executes(ctx -> run(ctx, runtime -> send(ctx,
+                                        "request=" + runtime.audienceRoleplay().request(
+                                                player(ctx, runtime),
+                                                StringArgumentType.getString(ctx, "reason"))))))));
+        test.then(Commands.literal("audience-status")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(ctx -> run(ctx, runtime ->
+                                runtime.audienceRoleplay().status(player(ctx, runtime))))));
+        test.then(Commands.literal("audience-list")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(ctx -> run(ctx, runtime ->
+                                runtime.audienceRoleplay().listForReview(player(ctx, runtime))))));
+        test.then(Commands.literal("audience-resolve")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("request", StringArgumentType.word())
+                                .then(Commands.argument("decision", StringArgumentType.word())
+                                        .then(Commands.argument("note", StringArgumentType.greedyString())
+                                                .executes(ctx -> run(ctx, runtime -> send(ctx,
+                                                        "resolve=" + runtime.audienceRoleplay().resolve(
+                                                                player(ctx, runtime),
+                                                                StringArgumentType.getString(ctx, "request"),
+                                                                StringArgumentType.getString(ctx, "decision"),
+                                                                StringArgumentType.getString(ctx, "note"))))))))));
         test.then(Commands.literal("complaint-submit")
                 .then(Commands.argument("id", StringArgumentType.word())
                         .then(Commands.argument("accused", StringArgumentType.word())

@@ -93,6 +93,7 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.ConfigValue<String> COMISAR_TITLE;
     public static final ModConfigSpec.IntValue REPORT_INTERVAL_DAYS;
     public static final ModConfigSpec.BooleanValue REPORT_BLOCK_DUTY_WHEN_OVERDUE;
+    public static final ModConfigSpec.IntValue AUDIENCE_NOTIFY_COOLDOWN;
     public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> PROMOTION_SERVICE_BLOCKS;
 
     public static final ModConfigSpec.IntValue FREE_DUTY_MIN_RANK;
@@ -347,6 +348,13 @@ public final class StrajaServerConfig {
                         "Refuse duty start at the Secretary while the member's",
                         "activity report is overdue.")
                 .define("blockDutyWhenOverdue", defaults.reportBlockDutyWhenOverdue);
+        B.pop();
+
+        B.push("audiences");
+        AUDIENCE_NOTIFY_COOLDOWN = B.comment(
+                        "Minimum seconds between Comisar notifications for new",
+                        "audience requests (§12) — notifications are coalesced.")
+                .defineInRange("notifyCooldownSeconds", defaults.audienceNotifyCooldownSeconds, 0, 3600);
         B.pop();
 
         B.push("promotion");
@@ -659,6 +667,7 @@ public final class StrajaServerConfig {
         p.comisarTitle = COMISAR_TITLE.get();
         p.reportIntervalDays = REPORT_INTERVAL_DAYS.get();
         p.reportBlockDutyWhenOverdue = REPORT_BLOCK_DUTY_WHEN_OVERDUE.get();
+        p.audienceNotifyCooldownSeconds = AUDIENCE_NOTIFY_COOLDOWN.get();
         p.promotionServiceBlocks = mapOrDefault(StrajaPolicies.parseIntMap(PROMOTION_SERVICE_BLOCKS.get()),
                 defaults().promotionServiceBlocks);
         p.freeDutyMinRank = FREE_DUTY_MIN_RANK.get();

@@ -39,6 +39,8 @@ public interface FormSessionUseCase {
         ARCHIVE_DOCUMENT_ISSUE("archive-document-issue"),
         REPORT_SUBMIT("report-submit"),
         REPORT_REVIEW("report-review"),
+        AUDIENCE_REQUEST("audience-request"),
+        AUDIENCE_REVIEW("audience-review"),
         OTHER_REQUEST("other-request");
 
         private final String id;

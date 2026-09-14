@@ -138,6 +138,9 @@ public final class NpcRoles {
             case "report-submit" -> openReportSubmitForm(player, runtime, gw);
             case "report-status" -> runtime.reportRoleplay().status(gw);
             case "report-review-list" -> runtime.reportRoleplay().listForReview(gw);
+            case "audience-request" -> openAudienceRequestForm(player, runtime, gw);
+            case "audience-status" -> runtime.audienceRoleplay().status(gw);
+            case "audience-review-list" -> runtime.audienceRoleplay().listForReview(gw);
             default -> { return false; }
         }
         return true;
@@ -209,6 +212,7 @@ public final class NpcRoles {
             case "archive-sheet-issue" -> openArchiveForm(player, runtime, gw,
                     com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase.Action.ISSUE_DOCUMENT, id);
             case "report-review" -> openReportReviewForm(player, runtime, gw, id);
+            case "audience-review" -> openAudienceReviewForm(player, runtime, gw, id);
             default -> { return false; }
         }
         return true;
@@ -410,6 +414,40 @@ public final class NpcRoles {
         return true;
     }
 
+    private static boolean openAudienceRequestForm(Player player,
+                                                   com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                                   com.dwurdy.straja.application.port.out.PlayerGateway gw) {
+        boolean stillAvailable = runtime.audienceRoleplay().availableActions(gw).stream()
+                .anyMatch(a -> a.action()
+                        == com.dwurdy.straja.application.port.in.AudienceUseCase.Action.REQUEST);
+        if (!stillAvailable) {
+            player.sendSystemMessage(Component.literal(
+                    "[Straja] Doar membrii Străjii pot cere audiență la Comisar."));
+            return true;
+        }
+        if (!(player instanceof ServerPlayer serverPlayer)) return true;
+        FormSessionBridge.open(serverPlayer, new FormSessionUseCase.Request(
+                FormSessionUseCase.Action.AUDIENCE_REQUEST, "",
+                "Cerere de audiență", "Scrie motivul pentru care ceri audiență la Comisar.",
+                java.util.List.of(new FormSessionUseCase.Field(
+                        "reason", "Motiv", 500, true))));
+        return true;
+    }
+
+    private static boolean openAudienceReviewForm(Player player,
+                                                  com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                                  com.dwurdy.straja.application.port.out.PlayerGateway gw,
+                                                  String recordId) {
+        if (!(player instanceof ServerPlayer serverPlayer)) return true;
+        FormSessionBridge.open(serverPlayer, new FormSessionUseCase.Request(
+                FormSessionUseCase.Action.AUDIENCE_REVIEW, recordId,
+                "Decide cererea " + recordId, "Decizie: resolve sau dismiss (notă opțională).",
+                java.util.List.of(
+                        new FormSessionUseCase.Field("decision", "Decizie", 16, false),
+                        new FormSessionUseCase.Field("note", "Notă pentru solicitant", 500, true))));
+        return true;
+    }
+
     private static boolean openReportReviewForm(Player player,
                                                 com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
                                                 com.dwurdy.straja.application.port.out.PlayerGateway gw,
@@ -547,6 +585,10 @@ public final class NpcRoles {
                     .stream().anyMatch(a -> a.action()
                             == com.dwurdy.straja.application.port.in.ReportUseCase.Action.REVIEW
                             && id.equals(a.reportId()));
+            case "audience-review" -> runtime.audienceRoleplay().availableActions(player)
+                    .stream().anyMatch(a -> a.action()
+                            == com.dwurdy.straja.application.port.in.AudienceUseCase.Action.REVIEW
+                            && id.equals(a.requestId()));
             default -> false;
         };
     }
@@ -644,6 +686,9 @@ public final class NpcRoles {
                         NpcPlayerSurface.RoleRoute.SECRETARY));
                 actions.addAll(NpcPlayerSurface.reportActions(
                         runtime.reportRoleplay().availableActions(gateway),
+                        NpcPlayerSurface.RoleRoute.SECRETARY));
+                actions.addAll(NpcPlayerSurface.audienceActions(
+                        runtime.audienceRoleplay().availableActions(gateway),
                         NpcPlayerSurface.RoleRoute.SECRETARY));
             }
             case JAILER -> actions.addAll(NpcPlayerSurface.custodyActions(
