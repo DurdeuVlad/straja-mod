@@ -9,6 +9,7 @@ import net.minecraft.world.item.ItemStack;
 
 /** Native hit feedback for the service whip; permission remains in CustodyService. */
 public final class WhipItem extends Item {
+    public static final float MAX_DAMAGE = 1.0F;
     public static final double KNOCKBACK_STRENGTH = 1.75D;
 
     public WhipItem(Properties properties) {

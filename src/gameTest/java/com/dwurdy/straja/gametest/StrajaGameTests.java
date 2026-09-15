@@ -4,6 +4,7 @@ import com.dwurdy.straja.adapter.in.event.StrajaEvents;
 import com.dwurdy.straja.adapter.in.npc.StrajaNpcEntity;
 import com.dwurdy.straja.adapter.in.test.VirtualPlayerGateway;
 import com.dwurdy.straja.adapter.out.minecraft.MinecraftPlayerGateway;
+import com.dwurdy.straja.adapter.out.minecraft.WhipItem;
 import com.dwurdy.straja.bootstrap.StrajaItems;
 import com.dwurdy.straja.bootstrap.StrajaMenus;
 import com.dwurdy.straja.bootstrap.StrajaRuntime;
@@ -113,8 +114,10 @@ public final class StrajaGameTests {
                 new DamageContainer(target.damageSources().playerAttack(attacker), 4.0f));
         NeoForge.EVENT_BUS.post(capped);
         helper.assertFalse(capped.isCanceled(), "a guard's non-lethal whip strike must pass through");
-        helper.assertTrue(capped.getAmount() == 9.0f,
-                "a whip strike must be capped to leave the target at 1 health");
+        helper.assertTrue(capped.getAmount() == WhipItem.MAX_DAMAGE,
+                "a whip strike must keep its low damage profile");
+        helper.assertTrue(WhipItem.KNOCKBACK_STRENGTH > WhipItem.MAX_DAMAGE,
+                "a whip must have more knockback than damage");
         var velocity = target.getDeltaMovement();
         helper.assertTrue(velocity.x * velocity.x + velocity.z * velocity.z > 0.1D,
                 "a successful whip strike must apply visible knockback");

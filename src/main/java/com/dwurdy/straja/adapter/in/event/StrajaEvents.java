@@ -283,9 +283,13 @@ public final class StrajaEvents {
                     return;
                 }
                 case ALLOW_NONLETHAL -> {
-                    if (isWhip(attacker)) WhipItem.animateHit(attacker, target);
-                    event.setAmount((float) runtime.custodyRoleplay()
-                            .capBatonDamage(target.getHealth(), target.getAbsorptionAmount()));
+                    if (isWhip(attacker)) {
+                        WhipItem.animateHit(attacker, target);
+                        event.setAmount(Math.min(event.getAmount(), WhipItem.MAX_DAMAGE));
+                    } else {
+                        event.setAmount((float) runtime.custodyRoleplay()
+                                .capBatonDamage(target.getHealth(), target.getAbsorptionAmount()));
+                    }
                     return;
                 }
                 default -> {}
