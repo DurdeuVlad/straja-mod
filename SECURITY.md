@@ -21,3 +21,11 @@ or contact the maintainer directly.
   do not weaken these gates on a live server.
 - The dev harness (`run/`, `tools/rcon.py`) uses a throwaway RCON password —
   never reuse it or expose RCON publicly.
+
+## Release integrity
+
+Release artifacts carry Sigstore build-provenance attestations created in
+the RC workflow (`gh attestation verify straja-*.jar --repo DurdeuVlad/straja-mod`).
+Stable promotions are byte-identical to the verified release candidate —
+verify the JAR SHA-256 against the `release-manifest.json` asset attached to
+the matching `v*-rc.N` prerelease.
