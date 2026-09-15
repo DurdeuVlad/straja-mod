@@ -17,10 +17,11 @@ class WhipAssetTest {
             "src/main/resources/assets/straja/textures/item/whip.png.mcmeta");
 
     @Test
-    void whipTextureHasFourStackedAnimationFrames() throws IOException {
+    void whipTextureHasEightStackedAnimationFrames() throws IOException {
         BufferedImage texture = ImageIO.read(TEXTURE.toFile());
         assertEquals(32, texture.getWidth());
-        assertEquals(128, texture.getHeight());
-        assertTrue(Files.readString(METADATA).contains("[0, 1, 2, 3, 2, 1]"));
+        assertEquals(256, texture.getHeight());
+        String metadata = Files.readString(METADATA);
+        assertTrue(metadata.contains("[0, 1, 2, 3, 4, 4, 5, 5, 6, 7, 6, 5, 4, 3, 2, 1]"));
     }
 }
