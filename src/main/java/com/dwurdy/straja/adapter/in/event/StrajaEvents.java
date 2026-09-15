@@ -10,11 +10,13 @@ import com.dwurdy.straja.adapter.in.item.PhysicalItemSurface;
 import com.dwurdy.straja.adapter.in.form.FormSessionBridge;
 import com.dwurdy.straja.adapter.in.form.StrajaFormMenu;
 import com.dwurdy.straja.adapter.out.minecraft.MinecraftPlayerGateway;
+import com.dwurdy.straja.adapter.out.minecraft.WhipItem;
 import com.dwurdy.straja.adapter.out.network.CustodyVisualSync;
 import com.dwurdy.straja.application.port.in.FormSessionUseCase;
 import com.dwurdy.straja.application.port.out.ItemView;
 import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.bootstrap.StrajaRuntime;
+import com.dwurdy.straja.bootstrap.StrajaItems;
 import com.dwurdy.straja.domain.model.Capability;
 import net.minecraft.network.chat.Component;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -273,8 +275,15 @@ public final class StrajaEvents {
             var enforcementWeapon = runtime.custodyRoleplay().batonStrike(attackerGateway, targetGateway,
                     target.getHealth(), target.getAbsorptionAmount(), event.getAmount());
             switch (enforcementWeapon.action()) {
-                case CANCEL -> { event.setCanceled(true); return; }
+                case CANCEL -> {
+                    if (isSuccessfulWhipHit(attacker, enforcementWeapon.reason())) {
+                        WhipItem.animateHit(attacker, target);
+                    }
+                    event.setCanceled(true);
+                    return;
+                }
                 case ALLOW_NONLETHAL -> {
+                    if (isWhip(attacker)) WhipItem.animateHit(attacker, target);
                     event.setAmount((float) runtime.custodyRoleplay()
                             .capBatonDamage(target.getHealth(), target.getAbsorptionAmount()));
                     return;
@@ -327,6 +336,15 @@ public final class StrajaEvents {
     private static boolean isWeaponHit(net.minecraft.server.level.ServerPlayer attacker) {
         return !attacker.getMainHandItem().isEmpty()
                 && attacker.getMainHandItem().isDamageableItem();
+    }
+
+    private static boolean isWhip(net.minecraft.server.level.ServerPlayer attacker) {
+        return attacker != null && attacker.getMainHandItem().is(StrajaItems.WHIP.get());
+    }
+
+    private static boolean isSuccessfulWhipHit(net.minecraft.server.level.ServerPlayer attacker, String reason) {
+        return isWhip(attacker)
+                && ("surrender_requested".equals(reason) || "no_cuffs_available".equals(reason));
     }
 
     private static boolean isExplicitHardKill(net.minecraft.server.level.ServerPlayer attacker) {

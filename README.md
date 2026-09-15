@@ -151,7 +151,9 @@ The Service Whip is available from the Armorer for active Străjeri (rank 2+),
 for the same coin and requisition prices as the service baton. It follows the
 same custody rules: damage is capped above zero health, a lethal hit creates a
 downed state and surrender request, and cuffed, bound or already-downed players
-cannot be struck again.
+cannot be struck again. A successful hit plays the normal attack swing and
+strong-hit sound, while applying 1.75 knockback strength for its low base
+damage.
 
 ## First-time setup
 

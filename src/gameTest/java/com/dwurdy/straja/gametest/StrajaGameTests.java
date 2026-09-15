@@ -115,6 +115,9 @@ public final class StrajaGameTests {
         helper.assertFalse(capped.isCanceled(), "a guard's non-lethal whip strike must pass through");
         helper.assertTrue(capped.getAmount() == 9.0f,
                 "a whip strike must be capped to leave the target at 1 health");
+        var velocity = target.getDeltaMovement();
+        helper.assertTrue(velocity.x * velocity.x + velocity.z * velocity.z > 0.1D,
+                "a successful whip strike must apply visible knockback");
 
         target.setHealth(2.0f);
         var lethal = new LivingIncomingDamageEvent(target,
