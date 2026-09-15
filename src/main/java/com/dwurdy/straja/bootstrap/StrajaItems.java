@@ -62,6 +62,8 @@ public final class StrajaItems {
             () -> new Item(new Item.Properties().stacksTo(1)));
     public static final DeferredItem<Item> BATON = ITEMS.register("baton",
             () -> new Item(new Item.Properties().stacksTo(1).rarity(Rarity.UNCOMMON)));
+    public static final DeferredItem<Item> WHIP = ITEMS.register("whip",
+            () -> new Item(new Item.Properties().stacksTo(1).rarity(Rarity.UNCOMMON)));
     public static final DeferredItem<Item> KEYCHAIN = ITEMS.register("keychain",
             () -> new Item(new Item.Properties().stacksTo(1).rarity(Rarity.RARE)));
 

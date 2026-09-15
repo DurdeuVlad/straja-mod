@@ -98,6 +98,9 @@ class StrajaPoliciesTest {
         assertEquals("straja:cuffs", cuffs.itemId());
         assertEquals(5, cuffs.cost());
         assertEquals(2, cuffs.minRank());
+        var whip = stock.stream().filter(e -> e.key().equals("whip")).findFirst().orElseThrow();
+        assertEquals("straja:whip", whip.itemId());
+        assertEquals(2, whip.minRank());
         // malformed entries are skipped, not fatal
         var tolerant = StrajaPolicies.parseArmoryItems(java.util.List.of(
                 "sword|minecraft:iron_sword|1|3|1", "broken", "x||1|1|1",

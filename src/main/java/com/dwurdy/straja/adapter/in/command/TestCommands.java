@@ -676,27 +676,8 @@ final class TestCommands {
                 .then(Commands.argument("id", StringArgumentType.word())
                         .executes(ctx -> run(ctx, runtime ->
                                 runtime.custody().removeHeadSack(player(ctx, runtime))))));
-        test.then(Commands.literal("baton-strike")
-                .then(Commands.argument("id", StringArgumentType.word())
-                        .then(Commands.argument("target", StringArgumentType.word())
-                                .then(Commands.argument("damage", IntegerArgumentType.integer(1))
-                                        .executes(ctx -> run(ctx, runtime -> {
-                                            var issuer = player(ctx, runtime);
-                                            var tgt = resolveVirtual(ctx, runtime, "target");
-                                            if (issuer == null || tgt == null) return;
-                                            var outcome = runtime.custody().batonStrike(issuer, tgt,
-                                                    tgt.health(), tgt.absorption(),
-                                                    IntegerArgumentType.getInteger(ctx, "damage"));
-                                            if (outcome.action()
-                                                    == com.dwurdy.straja.application.port.in.CustodyRoleplayUseCase
-                                                            .DamageAction.ALLOW_NONLETHAL) {
-                                                double capped = runtime.custody().capBatonDamage(
-                                                        tgt.health(), tgt.absorption());
-                                                tgt.setHealth(Math.max(1, tgt.health() - Math.min(capped,
-                                                        IntegerArgumentType.getInteger(ctx, "damage"))));
-                                            }
-                                            send(ctx, "baton=" + outcome.action() + " " + outcome.reason());
-                                        }))))));
+        test.then(strikeCommand("baton-strike", "baton"));
+        test.then(strikeCommand("whip-strike", "whip"));
         test.then(Commands.literal("custody-dump")
                 .executes(ctx -> run(ctx, runtime -> {
                     var s = runtime.context().custody().read();
@@ -1397,6 +1378,32 @@ final class TestCommands {
     private interface Op {
         void run(StrajaRuntime runtime)
                 throws com.mojang.brigadier.exceptions.CommandSyntaxException;
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> strikeCommand(
+            String command, String outputLabel) {
+        return Commands.literal(command)
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("target", StringArgumentType.word())
+                                .then(Commands.argument("damage", IntegerArgumentType.integer(1))
+                                        .executes(ctx -> run(ctx, runtime -> {
+                                            var issuer = player(ctx, runtime);
+                                            var target = resolveVirtual(ctx, runtime, "target");
+                                            if (issuer == null || target == null) return;
+                                            var outcome = runtime.custody().batonStrike(issuer, target,
+                                                    target.health(), target.absorption(),
+                                                    IntegerArgumentType.getInteger(ctx, "damage"));
+                                            if (outcome.action()
+                                                    == com.dwurdy.straja.application.port.in.CustodyRoleplayUseCase
+                                                            .DamageAction.ALLOW_NONLETHAL) {
+                                                double capped = runtime.custody().capBatonDamage(
+                                                        target.health(), target.absorption());
+                                                target.setHealth(Math.max(1, target.health() - Math.min(capped,
+                                                        IntegerArgumentType.getInteger(ctx, "damage"))));
+                                            }
+                                            send(ctx, outputLabel + "=" + outcome.action()
+                                                    + " " + outcome.reason());
+                                        })))));
     }
 
     private static int run(CommandContext<CommandSourceStack> ctx, Op op)

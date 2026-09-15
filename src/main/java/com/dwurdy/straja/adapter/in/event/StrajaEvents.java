@@ -267,12 +267,12 @@ public final class StrajaEvents {
             return;
         }
 
-        // Baton behavior remains a distinct non-lethal weapon flow. It owns
+        // Baton/whip behavior remains a distinct non-lethal weapon flow. It owns
         // its event before the general lethal resolver can see it.
         if (attackerGateway != null) {
-            var baton = runtime.custodyRoleplay().batonStrike(attackerGateway, targetGateway,
+            var enforcementWeapon = runtime.custodyRoleplay().batonStrike(attackerGateway, targetGateway,
                     target.getHealth(), target.getAbsorptionAmount(), event.getAmount());
-            switch (baton.action()) {
+            switch (enforcementWeapon.action()) {
                 case CANCEL -> { event.setCanceled(true); return; }
                 case ALLOW_NONLETHAL -> {
                     event.setAmount((float) runtime.custodyRoleplay()

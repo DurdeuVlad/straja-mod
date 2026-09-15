@@ -79,7 +79,7 @@ public final class StrajaGameTests {
                 "archive_document", "carbon_paper", "archive_stamp", "official_envelope",
                 "room_marker", "prison_marker", "npc_wand", "patrol_wand", "survey_rod",
                 "npc_cloner", "cuffs", "cuff_key", "bolt_cutters", "crowbar", "rope",
-                "head_sack", "baton", "keychain", "fine_book", "fine_notice",
+                "head_sack", "baton", "whip", "keychain", "fine_book", "fine_notice",
                 "training_manual")) {
             helper.assertTrue(BuiltInRegistries.ITEM.get(straja(id)) != Items.AIR,
                     "missing item registration straja:" + id);
@@ -89,6 +89,43 @@ public final class StrajaGameTests {
                 "missing entity registration straja:straja_npc");
         helper.assertTrue(BuiltInRegistries.MENU.get(straja("form")) == StrajaMenus.FORM.get(),
                 "missing menu registration straja:form");
+        helper.succeed();
+    }
+
+    /** The whip uses the same guarded, non-lethal custody pipeline as the baton. */
+    @GameTest(template = "empty")
+    public static void whipDamageRouting(GameTestHelper helper) {
+        var runtime = runtime(helper);
+        var attacker = mockPlayer(helper);
+        var target = mockPlayer(helper);
+        attacker.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(StrajaItems.WHIP.get()));
+
+        var denied = new LivingIncomingDamageEvent(target,
+                new DamageContainer(target.damageSources().playerAttack(attacker), 4.0f));
+        NeoForge.EVENT_BUS.post(denied);
+        helper.assertTrue(denied.isCanceled(), "a whip strike by a non-guard must be canceled");
+
+        var attackerState = runtime.players().state(attacker.getUUID());
+        attackerState.rank = Rank.GUARD.level();
+        runtime.players().save(attacker.getUUID(), attackerState);
+        target.setHealth(10.0f);
+        var capped = new LivingIncomingDamageEvent(target,
+                new DamageContainer(target.damageSources().playerAttack(attacker), 4.0f));
+        NeoForge.EVENT_BUS.post(capped);
+        helper.assertFalse(capped.isCanceled(), "a guard's non-lethal whip strike must pass through");
+        helper.assertTrue(capped.getAmount() == 9.0f,
+                "a whip strike must be capped to leave the target at 1 health");
+
+        target.setHealth(2.0f);
+        var lethal = new LivingIncomingDamageEvent(target,
+                new DamageContainer(target.damageSources().playerAttack(attacker), 4.0f));
+        NeoForge.EVENT_BUS.post(lethal);
+        helper.assertTrue(lethal.isCanceled(), "a lethal whip strike must be canceled");
+        helper.assertTrue(runtime.custodyRoleplay().isDowned(gateway(target)),
+                "a lethal whip strike must down the target");
+        helper.assertTrue(target.getHealth() == 1.0f,
+                "a whip knockout must leave the target at 1 health");
+        runtime.custodyRoleplay().recoverAfterDeath(gateway(target));
         helper.succeed();
     }
 
@@ -179,6 +216,7 @@ public final class StrajaGameTests {
         NeoForge.EVENT_BUS.post(plain);
         helper.assertFalse(plain.isCanceled(), "ordinary non-lethal damage must reach vanilla");
         helper.assertTrue(plain.getAmount() == 4.0f, "ordinary damage must not be modified");
+        runtime.custodyRoleplay().recoverAfterDeath(gateway(target));
         helper.succeed();
     }
 

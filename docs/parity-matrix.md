@@ -159,6 +159,7 @@ services the canonical commands use. Items are non-stackable, non-craftable
 | Rope binding + head sack | PASS | `rcon:` applied live |
 | Distance expiry | PASS | `unit:CustodyServiceTest` |
 | Baton, non-lethal damage, downed state | PASS | `unit:CustodyServiceTest`; `rcon:` knockout; damage capped so Straja never kills |
+| Whip, non-lethal damage, downed state | PASS | `unit:CustodyServiceTest.whipUsesTheSameNonLethalCustodyFlow`; `gameTest:whipDamageRouting`; rank-gated armory item |
 | Surrender / refusal / knockout flow | PASS | `rcon:` surrender live |
 | Prison cells, sentence timers, release points | PASS | `unit:PrisonServiceTest`; `rcon:` arrest→cell→sentence countdown (5s/tick cap) |
 | Sentence store retention (`prison.retentionLimit`) | PASS | `unit:PrisonServiceTest.retentionLimitPrunesOldestClosedSentences` — active/waiting sentences never pruned |

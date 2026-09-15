@@ -626,6 +626,18 @@ class CustodyServiceTest {
     }
 
     @Test
+    void whipUsesTheSameNonLethalCustodyFlow() {
+        hold(guard, CustodyService.WHIP);
+        var outcome = custody.batonStrike(guard, civilian, 6, 0, 8);
+        assertEquals(CustodyRoleplayUseCase.DamageAction.CANCEL, outcome.action());
+        assertEquals("surrender_requested", outcome.reason());
+        assertTrue(custody.isDowned(civilian));
+        assertEquals(1, civilian.health);
+        assertTrue(ctx.custody().read().cuffRequests.values().stream()
+                .anyMatch(request -> "SURRENDER".equals(request.kind)));
+    }
+
+    @Test
     void batonLethalKnockoutRequestsSurrender() {
         hold(guard, CustodyService.BATON);
         var outcome = custody.batonStrike(guard, civilian, 6, 0, 8);
