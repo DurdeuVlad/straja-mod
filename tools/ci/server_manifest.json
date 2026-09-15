@@ -1,0 +1,128 @@
+{
+  "schema": 1,
+  "comment": "Canonical dependency + profile manifest for the dedicated-server harness. Third-party JARs are downloaded at run time, verified against the pinned digests below, and never committed.",
+  "minecraft": "1.21.1",
+  "java": 21,
+  "neoforge": {
+    "version": "21.1.248",
+    "groupId": "net.neoforged",
+    "artifactId": "neoforge",
+    "classifier": "installer",
+    "mavenBase": "https://maven.neoforged.net/releases",
+    "checksumSidecars": ["sha256", "sha512"]
+  },
+  "dependencies": {
+    "envelope": {
+      "name": "Envelope",
+      "source": "modrinth",
+      "sourceId": "modrinth:envelope:MmLbWZuv",
+      "url": "https://api.modrinth.com/maven/maven/modrinth/envelope/MmLbWZuv/envelope-MmLbWZuv.jar",
+      "fileName": "envelope-MmLbWZuv.jar",
+      "size": 1639440,
+      "side": "server",
+      "expectedModId": "envelope",
+      "sha256": "5ed3f0797c2c752739071c52bd77e8f7ff18a11224d9679176ab25387ab9d7b9",
+      "sha512": "c6c076e40ec421eb276b3ef6529d73482dfa2b59fe22871f47acc534ed9c2179b6c0f03d611ab2893701ded271334b61daa83a70c7ecdf57b03efe87e2380ed9"
+    },
+    "adys_decorations": {
+      "name": "Ady's Decorations",
+      "source": "curseforge",
+      "sourceId": "curseforge:file:8626629",
+      "url": "https://mediafilez.forgecdn.net/files/8626/629/adys_decorations-1.0.7.2-neoforge-1.21.1.jar",
+      "fileName": "adys_decorations-1.0.7.2-neoforge-1.21.1.jar",
+      "size": 1814461,
+      "side": "server",
+      "expectedModId": "adys_decorations",
+      "sha256": "0924efd88c94b2f43c337533d7e3e863a87e85feb9daae930c36413c70bced39",
+      "sha512": "0bc29292aa659b6e8fa379df0f34183a98a4f720d23343b79fc39f7b014bd09d8923fc708ae5dec935cb3938dae15b1ed208d801ad6d676ace60f79da1ccb9fb"
+    },
+    "vampirism": {
+      "name": "Vampirism",
+      "source": "maven",
+      "sourceId": "maven:de.teamlapen.vampirism:Vampirism:1.21-1.10.13",
+      "url": "https://maven.maxanier.de/releases/de/teamlapen/vampirism/Vampirism/1.21-1.10.13/Vampirism-1.21-1.10.13.jar",
+      "fileName": "Vampirism-1.21-1.10.13.jar",
+      "size": 12478440,
+      "side": "server",
+      "expectedModId": "vampirism",
+      "sha256": "adc983018afe60e7a58a00851cc651f27826879eb14144947d0b477434395bd1",
+      "sha512": "beff6b3f741229bbc5ede01f455040a5a144a9012841e171d8903949f271f9bb1912d02c8732725bb3de816e75db38668da772d8f1034268b9b65457d612c308"
+    },
+    "customnpcs": {
+      "name": "CustomNPCs Unofficial NeoForge",
+      "source": "curseforge",
+      "sourceId": "curseforge:file:7411561",
+      "url": "https://mediafilez.forgecdn.net/files/7411/561/CustomNPCs-Unofficial-NeoForge-1.21.1.20251230.jar",
+      "fileName": "CustomNPCs-Unofficial-NeoForge-1.21.1.20251230.jar",
+      "size": 10789250,
+      "side": "server",
+      "expectedModId": "customnpcs",
+      "sha256": "6c28d87b215fc1191488194188ec8a39dd908ae7d2d887b7c9d7d463be0a162c",
+      "sha512": "22fd03cc2525fc74f03112348e0a6c2deb127e55f1737b6afe02c482308182e925f37466610c659835b35d9e8a228e0a7dc9bc785b9c630b63dc26c9fcec053d"
+    }
+  },
+  "profiles": {
+    "required-only": {
+      "description": "Straja + required Envelope runtime only. Coin provider absent by design.",
+      "blocking": true,
+      "deps": ["envelope"],
+      "config": {
+        "identity.environment": "local",
+        "testing.enableTestCommands": true
+      },
+      "timeoutSeconds": 720
+    },
+    "coin-provider": {
+      "description": "Adds Ady's Decorations so physical coin salary payments resolve.",
+      "blocking": true,
+      "deps": ["envelope", "adys_decorations"],
+      "config": {
+        "identity.environment": "local",
+        "testing.enableTestCommands": true
+      },
+      "timeoutSeconds": 720
+    },
+    "vampirism": {
+      "description": "Adds Vampirism so OptionalModCompatibility routes ownership to the real provider.",
+      "blocking": true,
+      "deps": ["envelope", "vampirism"],
+      "config": {
+        "identity.environment": "local",
+        "testing.enableTestCommands": true
+      },
+      "timeoutSeconds": 720
+    },
+    "combined": {
+      "description": "All declared server-side dependencies together.",
+      "blocking": true,
+      "deps": ["envelope", "adys_decorations", "vampirism"],
+      "config": {
+        "identity.environment": "local",
+        "testing.enableTestCommands": true
+      },
+      "timeoutSeconds": 720
+    },
+    "production-config": {
+      "description": "Combined dependencies under a hardened production-like config. Debug/test surfaces must fail closed.",
+      "blocking": true,
+      "deps": ["envelope", "adys_decorations", "vampirism"],
+      "config": {
+        "identity.environment": "production",
+        "identity.commissionerUuid": "11111111-2222-3333-4444-555555555555",
+        "debug.enabled": false,
+        "testing.enableTestCommands": false
+      },
+      "timeoutSeconds": 720
+    },
+    "foreign-npc": {
+      "description": "Advisory: CustomNPCs co-installed. Reported pass/fail/blocked; never blocks.",
+      "blocking": false,
+      "deps": ["envelope", "customnpcs"],
+      "config": {
+        "identity.environment": "local",
+        "testing.enableTestCommands": true
+      },
+      "timeoutSeconds": 720
+    }
+  }
+}
