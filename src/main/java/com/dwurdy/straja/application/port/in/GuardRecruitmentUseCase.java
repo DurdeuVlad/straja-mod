@@ -5,9 +5,10 @@ import java.util.Optional;
 
 /**
  * Inbound port for the recruitment chain (§5/§6): the receptionist records
- * the application, the recruiter ("Recrutorul") runs the admission quiz, and
- * the trainer ("Instructorul") owns training modules, service-block progress,
- * promotion requests and the physical theory manual. The prompt carries the
+ * the application, and the trainer ("Instructorul") is also the recruiter
+ * ("Recrutorul"): the same NPC runs the admission quiz, training modules,
+ * service-block progress, promotion requests and the physical theory manual.
+ * The prompt carries the
  * server-selected persisted question ID; answers are bound to that ID so a
  * stale or foreign form can never advance the quiz.
  */
@@ -29,12 +30,12 @@ public interface GuardRecruitmentUseCase {
 
     /**
      * Receptionist "Depune cererea" action (§5): records the application and
-     * directs the applicant to the Recrutor. Idempotent — re-applying while
+     * directs the applicant to the Instructor. Idempotent — re-applying while
      * APPLIED is a no-op tell; invited/guarded/fired states stay explicit.
      */
     void applyForStraja(PlayerGateway player);
 
-    /** Recruiter "join the guard" action — application/invitation checks stay in the service. */
+    /** Instructor/Recrutor admission action — checks stay in the service. */
     void recruit(PlayerGateway player);
 
     /** Trainer projection used to mint the state-aware promotion button. */

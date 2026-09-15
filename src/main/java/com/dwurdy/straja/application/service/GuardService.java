@@ -244,7 +244,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         players.save(target.uuid(), state);
         audit.record("invite", actor.name(), actor.uuid().toString(),
                 target.name(), target.uuid().toString(), "SUCCESS", "invited");
-        target.tell("Ai fost invitat în Straja Castelului. Prezintă-te la Recrutor pentru examen, apoi la Instructor pentru instruire.");
+        target.tell("Ai fost invitat în Straja Castelului. Prezintă-te la Instructor pentru examen și instruire.");
         actor.tell("Invitația a fost trimisă lui " + target.name() + ".");
         return true;
     }
@@ -256,7 +256,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
 
     private String admissionGate(GuardState state) {
         return state.fired ? coreError("fired")
-                : "Depune mai întâi cererea la Recepție, apoi prezintă-te la Recrutor pentru examen.";
+                : "Depune mai întâi cererea la Recepție, apoi prezintă-te la Instructor pentru examen.";
     }
 
     @Override
@@ -279,11 +279,11 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             return;
         }
         if (state.invited) {
-            player.tell("Ai deja o invitație de la Comisar — prezintă-te direct la Recrutor pentru examen.");
+            player.tell("Ai deja o invitație de la Comisar — prezintă-te direct la Instructor pentru examen.");
             return;
         }
         if ("APPLIED".equals(state.applicationState)) {
-            player.tell("Cererea ta este deja înregistrată. Prezintă-te la Recrutor pentru examen.");
+            player.tell("Cererea ta este deja înregistrată. Prezintă-te la Instructor pentru examen.");
             return;
         }
         state.applicationState = "APPLIED";
@@ -292,7 +292,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         players.save(player.uuid(), state);
         audit.record("application", player.name(), player.uuid().toString(),
                 player.name(), player.uuid().toString(), "SUCCESS", "applied");
-        player.tell("Cerere înregistrată la Recepție. Prezintă-te la Recrutor pentru examenul de admitere.");
+        player.tell("Cerere înregistrată la Recepție. Prezintă-te la Instructor pentru examenul de admitere.");
     }
 
     @Override
@@ -308,8 +308,8 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         }
         var question = ensureQuizOrder(state);
         players.save(player.uuid(), state);
-        player.tell("Examenul se susține la Recrutor, pas cu pas. "
-                + (question != null ? question.question() : "Revino la Recrutor pentru următoarea întrebare."));
+        player.tell("Examenul se susține la Instructor, pas cu pas. "
+                + (question != null ? question.question() : "Revino la Instructor pentru următoarea întrebare."));
     }
 
     /**
@@ -366,7 +366,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
 
     /**
      * Commissioner-side specialization management (§2): ranks are the ladder,
-     * specializations are independent functions (Instructor, Recrutor, …)
+     * specializations are independent functions (Instructor/Recrutor, …)
      * recorded on the personnel file.
      */
     public boolean setSpecialization(PlayerGateway actor, PlayerGateway target,
@@ -1620,19 +1620,25 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         aliases.put("reception", "receptionist");
         aliases.put("secretary", "secretary");
         aliases.put("secretara", "secretary");
-        aliases.put("recruiter", "recruiter");
-        aliases.put("recrutor", "recruiter");
+        // Legacy location aliases resolve to the physical Instructor, which
+        // now also owns recruitment and the admission exam.
+        aliases.put("recruiter", "trainer");
+        aliases.put("recrutor", "trainer");
         aliases.put("prison-release", "prisonRelease");
         aliases.put("release", "prisonRelease");
         aliases.put("infirmary", "infirmary");
         aliases.put("infirmerie", "infirmary");
         aliases.put("trainer", "trainer");
         aliases.put("instructor", "trainer");
+        aliases.put("armorer", "armorer");
+        aliases.put("armourer", "armorer");
+        aliases.put("armurier", "armorer");
+        aliases.put("armuriera", "armorer");
         aliases.put("hq", "hq");
         aliases.put("sediu", "hq");
         String key = aliases.get(name == null ? "" : name.trim().toLowerCase());
         if (key == null) {
-            player.tell("Locație necunoscută: reports, mailbox, office, receptionist, secretary, prison-release, infirmary, trainer sau hq.");
+            player.tell("Locație necunoscută: reports, mailbox, office, receptionist, secretary, trainer, armorer, prison-release, infirmary sau hq.");
             return;
         }
         stampLocation(player, key, player.dimension(), player.x(), player.y(), player.z());
@@ -1649,7 +1655,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             return;
         }
         if (java.util.Arrays.asList(SetupData.LOCATION_KEYS).indexOf(key) < 0) {
-            player.tell("Locație necunoscută: reports, mailbox, office, receptionist, secretary, prison-release, infirmary, trainer sau hq.");
+            player.tell("Locație necunoscută: reports, mailbox, office, receptionist, secretary, trainer, armorer, prison-release, infirmary sau hq.");
             return;
         }
         SetupData setup = ctx.setup().read();

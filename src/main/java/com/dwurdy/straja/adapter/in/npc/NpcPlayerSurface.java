@@ -22,6 +22,7 @@ final class NpcPlayerSurface {
             "archive-sheet-submit", "archive-sheet-sign", "archive-sheet-copy",
             "archive-sheet-envelope", "archive-sheet-issue", "archive-sheet-revoke",
             "report-review", "audience-review",
+            "faq",
             "admin-dossier", "admin-promote", "admin-demote", "admin-suspend",
             "admin-fire", "admin-reinstate",
             "tool-npc-assign", "tool-npc-rename", "tool-npc-skin",
@@ -62,8 +63,9 @@ final class NpcPlayerSurface {
             case NpcRoles.SECRETARY -> RoleRoute.SECRETARY;
             case NpcRoles.JAILER -> RoleRoute.JAILER;
             case NpcRoles.ARCHIVIST -> RoleRoute.ARCHIVIST;
-            case NpcRoles.TRAINER -> RoleRoute.TRAINER;
-            case NpcRoles.RECRUITER -> RoleRoute.RECRUITER;
+            // Recruiter remains a persisted/CLI alias for old worlds, but the
+            // physical player-facing role is now the Instructor.
+            case NpcRoles.TRAINER, NpcRoles.RECRUITER -> RoleRoute.TRAINER;
             case NpcRoles.ARMORER -> RoleRoute.ARMORER;
             default -> RoleRoute.UNKNOWN;
         };
@@ -74,36 +76,33 @@ final class NpcPlayerSurface {
             case RECEPTIONIST -> new RoleSurface(
                     RoleRoute.RECEPTIONIST,
                     "Recepție",
-                    "Depui aici cererea de admitere, alegi regulamentul Străjii, verifici situația, amenzile, camera sau facțiunea nativă; examenul se susține la Recrutor, instruirea la Instructor.",
+                    "Depui aici cererea de admitere, alegi regulamentul Străjii, verifici situația, amenzile, camera sau facțiunea nativă; examenul și instruirea se fac la Instructor.",
                     List.of(
                             new ChatAction("Depune cererea", "application-submit"),
                             new ChatAction("Regulament", "rules"),
                             new ChatAction("Stare Străjer", "guard-status"),
                             new ChatAction("Amenzile mele", "fine-list"),
                             new ChatAction("Stare cameră", "room-status"),
-                            new ChatAction("Declară facțiunea nativă", "faction-declare")));
-            case RECRUITER -> new RoleSurface(
-                    RoleRoute.RECRUITER,
-                    "Recrutare",
-                    "Depui cererea la Recepție, apoi susții aici examenul de admitere — îți pun întrebările una câte una; trecerea te autorizează ca Stagiar.",
-                    List.of(
-                            new ChatAction("Examen de admitere", "recruit"),
-                            new ChatAction("Răspunde la examen (formular)", "quiz-answer")));
+                            new ChatAction("Declară facțiunea nativă", "faction-declare"),
+                            faqEntry(RoleRoute.RECEPTIONIST)));
             case TRAINER -> new RoleSurface(
                     RoleRoute.TRAINER,
                     "Instructor",
-                    "Instruirea străjerilor se face aici: module teoretice, puncte de serviciu și avansări; manualul teoretic se ridică tot de la mine.",
+                    "Aici se fac recrutarea și instruirea: examen de admitere, module teoretice, puncte de serviciu și avansări; manualul se ridică tot de la mine.",
                     List.of(
                             new ChatAction("Progres și puncte", "training-progress"),
-                            new ChatAction("Manual de instruire", "training-manual")));
+                            new ChatAction("Manual de instruire", "training-manual"),
+                            faqEntry(RoleRoute.TRAINER)));
+            case RECRUITER -> surfaceFor(NpcRoles.TRAINER);
             case SECRETARY -> new RoleSurface(
                     RoleRoute.SECRETARY,
                     "Secretariat",
-                    "Îți arăt misiunile vizibile; ofițerii pot primi Carnetul de Ordine; acțiunile de serviciu apar în funcție de starea ta curentă.",
+                    "Ține o carte în mâna principală ca să primești o copie; îți arăt și misiunile vizibile, Carnetul de Ordine și acțiunile de serviciu disponibile.",
                     List.of(
                             new ChatAction("Misiunile mele", "mission-list"),
                             new ChatAction("Carnet de ordine", "mission-carnet"),
-                            new ChatAction("Stare serviciu", "guard-status")));
+                            new ChatAction("Stare serviciu", "guard-status"),
+                            faqEntry(RoleRoute.SECRETARY)));
             case JAILER -> new RoleSurface(
                     RoleRoute.JAILER,
                     "Temniță",
@@ -112,19 +111,22 @@ final class NpcPlayerSurface {
                             new ChatAction("Stare custodie", "cuffs-status"),
                             new ChatAction("Stare sentință", "prison-status"),
                             new ChatAction("Stare leșin", "downed-status"),
-                            new ChatAction("Primește cătușe", "cuffs-item")));
+                            new ChatAction("Primește cătușe", "cuffs-item"),
+                            faqEntry(RoleRoute.JAILER)));
             case ARCHIVIST -> new RoleSurface(
                     RoleRoute.ARCHIVIST,
                     "Arhivă",
                     "Îți arăt dosarele pe care ai voie să le citești.",
-                    List.of(new ChatAction("Vezi dosarele", "archive-list")));
+                    List.of(new ChatAction("Vezi dosarele", "archive-list"),
+                            faqEntry(RoleRoute.ARCHIVIST)));
             case ARMORER -> new RoleSurface(
                     RoleRoute.ARMORER,
                     "Armurier",
                     "Vând echipament de rang pe monede și rezerve pe puncte de rechiziție; ofertele depind de rangul tău.",
                     List.of(
                             new ChatAction("Vezi ofertele", "armory-status"),
-                            new ChatAction("Kit de serviciu", "duty-kit")));
+                            new ChatAction("Kit de serviciu", "duty-kit"),
+                            faqEntry(RoleRoute.ARMORER)));
             case UNKNOWN -> new RoleSurface(
                     RoleRoute.UNKNOWN,
                     "Straja",
@@ -143,6 +145,10 @@ final class NpcPlayerSurface {
         var actions = new java.util.ArrayList<>(surface.actions());
         actions.addAll(additional);
         return new RoleSurface(surface.route(), surface.title(), surface.guidance(), List.copyOf(actions));
+    }
+
+    static ChatAction faqEntry(RoleRoute origin) {
+        return NpcFaqSurface.entry(origin);
     }
 
     /** Builds an action only for a record ID that can be carried safely by a chat token. */

@@ -2,6 +2,7 @@ package com.dwurdy.straja.application.port.in;
 
 import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.domain.model.Capability;
+import com.dwurdy.straja.domain.model.GuardState;
 
 /**
  * Read-only authority/capability queries for inbound adapters. Adapters use
@@ -9,6 +10,9 @@ import com.dwurdy.straja.domain.model.Capability;
  * still revalidates the same rules inside the services.
  */
 public interface PlayerQueryUseCase {
+
+    /** Read-only projection source for contextual player-facing surfaces. */
+    GuardState readState(PlayerGateway player);
 
     boolean isCommissioner(PlayerGateway player);
 

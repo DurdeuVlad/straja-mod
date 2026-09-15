@@ -137,6 +137,17 @@ public final class Fakes {
         @Override public ItemView mainHand() {
             return selectedSlot >= 0 && selectedSlot < inventory.slots() ? inventory.stackAt(selectedSlot) : ItemView.EMPTY;
         }
+        @Override public PlayerGateway.BookCopyResult copyMainHandBook() {
+            ItemView held = mainHand();
+            if (held.isEmpty() || switch (held.id()) {
+                case "minecraft:book", "minecraft:writable_book", "minecraft:written_book",
+                        "minecraft:enchanted_book", "minecraft:knowledge_book" -> false;
+                default -> true;
+            }) return PlayerGateway.BookCopyResult.NOT_A_BOOK;
+            return inventory.insert(held.withCount(1))
+                    ? PlayerGateway.BookCopyResult.COPIED
+                    : PlayerGateway.BookCopyResult.NO_SPACE;
+        }
         @Override public int selectedSlot() { return selectedSlot; }
         @Override public void selectSlot(int slot) { selectedSlot = slot; }
         @Override public void applyEffect(String effectId, int durationTicks, int amplifier) {

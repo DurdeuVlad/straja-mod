@@ -41,6 +41,16 @@ public final class NpcRoles {
         return KNOWN;
     }
 
+    /** Handles the implicit Secretary book action before the normal dialog. */
+    public static boolean trySecretaryBookCopy(
+            String roleId, com.dwurdy.straja.application.port.out.PlayerGateway player) {
+        if (!SECRETARY.equals(roleId) || player == null) return false;
+        var runtime = com.dwurdy.straja.bootstrap.StrajaRuntime.get();
+        if (runtime == null) return false;
+        return runtime.secretaryRoleplay().copyHeldBook(player)
+                != com.dwurdy.straja.application.port.out.PlayerGateway.BookCopyResult.NOT_A_BOOK;
+    }
+
     public static void interact(String roleId, Player player, ServerLevel level) {
         NpcPlayerSurface.InteractionPlan plan = NpcPlayerSurface.interactionPlan(roleId);
         NpcPlayerSurface.RoleSurface surface = plan.surface();
@@ -190,6 +200,7 @@ public final class NpcRoles {
             return false;
         }
         switch (operation) {
+            case "faq" -> performFaq(id, player, runtime, gw);
             case "duty-checkpoint" -> runtime.guardDuty().checkpoint(gw, id);
             case "mission-join" -> runtime.missionRoleplay().join(gw, id);
             case "mission-accept" -> runtime.missionRoleplay().accept(gw, id);
@@ -284,6 +295,38 @@ public final class NpcRoles {
             default -> { return false; }
         }
         return true;
+    }
+
+    private static void performFaq(String target, Player player,
+                                    com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                    com.dwurdy.straja.application.port.out.PlayerGateway gw) {
+        var parsed = NpcFaqSurface.parseTarget(target);
+        if (parsed.isEmpty()) {
+            gw.tell("[Straja] Întrebarea FAQ nu mai este disponibilă.");
+            return;
+        }
+        var state = runtime.playerQueries().readState(gw);
+        int rank = state == null ? com.dwurdy.straja.domain.model.Rank.CIVIL.level() : state.rank;
+        var context = NpcFaqSurface.Context.from(state, runtime.playerQueries().isCommissioner(gw),
+                runtime.policies().rankName(rank));
+        var targetRef = parsed.get();
+        if (!NpcFaqSurface.targetAvailable(targetRef, context)) {
+            gw.tell("[FAQ] Ramura nu mai este disponibilă pentru statutul tău.");
+            sendGuidance(player, NpcFaqSurface.root(targetRef.origin(), context));
+            return;
+        }
+        switch (targetRef.kind()) {
+            case "root" -> sendGuidance(player, NpcFaqSurface.root(targetRef.origin(), context));
+            case "menu" -> sendGuidance(player,
+                    NpcFaqSurface.menu(targetRef.origin(), context, targetRef.topic()));
+            case "answer" -> {
+                gw.tell("[FAQ] " + NpcFaqSurface.answer(
+                        targetRef.origin(), targetRef.topic(), targetRef.question(), context));
+                sendGuidance(player,
+                        NpcFaqSurface.menu(targetRef.origin(), context, targetRef.topic()));
+            }
+            default -> gw.tell("[Straja] Ramură FAQ necunoscută.");
+        }
     }
 
     /** The loaded Straja NPC entity across all server levels, or null. */
@@ -762,6 +805,7 @@ public final class NpcRoles {
                                                  com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
                                                  com.dwurdy.straja.application.port.out.PlayerGateway player) {
         return switch (operation) {
+            case "faq" -> true;
             case "duty-checkpoint" -> {
                 var view = runtime.guardDuty().dutyView(player);
                 yield view != null && id.equals(view.checkpointId());
@@ -947,8 +991,21 @@ public final class NpcRoles {
                     runtime.custodyRoleplay().availableActions(gateway)));
             case ARCHIVIST -> actions.addAll(NpcPlayerSurface.archiveActions(
                     runtime.archiveRoleplay().availableActions(gateway)));
-            case TRAINER -> actions.addAll(NpcPlayerSurface.trainingActions(
-                    runtime.guardRecruitment().trainingView(gateway)));
+            case TRAINER -> {
+                var guardState = runtime.playerQueries().readState(gateway);
+                // The physical Instructor also owns admission. Keep the
+                // recruiter role alias working, but never spawn or require a
+                // second admission NPC.
+                if (guardState != null && !guardState.fired && !guardState.suspended && !guardState.resigned
+                        && guardState.rank < com.dwurdy.straja.domain.model.Rank.STAGIAR.level()
+                        && (guardState.invited || "APPLIED".equals(guardState.applicationState))) {
+                    actions.add(new NpcPlayerSurface.ChatAction("Examen de admitere", "recruit"));
+                    actions.add(new NpcPlayerSurface.ChatAction(
+                            "Răspunde la examen (formular)", "quiz-answer"));
+                }
+                actions.addAll(NpcPlayerSurface.trainingActions(
+                        runtime.guardRecruitment().trainingView(gateway)));
+            }
             case ARMORER -> actions.addAll(NpcPlayerSurface.armoryActions(
                     runtime.armory().offers(gateway)));
             case RECEPTIONIST -> {

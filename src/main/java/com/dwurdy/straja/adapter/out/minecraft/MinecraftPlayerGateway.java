@@ -11,6 +11,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.tags.ItemTags;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.item.ItemStack;
 
@@ -99,6 +100,25 @@ public class MinecraftPlayerGateway implements PlayerGateway {
     @Override public ItemView mainHand() {
         ServerPlayer p = entity();
         return p != null ? MinecraftInventoryView.view(p.getMainHandItem()) : ItemView.EMPTY;
+    }
+
+    @Override public BookCopyResult copyMainHandBook() {
+        ServerPlayer p = entity();
+        if (p == null) return BookCopyResult.NOT_A_BOOK;
+
+        ItemStack source = p.getMainHandItem();
+        if (source.isEmpty() || !source.is(ItemTags.BOOKSHELF_BOOKS)) {
+            return BookCopyResult.NOT_A_BOOK;
+        }
+
+        // copyWithCount preserves every component (written-book pages, title,
+        // author, custom data, and modded components) while copying one item.
+        ItemStack copy = source.copyWithCount(1);
+        var inventory = p.getInventory();
+        if (inventory.getSlotWithRemainingSpace(copy) < 0 && inventory.getFreeSlot() < 0) {
+            return BookCopyResult.NO_SPACE;
+        }
+        return inventory.add(copy) ? BookCopyResult.COPIED : BookCopyResult.NO_SPACE;
     }
 
     @Override public int selectedSlot() {

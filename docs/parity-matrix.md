@@ -23,7 +23,7 @@ public typed conveniences are limited to status/rules/help text. `/straja backup
 is an administrator-only command that writes a bounded durable SavedData snapshot;
 `_corrupt_backup` remains a separate internal persistence recovery record.
 
-Test suite: **474 unit tests** (`gradlew test`, all green) across
+Test suite: **597 unit tests** (`gradlew test`, all green) across
 `ArchitectureBoundaryTest`, `GuardServiceTest`, `DutyEngineTest`,
 `MissionServiceTest`, `CustodyServiceTest`, `PrisonServiceTest`,
 `CivicServiceTest`, `MigrationServiceTest`, `PersistenceTest`,
@@ -56,7 +56,7 @@ Test suite: **474 unit tests** (`gradlew test`, all green) across
 | Feature | Status | Evidence / notes |
 |---|---|---|
 | Civil → application at Recepție (§5) | PASS | `unit:GuardServiceTest.applicationFlowAuthorizesThroughRecruiterQuiz`, `invitedApplicantSkipsTheApplicationStep`, `firedAndAuthorizedCannotApply`; `rcon:` `apply` → APPLIED → quiz → AUTHORIZED/Stagiar |
-| Admission exam at Recrutor (§6) | PASS | `unit:NpcInteractionSurfaceTest.applicationAtReceptionistExamAtRecruiterTrainingAtInstructor`; `rcon:` no application → directed to Recepție |
+| Admission exam at Instructor/Recrutor (§6) | PASS | `unit:NpcInteractionSurfaceTest.applicationAndAdmissionExamAreAtReceptionistThenInstructor`; legacy recruiter role aliases to the Instructor |
 | Invitations (invite/accept/decline) | PASS | `unit:GuardServiceTest` |
 | Progressive quiz (shuffled order, cooldown) | PASS | `unit:GuardServiceTest` answers dynamic `quizOrder` |
 | Rank progression (promote/demote rules) | PASS | `unit:GuardServiceTest`; `rcon:` `set-rank` |
@@ -104,7 +104,10 @@ Test suite: **474 unit tests** (`gradlew test`, all green) across
 | Persistent UUID + explicit role ID | PASS | `code:NpcRegistry` + `EntityJoinLevelEvent` resync; `rcon:` registry survives restart |
 | Roleplay-first NPC player surface | PASS | `unit:NpcInteractionSurfaceTest` + `code:NpcRoles` — native NPC interaction presents clickable chat actions for the full player journey; client live UAT still needed for rendered behavior |
 | Native server-authoritative forms | PASS | `unit:FormSessionServiceTest` + `unit:FormPayloadSurfaceTest` + `code:StrajaFormMenu`/`StrajaFormScreen` — owner-bound, allowlisted, expiring, one-use sessions with bounded fields; quiz, mission report/fail, complaint submit/report/withdraw, appeal/review, archive sheet edit flows |
-| Roles: receptionist/recruiter/secretary/jailer/archivist/trainer | PASS | `code:NpcRoles` — receptionist: application intake, rules, status, fines, rooms, native faction, complaints; recruiter: admission exam → Stagiar; trainer: training modules, service-block progress, self-service rank-ups, physical theory manual; secretary: duty self-service, missions, Order Carnet, investigation reports; jailer: custody/downed/sentence status, officer tasks, cuffs item; archivist: folders, sheets, copies, envelopes, documents |
+| Contextual FAQ dialog trees | PASS | `unit:NpcInteractionSurfaceTest.everyVisibleFaqQuestionHasAnAllowlistedAnswer` — 36 generated questions have matching answers, rank/lifecycle gates and read-only dispatch; `docs/dialog-trees.md` is the directed-graph audit |
+| Four-NPC building layout and guided spawn | PASS | `unit:NpcInteractionSurfaceTest.physicalNpcRolesResolveToTheirConfiguredBuildingLocations`; `code:NpcCommands` — receptionist, trainer/recruiter, secretary and armorer spawn only at configured locations and refuse partial setup |
+| Secretary book-copy interaction | PASS | `unit:SecretaryServiceTest`, `unit:NpcInteractionSurfaceTest.secretaryGuidesImplicitBookCopyInteraction`; `code:MinecraftPlayerGateway` — tagged main-hand book copied with components preserved, original retained, full inventory fails closed |
+| Roles: receptionist/trainer-recruiter/secretary/armorer (+ optional custody/archive roles) | PASS | `code:NpcRoles` — receptionist: application intake, rules, status, fines, rooms, native faction, complaints and contextual FAQ; Instructor/Recrutor: admission exam → Stagiar plus training modules, service-block progress, self-service rank-ups and manual; secretary: book copy, duty self-service, missions, Order Carnet, investigation reports and contextual FAQ; armorer: rank-gated coin/reserve equipment; jailer/archivist remain optional role surfaces |
 | NPC admin commands | PASS | `rcon:` `npc list/spawn/assign/set-name/set-skin/remove` — registry-targeted, console-safe |
 | NPC interaction → application services | PASS | `code:NpcInteractionService` → `NpcRoles` → inbound `*RoleplayUseCase` ports only; state-aware actions use short-lived, one-use, TTL-expiring, player-bound tokens; text actions open native form sessions. `unit:ArchitectureBoundaryTest` bars concrete services/persistence from player-facing adapters |
 | Jailer damage → assault mission | PASS | `code:` jailer takes real damage (`StrajaNpcEntity.isInvulnerable`/`hurt` → `jailerMayTakeDamage` → `LivingDamageEvent.Post`/`LivingDeathEvent` → `createJailerAssaultMission`); `unit:CivicServiceTest.jailerAssaultCreatesUrgentMissionAndUpgradesSeverity`; `unit:StrajaPoliciesTest.jailerDamageAllowed*` (guard-immunity truth table) |

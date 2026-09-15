@@ -52,6 +52,7 @@ public final class StrajaRuntime {
     private com.dwurdy.straja.application.service.AdminToolService adminTools;
     private final com.dwurdy.straja.application.service.RoomService rooms;
     private final com.dwurdy.straja.application.service.ArchiveService archive;
+    private final com.dwurdy.straja.application.service.SecretaryService secretary;
     private final com.dwurdy.straja.application.service.MigrationService migration;
     private final com.dwurdy.straja.application.service.FormSessionService formSessions;
     private final com.dwurdy.straja.application.service.PolicyService policyService;
@@ -151,6 +152,7 @@ public final class StrajaRuntime {
         this.emergency = new com.dwurdy.straja.application.service.EmergencyService(ctx, players, audit);
         this.rooms = new com.dwurdy.straja.application.service.RoomService(ctx, players, audit, ctx.world());
         this.archive = new com.dwurdy.straja.application.service.ArchiveService(ctx, players, audit);
+        this.secretary = new com.dwurdy.straja.application.service.SecretaryService();
         this.migration = new com.dwurdy.straja.application.service.MigrationService(ctx, audit);
         this.formSessions = new com.dwurdy.straja.application.service.FormSessionService(clock, ids);
         // Runtime policy overrides: TOML-resolved baseline + persisted YAML
@@ -253,6 +255,7 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.port.in.PrisonRoleplayUseCase prisonRoleplay() { return prison; }
     public com.dwurdy.straja.application.port.in.RoomRoleplayUseCase roomRoleplay() { return rooms; }
     public com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase archiveRoleplay() { return archive; }
+    public com.dwurdy.straja.application.port.in.SecretaryRoleplayUseCase secretaryRoleplay() { return secretary; }
     public com.dwurdy.straja.application.port.in.PlayerQueryUseCase playerQueries() { return players; }
     public com.dwurdy.straja.application.port.in.NpcRegistryUseCase npcRegistry() { return npcs; }
     public com.dwurdy.straja.application.service.NpcAdminService npcs() { return npcs; }

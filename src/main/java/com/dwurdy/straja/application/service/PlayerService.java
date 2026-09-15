@@ -32,6 +32,11 @@ public class PlayerService implements com.dwurdy.straja.application.port.in.Play
         return state;
     }
 
+    @Override
+    public GuardState readState(PlayerGateway player) {
+        return ctx.players().read(player.uuid());
+    }
+
     public GuardState state(UUID uuid) {
         return ctx.players().read(uuid);
     }
