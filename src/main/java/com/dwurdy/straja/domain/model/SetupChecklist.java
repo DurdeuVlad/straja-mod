@@ -14,7 +14,7 @@ public final class SetupChecklist {
     public static List<String> missingLocations(SetupData setup) {
         var missing = new ArrayList<String>();
         for (String key : SetupData.LOCATION_KEYS) {
-            if (setup.locations.get(key) == null) missing.add(key);
+            if (setup.location(key) == null) missing.add(key);
         }
         return List.copyOf(missing);
     }
@@ -39,7 +39,9 @@ public final class SetupChecklist {
         }
         var missing = new ArrayList<String>();
         for (String role : expectedRoles) {
-            if (!present.contains(role)) missing.add(role);
+            if (!present.contains(role) && !("trainer".equals(role) && present.contains("recruiter"))) {
+                missing.add(role);
+            }
         }
         return List.copyOf(missing);
     }
@@ -53,7 +55,7 @@ public final class SetupChecklist {
             return "Lipsesc checkpoint-urile de patrulare — /straja setup patrol creează un traseu pătrat în jurul tău.";
         }
         if (!missingNpcRoles(registry, expectedRoles).isEmpty()) {
-            return "Lipsesc NPC-uri — /straja setup npcs spawnează rolurile rămase lângă tine.";
+            return "Lipsesc NPC-uri — configurează locațiile lor și rulează /straja setup npcs.";
         }
         return null;
     }

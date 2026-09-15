@@ -34,6 +34,19 @@ class PlayerServiceTest {
     }
 
     @Test
+    void readStateIsSideEffectFreeForContextualSurfaces() {
+        TestPlayer player = server.add("faq-reader");
+        var stored = ctx.players().read(player.uuid());
+        stored.lastKnownName = "";
+        ctx.players().write(player.uuid(), stored);
+
+        var state = players.readState(player);
+
+        assertEquals("", state.lastKnownName);
+        assertEquals("", ctx.players().read(player.uuid()).lastKnownName);
+    }
+
+    @Test
     void nameMatchDeniedOutsideLocalWithoutUuidPin() {
         policies.environment = "production";
         policies.commissionerUuid = "";

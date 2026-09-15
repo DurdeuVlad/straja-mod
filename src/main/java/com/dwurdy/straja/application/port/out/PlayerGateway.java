@@ -8,6 +8,15 @@ import java.util.UUID;
  * through here so the same checks apply to commands, NPCs, GUI and tests.
  */
 public interface PlayerGateway {
+    enum BookCopyResult {
+        /** The main hand does not contain an item from the book tag. */
+        NOT_A_BOOK,
+        /** One copy was inserted while the original stack stayed untouched. */
+        COPIED,
+        /** The player has a book, but no inventory space for its copy. */
+        NO_SPACE
+    }
+
     UUID uuid();
 
     String name();
@@ -53,6 +62,12 @@ public interface PlayerGateway {
     InventoryView inventory();
 
     ItemView mainHand();
+
+    /**
+     * Copies one book from the main hand without consuming the original.
+     * Concrete adapters must preserve the complete native item stack data.
+     */
+    default BookCopyResult copyMainHandBook() { return BookCopyResult.NOT_A_BOOK; }
 
     int selectedSlot();
 

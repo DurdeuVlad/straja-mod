@@ -1,5 +1,6 @@
 package com.dwurdy.straja.adapter.in.npc;
 
+import com.dwurdy.straja.adapter.out.minecraft.MinecraftPlayerGateway;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -75,6 +76,11 @@ public final class NpcInteractionService {
     private record PendingAction(UUID playerId, String actionId, long expiresAtNanos) {}
 
     public static void interact(StrajaNpcEntity npc, Player player, ServerLevel level) {
+        if (player instanceof net.minecraft.server.level.ServerPlayer serverPlayer
+                && NpcRoles.trySecretaryBookCopy(npc.getRoleId(),
+                new MinecraftPlayerGateway(serverPlayer.getServer(), serverPlayer.getUUID()))) {
+            return;
+        }
         NpcRoles.interact(npc.getRoleId(), player, level);
     }
 

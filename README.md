@@ -57,14 +57,14 @@ The NPC roles are:
 - **Receptionist** — records the Straja application ("Depune cererea"),
   rules, status, complaint submission/confirmation/withdrawal, fine
   payment/refusal/appeals, room status/release, native-faction declaration.
-- **Recruiter (Recrutor)** — the admission exam: only applicants recorded at
-  Recepție (or commissioner-invited recruits) may answer; passing authorizes
-  the applicant as Stagiar.
-- **Trainer (Instructor)** — post-admission progression only: training
-  modules, service-block points and progress, self-service rank-ups for
-  configured ranks, and the physical training manual
-  (`straja:training_manual`) — right-click it to read the rules.
-- **Secretary** — duty self-service (start/checkpoint/stop, salary, coins,
+- **Trainer / Recruiter (Instructorul)** — handles the admission exam for
+  applicants and invited recruits, then owns training modules, service-block
+  points and progress, self-service rank-ups for configured ranks, and the
+  physical training manual (`straja:training_manual`) — right-click it to read
+  the rules.
+- **Secretary** — copies a book recognized by `#minecraft:bookshelf_books`
+  held in the main hand without consuming the original; duty self-service
+  (start/checkpoint/stop, salary, coins,
   food, kit, resignation/rejoin), mission browsing/accept/report/fail, order
   carnet, complaint investigation reports, archive catalog, and **weekly
   activity reports** (§11): every member files a report per interval
@@ -95,6 +95,15 @@ The NPC roles are:
   Comisar administers templates in-game via `/straja mission template`
   (create/set/duplicate/enable/disable); issued missions keep their stamped
   reward, persist the template id, and can mark patrol-substituting work.
+- **Armorer** — rank-gated equipment, coin purchases and requisition-reserve
+  offers in the second-floor changing room.
+
+Every role surface also exposes a contextual **Am o întrebare** FAQ. The FAQ
+is read-only and filters explanations by lifecycle state, rank and Comisar
+authority; it never replaces the server-side use-case checks. The Secretary
+also copies a book held in the player's main hand on right-click, preserving
+  the original and all book components.
+
 - **Emergency system** (§25) — the Comisar (or op/console/RCON) can raise a
   TTL-bound **urgency call** (`/straja emergency alert <mesaj>`, default
   `emergency.urgencyTtlMinutes=60`): every online member — on- or off-duty —
@@ -141,18 +150,21 @@ authority.
 ## First-time setup
 
 One command drives installation: `/straja setup` prints a checklist —
-commissioner identity, the 8 administrative locations, the 4 patrol
-checkpoints, and the 5 NPC officials — and always ends with the single next
+commissioner identity, the 10 administrative locations, the 4 patrol
+checkpoints, and the 4 NPC officials — and always ends with the single next
 step. The commissioner is also nudged at login while anything is missing.
 
 The fast path from a fresh world:
 
 1. Stand where the service desks should be → `/straja setup here` stamps all
-   8 locations (receptionist, trainer, secretary, infirmary, …) at your spot.
+   10 locations (receptionist, trainer, secretary, armorer, infirmary, …) at
+   your spot; refine the four NPC locations individually for the building
+   layout.
 2. Stand in the patrol area → `/straja setup patrol` lays a 16×16 checkpoint
    square around you with default mission times.
-3. `/straja setup npcs` spawns every missing official in a row (idempotent —
-   roles already registered are skipped, so it only fills gaps).
+3. `/straja setup npcs` spawns every missing official at its configured
+   location (idempotent — roles already registered are skipped, so it only
+   fills gaps).
 
 Done. Refine individual points later with `/straja set-location <nume>`,
 `set-checkpoint <id>`, `set-mission-time <id> <min>`, and `/straja npc …`.
@@ -354,6 +366,7 @@ the baton is structurally non-lethal.
 
 See `docs/parity-matrix.md` for the full PASS/PARTIAL/BLOCKED matrix. The
 player flow is native NPCs, physical items, clickable chat, and native
-server-authoritative form screens. Client live UAT is still needed to verify
-rendered NPC interactions, form screens, item use, and end-to-end client
-experience — all current evidence is unit/build/source-level.
+server-authoritative form screens. The test profile now starts with the built
+mod loaded successfully. Client live UAT is still needed to verify rendered
+NPC interactions, form screens, item use, and the end-to-end client
+experience.

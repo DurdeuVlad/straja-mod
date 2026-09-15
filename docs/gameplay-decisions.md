@@ -68,28 +68,27 @@ Exact surfaces such as chat, TAB and nameplate may be configurable.
 
 Normal flow:
 
-`Recepție -> cerere/documente -> Recrutor -> quiz -> autorizare ca Stagiar`
+`Recepție -> cerere/documente -> Instructor/Recrutor -> quiz -> autorizare ca Stagiar`
 
 ### Receptionist
 
 - Introduces the system and rules.
 - Records the recruitment application.
 - Gives tangible RP documents where appropriate.
-- Explicitly directs the applicant to the Recruiter.
+- Explicitly directs the applicant to the Instructor, who is also the
+  Recruiter for the admission exam.
 - Physical paperwork is non-authoritative: losing/renaming it must not erase or grant application status.
-
-### Recruiter
-
-- Only tests players with a valid submitted application.
-- Uses a real multi-question quiz.
-- Wrong answers may apply a configurable cooldown.
-- Passing the full quiz authorizes the player as **Stagiar**.
-- The Recruiter cannot be used to bypass Reception/application.
 
 ### Trainer / Instructor
 
-- Separate role from Recruiter.
-- Handles training, instruction and later progression/exams.
+- Combines the former Recruiter and Trainer roles in the physical Instructor
+  NPC.
+- Only tests players with a valid submitted application or commissioner
+  invitation.
+- Uses a real multi-question admission quiz; wrong answers may apply a
+  configurable cooldown.
+- Passing the full admission quiz authorizes the player as **Stagiar**.
+- Handles training, instruction and later progression exams.
 - Whether specific training is mandatory before first duty remains configurable.
 
 ## 6. NPC roles and UX
@@ -97,9 +96,18 @@ Normal flow:
 Visible NPC roles currently in scope:
 
 - Receptionist
-- Recruiter
-- Trainer / Instructor
+- Trainer / Recruiter (Instructor)
 - Secretary
+- Armorer
+
+Physical layout: the Receptionist and Instructor share the ground-floor common
+room; the Secretary and the Commissioner's office are to the left on the first
+floor; the guards' rooms and changing room/Armorer are on the second floor;
+the prison is in the basement.
+
+The four physical NPC spawn points are configured independently as
+`receptionist`, `trainer`, `secretary` and `armorer`; guided NPC setup must use
+those points and must not silently place the NPCs beside the setup executor.
 
 Jailer/item-dependent custody expansion is postponed for now.
 
@@ -306,7 +314,7 @@ At minimum, the system should aim to make these editable without recompiling:
 - coin/item IDs, denomination order and conversion ratios;
 - checkpoint routes, locations, waits and deadlines;
 - recruitment quiz questions/answers/cooldowns;
-- Receptionist/Recruiter/Trainer/Secretary dialogue and documents;
+- Receptionist/Trainer-Recruiter/Secretary/Armorer dialogue and documents;
 - report interval and report policies;
 - mission templates, minimum ranks, default estimated hours, risk multipliers/categories, participant limits and permissions;
 - equipment/kit rules where applicable;

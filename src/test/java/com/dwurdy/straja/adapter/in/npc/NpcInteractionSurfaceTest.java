@@ -39,6 +39,23 @@ class NpcInteractionSurfaceTest {
         assertEquals(NpcPlayerSurface.RoleRoute.UNKNOWN, NpcInteractionService.routeFor("not-a-role"));
     }
 
+    @Test
+    void recruiterRoleRemainsACompatibilityAliasForTheInstructor() {
+        assertEquals(NpcPlayerSurface.RoleRoute.TRAINER,
+                NpcInteractionService.routeFor(NpcRoles.RECRUITER));
+        var surface = NpcPlayerSurface.surfaceFor(NpcRoles.RECRUITER);
+        assertEquals("Instructor", surface.title());
+        assertTrue(surface.visibleText().contains("recrutarea"));
+    }
+
+    @Test
+    void secretaryGuidesImplicitBookCopyInteraction() {
+        var secretary = NpcPlayerSurface.surfaceFor(NpcRoles.SECRETARY);
+
+        assertTrue(secretary.visibleText().contains("carte"));
+        assertTrue(secretary.visibleText().contains("copie"));
+    }
+
     @ParameterizedTest
     @MethodSource("roleRoutes")
     void ordinaryNpcGuidanceContainsNoTypedGameplayCommands(
@@ -128,7 +145,7 @@ class NpcInteractionSurfaceTest {
     }
 
     @Test
-    void applicationAtReceptionistExamAtRecruiterTrainingAtInstructor() {
+    void applicationAndAdmissionExamAreAtReceptionistThenInstructor() {
         var receptionist = NpcPlayerSurface.surfaceFor(NpcRoles.RECEPTIONIST);
         var receptionistIds = receptionist.actions().stream()
                 .map(NpcPlayerSurface.ChatAction::actionId).toList();
@@ -136,20 +153,168 @@ class NpcInteractionSurfaceTest {
                 "the receptionist records the application (§5)");
         assertTrue(receptionistIds.stream()
                         .noneMatch(a -> a.equals("recruit") || a.equals("quiz-answer")),
-                "the exam moved to the recruiter");
-
-        var recruiter = NpcPlayerSurface.surfaceFor(NpcRoles.RECRUITER);
-        assertEquals(NpcPlayerSurface.RoleRoute.RECRUITER, recruiter.route());
-        var recruiterIds = recruiter.actions().stream()
-                .map(NpcPlayerSurface.ChatAction::actionId).toList();
-        assertTrue(recruiterIds.containsAll(java.util.List.of("recruit", "quiz-answer")),
-                "the recruiter runs the admission exam");
+                "the exam moved to the Instructor");
 
         var trainer = NpcPlayerSurface.surfaceFor(NpcRoles.TRAINER);
         var trainerIds = trainer.actions().stream().map(NpcPlayerSurface.ChatAction::actionId).toList();
         assertTrue(trainerIds.containsAll(java.util.List.of("training-progress", "training-manual")));
-        assertTrue(trainerIds.stream().noneMatch(a -> a.equals("recruit") || a.equals("quiz-answer")),
-                "the trainer no longer offers the entry exam");
+        assertTrue(trainer.visibleText().contains("recrutarea"),
+                "the Instructor also owns the admission exam");
+    }
+
+    @Test
+    void faqRootIsContextualAndNeverExposesOperationalMenusToCivilians() {
+        var civil = NpcFaqSurface.Context.from(
+                new com.dwurdy.straja.domain.model.GuardState(), false, "Civil");
+        var ids = NpcFaqSurface.root(NpcPlayerSurface.RoleRoute.RECEPTIONIST, civil)
+                .actions().stream().map(NpcPlayerSurface.ChatAction::actionId).toList();
+
+        assertTrue(ids.contains("faq:menu_about_receptionist"));
+        assertTrue(ids.contains("faq:menu_entry_receptionist"));
+        assertTrue(ids.contains("faq:menu_locations_receptionist"));
+        assertFalse(ids.contains("faq:menu_duty_receptionist"));
+        assertFalse(ids.contains("faq:menu_economy_receptionist"));
+        assertFalse(ids.contains("faq:menu_missions_receptionist"));
+        assertFalse(ids.contains("faq:menu_admin_receptionist"));
+    }
+
+    @Test
+    void faqRootAddsMemberAndCommissionerBranchesOnlyWhenEligible() {
+        var state = new com.dwurdy.straja.domain.model.GuardState();
+        state.rank = com.dwurdy.straja.domain.model.Rank.SERGENT.level();
+        var member = NpcFaqSurface.Context.from(state, false, "Sergent");
+        var memberIds = NpcFaqSurface.root(NpcPlayerSurface.RoleRoute.SECRETARY, member)
+                .actions().stream().map(NpcPlayerSurface.ChatAction::actionId).toList();
+        assertTrue(memberIds.contains("faq:menu_duty_secretary"));
+        assertTrue(memberIds.contains("faq:menu_missions_secretary"));
+        assertTrue(memberIds.contains("faq:menu_economy_secretary"));
+        assertFalse(memberIds.contains("faq:menu_admin_secretary"));
+
+        var commissioner = NpcFaqSurface.Context.from(state, true, "Sergent");
+        var commissionerIds = NpcFaqSurface.root(NpcPlayerSurface.RoleRoute.SECRETARY, commissioner)
+                .actions().stream().map(NpcPlayerSurface.ChatAction::actionId).toList();
+        assertTrue(commissionerIds.contains("faq:menu_admin_secretary"));
+    }
+
+    @Test
+    void faqTargetsRoundTripAndInstructorExplainsCombinedRecruitment() {
+        var action = NpcFaqSurface.entry(NpcPlayerSurface.RoleRoute.TRAINER);
+        var target = NpcPlayerSurface.parseActionId(action.actionId()).orElseThrow();
+        var parsed = NpcFaqSurface.parseTarget(target.recordId()).orElseThrow();
+        assertEquals("root", parsed.kind());
+        assertEquals(NpcPlayerSurface.RoleRoute.TRAINER, parsed.origin());
+
+        var answer = NpcFaqSurface.answer(NpcPlayerSurface.RoleRoute.TRAINER, "entry", "exam",
+                NpcFaqSurface.Context.from(new com.dwurdy.straja.domain.model.GuardState(),
+                        false, "Civil"));
+        assertTrue(answer.contains("Instructorul este și Recrutorul"));
+
+        var roleAnswer = NpcFaqSurface.answer(NpcPlayerSurface.RoleRoute.SECRETARY,
+                "here", "role", NpcFaqSurface.Context.from(
+                        new com.dwurdy.straja.domain.model.GuardState(), false, "Civil"));
+        assertTrue(roleAnswer.startsWith("Secretariatul"));
+        assertTrue(roleAnswer.contains("copierea cărților"));
+
+        assertFalse(NpcFaqSurface.topicAvailable("duty",
+                NpcFaqSurface.Context.from(new com.dwurdy.straja.domain.model.GuardState(),
+                        false, "Civil")));
+        var active = new com.dwurdy.straja.domain.model.GuardState();
+        active.rank = com.dwurdy.straja.domain.model.Rank.STAGIAR.level();
+        assertTrue(NpcFaqSurface.topicAvailable("duty",
+                NpcFaqSurface.Context.from(active, false, "Stagiar")));
+
+        var activeContext = NpcFaqSurface.Context.from(active, false, "Stagiar");
+        assertTrue(NpcFaqSurface.answer(NpcPlayerSurface.RoleRoute.SECRETARY,
+                "duty", "stop", activeContext).contains("de oriunde"));
+        assertFalse(NpcFaqSurface.targetAvailable(
+                new NpcFaqSurface.Target("answer", "duty", "missing", NpcPlayerSurface.RoleRoute.SECRETARY),
+                activeContext));
+        assertTrue(NpcFaqSurface.targetAvailable(
+                new NpcFaqSurface.Target("answer", "duty", "stop", NpcPlayerSurface.RoleRoute.SECRETARY),
+                activeContext));
+
+        assertTrue(NpcFaqSurface.parseTarget("menu_duty_secretary").isPresent());
+        assertTrue(NpcFaqSurface.parseTarget("menu_duty_secretary_extra").isEmpty());
+        assertTrue(NpcFaqSurface.parseTarget("answer_duty_start_secretary_extra").isEmpty());
+    }
+
+    @Test
+    void everyVisibleFaqQuestionHasAnAllowlistedAnswer() {
+        var contexts = new java.util.ArrayList<NpcFaqSurface.Context>();
+        contexts.add(NpcFaqSurface.Context.from(new com.dwurdy.straja.domain.model.GuardState(), false, "Civil"));
+
+        var candidate = new com.dwurdy.straja.domain.model.GuardState();
+        candidate.applicationState = "APPLIED";
+        contexts.add(NpcFaqSurface.Context.from(candidate, false, "Civil"));
+
+        var active = new com.dwurdy.straja.domain.model.GuardState();
+        active.rank = com.dwurdy.straja.domain.model.Rank.STAGIAR.level();
+        contexts.add(NpcFaqSurface.Context.from(active, false, "Stagiar"));
+
+        var commissioner = new com.dwurdy.straja.domain.model.GuardState();
+        commissioner.rank = com.dwurdy.straja.domain.model.Rank.INSPECTOR.level();
+        contexts.add(NpcFaqSurface.Context.from(commissioner, true, "Inspector"));
+
+        for (var context : contexts) {
+            for (var role : java.util.List.of(
+                    NpcPlayerSurface.RoleRoute.RECEPTIONIST,
+                    NpcPlayerSurface.RoleRoute.TRAINER,
+                    NpcPlayerSurface.RoleRoute.SECRETARY,
+                    NpcPlayerSurface.RoleRoute.ARMORER)) {
+                var root = NpcFaqSurface.root(role, context);
+                for (var category : root.actions()) {
+                    var categoryTarget = NpcFaqSurface.parseTarget(
+                            NpcPlayerSurface.parseActionId(category.actionId()).orElseThrow().recordId()).orElseThrow();
+                    var menu = NpcFaqSurface.menu(role, context, categoryTarget.topic());
+                    for (var question : menu.actions()) {
+                        if (question.label().startsWith("Înapoi")) continue;
+                        var target = NpcFaqSurface.parseTarget(
+                                NpcPlayerSurface.parseActionId(question.actionId()).orElseThrow().recordId()).orElseThrow();
+                        assertTrue(NpcFaqSurface.targetAvailable(target, context),
+                                () -> "FAQ target rejected: " + target);
+                        assertFalse(NpcFaqSurface.answer(role, target.topic(), target.question(), context)
+                                        .contains("nu are încă un răspuns configurat"),
+                                () -> "FAQ answer missing: " + target);
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    void setupSpawnsTheFourPhysicalOfficialsAndKeepsRecruiterAsAlias() {
+        assertEquals(java.util.List.of(
+                        NpcRoles.RECEPTIONIST, NpcRoles.TRAINER,
+                        NpcRoles.SECRETARY, NpcRoles.ARMORER),
+                com.dwurdy.straja.application.service.NpcAdminService.ROLE_ORDER);
+    }
+
+    @Test
+    void physicalNpcRolesResolveToTheirConfiguredBuildingLocations() {
+        assertEquals("receptionist",
+                com.dwurdy.straja.domain.model.SetupData.npcLocationKey(NpcRoles.RECEPTIONIST));
+        assertEquals("trainer",
+                com.dwurdy.straja.domain.model.SetupData.npcLocationKey(NpcRoles.RECRUITER));
+        assertEquals("secretary",
+                com.dwurdy.straja.domain.model.SetupData.npcLocationKey(NpcRoles.SECRETARY));
+        assertEquals("armorer",
+                com.dwurdy.straja.domain.model.SetupData.npcLocationKey(NpcRoles.ARMORER));
+        assertNull(com.dwurdy.straja.domain.model.SetupData.npcLocationKey(NpcRoles.JAILER));
+
+        var legacySetup = new com.dwurdy.straja.domain.model.SetupData();
+        var legacyTrainer = new com.dwurdy.straja.domain.model.SetupData.Location();
+        legacySetup.locations.put("recruiter", legacyTrainer);
+        assertEquals(legacyTrainer, legacySetup.location("trainer"));
+        assertFalse(com.dwurdy.straja.domain.model.SetupChecklist.missingLocations(legacySetup)
+                .contains("trainer"));
+
+        var legacyRegistry = new com.dwurdy.straja.domain.model.NpcRegistry();
+        var legacyNpc = new com.dwurdy.straja.domain.model.NpcRegistry.Record();
+        legacyNpc.role = NpcRoles.RECRUITER;
+        legacyRegistry.npcs.put("legacy-recruiter", legacyNpc);
+        assertFalse(com.dwurdy.straja.domain.model.SetupChecklist.missingNpcRoles(
+                legacyRegistry, com.dwurdy.straja.application.service.NpcAdminService.ROLE_ORDER)
+                .contains(NpcRoles.TRAINER));
     }
 
     @Test

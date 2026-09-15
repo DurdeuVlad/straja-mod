@@ -391,6 +391,7 @@ public final class StrajaEvents {
                     // Same trailing-packet guard as the tool claim: a held
                     // patrol wand must not see this click as an air gesture.
                     toolClickHandledAt.put(player.getUUID(), player.level().getGameTime());
+                    if (NpcRoles.trySecretaryBookCopy(registration.role(), gateway)) return;
                     NpcRoles.interact(registration.role(), player, level);
                 }
             }

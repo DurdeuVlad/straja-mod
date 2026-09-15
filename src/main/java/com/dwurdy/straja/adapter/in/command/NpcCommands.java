@@ -3,6 +3,7 @@ package com.dwurdy.straja.adapter.in.command;
 import com.dwurdy.straja.adapter.in.npc.StrajaNpcEntity;
 import com.dwurdy.straja.bootstrap.StrajaRuntime;
 import com.dwurdy.straja.domain.model.NpcRegistry;
+import com.dwurdy.straja.domain.model.SetupData;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
@@ -10,7 +11,10 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.coordinates.Vec3Argument;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.Level;
 
 /**
  * /straja npc * — console/RCON-safe NPC administration. The persistent NPC
@@ -139,9 +143,10 @@ final class NpcCommands {
     }
 
     /**
-     * Guided setup: spawns every role missing from the registry in a row next
-     * to the executor. Idempotent — roles already registered are skipped, so
-     * re-running only fills gaps. Works from console/RCON (source position).
+     * Guided setup: spawns every missing physical role at its configured HQ
+     * location. It refuses to partially spawn a set when one of those locations
+     * is missing, because a row beside the executor would silently violate the
+     * four-NPC building layout.
      */
     static int spawnMissing(CommandContext<CommandSourceStack> ctx) {
         var runtime = StrajaRuntime.get();
@@ -153,20 +158,50 @@ final class NpcCommands {
             ctx.getSource().sendSystemMessage(Component.literal("Toate NPC-urile Straja sunt deja înregistrate."));
             return 1;
         }
-        var level = ctx.getSource().getLevel();
-        var base = ctx.getSource().getPosition();
-        float facing = ctx.getSource().getRotation().y + 180f;
-        int index = 0;
+        var setup = runtime.context().setup().read();
+        var missingLocations = new java.util.ArrayList<String>();
+        var roleLocations = new java.util.LinkedHashMap<String, SetupData.Location>();
+        var roleLevels = new java.util.LinkedHashMap<String, net.minecraft.server.level.ServerLevel>();
         for (String role : missing) {
-            var pos = base.add(index * 2.0, 0, 0);
+            String locationKey = SetupData.npcLocationKey(role);
+            var location = setup.location(locationKey);
+            if (location == null) {
+                missingLocations.add(role + " (" + locationKey + ")");
+            } else {
+                roleLocations.put(role, location);
+                String dimensionName = location.dimension == null ? "" : location.dimension;
+                ResourceLocation dimensionId = ResourceLocation.tryParse(dimensionName);
+                if (dimensionId == null) {
+                    missingLocations.add(role + " (dimensiune invalidă: " + dimensionName + ")");
+                } else {
+                    ResourceKey<Level> dimensionKey = ResourceKey.create(
+                            net.minecraft.core.registries.Registries.DIMENSION, dimensionId);
+                    var level = ctx.getSource().getServer().getLevel(dimensionKey);
+                    if (level == null) {
+                        missingLocations.add(role + " (dimensiune neîncărcată: " + dimensionName + ")");
+                    } else {
+                        roleLevels.put(role, level);
+                    }
+                }
+            }
+        }
+        if (!missingLocations.isEmpty()) {
+            ctx.getSource().sendFailure(Component.literal(
+                    "Lipsesc locațiile NPC-urilor: " + String.join(", ", missingLocations)
+                            + ". Folosește /straja set-location <nume> înainte de setup npcs."));
+            return 0;
+        }
+        for (String role : missing) {
+            var location = roleLocations.get(role);
+            var level = roleLevels.get(role);
+            var pos = new Vec3(location.x + 0.5, location.y, location.z + 0.5);
             var entity = spawnRoleEntity(runtime, level, role, pos);
-            entity.setYRot(facing);
+            entity.setYRot(0f);
             ctx.getSource().sendSystemMessage(Component.literal(
                     "NPC " + role + " creat la " + (int) pos.x + ", " + (int) pos.y + ", " + (int) pos.z));
-            index++;
         }
         ctx.getSource().sendSystemMessage(Component.literal(
-                missing.size() + " NPC-uri spawnate. Mută-le/numește-le cu /straja npc …"));
+                missing.size() + " NPC-uri spawnate în locațiile configurate ale sediului."));
         return 1;
     }
 

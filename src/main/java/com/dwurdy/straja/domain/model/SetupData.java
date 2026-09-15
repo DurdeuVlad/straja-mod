@@ -44,9 +44,20 @@ public class SetupData {
 
     public static final String[] LOCATION_KEYS = {
             "reportsLectern", "commissionerMailbox", "commissionerOffice",
-            "receptionist", "secretary", "prisonRelease", "infirmary", "trainer",
-            "recruiter", HQ
+            "receptionist", "secretary", "trainer", "armorer", "prisonRelease", "infirmary",
+            HQ
     };
+
+    /** Canonical setup location used when spawning one of the four physical NPCs. */
+    public static String npcLocationKey(String role) {
+        return switch (role == null ? "" : role.trim().toLowerCase()) {
+            case "receptionist" -> "receptionist";
+            case "trainer", "recruiter", "instructor", "recrutor" -> "trainer";
+            case "secretary", "secretara" -> "secretary";
+            case "armorer", "armourer", "armurier", "armuriera" -> "armorer";
+            default -> null;
+        };
+    }
 
     public static class Checkpoint {
         public String id;
@@ -69,7 +80,12 @@ public class SetupData {
     }
 
     public Location location(String key) {
-        return locations.get(key);
+        Location direct = locations.get(key);
+        if (direct != null) return direct;
+        // Worlds created before the Instructor/Recrutor merge persisted the
+        // physical desk as "recruiter". Read it through the new canonical key
+        // without keeping the legacy alias in the required-location list.
+        return "trainer".equals(key) ? locations.get("recruiter") : null;
     }
 
     public int missionMinutes(String checkpointId, int fallback) {
