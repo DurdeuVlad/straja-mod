@@ -58,6 +58,9 @@ jobs:
           chmod +x gradlew
           ./gradlew test jar --no-daemon --stacktrace
 
+      - name: CI tooling unit tests
+        run: python3 -m unittest discover -s tools/ci -p 'test_*.py' -v
+
       - name: Validate distributable artifact
         run: >-
           python3 tools/ci/release_contract.py artifact
