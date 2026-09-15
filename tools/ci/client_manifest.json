@@ -1,0 +1,30 @@
+{
+  "comment": "Pinned inputs for the advisory real-client UI job (CI-006). Every downloadable asset is version- and checksum-pinned where the ecosystem supports it; the runner fails closed (blocked) rather than silently substituting versions.",
+  "mct": {
+    "package": "@kzheart_/mc-pilot",
+    "version": "0.14.0",
+    "integrity": "sha512-AHYqNQnlATe/aXdhUBbdTaWLsidP3f8ZxnjO3ojReFMT0bmvBSJLISrM0ITvXR2v5VIsw3VItDbKJTXhtIjWUQ=="
+  },
+  "clientMod": {
+    "file": "mct-client-mod-neoforge-1.21.1.jar",
+    "url": "https://github.com/kzheart/mc-pilot/releases/download/v0.14.0/mct-client-mod-neoforge-1.21.1.jar",
+    "sha256": "d89bd309af94c0afe6b37dc03f8e9a689b4dabf95ff53f3f04fc7df9a7587788",
+    "note": "The 0.14.0 catalog maps the 1.21.1/neoforge variant to a v0.9.1 release that no longer exists; the runner pre-seeds the mct mod cache with this pinned asset and verifies sha256 before use."
+  },
+  "client": {
+    "name": "ci-straja",
+    "loader": "neoforge",
+    "minecraftVersion": "1.21.1",
+    "account": "ci_straja",
+    "language": "en_us",
+    "resolution": "1280x720x24",
+    "display": ":99",
+    "readyTimeoutSeconds": 300,
+    "java": "java"
+  },
+  "node": {"major": 20},
+  "aptPackages": ["xvfb", "x11-utils", "mesa-utils", "libgl1-mesa-dri", "libegl1", "libgl1"],
+  "profile": "combined",
+  "server": {"profile": "combined"},
+  "capacity": {"minCpus": 4, "minMemGiB": 8}
+}

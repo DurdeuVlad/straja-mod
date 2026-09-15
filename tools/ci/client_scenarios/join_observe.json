@@ -1,0 +1,138 @@
+{
+  "name": "join-observe",
+  "group": "client-proof",
+  "timeoutSeconds": 240,
+  "observable": "the real NeoForge client is in-world (health/position answer), a Straja NPC spawned via RCON at the player's position is visible in the client's entity list, its guidance menu reaches chat, and a framebuffer screenshot is captured",
+  "failure": "status/entity queries error, the NPC is absent from the client view, the guidance menu never arrives, or the screenshot cannot be produced",
+  "prerequisites": [
+    "combined server running",
+    "client joined as ci_straja"
+  ],
+  "steps": [
+    {
+      "name": "player-position",
+      "type": "mct",
+      "setup": true,
+      "args": [
+        "position",
+        "get"
+      ],
+      "captures": [
+        {
+          "name": "px",
+          "regex": "\"x\"\\s*:\\s*(-?[0-9.]+)"
+        },
+        {
+          "name": "py",
+          "regex": "\"y\"\\s*:\\s*(-?[0-9.]+)"
+        },
+        {
+          "name": "pz",
+          "regex": "\"z\"\\s*:\\s*(-?[0-9.]+)"
+        }
+      ]
+    },
+    {
+      "name": "spawn-trainer",
+      "type": "rcon",
+      "setup": true,
+      "command": "straja npc spawn trainer {px} {py} {pz}",
+      "capture": {
+        "name": "trainer_uuid",
+        "regex": "creat: ([0-9a-f-]{36})"
+      }
+    },
+    {
+      "name": "client-health",
+      "type": "mct",
+      "args": [
+        "status",
+        "health"
+      ],
+      "expect": [
+        {
+          "rawRegex": "\"health\"\\s*:"
+        }
+      ]
+    },
+    {
+      "name": "client-position",
+      "type": "mct",
+      "args": [
+        "position",
+        "get"
+      ],
+      "expect": [
+        {
+          "rawRegex": "\"x\"\\s*:"
+        }
+      ]
+    },
+    {
+      "name": "npc-visible",
+      "type": "mct",
+      "args": [
+        "entity",
+        "list",
+        "--radius",
+        "40"
+      ],
+      "expect": [
+        {
+          "rawRegex": "straja_npc"
+        }
+      ]
+    },
+    {
+      "name": "npc-interact",
+      "type": "mct",
+      "args": [
+        "entity",
+        "interact",
+        "--type",
+        "straja:straja_npc",
+        "--nearest",
+        "--max-distance",
+        "8"
+      ],
+      "expect": [
+        {
+          "rawRegex": "."
+        }
+      ]
+    },
+    {
+      "name": "guidance-arrives",
+      "type": "mct",
+      "args": [
+        "chat",
+        "wait",
+        "--match",
+        "[Straja]",
+        "--timeout",
+        "30"
+      ],
+      "timeout": 60,
+      "expect": [
+        {
+          "rawRegex": "Straja"
+        }
+      ]
+    },
+    {
+      "name": "join-guidance-menu",
+      "type": "screenshot"
+    },
+    {
+      "name": "join-observe",
+      "type": "screenshot"
+    }
+  ],
+  "cleanup": [
+    {
+      "name": "remove-trainer",
+      "type": "rcon",
+      "command": "straja npc remove {trainer_uuid}"
+    }
+  ]
+}

@@ -1,0 +1,198 @@
+{
+  "name": "quiz-form",
+  "group": "client-form",
+  "timeoutSeconds": 300,
+  "observable": "the client applies at the receptionist through the clickable chat menu, asks the trainer for the admission exam through a second tokenized action, opens the native NeoForge quiz form, types the correct answer (derived from the question told in chat), submits it, and the server records exactly one advancement (Răspuns corect in chat, uuid resolvable in dump-state)",
+  "failure": "a clickable action token cannot be resolved, the form never opens, the typed answer is not submitted, or the server records no quiz progress",
+  "prerequisites": [
+    "combined server running",
+    "client joined as ci_straja"
+  ],
+  "steps": [
+    {
+      "name": "player-position",
+      "type": "mct",
+      "setup": true,
+      "args": [
+        "position",
+        "get"
+      ],
+      "captures": [
+        {
+          "name": "px",
+          "regex": "\"x\"\\s*:\\s*(-?[0-9.]+)"
+        },
+        {
+          "name": "py",
+          "regex": "\"y\"\\s*:\\s*(-?[0-9.]+)"
+        },
+        {
+          "name": "pz",
+          "regex": "\"z\"\\s*:\\s*(-?[0-9.]+)"
+        }
+      ]
+    },
+    {
+      "name": "spawn-receptionist",
+      "type": "rcon",
+      "setup": true,
+      "command": "straja npc spawn receptionist {px} {py} {pz}",
+      "capture": {
+        "name": "receptionist_uuid",
+        "regex": "creat: ([0-9a-f-]{36})"
+      }
+    },
+    {
+      "name": "interact-receptionist",
+      "type": "mct",
+      "setup": true,
+      "args": [
+        "entity",
+        "interact",
+        "--type",
+        "straja:straja_npc",
+        "--nearest",
+        "--max-distance",
+        "8"
+      ]
+    },
+    {
+      "name": "apply-via-menu",
+      "type": "npc-action",
+      "label": "Depune cererea"
+    },
+    {
+      "name": "application-recorded",
+      "type": "mct",
+      "args": [
+        "chat",
+        "wait",
+        "--match",
+        "Cerere înregistrată",
+        "--timeout",
+        "30"
+      ],
+      "timeout": 60,
+      "expect": [
+        {
+          "rawRegex": "registrat"
+        }
+      ]
+    },
+    {
+      "name": "remove-receptionist",
+      "type": "rcon",
+      "setup": true,
+      "command": "straja npc remove {receptionist_uuid}"
+    },
+    {
+      "name": "spawn-trainer",
+      "type": "rcon",
+      "setup": true,
+      "command": "straja npc spawn trainer {px} {py} {pz}",
+      "capture": {
+        "name": "trainer_uuid",
+        "regex": "creat: ([0-9a-f-]{36})"
+      }
+    },
+    {
+      "name": "interact-trainer",
+      "type": "mct",
+      "setup": true,
+      "args": [
+        "entity",
+        "interact",
+        "--type",
+        "straja:straja_npc",
+        "--nearest",
+        "--max-distance",
+        "8"
+      ]
+    },
+    {
+      "name": "ask-exam",
+      "type": "npc-action",
+      "label": "Examen de admitere"
+    },
+    {
+      "name": "question-told",
+      "type": "mct",
+      "args": [
+        "chat",
+        "wait",
+        "--match",
+        "scrie:",
+        "--timeout",
+        "30"
+      ],
+      "timeout": 60,
+      "capture": {
+        "name": "answer",
+        "regex": "scrie: ([^)\"\\\\]+)"
+      }
+    },
+    {
+      "name": "interact-trainer-again",
+      "type": "mct",
+      "setup": true,
+      "args": [
+        "entity",
+        "interact",
+        "--type",
+        "straja:straja_npc",
+        "--nearest",
+        "--max-distance",
+        "8"
+      ]
+    },
+    {
+      "name": "open-quiz-form",
+      "type": "npc-action",
+      "label": "Răspunde la examen (formular)"
+    },
+    {
+      "name": "fill-answer",
+      "type": "form",
+      "expectTitleRegex": "(?i)examen|admitere|răspuns|straja",
+      "fill": [
+        "{answer}"
+      ],
+      "submit": true
+    },
+    {
+      "name": "answer-accepted",
+      "type": "mct",
+      "args": [
+        "chat",
+        "wait",
+        "--match",
+        "Răspuns corect",
+        "--timeout",
+        "30"
+      ],
+      "timeout": 60,
+      "expect": [
+        {
+          "rawRegex": "corect"
+        }
+      ]
+    },
+    {
+      "name": "progress-recorded",
+      "type": "rcon",
+      "command": "straja test dump-state {account}",
+      "expectRegex": "uuid="
+    },
+    {
+      "name": "quiz-result",
+      "type": "screenshot"
+    }
+  ],
+  "cleanup": [
+    {
+      "name": "remove-trainer",
+      "type": "rcon",
+      "command": "straja npc remove {trainer_uuid}"
+    }
+  ]
+}
