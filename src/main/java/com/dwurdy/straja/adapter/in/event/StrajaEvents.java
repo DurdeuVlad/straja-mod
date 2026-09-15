@@ -556,7 +556,7 @@ public final class StrajaEvents {
      * bounded before they reach a service, which then performs the persisted
      * existence and access checks.
      */
-    private boolean usePhysicalItem(StrajaRuntime runtime, PlayerGateway player) {
+    public static boolean usePhysicalItem(StrajaRuntime runtime, PlayerGateway player) {
         ItemView item = player.mainHand();
         switch (PhysicalItemSurface.action(item)) {
             case MISSION_CARNET -> {

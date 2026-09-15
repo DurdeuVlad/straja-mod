@@ -1,0 +1,51 @@
+name: Release candidate
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+'
+  workflow_dispatch:
+
+concurrency:
+  group: rc-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  game-tests:
+    name: NeoForge GameTests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+
+      - name: Validate release tag contract
+        if: startsWith(github.ref, 'refs/tags/')
+        run: python3 tools/ci/release_contract.py version --properties gradle.properties --tag "$GITHUB_REF_NAME"
+
+      - name: Run NeoForge GameTests
+        run: ./gradlew runGameTestServer --no-daemon --stacktrace
+
+      - name: Upload GameTest diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: gametest-diagnostics
+          path: |
+            run/logs/
+            run/crash-reports/
+          if-no-files-found: ignore
+          retention-days: 14
