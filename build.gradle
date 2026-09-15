@@ -210,6 +210,14 @@ tasks.register("publishCurseForge", net.darkhax.curseforgegradle.TaskPublishCurs
     mainFile.addRequirement("envelope")
 }
 
+// Reproducible archives: a rebuilt distributable JAR hashes identically, which
+// the artifact contract (tools/ci/release_contract.py) and the RC-to-stable
+// promotion flow rely on. Applies to every archive task, present and future.
+tasks.withType(AbstractArchiveTask).configureEach {
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+}
+
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8' // Use the UTF-8 charset for Java compilation
 }
