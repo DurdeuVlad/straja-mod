@@ -664,7 +664,10 @@ def _assert_refused(resp: str, surface: str):
 def check_test_surface_refused(ctx):
     resp = _rcon(ctx, "straja test create-player harness1")
     _assert_refused(resp, "test surface")
-    return f"refused: {resp.strip() or '(not registered)'}"
+    perf = _rcon(ctx, "straja test perf-sample")
+    _assert_refused(perf, "perf-sample")
+    return f"refused: {resp.strip() or '(not registered)'}; " \
+           f"perf-sample: {perf.strip() or '(not registered)'}"
 
 
 def _accrue_and_pay(ctx) -> str:

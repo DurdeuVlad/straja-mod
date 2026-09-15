@@ -17,6 +17,13 @@ public abstract class JsonBackedStore {
     private static final Logger LOGGER = LoggerFactory.getLogger("Straja");
     protected static final Gson GSON = new GsonBuilder().serializeNulls().create();
 
+    // NBT StringTags persist through DataOutput.writeUTF — hard-capped at
+    // 65535 modified-UTF-8 bytes. Aggregate stores can legitimately exceed
+    // that (e.g. the fines ledger under sustained volume), so large payloads
+    // are chunked across key_part_N entries; single-key storage is kept for
+    // small payloads so existing saves read back unchanged.
+    static final int CHUNK_BYTE_LIMIT = 32_000;
+
     private final StoreAccess access;
     private final String storeName;
 
@@ -30,20 +37,103 @@ public abstract class JsonBackedStore {
     }
 
     protected <T> T readJson(Class<T> type, Supplier<T> fallback) {
-        String raw = store().get("json");
+        String raw = getChunked("json");
         if (raw == null || raw.isEmpty()) return fallback.get();
         try {
             T value = GSON.fromJson(JsonParser.parseString(raw), type);
             return value != null ? value : fallback.get();
         } catch (RuntimeException error) {
             LOGGER.error("[Straja] corrupt store '{}' — backing up raw payload and starting fresh", storeName);
-            store().put("corrupt_backup", raw);
-            store().remove("json");
+            putChunked("corrupt_backup", raw);
+            removeChunked("json");
             return fallback.get();
         }
     }
 
     protected void writeJson(Object value) {
-        store().put("json", GSON.toJson(value));
+        putChunked("json", GSON.toJson(value));
+    }
+
+    /** Reads a possibly-chunked value; absent keys and single-key values behave as before. */
+    private String getChunked(String key) {
+        String single = store().get(key);
+        if (single != null) return single;
+        String count = store().get(key + "_parts");
+        if (count == null) return null;
+        int n;
+        try {
+            n = Integer.parseInt(count);
+        } catch (NumberFormatException error) {
+            return null;
+        }
+        StringBuilder joined = new StringBuilder();
+        for (int i = 0; i < n; i++) {
+            String part = store().get(key + "_part_" + i);
+            if (part == null) break; // truncated — let the parse path handle it
+            joined.append(part);
+        }
+        return joined.toString();
+    }
+
+    private void putChunked(String key, String value) {
+        removeChunked(key);
+        if (utf8Bytes(value) <= CHUNK_BYTE_LIMIT) {
+            store().put(key, value);
+            return;
+        }
+        java.util.List<String> parts = chunkUtf8(value);
+        store().put(key + "_parts", String.valueOf(parts.size()));
+        for (int i = 0; i < parts.size(); i++) {
+            store().put(key + "_part_" + i, parts.get(i));
+        }
+    }
+
+    private void removeChunked(String key) {
+        store().remove(key);
+        java.util.List<String> stale = new java.util.ArrayList<>();
+        for (String k : store().keys()) {
+            if (k.equals(key + "_parts") || k.startsWith(key + "_part_")) stale.add(k);
+        }
+        stale.forEach(store()::remove);
+    }
+
+    /** Splits on code-point boundaries so no chunk exceeds the writeUTF cap. */
+    static java.util.List<String> chunkUtf8(String value) {
+        java.util.List<String> parts = new java.util.ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        int bytes = 0;
+        for (int i = 0; i < value.length();) {
+            int cp = value.codePointAt(i);
+            int width = modifiedUtf8Width(cp);
+            if (bytes + width > CHUNK_BYTE_LIMIT && current.length() > 0) {
+                parts.add(current.toString());
+                current.setLength(0);
+                bytes = 0;
+            }
+            current.appendCodePoint(cp);
+            bytes += width;
+            i += Character.charCount(cp);
+        }
+        if (current.length() > 0) parts.add(current.toString());
+        return parts;
+    }
+
+    private static int utf8Bytes(String value) {
+        int total = 0;
+        for (int i = 0; i < value.length(); i++) {
+            int cp = value.codePointAt(i);
+            total += modifiedUtf8Width(cp);
+            i += Character.charCount(cp) - 1;
+        }
+        return total;
+    }
+
+    /** Byte width under Java's modified UTF-8 (writeUTF): supplementary
+     *  code points encode as two 3-byte surrogate halves. */
+    private static int modifiedUtf8Width(int cp) {
+        if (cp < 0x80) return 1;
+        if (cp < 0x800) return 2;
+        if (cp < 0x10000) return 3;
+        return 6;
     }
 }

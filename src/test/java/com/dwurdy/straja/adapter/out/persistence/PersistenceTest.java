@@ -86,6 +86,76 @@ class PersistenceTest {
     }
 
     @Test
+    void oversizedPayloadChunksAndRoundTrips() {
+        var repo = new SavedStores.Setup(access);
+        SetupData data = SetupData.defaults();
+        // ~100 KiB of payload — well past the writeUTF 65535-byte cap a
+        // single StringTag would hit
+        for (int i = 0; i < 400; i++) {
+            var loc = new SetupData.Location();
+            loc.x = i; loc.y = 64; loc.z = -i;
+            data.locations.put("room_" + i + "_" + "x".repeat(200), loc);
+        }
+        repo.write(data);
+
+        var keys = access.store("setup").keys();
+        assertNull(access.store("setup").get("json"));
+        assertNotNull(access.store("setup").get("json_parts"));
+        assertTrue(keys.stream().anyMatch(k -> k.startsWith("json_part_")));
+
+        SetupData loaded = repo.read();
+        assertEquals(data.locations.size(), loaded.locations.size());
+        assertTrue(loaded.locations.containsKey("room_399_" + "x".repeat(200)));
+    }
+
+    @Test
+    void chunkedPayloadShrinksBackToSingleKey() {
+        var repo = new SavedStores.Setup(access);
+        SetupData big = SetupData.defaults();
+        for (int i = 0; i < 400; i++) {
+            var loc = new SetupData.Location();
+            loc.x = i;
+            big.locations.put("room_" + i + "_" + "y".repeat(200), loc);
+        }
+        repo.write(big);
+        repo.write(SetupData.defaults());
+
+        assertNotNull(access.store("setup").get("json"));
+        assertNull(access.store("setup").get("json_parts"));
+        assertTrue(access.store("setup").keys().stream()
+                .noneMatch(k -> k.startsWith("json_part")));
+        assertEquals(0, repo.read().locations.size());
+    }
+
+    @Test
+    void chunkedCorruptPayloadStillBacksUp() {
+        var repo = new SavedStores.Setup(access);
+        access.store("setup").put("json_parts", "2");
+        access.store("setup").put("json_part_0", "{broken-");
+        access.store("setup").put("json_part_1", "still-broken");
+        SetupData data = repo.read();
+
+        assertEquals(4, data.checkpoints.size());
+        assertEquals("{broken-still-broken",
+                access.store("setup").get("corrupt_backup"));
+        // the corrupt chunked keys are cleared so the next read doesn't loop
+        assertNull(access.store("setup").get("json_parts"));
+    }
+
+    @Test
+    void chunksSplitOnCodePointBoundaries() {
+        // 'ă' is 2 UTF-8 bytes — 20000 of them exceed the 32000-byte limit
+        String heavy = "ă".repeat(20_000);
+        var parts = JsonBackedStore.chunkUtf8(heavy);
+        assertTrue(parts.size() >= 2);
+        for (String part : parts) {
+            int bytes = part.chars().map(c -> c < 0x80 ? 1 : c < 0x800 ? 2 : 3).sum();
+            assertTrue(bytes <= JsonBackedStore.CHUNK_BYTE_LIMIT);
+        }
+        assertEquals(heavy, String.join("", parts));
+    }
+
+    @Test
     void auditIsBounded() {
         var repo = new SavedStores.Audit(access, 5);
         for (int i = 0; i < 10; i++) {

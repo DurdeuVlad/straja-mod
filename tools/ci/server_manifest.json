@@ -9,7 +9,10 @@
     "artifactId": "neoforge",
     "classifier": "installer",
     "mavenBase": "https://maven.neoforged.net/releases",
-    "checksumSidecars": ["sha256", "sha512"]
+    "checksumSidecars": [
+      "sha256",
+      "sha512"
+    ]
   },
   "dependencies": {
     "envelope": {
@@ -65,64 +68,83 @@
     "required-only": {
       "description": "Straja + required Envelope runtime only. Coin provider absent by design.",
       "blocking": true,
-      "deps": ["envelope"],
+      "deps": [
+        "envelope"
+      ],
       "config": {
         "identity.environment": "local",
         "testing.enableTestCommands": true
       },
-      "timeoutSeconds": 720
+      "timeoutSeconds": 180
     },
     "coin-provider": {
       "description": "Adds Ady's Decorations so physical coin salary payments resolve.",
       "blocking": true,
-      "deps": ["envelope", "adys_decorations"],
+      "deps": [
+        "envelope",
+        "adys_decorations"
+      ],
       "config": {
         "identity.environment": "local",
         "testing.enableTestCommands": true
       },
-      "timeoutSeconds": 720
+      "timeoutSeconds": 300
     },
     "vampirism": {
       "description": "Adds Vampirism so OptionalModCompatibility routes ownership to the real provider.",
       "blocking": true,
-      "deps": ["envelope", "vampirism"],
+      "deps": [
+        "envelope",
+        "vampirism"
+      ],
       "config": {
         "identity.environment": "local",
         "testing.enableTestCommands": true
       },
-      "timeoutSeconds": 720
+      "timeoutSeconds": 300
     },
     "combined": {
       "description": "All declared server-side dependencies together.",
       "blocking": true,
-      "deps": ["envelope", "adys_decorations", "vampirism"],
+      "deps": [
+        "envelope",
+        "adys_decorations",
+        "vampirism"
+      ],
       "config": {
         "identity.environment": "local",
         "testing.enableTestCommands": true
       },
-      "timeoutSeconds": 720
+      "timeoutSeconds": 300
     },
     "production-config": {
       "description": "Combined dependencies under a hardened production-like config. Debug/test surfaces must fail closed.",
       "blocking": true,
-      "deps": ["envelope", "adys_decorations", "vampirism"],
+      "deps": [
+        "envelope",
+        "adys_decorations",
+        "vampirism"
+      ],
       "config": {
         "identity.environment": "production",
         "identity.commissionerUuid": "11111111-2222-3333-4444-555555555555",
         "debug.enabled": false,
         "testing.enableTestCommands": false
       },
-      "timeoutSeconds": 720
+      "timeoutSeconds": 300
     },
     "foreign-npc": {
       "description": "Advisory: CustomNPCs co-installed. Reported pass/fail/blocked; never blocks.",
       "blocking": false,
-      "deps": ["envelope", "customnpcs"],
+      "deps": [
+        "envelope",
+        "customnpcs"
+      ],
       "config": {
         "identity.environment": "local",
         "testing.enableTestCommands": true
       },
-      "timeoutSeconds": 720
+      "timeoutSeconds": 300
     }
   }
 }
