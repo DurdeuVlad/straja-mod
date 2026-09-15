@@ -319,15 +319,37 @@ Contributing to dev runs: Envelope resolves automatically from Modrinth Maven.
 Ady's Decorations is not redistributed — drop its jar into `libs/` to have the
 default coins in `runServer`.
 
-Releases publish to Modrinth and CurseForge through
-[`.github/workflows/release.yml`](.github/workflows/release.yml) when a `v*` tag
-is pushed. Configure these repository-level GitHub Actions values first:
+Releases are evidence-gated. Push `vX.Y.Z-rc.N` to run
+[`.github/workflows/rc.yml`](.github/workflows/rc.yml): the JAR is built once,
+attested with Sigstore provenance, verified by digest through GameTests,
+dedicated-server profiles, the RCON scenario suite, and the performance
+budgets, then published as a **beta** to Modrinth and CurseForge and
+finalized as a GitHub **prerelease** carrying the release manifest, SBOM,
+checksums, and publication ledger. The advisory real-client UI job reports
+its verdict in the manifest but never blocks publication.
+
+Push the matching stable tag `vX.Y.Z` on the **same commit** to run
+[`.github/workflows/release.yml`](.github/workflows/release.yml): it locates
+the highest green RC for that version+commit, downloads the exact RC bytes,
+re-verifies the digest and attestation, promotes the Modrinth version to a
+release (retaining the file hash), uploads the identical bytes to CurseForge
+as a release file, and creates the stable GitHub Release last. No compile or
+JAR task runs during promotion. `workflow_dispatch` supports `dry_run` for a
+no-mutation validation pass.
+
+Repository setup (names only — values stay in GitHub settings):
 
 - **Secrets:** `MODRINTH_TOKEN`, `CURSEFORGE_API_KEY`
-- **Variables:** `MODRINTH_PROJECT_ID`, `CURSEFORGE_PROJECT_ID`
+- **Variables:** `MODRINTH_PROJECT_ID`, `CURSEFORGE_PROJECT_ID`,
+  optionally `CURSEFORGE_GAME_VERSIONS` (numeric IDs; names are resolved
+  through the CurseForge API when unset)
+- **Environment:** `release`, restricted to release workflows/tags
+- **Tags:** restrict `v*` creation to maintainers; protect `main` with the
+  PR checks from `ci.yml`
 
-The workflow builds and tests the mod, publishes the matching NeoForge 1.21.1
-file to both platforms, and creates a GitHub Release with the jar attached.
+All external mutations are query-before-create: a matching remote
+version/hash is an idempotent no-op, while the same version carrying
+different bytes fails closed. The workflow never deletes remote releases.
 
 ## Testing
 

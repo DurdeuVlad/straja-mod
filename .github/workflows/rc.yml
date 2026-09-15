@@ -21,6 +21,8 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+      id-token: write      # Sigstore provenance attestation
+      attestations: write
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -48,6 +50,20 @@ jobs:
           --libs-dir build/libs
           --checksum-dir build/release
 
+      - name: Attest build provenance
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: build/libs/straja-*.jar
+
+      - name: Generate SBOM
+        if: startsWith(github.ref, 'refs/tags/')
+        run: >-
+          python3 tools/ci/publish.py sbom
+          --server-manifest tools/ci/server_manifest.json
+          --version "$(grep -Po '(?<=^mod_version=).*' gradle.properties)"
+          --out build/release/sbom.json
+
       - name: Upload staged artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -56,6 +72,7 @@ jobs:
             build/libs/straja-*.jar
             build/release/straja-*.jar.sha256
             build/release/straja-*.jar.sha512
+            build/release/sbom.json
           if-no-files-found: error
           overwrite: true
           retention-days: 14
@@ -402,3 +419,165 @@ jobs:
           VERDICT=$(python3 -c "import json;print(json.load(open('client-ui/client-report.json'))['verdict'])")
           echo "client-ui advisory verdict: $VERDICT"
           case "$VERDICT" in pass|fail|blocked) ;; *) exit 1;; esac
+
+  publish-beta:
+    name: Publish beta (RC evidence ledger)
+    # Runs only after every blocking gate passed. Publishes the exact
+    # staged JAR as a beta on Modrinth + CurseForge, then finalizes the
+    # GitHub prerelease LAST — it is the long-lived evidence ledger the
+    # stable promotion consumes (workflow artifacts expire in days).
+    needs: [package, game-tests, server-profiles, foreign-npc-advisory,
+            rc-scenarios, rc-performance, client-ui-advisory, profiles-gate]
+    # The gate job uses if:always(), so its own result must be checked —
+    # a failed gate must never reach publication.
+    if: >-
+      startsWith(github.ref, 'refs/tags/')
+      && needs.profiles-gate.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Download staged artifact
+        uses: actions/download-artifact@fdfa46a5c1cdeed02ba81aa0a28576771a4ba60f1 # v7.0.0
+        with:
+          name: straja-jar
+          path: staged/
+
+      - name: Download foreign-NPC advisory report
+        uses: actions/download-artifact@fdfa46a5c1cdeed02ba81aa0a28576771a4ba60f1 # v7.0.0
+        with:
+          name: server-profile-foreign-npc
+          path: advisory/
+        continue-on-error: true
+
+      - name: Download client UI advisory report
+        uses: actions/download-artifact@fdfa46a5c1cdeed02ba81aa0a28576771a4ba60f1 # v7.0.0
+        with:
+          name: client-ui
+          path: advisory/
+        continue-on-error: true
+
+      - name: Verify JAR digest and build release manifest
+        env:
+          PKG: ${{ needs.package.result }}
+          GT: ${{ needs.game-tests.result }}
+          PROFILES: ${{ needs.server-profiles.result }}
+          SCENARIOS: ${{ needs.rc-scenarios.result }}
+          PERF: ${{ needs.rc-performance.result }}
+        run: |
+          set -euo pipefail
+          JAR=$(ls staged/straja-*.jar | head -1)
+          EXPECTED=$(cut -d' ' -f1 "staged/$(basename "$JAR").sha256")
+          EXPECTED512=$(cut -d' ' -f1 "staged/$(basename "$JAR").sha512")
+          echo "$EXPECTED  $JAR" | sha256sum --check -
+          FN=$(find advisory -name result.json -o -name client-report.json 2>/dev/null || true)
+          python3 - "$FN" <<'PYEOF'
+          import json, os, sys
+          gates = {"package": os.environ["PKG"],
+                   "game_tests": os.environ["GT"],
+                   "server_profiles": os.environ["PROFILES"],
+                   "rc_scenarios": os.environ["SCENARIOS"],
+                   "rc_performance": os.environ["PERF"]}
+          for p in sys.argv[1].split():
+              d = json.load(open(p))
+              key = "client_ui_advisory" if "client-report" in p \
+                  else "foreign_npc_advisory"
+              gates[key] = d.get("verdict") or d.get("status") or "missing"
+          gates.setdefault("foreign_npc_advisory", "missing")
+          gates.setdefault("client_ui_advisory", "missing")
+          json.dump(gates, open("gates.json", "w"), indent=2)
+          print(json.dumps(gates))
+          PYEOF
+          VERSION=$(grep -Po '(?<=^mod_version=).*' gradle.properties)
+          python3 tools/ci/publish.py evidence \
+            --tag "$GITHUB_REF_NAME" --commit "$GITHUB_SHA" \
+            --version "$VERSION" --jar "$JAR" \
+            --sha256 "$EXPECTED" --sha512 "$EXPECTED512" \
+            --gates-json gates.json \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            --out release-manifest.json
+          cp staged/*.sha256 staged/*.sha512 staged/sbom.json .
+          echo "JAR=$JAR" >> "$GITHUB_ENV"
+
+      - name: Validate publication configuration
+        env:
+          MODRINTH_PROJECT_ID: ${{ vars.MODRINTH_PROJECT_ID }}
+          CURSEFORGE_PROJECT_ID: ${{ vars.CURSEFORGE_PROJECT_ID }}
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+          CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
+        run: |
+          missing=()
+          [[ -n "$MODRINTH_PROJECT_ID" ]] || missing+=(MODRINTH_PROJECT_ID)
+          [[ -n "$CURSEFORGE_PROJECT_ID" ]] || missing+=(CURSEFORGE_PROJECT_ID)
+          [[ -n "$MODRINTH_TOKEN" ]] || missing+=(MODRINTH_TOKEN)
+          [[ -n "$CURSEFORGE_API_KEY" ]] || missing+=(CURSEFORGE_API_KEY)
+          if (( ${#missing[@]} > 0 )); then
+            echo "::error::missing repository configuration: ${missing[*]}"
+            exit 1
+          fi
+          echo "MODRINTH_PROJECT_ID=$MODRINTH_PROJECT_ID" >> "$GITHUB_ENV"
+          echo "CURSEFORGE_PROJECT_ID=$CURSEFORGE_PROJECT_ID" >> "$GITHUB_ENV"
+
+      - name: Publish beta to Modrinth
+        env:
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+        run: >-
+          python3 tools/ci/publish.py modrinth
+          --project-id "$MODRINTH_PROJECT_ID"
+          --tag "$GITHUB_REF_NAME" --name "Straja $GITHUB_REF_NAME"
+          --version-type beta --jar "$JAR"
+          --sha256 "$(cut -d' ' -f1 straja-*.sha256 | head -1)"
+          --game-versions 1.21.1 --loaders neoforge
+          --changelog "Release candidate $GITHUB_REF_NAME — see GitHub prerelease for full evidence."
+          --ledger modrinth-ledger.json
+
+      - name: Publish beta to CurseForge
+        env:
+          CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
+          CURSEFORGE_GAME_VERSIONS: ${{ vars.CURSEFORGE_GAME_VERSIONS }}
+        run: >-
+          python3 tools/ci/publish.py curseforge
+          --project-id "$CURSEFORGE_PROJECT_ID"
+          --tag "$GITHUB_REF_NAME" --name "Straja $GITHUB_REF_NAME"
+          --release-type beta --jar "$JAR"
+          --game-versions "${CURSEFORGE_GAME_VERSIONS:-1.21.1,NeoForge}"
+          --changelog "Release candidate $GITHUB_REF_NAME — see GitHub prerelease for full evidence."
+          --ledger curseforge-ledger.json
+
+      - name: Finalize GitHub prerelease (evidence ledger)
+        # Always runs: the prerelease doubles as the publication ledger, so
+        # a partial external failure still leaves an inspectable record.
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >-
+          python3 tools/ci/publish.py merge-ledger
+          --ledgers modrinth-ledger.json curseforge-ledger.json
+          --out publication-ledger.json
+          &&
+          python3 tools/ci/publish.py github
+          --repo "$GITHUB_REPOSITORY" --tag "$GITHUB_REF_NAME"
+          --name "Straja $GITHUB_REF_NAME (release candidate)"
+          --notes "Release candidate. Blocking gates green; advisory client verdict recorded in release-manifest.json. Promote by pushing the matching stable tag."
+          --commit "$GITHUB_SHA" --prerelease
+          --files "$JAR" straja-*.sha256 straja-*.sha512 release-manifest.json sbom.json publication-ledger.json
+          --ledger github-ledger.json
+
+      - name: Upload publication ledger
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: publication-ledger
+          path: |
+            publication-ledger.json
+            *-ledger.json
+            release-manifest.json
+            gates.json
+          if-no-files-found: warn
+          retention-days: 90

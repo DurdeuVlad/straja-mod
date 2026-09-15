@@ -1,67 +1,206 @@
-name: Release
+name: Stable release promotion
+
+# Promotes the exact RC-tested bytes to stable. No Gradle task runs here:
+# the JAR is downloaded from the matching green release-candidate
+# prerelease and verified by digest before any external mutation.
 
 on:
   push:
-    tags: ['v*']
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Stable tag to promote (e.g. v0.2.0)'
+        required: true
+      dry_run:
+        description: 'Validate and plan only; perform no external mutation'
+        type: boolean
+        default: true
 
-permissions:
-  contents: write
+permissions: {}
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.ref_name }}
   cancel-in-progress: false
 
 jobs:
-  release:
-    runs-on: ubuntu-latest
+  promote:
+    name: Promote verified RC to stable
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: release
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+      DRY_RUN: ${{ inputs.dry_run || false }}
     steps:
-      - uses: actions/checkout@v5
-
-      - uses: actions/setup-java@v5
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          distribution: temurin
-          java-version: 21
+          ref: ${{ inputs.tag || github.ref }}
 
-      - uses: gradle/actions/setup-gradle@v4
-
-      - name: Build
+      - name: Resolve tag commit
+        # workflow_dispatch is not on the tag ref, so resolve the commit the
+        # tag actually points at (peeling annotated tag objects).
+        id: tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          chmod +x gradlew
-          ./gradlew build --no-daemon
+          set -euo pipefail
+          REF=$(gh api "repos/$GITHUB_REPOSITORY/git/refs/tags/$TAG")
+          SHA=$(echo "$REF" | python3 -c "import json,sys;print(json.load(sys.stdin)['object']['sha'])")
+          TYPE=$(echo "$REF" | python3 -c "import json,sys;print(json.load(sys.stdin)['object']['type'])")
+          if [ "$TYPE" = "tag" ]; then
+            SHA=$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$SHA" \
+              --jq '.object.sha')
+          fi
+          echo "commit=$SHA" >> "$GITHUB_OUTPUT"
+          echo "tag $TAG -> commit $SHA"
 
-      - name: Validate publishing configuration
+      - name: Validate tag/version contract
+        run: >-
+          python3 tools/ci/release_contract.py version
+          --properties gradle.properties --tag "$TAG"
+
+      - name: Locate highest green matching RC
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >-
+          python3 tools/ci/publish.py resolve-rc
+          --repo "$GITHUB_REPOSITORY" --tag "$TAG"
+          --commit "${{ steps.tag.outputs.commit }}"
+          --out rc-manifest.json
+
+      - name: Download RC prerelease assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          RC=$(python3 -c "import json;print(json.load(open('rc-manifest.json'))['rc_tag'])")
+          echo "RC_TAG=$RC" >> "$GITHUB_ENV"
+          JAR=$(python3 -c "import json;print(json.load(open('rc-manifest.json'))['jar'])")
+          gh release download "$RC" --repo "$GITHUB_REPOSITORY" \
+            --pattern "$JAR" --pattern "*.sha256" --pattern "*.sha512" \
+            --pattern "release-manifest.json" --pattern "sbom.json" \
+            --pattern "publication-ledger.json" \
+            --dir promoted --clobber
+          EXPECTED=$(python3 -c "import json;print(json.load(open('rc-manifest.json'))['sha256'])")
+          echo "$EXPECTED  promoted/$JAR" | sha256sum --check -
+          echo "RC_JAR=promoted/$JAR" >> "$GITHUB_ENV"
+
+      - name: Verify Sigstore attestation
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >-
+          gh attestation verify "$RC_JAR"
+          --repo "$GITHUB_REPOSITORY"
+
+      - name: Validate promotion configuration
         env:
           MODRINTH_PROJECT_ID: ${{ vars.MODRINTH_PROJECT_ID }}
           CURSEFORGE_PROJECT_ID: ${{ vars.CURSEFORGE_PROJECT_ID }}
           MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
           CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
         run: |
-          set -euo pipefail
           missing=()
           [[ -n "$MODRINTH_PROJECT_ID" ]] || missing+=(MODRINTH_PROJECT_ID)
           [[ -n "$CURSEFORGE_PROJECT_ID" ]] || missing+=(CURSEFORGE_PROJECT_ID)
           [[ -n "$MODRINTH_TOKEN" ]] || missing+=(MODRINTH_TOKEN)
           [[ -n "$CURSEFORGE_API_KEY" ]] || missing+=(CURSEFORGE_API_KEY)
           if (( ${#missing[@]} > 0 )); then
-            echo "Missing GitHub Actions configuration: ${missing[*]}" >&2
+            echo "::error::missing repository configuration: ${missing[*]}"
             exit 1
           fi
+          echo "MODRINTH_PROJECT_ID=$MODRINTH_PROJECT_ID" >> "$GITHUB_ENV"
+          echo "CURSEFORGE_PROJECT_ID=$CURSEFORGE_PROJECT_ID" >> "$GITHUB_ENV"
 
-      - name: Publish to Modrinth
+      - name: Promote Modrinth RC metadata to release
         env:
           MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
-          MODRINTH_PROJECT_ID: ${{ vars.MODRINTH_PROJECT_ID }}
-        run: ./gradlew modrinth -Pmodrinth_project_id="$MODRINTH_PROJECT_ID" --no-daemon
+        run: >-
+          python3 tools/ci/publish.py modrinth
+          --project-id "$MODRINTH_PROJECT_ID"
+          --tag "$TAG" --name "Straja ${TAG#v}"
+          --promote-from "$RC_TAG"
+          --sha256 "$(python3 -c "import json;print(json.load(open('rc-manifest.json'))['sha256'])")"
+          --game-versions 1.21.1 --loaders neoforge
+          --ledger modrinth-ledger.json
+          ${{ env.DRY_RUN == 'true' && '--dry-run' || '' }}
 
-      - name: Publish to CurseForge
+      - name: Upload exact bytes to CurseForge as release
+        # CurseForge has no metadata-promotion endpoint; the identical
+        # already-tested JAR bytes are uploaded with releaseType=release.
+        # Hash matching makes a repeat upload a no-op.
         env:
           CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
-          CURSEFORGE_PROJECT_ID: ${{ vars.CURSEFORGE_PROJECT_ID }}
-        run: ./gradlew publishCurseForge -Pcurseforge_project_id="$CURSEFORGE_PROJECT_ID" --no-daemon
+          CURSEFORGE_GAME_VERSIONS: ${{ vars.CURSEFORGE_GAME_VERSIONS }}
+        run: >-
+          python3 tools/ci/publish.py curseforge
+          --project-id "$CURSEFORGE_PROJECT_ID"
+          --tag "$TAG" --name "Straja ${TAG#v}"
+          --release-type release --jar "$RC_JAR"
+          --game-versions "${CURSEFORGE_GAME_VERSIONS:-1.21.1,NeoForge}"
+          --changelog "Stable release $TAG — promoted byte-identically from $RC_TAG. See GitHub release for the full evidence ledger."
+          --ledger curseforge-ledger.json
+          ${{ env.DRY_RUN == 'true' && '--dry-run' || '' }}
 
-      - name: GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: Finalize GitHub stable release (last)
+        # GitHub is the release ledger: created/marked latest only after
+        # every external target verified or recorded.
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          LEDGERS=""
+          for f in modrinth-ledger.json curseforge-ledger.json; do
+            [ -f "$f" ] && LEDGERS="$LEDGERS $f"
+          done
+          python3 tools/ci/publish.py merge-ledger $LEDGERS \
+            --out publication-ledger.json 2>/dev/null || \
+            echo '{"entries":[]}' > publication-ledger.json
+          # External steps must have succeeded (or dry-run) before the
+          # stable release is finalized.
+          if [ "$DRY_RUN" != "true" ]; then
+            python3 - <<'PYEOF'
+          import json, sys
+          entries = json.load(open("publication-ledger.json"))["entries"]
+          bad = [e for e in entries
+                 if e["platform"] in ("modrinth", "curseforge")
+                 and e["state"] not in ("published", "promoted", "noop")]
+          if bad:
+              sys.exit(f"external promotion incomplete: "
+                       f"{[(e['platform'], e['state']) for e in bad]}")
+          PYEOF
+          fi
+          cp "$RC_JAR" . 2>/dev/null || true
+          NOTES="Stable release $TAG. Promoted byte-identically from verified RC $RC_TAG. Publication ledger attached."
+          if [ "$DRY_RUN" = "true" ]; then
+            python3 tools/ci/publish.py github --repo "$GITHUB_REPOSITORY" \
+              --tag "$TAG" --name "Straja ${TAG#v}" --notes "$NOTES" \
+              --commit "${{ steps.tag.outputs.commit }}" --latest --dry-run \
+              --files straja-*.jar rc-manifest.json publication-ledger.json \
+              --ledger github-ledger.json
+          else
+            python3 tools/ci/publish.py github --repo "$GITHUB_REPOSITORY" \
+              --tag "$TAG" --name "Straja ${TAG#v}" --notes "$NOTES" \
+              --commit "${{ steps.tag.outputs.commit }}" --latest \
+              --files straja-*.jar promoted/*.sha256 promoted/*.sha512 \
+                promoted/release-manifest.json promoted/sbom.json \
+                promoted/publication-ledger.json publication-ledger.json \
+              --ledger github-ledger.json
+          fi
+
+      - name: Upload promotion ledger
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          files: build/libs/*.jar
-          generate_release_notes: true
+          name: promotion-ledger
+          path: |
+            publication-ledger.json
+            *-ledger.json
+            rc-manifest.json
+          if-no-files-found: warn
+          retention-days: 90

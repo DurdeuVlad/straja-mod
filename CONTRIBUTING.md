@@ -26,3 +26,15 @@ Hexagonal ports-and-adapters — `ArchitectureBoundaryTest` enforces it:
   the result in the PR.
 - Every key in `straja-server.toml` must actually do something — don't add
   config knobs that aren't consumed.
+
+## Releases
+
+- Tag `vX.Y.Z-rc.N` to cut a release candidate: the RC workflow builds the
+  JAR once, runs the blocking gates (GameTests, dedicated-server profiles,
+  RCON scenarios, performance budgets), records the advisory client verdict,
+  and publishes a beta + evidence prerelease.
+- Tag `vX.Y.Z` on the same commit to promote the verified RC bytes to
+  stable — promotion never rebuilds.
+- `mod_version` in `gradle.properties` must equal `X.Y.Z` exactly.
+- See `docs/testing.md` for the pipeline layers and `README.md` for the
+  repository settings runbook.
