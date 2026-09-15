@@ -1,24 +1,133 @@
 name: CI
 
+# Fast, secretless contract for every push, PR, and merge-queue entry.
+# No Minecraft server or client is launched here; runtime jobs live in the
+# release-candidate pipeline.
+
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
+  merge_group:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  version-contract:
+    name: Version and tag contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v5
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-java@v5
+      - name: Validate mod_version and release tag
+        # On tag pushes this fails closed before any later job (or credential)
+        # is touched; on branches/PRs it only checks the mod_version contract.
+        run: >-
+          python3 tools/ci/release_contract.py version
+          --properties gradle.properties
+          --tag "${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}"
+
+  build:
+    name: Build, test, and package
+    needs: version-contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Java 21
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: 21
 
-      - uses: gradle/actions/setup-gradle@v4
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
 
       - name: Build and test
         run: |
           chmod +x gradlew
-          ./gradlew build --no-daemon
+          ./gradlew test jar --no-daemon --stacktrace
+
+      - name: Validate distributable artifact
+        run: >-
+          python3 tools/ci/release_contract.py artifact
+          --properties gradle.properties
+          --libs-dir build/libs
+          --checksum-dir build/release
+
+      - name: Upload distributable artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: straja-jar
+          path: |
+            build/libs/straja-*.jar
+            build/release/straja-*.jar.sha256
+            build/release/straja-*.jar.sha512
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 14
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-reports-${{ github.run_id }}
+          path: |
+            build/reports/tests/
+            build/test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  dependency-submission:
+    name: Dependency graph submission
+    # GitHub's dependency graph cannot scan Groovy build files; resolved
+    # dependencies are submitted instead. Baseline snapshots come from pushes
+    # to main; head snapshots come from same-repo PRs (fork tokens are
+    # read-only and cannot submit).
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+      || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Java 21
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x gradlew
+
+      - name: Submit Gradle dependencies
+        uses: gradle/actions/dependency-submission@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+
+  dependency-review:
+    name: Dependency review
+    # Blocks newly introduced moderate-or-higher known vulnerabilities on PRs.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Review dependency changes
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: moderate

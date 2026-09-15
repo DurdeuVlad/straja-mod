@@ -27,3 +27,7 @@ repo
 
 # vendored optional-dependency jars are not redistributed
 libs/*.jar
+
+# python tooling under tools/
+__pycache__/
+*.pyc
