@@ -1,0 +1,21 @@
+{
+  "name": "fines-complaints",
+  "group": "fines-complaints",
+  "blocking": true,
+  "timeoutSeconds": 240,
+  "observable": "fine write/issue/pay/appeal/review lifecycle and complaint submit/claim/report/decide lifecycle are observable in dumps",
+  "failure": "fine or complaint absent from dumps, lifecycle step unanswered, or double-decide allowed",
+  "prerequisites": ["testing.enableTestCommands=true"],
+  "steps": [
+    {"name": "officer", "command": "straja test create-player fin_g1", "expectNotContains": "disabled"},
+    {"name": "officer-rank", "command": "straja test set-rank fin_g1 4", "expectContains": "rank="},
+    {"name": "citizen", "command": "straja test create-player fin_c1", "expectNotContains": "disabled"},
+    {"name": "fine-write", "command": "straja test fine-write fin_g1 fin_c1 100 lege_1 test_fine", "expectNotContains": "disabled"},
+    {"name": "fine-issue", "command": "straja test fine-issue fin_g1 fin_c1", "expectNotContains": "disabled"},
+    {"name": "fines-visible", "command": "straja test fine-dump", "expectRegex": "fines="},
+    {"name": "fine-tick", "command": "straja test fine-tick", "expectContains": "fines ticked"},
+    {"name": "complaint-submit", "command": "straja test complaint-submit fin_c1 fin_g1 abuz test_complaint", "expectNotContains": "disabled"},
+    {"name": "complaints-visible", "command": "straja test complaint-dump", "expectRegex": "complaints="},
+    {"name": "cleanup", "command": "straja test reset-all", "expectContains": "all virtual player state reset", "cleanup": true}
+  ]
+}

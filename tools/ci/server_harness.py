@@ -413,9 +413,11 @@ class RconClient:
         self.host, self.port, self.password, self.timeout = host, port, password, timeout
 
     def execute(self, command: str) -> str:
-        sock = socket.create_connection((self.host, self.port), timeout=self.timeout)
-        sock.settimeout(self.timeout)
+        sock = None
         try:
+            sock = socket.create_connection((self.host, self.port),
+                                            timeout=self.timeout)
+            sock.settimeout(self.timeout)
             sock.sendall(_rcon_packet(1, _SERVERDATA_AUTH, self.password))
             header = _rcon_recv_exact(sock, 4)
             if len(header) < 4:
@@ -443,7 +445,8 @@ class RconClient:
         except (ConnectionRefusedError, socket.timeout, OSError) as exc:
             raise HarnessError(RCON_LOST, f"rcon {command!r}: {exc}")
         finally:
-            sock.close()
+            if sock is not None:
+                sock.close()
 
 
 # ---------------------------------------------------------------------------
@@ -454,10 +457,10 @@ _CRASH_RE = re.compile(r'Exception in server tick loop|Failed to start the minec
 
 
 def start_server(server_dir: str, argfile: str, log_path: str,
-                 heap: str = "2G"):
+                 heap: str = "2G", append: bool = False):
     rel = os.path.relpath(argfile, server_dir)
     cmd = ["java", f"-Xmx{heap}", "-Xms512m", f"@{rel}", "nogui"]
-    log_fh = open(log_path, "wb")
+    log_fh = open(log_path, "ab" if append else "wb")
     kwargs = {}
     if os.name == "nt":
         kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP

@@ -1,0 +1,22 @@
+{
+  "name": "bootstrap-security",
+  "group": "bootstrap",
+  "blocking": true,
+  "timeoutSeconds": 120,
+  "observable": "virtual players create/remove/list; commissioner pins; policy reads; reset cleans state",
+  "failure": "any expectation unmet, or a command answered by a gate refusal",
+  "prerequisites": ["testing.enableTestCommands=true", "environment=local"],
+  "steps": [
+    {"name": "create-commissioner-player", "command": "straja test create-player sec_com", "expectNotContains": "disabled"},
+    {"name": "list-shows-player", "command": "straja test list-players", "expectContains": "sec_com"},
+    {"name": "pin-commissioner", "command": "straja test set-commissioner sec_com", "expectRegex": "commissioner"},
+    {"name": "commissioner-persists", "command": "straja test dump-state sec_com", "expectRegex": "uuid=[0-9a-f-]{36}"},
+    {"name": "policy-read", "command": "straja test policy-get sec_com timers.serviceBlockMinutes", "expectNotContains": "disabled"},
+    {"name": "policy-value", "command": "straja test tell-log sec_com", "expectRegex": "timers.serviceBlockMinutes = "},
+    {"name": "create-second-player", "command": "straja test create-player sec_two", "expectNotContains": "disabled"},
+    {"name": "second-listed", "command": "straja test list-players", "expectContains": "sec_two"},
+    {"name": "remove-second", "command": "straja test remove-player sec_two", "expectNotContains": "disabled"},
+    {"name": "second-gone", "command": "straja test list-players", "expectNotContains": "sec_two"},
+    {"name": "cleanup-reset", "command": "straja test reset-all", "expectContains": "all virtual player state reset", "cleanup": true}
+  ]
+}

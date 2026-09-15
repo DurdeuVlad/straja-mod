@@ -1,0 +1,33 @@
+{
+  "name": "restart-persistence",
+  "group": "restart",
+  "blocking": true,
+  "timeoutSeconds": 420,
+  "observable": "state created in persisted aggregates survives a clean stop+start; recovery invoked twice produces no duplicate effects",
+  "failure": "post-restart assertions differ, server fails to restart, or duplicate recovery effects appear",
+  "prerequisites": ["testing.enableTestCommands=true"],
+  "steps": [
+    {"name": "commissioner", "command": "straja test create-player rst_com", "expectNotContains": "disabled"},
+    {"name": "pin-commissioner", "command": "straja test set-commissioner rst_com", "expectRegex": "commissioner"},
+    {"name": "guard", "command": "straja test create-player rst_g1", "expectNotContains": "disabled"},
+    {"name": "guard-rank", "command": "straja test set-rank rst_g1 3", "expectContains": "rank="},
+    {"name": "wand-cp1", "command": "straja test tool-patrol rst_com 0 64 0", "expectNotContains": "disabled"},
+    {"name": "wand-cp2", "command": "straja test tool-patrol rst_com 8 64 0", "expectNotContains": "disabled"},
+    {"name": "route-finish", "command": "straja test tool-patrol-finish rst_com", "expectNotContains": "disabled"},
+    {"name": "fine-seed", "command": "straja test fine-write rst_g1 rst_com 50 lege_x persist_fine", "expectNotContains": "disabled"},
+    {"name": "room-seed", "command": "straja test room-discover rst_g1 camera_p", "expectNotContains": "disabled"},
+    {"name": "pre-restart-state", "command": "straja test dump-state rst_g1", "expectRegex": "rank=3"},
+    {"name": "restart-server", "type": "restart"},
+    {"name": "recreate-commissioner", "command": "straja test create-player rst_com", "expectNotContains": "disabled"},
+    {"name": "recreate-guard", "command": "straja test create-player rst_g1", "expectNotContains": "disabled"},
+    {"name": "post-restart-rank", "command": "straja test assert rst_g1 rank 3", "expectContains": "ASSERT PASS"},
+    {"name": "post-restart-policy", "command": "straja test policy-get rst_com timers.serviceBlockMinutes", "expectNotContains": "disabled"},
+    {"name": "post-restart-policy-value", "command": "straja test tell-log rst_com", "expectRegex": "timers.serviceBlockMinutes = "},
+    {"name": "post-restart-fines", "command": "straja test fine-dump", "expectRegex": "fines="},
+    {"name": "post-restart-rooms", "command": "straja test room-dump", "expectRegex": "rooms="},
+    {"name": "recovery-first", "command": "straja test rejoin rst_g1", "expectNotContains": "disabled"},
+    {"name": "recovery-second", "command": "straja test rejoin rst_g1", "expectNotContains": "disabled"},
+    {"name": "no-duplicate-effects", "command": "straja test dump-state rst_g1", "expectRegex": "rank=3"},
+    {"name": "cleanup", "command": "straja test reset-all", "expectContains": "all virtual player state reset", "cleanup": true}
+  ]
+}
