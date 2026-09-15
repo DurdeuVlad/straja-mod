@@ -1168,6 +1168,37 @@ final class TestCommands {
                                             return 0;
                                         })))));
 
+        // ------------------------------------------------------------ perf sampling
+        // CI-007: one machine-readable line per call — tick count, average
+        // tick nanos, the raw recent-tick ring (so the harness computes its
+        // own percentiles), heap, player counts, and Straja workload sizes.
+        // Same local/test/perms gate as every other `straja test` command.
+        test.then(Commands.literal("perf-sample")
+                .executes(ctx -> run(ctx, runtime -> {
+                    var server = runtime.server();
+                    var rt = Runtime.getRuntime();
+                    var custody = runtime.context().custody().read();
+                    var ticks = server.getTickTimesNanos();
+                    var sb = new StringBuilder(ticks.length * 8);
+                    for (int i = 0; i < ticks.length; i++) {
+                        if (i > 0) sb.append(',');
+                        sb.append(ticks[i]);
+                    }
+                    send(ctx, "perf"
+                            + " tick=" + server.getTickCount()
+                            + " avgTickNanos=" + server.getAverageTickTimeNanos()
+                            + " heapUsedBytes=" + (rt.totalMemory() - rt.freeMemory())
+                            + " heapMaxBytes=" + rt.maxMemory()
+                            + " onlinePlayers=" + server.getPlayerList().getPlayers().size()
+                            + " virtualPlayers=" + runtime.testPlayers().all().size()
+                            + " fines=" + runtime.context().fines().read().fines.size()
+                            + " missions=" + runtime.context().missions().read().missions.size()
+                            + " custody=" + (custody.cuffed.size() + custody.bound.size()
+                                            + custody.downed.size() + custody.headSacks.size())
+                            + " cells=" + runtime.context().prison().read().cells.size()
+                            + " tickNanos=" + sb);
+                })));
+
         // ------------------------------------------------------------ admin tools
         // Drives the same AdminToolsUseCase the physical items reach through
         // interact events — a click is (player, position/target), which the
