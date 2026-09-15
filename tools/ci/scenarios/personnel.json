@@ -1,0 +1,30 @@
+{
+  "name": "personnel-recruitment",
+  "group": "personnel",
+  "blocking": true,
+  "timeoutSeconds": 180,
+  "observable": "rank changes, specialization grant/revoke, faction, resign and rejoin lifecycle via ASSERT fields",
+  "failure": "ASSERT FAIL lines or missing structured fields",
+  "prerequisites": ["testing.enableTestCommands=true", "environment=local"],
+  "steps": [
+    {"name": "commissioner", "command": "straja test create-player per_com", "expectNotContains": "disabled"},
+    {"name": "pin-commissioner", "command": "straja test set-commissioner per_com", "expectRegex": "commissioner"},
+    {"name": "guard", "command": "straja test create-player per_g1", "expectNotContains": "disabled"},
+    {"name": "rank-1", "command": "straja test set-rank per_g1 1", "expectContains": "rank="},
+    {"name": "assert-rank", "command": "straja test assert per_g1 rank 1", "expectContains": "ASSERT PASS"},
+    {"name": "faction", "command": "straja test faction per_g1 carpatini", "expectNotContains": "disabled"},
+    {"name": "grant-specialization", "command": "straja test specialization per_com per_g1 add cartograf", "expectNotContains": "disabled"},
+    {"name": "assert-specialization", "command": "straja test assert per_g1 specializations cartograf", "expectContains": "ASSERT PASS"},
+    {"name": "revoke-specialization", "command": "straja test specialization per_com per_g1 remove cartograf", "expectNotContains": "disabled"},
+    {"name": "assert-revoked", "command": "straja test assert per_g1 specializations null", "expectRegex": "ASSERT (PASS|FAIL) specializations"},
+    {"name": "resign-notice", "command": "straja test resign per_g1 cerere", "expectNotContains": "disabled"},
+    {"name": "notice-elapse", "command": "straja test advance-time 7200", "expectContains": "clock advanced"},
+    {"name": "resign-confirm", "command": "straja test resign per_g1 confirm", "expectNotContains": "disabled"},
+    {"name": "assert-resigned", "command": "straja test assert per_g1 resigned true", "expectContains": "ASSERT PASS"},
+    {"name": "rejoin", "command": "straja test rejoin per_g1", "expectNotContains": "disabled"},
+    {"name": "roster", "command": "straja test admin-roster per_com per_com", "expectNotContains": "disabled"},
+    {"name": "personnel-view", "command": "straja test admin-personnel per_com per_g1", "expectNotContains": "disabled"},
+    {"name": "dossier", "command": "straja test admin-dossier per_com per_g1", "expectNotContains": "disabled"},
+    {"name": "cleanup", "command": "straja test reset-all", "expectContains": "all virtual player state reset", "cleanup": true}
+  ]
+}

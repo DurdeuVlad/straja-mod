@@ -187,12 +187,61 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  rc-scenarios:
+    name: RCON scenario suite — combined
+    # Declarative fail-fast RCON suite (CI-006a): the same packaged JAR,
+    # combined profile, one disposable world. Covers bootstrap/security,
+    # personnel, duty/economy, missions, custody/prison, fines/complaints,
+    # rooms/archive, reports/emergency/admin, restart persistence, backup/
+    # migration/corruption, and Vampirism ownership.
+    needs: package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Download staged artifact
+        uses: actions/download-artifact@fdfa46a5c1cdeed02ba81aa0a28576771a4ba60f # v7.0.0
+        with:
+          name: straja-jar
+          path: staged/
+
+      - name: Run scenario suite on combined profile
+        run: |
+          JAR=$(ls staged/straja-*.jar | head -1)
+          EXPECTED=$(cut -d' ' -f1 staged/$(basename "$JAR").sha256)
+          python3 tools/ci/scenario_runner.py run \
+            --manifest tools/ci/server_manifest.json \
+            --scenarios tools/ci/scenarios \
+            --profile combined \
+            --jar "$JAR" --jar-sha256 "$EXPECTED" \
+            --work-root "$RUNNER_TEMP/straja-scenarios" \
+            --artifacts-dir scenario-artifacts
+
+      - name: Upload scenario artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: scenario-suite
+          path: scenario-artifacts/
+          if-no-files-found: error
+          retention-days: 14
+
   profiles-gate:
     name: Server profiles gate
     # Explicit aggregate: every blocking profile must have passed; the
     # advisory report must exist and carry an explicit status — a missing
     # or silent advisory report fails the gate.
-    needs: [package, game-tests, server-profiles, foreign-npc-advisory]
+    needs: [package, game-tests, server-profiles, foreign-npc-advisory, rc-scenarios]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -214,8 +263,9 @@ jobs:
           PKG: ${{ needs.package.result }}
           GT: ${{ needs.game-tests.result }}
           PROFILES: ${{ needs.server-profiles.result }}
+          SCENARIOS: ${{ needs.rc-scenarios.result }}
         run: |
-          for pair in "package=$PKG" "game-tests=$GT" "server-profiles=$PROFILES"; do
+          for pair in "package=$PKG" "game-tests=$GT" "server-profiles=$PROFILES" "rc-scenarios=$SCENARIOS"; do
             name="${pair%%=*}"; res="${pair#*=}"
             echo "$name: $res"
             if [ "$res" != "success" ]; then

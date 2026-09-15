@@ -1,0 +1,29 @@
+{
+  "name": "custody-prison",
+  "group": "custody-prison",
+  "blocking": true,
+  "timeoutSeconds": 240,
+  "observable": "rope/cuffs/baton custody flow, cell creation via real geometry, prison arrest/status/release, emergency release",
+  "failure": "custody state missing from dumps, prison sentence absent, or release fails",
+  "prerequisites": ["testing.enableTestCommands=true"],
+  "steps": [
+    {"name": "guard", "command": "straja test create-player cus_g1", "expectNotContains": "disabled"},
+    {"name": "guard-rank", "command": "straja test set-rank cus_g1 4", "expectContains": "rank="},
+    {"name": "target", "command": "straja test create-player cus_t1", "expectNotContains": "disabled"},
+    {"name": "cuffs-item", "command": "straja test cuffs-item cus_g1", "expectNotContains": "disabled"},
+    {"name": "rope-target", "command": "straja test rope cus_g1 cus_t1", "expectNotContains": "disabled"},
+    {"name": "custody-visible", "command": "straja test custody-dump", "expectRegex": "requests="},
+    {"name": "baton", "command": "straja test baton-strike cus_g1 cus_t1 4", "expectContains": "baton="},
+    {"name": "sack", "command": "straja test head-sack cus_g1 cus_t1", "expectNotContains": "disabled"},
+    {"name": "sack-remove", "command": "straja test sack-remove cus_t1", "expectNotContains": "disabled"},
+    {"name": "cell-create", "command": "straja test cell-create cus_g1 cell_a 0 60 0 4 63 4", "expectNotContains": "disabled"},
+    {"name": "arrest", "command": "straja test prison-arrest cus_g1 cus_t1 1", "expectNotContains": "disabled"},
+    {"name": "prison-status", "command": "straja test prison-status cus_g1", "expectNotContains": "disabled"},
+    {"name": "prison-tick", "command": "straja test prison-tick", "expectContains": "prison ticked"},
+    {"name": "prison-dump", "command": "straja test prison-dump", "expectRegex": "cells="},
+    {"name": "release", "command": "straja test prison-release cus_g1 cus_t1", "expectNotContains": "disabled"},
+    {"name": "emergency-release", "command": "straja test cuffs-emergency cus_g1 cus_t1", "expectNotContains": "disabled"},
+    {"name": "rejoin-recovery", "command": "straja test rejoin cus_t1", "expectNotContains": "disabled"},
+    {"name": "cleanup", "command": "straja test reset-all", "expectContains": "all virtual player state reset", "cleanup": true}
+  ]
+}

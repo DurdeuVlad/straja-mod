@@ -1,0 +1,24 @@
+{
+  "name": "vampirism-ownership",
+  "group": "vampirism",
+  "blocking": true,
+  "requiresDeps": ["vampirism"],
+  "timeoutSeconds": 180,
+  "observable": "the Vampirism provider is detected and owns vampire DBNO/stake resolution, while Straja still owns custody of non-vampires: a lethal baton strike on a non-vampire virtual player produces exactly one Straja downed record (no double-resolution)",
+  "failure": "provider log line absent, non-vampire downed record missing, or more than one downed entry for a single lethal event",
+  "prerequisites": ["testing.enableTestCommands=true", "profile deps include vampirism"],
+  "steps": [
+    {"name": "provider-loaded", "type": "log", "expectRegex": "Vampirism provider loaded.*Vampirism-owned"},
+    {"name": "guard", "command": "straja test create-player vam_g1", "expectNotContains": "disabled"},
+    {"name": "guard-rank", "command": "straja test set-rank vam_g1 4", "expectContains": "rank="},
+    {"name": "guard-baton", "command": "straja test give vam_g1 straja:baton 1", "expectContains": "gave 1x straja:baton"},
+    {"name": "guard-wield", "command": "straja test select-slot vam_g1 0", "expectNotContains": "disabled"},
+    {"name": "guard-cuffs", "command": "straja test cuffs-item vam_g1", "expectNotContains": "disabled"},
+    {"name": "target", "command": "straja test create-player vam_t1", "expectNotContains": "disabled"},
+    {"name": "nonvampire-lethal-strike", "command": "straja test baton-strike vam_g1 vam_t1 999", "expectRegex": "baton=CANCEL (surrender_requested|no_cuffs_available)"},
+    {"name": "straja-owns-nonvampire", "command": "straja test custody-dump", "expectRegex": "downed=\\[[0-9a-f-]{36}\\]"},
+    {"name": "no-double-resolution", "command": "straja test custody-dump", "expectAbsentRegex": "downed=\\[[^\\]]*,[^\\]]*\\]"},
+    {"name": "downed-health-capped", "command": "straja test assert vam_t1 health 1.0", "expectContains": "ASSERT PASS health=1.0"},
+    {"name": "cleanup", "command": "straja test reset-all", "expectContains": "all virtual player state reset", "cleanup": true}
+  ]
+}

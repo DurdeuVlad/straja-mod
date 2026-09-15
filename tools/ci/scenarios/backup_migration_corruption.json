@@ -1,0 +1,31 @@
+{
+  "name": "backup-migration-corruption",
+  "group": "backup-migration",
+  "blocking": true,
+  "timeoutSeconds": 420,
+  "observable": "backup snapshots source stores; KubeJS fixture migrates then dedupes on second run (legacy_cp lands exactly twice in the persisted store — once as a checkpoint id, once as a missionMinutes key; a duplicated checkpoint would push it to 3); a corrupt store is preserved under corrupt_backup and reset",
+  "failure": "backup/migration commands fail, second migrate re-imports a duplicate, or the corrupt payload is lost",
+  "prerequisites": ["testing.enableTestCommands=true", "runner restart primitive"],
+  "steps": [
+    {"name": "seed-player", "command": "straja test create-player mig_g1", "expectNotContains": "disabled"},
+    {"name": "seed-rank", "command": "straja test set-rank mig_g1 2", "expectContains": "rank="},
+    {"name": "backup", "command": "straja backup", "expectContains": "Backup Straja creat:"},
+    {"name": "backup-coverage", "command": "straja backup", "expectRegex": "\\([0-9]+ store-uri"},
+    {"name": "restart-with-fixtures", "type": "restart", "whileStopped": [
+      {"name": "kubejs-fixture", "type": "inject-kubejs", "dir": "fixture_world", "entries": {
+        "straja_setup": "{\"checkpoints\":{\"legacy_cp\":{\"id\":\"legacy_cp\",\"x\":1,\"y\":64,\"z\":1,\"dimension\":\"minecraft:overworld\"}},\"missionMinutes\":{\"legacy_cp\":10}}"
+      }},
+      {"name": "corrupt-fines", "type": "inject-corrupt", "store": "fines"}
+    ]},
+    {"name": "migrate-run", "command": "straja migrate fixture_world", "expectContains": "Migrație completă."},
+    {"name": "migrate-dedup-run", "command": "straja migrate fixture_world", "expectContains": "Migrație completă."},
+    {"name": "flush-stores", "command": "save-all flush", "expectNotContains": "disabled"},
+    {"name": "dedup-proof", "type": "expect-file", "path": "world/data/straja_setup.dat", "gunzip": true, "contains": "legacy_cp", "occurrences": 2},
+    {"name": "corrupt-read-triggers", "command": "straja test fine-dump", "expectRegex": "fines="},
+    {"name": "corrupt-store-detected", "type": "log", "expectRegex": "corrupt store 'fines'"},
+    {"name": "flush-store", "command": "save-all flush", "expectNotContains": "disabled"},
+    {"name": "corrupt-backup-preserved", "type": "expect-file", "path": "world/data/straja_fines.dat", "gunzip": true, "contains": "corrupt_backup"},
+    {"name": "recreate-player", "command": "straja test create-player mig_g1", "expectNotContains": "disabled"},
+    {"name": "cleanup", "command": "straja test reset-all", "expectContains": "all virtual player state reset", "cleanup": true}
+  ]
+}

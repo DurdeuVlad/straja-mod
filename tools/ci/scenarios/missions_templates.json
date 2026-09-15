@@ -1,0 +1,24 @@
+{
+  "name": "missions-templates",
+  "group": "missions",
+  "blocking": true,
+  "timeoutSeconds": 180,
+  "observable": "template create/edit/toggle/duplicate, draft from template, mission create/issue/report/complete lifecycle",
+  "failure": "template ops unanswered, mission lifecycle stuck, or dump lacks the mission id",
+  "prerequisites": ["testing.enableTestCommands=true"],
+  "steps": [
+    {"name": "commissioner", "command": "straja test create-player mis_com", "expectNotContains": "disabled"},
+    {"name": "pin-commissioner", "command": "straja test set-commissioner mis_com", "expectRegex": "commissioner"},
+    {"name": "agent", "command": "straja test create-player mis_g1", "expectNotContains": "disabled"},
+    {"name": "agent-rank", "command": "straja test set-rank mis_g1 2", "expectContains": "rank="},
+    {"name": "template-create", "command": "straja test template-create mis_com patrula 1 2.0 1.0", "expectNotContains": "disabled"},
+    {"name": "template-list", "command": "straja test template-list mis_com", "expectNotContains": "disabled"},
+    {"name": "template-toggle", "command": "straja test template-toggle mis_com patrula true", "expectNotContains": "disabled"},
+    {"name": "template-duplicate", "command": "straja test template-duplicate mis_com patrula", "expectNotContains": "disabled"},
+    {"name": "mission-create", "command": "straja test mission-create mis_com mis_g1 30 100 patrula_nocturna", "expectNotContains": "disabled"},
+    {"name": "mission-give", "command": "straja test mission-give mis_com mis_g1", "expectContains": "give="},
+    {"name": "mission-list", "command": "straja test mission-list mis_g1", "expectNotContains": "disabled"},
+    {"name": "mission-dump", "command": "straja test mission-dump", "expectRegex": "missions="},
+    {"name": "cleanup", "command": "straja test reset-all", "expectContains": "all virtual player state reset", "cleanup": true}
+  ]
+}

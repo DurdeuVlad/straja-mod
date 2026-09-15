@@ -1,0 +1,30 @@
+{
+  "name": "reports-audiences-emergency-admin",
+  "group": "reports-emergency",
+  "blocking": true,
+  "timeoutSeconds": 240,
+  "observable": "activity report submit/review, audience request/resolve, emergency start/status/end, admin tool surface answers",
+  "failure": "report/audience lifecycle missing, emergency flags stuck, or admin tools unresponsive",
+  "prerequisites": ["testing.enableTestCommands=true"],
+  "steps": [
+    {"name": "commissioner", "command": "straja test create-player rep_com", "expectNotContains": "disabled"},
+    {"name": "pin-commissioner", "command": "straja test set-commissioner rep_com", "expectRegex": "commissioner"},
+    {"name": "guard", "command": "straja test create-player rep_g1", "expectNotContains": "disabled"},
+    {"name": "guard-rank", "command": "straja test set-rank rep_g1 2", "expectContains": "rank="},
+    {"name": "report-submit", "command": "straja test report-submit rep_g1 activitate_saptamanala", "expectNotContains": "disabled"},
+    {"name": "report-status", "command": "straja test report-status rep_g1 rep_g1", "expectNotContains": "disabled"},
+    {"name": "report-list", "command": "straja test report-list rep_com rep_com", "expectNotContains": "disabled"},
+    {"name": "audience-request", "command": "straja test audience-request rep_g1 audienta_test", "expectNotContains": "disabled"},
+    {"name": "audience-status", "command": "straja test audience-status rep_g1 rep_g1", "expectNotContains": "disabled"},
+    {"name": "audience-list", "command": "straja test audience-list rep_com rep_com", "expectNotContains": "disabled"},
+    {"name": "emergency-start", "command": "straja test emergency-start rep_com 2.0 1 test_urgenta", "expectNotContains": "disabled"},
+    {"name": "emergency-status", "command": "straja test emergency-status rep_com rep_com", "expectNotContains": "disabled"},
+    {"name": "emergency-end", "command": "straja test emergency-end rep_com rep_com", "expectNotContains": "disabled"},
+    {"name": "tool-kit", "command": "straja test tool-kit rep_com rep_com", "expectNotContains": "disabled"},
+    {"name": "tool-state", "command": "straja test tool-state", "expectRegex": "holders="},
+    {"name": "tool-clear", "command": "straja test tool-clear rep_com", "expectContains": "tool state cleared"},
+    {"name": "admin-actions", "command": "straja test admin-actions rep_com", "expectNotContains": "disabled"},
+    {"name": "admin-authorize", "command": "straja test admin-authorize rep_com rep_g1 2", "expectNotContains": "disabled"},
+    {"name": "cleanup", "command": "straja test reset-all", "expectContains": "all virtual player state reset", "cleanup": true}
+  ]
+}

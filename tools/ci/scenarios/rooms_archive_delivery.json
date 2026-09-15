@@ -1,0 +1,28 @@
+{
+  "name": "rooms-archive-delivery",
+  "group": "rooms-archive",
+  "blocking": true,
+  "timeoutSeconds": 240,
+  "observable": "room discover/assign/release, archive folder/sheet/sign flow, waitlist and dumps stay consistent",
+  "failure": "room or archive records absent from dumps, or a lifecycle step unanswered",
+  "prerequisites": ["testing.enableTestCommands=true"],
+  "steps": [
+    {"name": "archivist", "command": "straja test create-player room_com", "expectNotContains": "disabled"},
+    {"name": "pin-commissioner", "command": "straja test set-commissioner room_com", "expectRegex": "commissioner"},
+    {"name": "member", "command": "straja test create-player room_m1", "expectNotContains": "disabled"},
+    {"name": "member-rank", "command": "straja test set-rank room_m1 1", "expectContains": "rank="},
+    {"name": "room-discover", "command": "straja test room-discover room_m1 camera_1", "expectNotContains": "disabled"},
+    {"name": "room-assign", "command": "straja test room-assign room_com room_m1", "expectNotContains": "disabled"},
+    {"name": "room-dump", "command": "straja test room-dump", "expectRegex": "rooms="},
+    {"name": "room-release", "command": "straja test room-release room_m1", "expectNotContains": "disabled"},
+    {"name": "archive-grant", "command": "straja test archive-grant room_com room_m1", "expectNotContains": "disabled"},
+    {"name": "archive-folder", "command": "straja test archive-folder room_m1 dosare personal", "expectNotContains": "disabled"},
+    {"name": "archive-sheet", "command": "straja test archive-sheet room_m1 dosare fisa nota_test", "expectNotContains": "disabled"},
+    {"name": "archive-edit", "command": "straja test archive-edit room_m1 nota_test continut_initial", "expectNotContains": "disabled"},
+    {"name": "archive-submit", "command": "straja test archive-submit room_m1 nota_test", "expectNotContains": "disabled"},
+    {"name": "archive-sign", "command": "straja test archive-sign room_com nota_test", "expectNotContains": "disabled"},
+    {"name": "archive-dump", "command": "straja test archive-dump", "expectRegex": "folders="},
+    {"name": "emergency-deliver", "command": "straja test emergency-deliver room_m1", "expectNotContains": "disabled"},
+    {"name": "cleanup", "command": "straja test reset-all", "expectContains": "all virtual player state reset", "cleanup": true}
+  ]
+}
