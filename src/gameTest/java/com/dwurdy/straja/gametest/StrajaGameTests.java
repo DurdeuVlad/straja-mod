@@ -118,6 +118,8 @@ public final class StrajaGameTests {
                 "a whip strike must keep its low damage profile");
         helper.assertTrue(WhipItem.KNOCKBACK_STRENGTH > WhipItem.MAX_DAMAGE,
                 "a whip must have more knockback than damage");
+        helper.assertTrue(WhipItem.ATTACK_SPEED_BONUS > 0.0D,
+                "a whip must provide faster follow-up attacks");
         var velocity = target.getDeltaMovement();
         helper.assertTrue(velocity.x * velocity.x + velocity.z * velocity.z > 0.1D,
                 "a successful whip strike must apply visible knockback");
