@@ -4,6 +4,7 @@ import com.dwurdy.straja.adapter.in.event.StrajaEvents;
 import com.dwurdy.straja.adapter.in.npc.StrajaNpcEntity;
 import com.dwurdy.straja.adapter.in.test.VirtualPlayerGateway;
 import com.dwurdy.straja.adapter.out.minecraft.MinecraftPlayerGateway;
+import com.dwurdy.straja.adapter.out.minecraft.WhipItem;
 import com.dwurdy.straja.bootstrap.StrajaItems;
 import com.dwurdy.straja.bootstrap.StrajaMenus;
 import com.dwurdy.straja.bootstrap.StrajaRuntime;
@@ -79,7 +80,7 @@ public final class StrajaGameTests {
                 "archive_document", "carbon_paper", "archive_stamp", "official_envelope",
                 "room_marker", "prison_marker", "npc_wand", "patrol_wand", "survey_rod",
                 "npc_cloner", "cuffs", "cuff_key", "bolt_cutters", "crowbar", "rope",
-                "head_sack", "baton", "keychain", "fine_book", "fine_notice",
+                "head_sack", "baton", "whip", "keychain", "fine_book", "fine_notice",
                 "training_manual")) {
             helper.assertTrue(BuiltInRegistries.ITEM.get(straja(id)) != Items.AIR,
                     "missing item registration straja:" + id);
@@ -89,6 +90,50 @@ public final class StrajaGameTests {
                 "missing entity registration straja:straja_npc");
         helper.assertTrue(BuiltInRegistries.MENU.get(straja("form")) == StrajaMenus.FORM.get(),
                 "missing menu registration straja:form");
+        helper.succeed();
+    }
+
+    /** The whip uses the same guarded, non-lethal custody pipeline as the baton. */
+    @GameTest(template = "empty")
+    public static void whipDamageRouting(GameTestHelper helper) {
+        var runtime = runtime(helper);
+        var attacker = mockPlayer(helper);
+        var target = mockPlayer(helper);
+        attacker.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(StrajaItems.WHIP.get()));
+
+        var denied = new LivingIncomingDamageEvent(target,
+                new DamageContainer(target.damageSources().playerAttack(attacker), 4.0f));
+        NeoForge.EVENT_BUS.post(denied);
+        helper.assertTrue(denied.isCanceled(), "a whip strike by a non-guard must be canceled");
+
+        var attackerState = runtime.players().state(attacker.getUUID());
+        attackerState.rank = Rank.GUARD.level();
+        runtime.players().save(attacker.getUUID(), attackerState);
+        target.setHealth(10.0f);
+        var capped = new LivingIncomingDamageEvent(target,
+                new DamageContainer(target.damageSources().playerAttack(attacker), 4.0f));
+        NeoForge.EVENT_BUS.post(capped);
+        helper.assertFalse(capped.isCanceled(), "a guard's non-lethal whip strike must pass through");
+        helper.assertTrue(capped.getAmount() == WhipItem.MAX_DAMAGE,
+                "a whip strike must keep its low damage profile");
+        helper.assertTrue(WhipItem.KNOCKBACK_STRENGTH > WhipItem.MAX_DAMAGE,
+                "a whip must have more knockback than damage");
+        helper.assertTrue(WhipItem.ATTACK_SPEED_BONUS > 0.0D,
+                "a whip must provide faster follow-up attacks");
+        var velocity = target.getDeltaMovement();
+        helper.assertTrue(velocity.x * velocity.x + velocity.z * velocity.z > 0.1D,
+                "a successful whip strike must apply visible knockback");
+
+        target.setHealth(2.0f);
+        var lethal = new LivingIncomingDamageEvent(target,
+                new DamageContainer(target.damageSources().playerAttack(attacker), 4.0f));
+        NeoForge.EVENT_BUS.post(lethal);
+        helper.assertTrue(lethal.isCanceled(), "a lethal whip strike must be canceled");
+        helper.assertTrue(runtime.custodyRoleplay().isDowned(gateway(target)),
+                "a lethal whip strike must down the target");
+        helper.assertTrue(target.getHealth() == 1.0f,
+                "a whip knockout must leave the target at 1 health");
+        runtime.custodyRoleplay().recoverAfterDeath(gateway(target));
         helper.succeed();
     }
 
@@ -179,6 +224,7 @@ public final class StrajaGameTests {
         NeoForge.EVENT_BUS.post(plain);
         helper.assertFalse(plain.isCanceled(), "ordinary non-lethal damage must reach vanilla");
         helper.assertTrue(plain.getAmount() == 4.0f, "ordinary damage must not be modified");
+        runtime.custodyRoleplay().recoverAfterDeath(gateway(target));
         helper.succeed();
     }
 

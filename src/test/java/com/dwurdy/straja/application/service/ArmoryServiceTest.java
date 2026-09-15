@@ -93,6 +93,17 @@ class ArmoryServiceTest {
     }
 
     @Test
+    void buyWhipChargesCoinsAndDeliversTheRankGatedItem() {
+        TestPlayer guard = guardAtRank(Rank.GUARD.level());
+        var currency = (TestCurrency) ctx.currency();
+        currency.balance = 500;
+
+        assertTrue(armory.buy(guard, "whip"));
+        assertEquals(1, countItem(guard, "straja:whip"));
+        assertEquals(300, currency.balance);
+    }
+
+    @Test
     void buyRefusesLowRankUnknownKeyAndEmptyPurse() {
         TestPlayer stagiar = guardAtRank(Rank.STAGIAR.level());
         var currency = (TestCurrency) ctx.currency();

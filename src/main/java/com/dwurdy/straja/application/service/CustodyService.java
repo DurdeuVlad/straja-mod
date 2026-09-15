@@ -28,7 +28,7 @@ import java.util.UUID;
 
 /**
  * Enforcement mechanics: cuff consent flow, surrender, direct cuffs, cuff keys,
- * rope binding, head sack, distance break, non-lethal baton knockout, downed
+ * rope binding, head sack, distance break, non-lethal baton/whip knockout, downed
  * state and release. Ported from the reference runtime; all checks are
  * server-side and every state transition is persisted + audited.
  */
@@ -41,6 +41,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
     public static final String ROPE = "straja:rope";
     public static final String HEAD_SACK = "straja:head_sack";
     public static final String BATON = "straja:baton";
+    public static final String WHIP = "straja:whip";
     private static final double RESUSCITATION_DISTANCE_BLOCKS = 3.0;
 
     private final StrajaContext ctx;
@@ -2136,34 +2137,42 @@ public class CustodyService implements CustodyRoleplayUseCase {
     }
 
     /**
-     * Baton strike semantics. The event adapter computes whether the incoming
-     * damage would be lethal; this returns what the adapter must do.
+     * Baton and whip strike semantics. Both are deliberately the same
+     * non-lethal custody flow; the event adapter computes whether the incoming
+     * damage would be lethal and this returns what the adapter must do.
      */
     public DamageDecision batonStrike(PlayerGateway issuer, PlayerGateway target,
                                       double targetHealth, double targetAbsorption, double damage) {
         var held = issuer.mainHand();
-        if (held.isEmpty() || !BATON.equals(held.id())) {
+        boolean baton = !held.isEmpty() && BATON.equals(held.id());
+        boolean whip = !held.isEmpty() && WHIP.equals(held.id());
+        if (!baton && !whip) {
             return new DamageDecision(DamageAction.NOT_BATON, "not_baton");
         }
+        String weapon = whip ? "Biciul" : "Bastonul";
+        String weaponLower = whip ? "biciul" : "bastonul";
+        String auditAction = whip ? "whip_knockout" : "baton_knockout";
         if (!enforcementGuard(issuer)) {
-            issuer.tell("Bastonul poate fi folosit doar de un străjer activ.");
+            issuer.tell(weapon + " poate fi folosit doar de un străjer activ.");
             return new DamageDecision(DamageAction.CANCEL, "issuer_not_active_guard");
         }
         if (!players.hasCapability(issuer, Capability.USE_BATON)) {
-            issuer.tell("Bastonul de Poliție se folosește de la rangul Străjer în sus.");
+            issuer.tell(weapon + " de Poliție se folosește de la rangul Străjer în sus.");
             return new DamageDecision(DamageAction.CANCEL, "issuer_rank_not_authorized");
         }
         if (isCuffed(target)) {
-            issuer.tell(target.name() + " este deja încătușat; bastonul nu mai poate porni un al doilea flow.");
+            issuer.tell(target.name() + " este deja încătușat; " + weaponLower
+                    + " nu mai poate porni un al doilea flow.");
             return new DamageDecision(DamageAction.CANCEL, "already_cuffed");
         }
         if (isBound(target)) {
-            issuer.tell(target.name() + " este deja legat; bastonul nu mai poate porni un al doilea flow.");
+            issuer.tell(target.name() + " este deja legat; " + weaponLower
+                    + " nu mai poate porni un al doilea flow.");
             return new DamageDecision(DamageAction.CANCEL, "already_bound");
         }
         if (isDowned(target)) {
             issuer.tell(target.name() + " este deja inconștient. Nu mai poate primi lovituri.");
-            audit.record("baton_knockout", issuer.name(), uuidOf(issuer),
+            audit.record(auditAction, issuer.name(), uuidOf(issuer),
                     target.name(), uuidOf(target), "REFUSED", "already_downed");
             return new DamageDecision(DamageAction.CANCEL, "already_downed");
         }
@@ -2175,11 +2184,11 @@ public class CustodyService implements CustodyRoleplayUseCase {
         }
         // Lethal strike is converted into a knockout.
         target.setHealth(1);
-        startDowned(target, issuer, "baton_lethal_hit");
+        startDowned(target, issuer, whip ? "whip_lethal_hit" : "baton_lethal_hit");
         if (!hasItem(issuer, CUFFS)) {
             issuer.tell("Lovitura a fost un knockout, dar nu ai Cătușe în inventar; ținta rămâne inconștientă.");
-            target.tell("Bastonul te-a doborât, dar gardianul nu avea Cătușe disponibile.");
-            audit.record("baton_knockout", issuer.name(), uuidOf(issuer),
+            target.tell(weapon + " te-a doborât, dar gardianul nu avea Cătușe disponibile.");
+            audit.record(auditAction, issuer.name(), uuidOf(issuer),
                     target.name(), uuidOf(target), "SUCCESS", "no_cuffs_available");
             return new DamageDecision(DamageAction.CANCEL, "no_cuffs_available");
         }
@@ -2187,7 +2196,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
         return new DamageDecision(DamageAction.CANCEL, "surrender_requested");
     }
 
-    /** Maximum baton damage so the hit never kills on its own. */
+    /** Maximum baton/whip damage so the hit never kills on its own. */
     public double capBatonDamage(double health, double absorption) {
         return Math.max(0, health + absorption - 1);
     }

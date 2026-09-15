@@ -9,11 +9,13 @@ import com.dwurdy.straja.bootstrap.StrajaItems;
 import com.dwurdy.straja.bootstrap.StrajaMenus;
 import com.dwurdy.straja.bootstrap.StrajaRuntime;
 import com.dwurdy.straja.config.StrajaServerConfig;
+import net.minecraft.world.item.CreativeModeTabs;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
 import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
@@ -32,6 +34,7 @@ public class StrajaMod {
     public StrajaMod(IEventBus modBus, ModContainer container) {
         container.registerConfig(ModConfig.Type.SERVER, StrajaServerConfig.SPEC);
         StrajaItems.register(modBus);
+        modBus.addListener(StrajaMod::addCreativeItems);
         StrajaMenus.register(modBus);
         StrajaNpcEntity.register(modBus);
         modBus.addListener(RegisterPayloadHandlersEvent.class, FormPayloads::register);
@@ -43,5 +46,12 @@ public class StrajaMod {
         NeoForge.EVENT_BUS.addListener(ServerStoppingEvent.class,
                 event -> StrajaRuntime.stop());
         LOGGER.info("Straja mod initialized");
+    }
+
+    private static void addCreativeItems(BuildCreativeModeTabContentsEvent event) {
+        if (event.getTabKey() == CreativeModeTabs.COMBAT) {
+            event.accept(StrajaItems.BATON);
+            event.accept(StrajaItems.WHIP);
+        }
     }
 }

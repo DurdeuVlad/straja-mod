@@ -289,6 +289,7 @@ public class StrajaPolicies {
     // requisition points. Entries: {key, itemId, count, cost, minRank}.
     public List<ArmoryItem> armoryStock = new ArrayList<>(List.of(
             new ArmoryItem("baton", "straja:baton", 1, 200, 2),
+            new ArmoryItem("whip", "straja:whip", 1, 200, 2),
             new ArmoryItem("cuffs", "straja:cuffs", 1, 200, 2),
             new ArmoryItem("sword_diamond", "minecraft:diamond_sword", 1, 500, 3),
             new ArmoryItem("armor_diamond", "minecraft:diamond_chestplate", 1, 800, 4)));
@@ -296,6 +297,7 @@ public class StrajaPolicies {
             new ArmoryItem("sword", "minecraft:iron_sword", 1, 3, 1),
             new ArmoryItem("shield", "minecraft:shield", 1, 3, 1),
             new ArmoryItem("baton", "straja:baton", 1, 5, 2),
+            new ArmoryItem("whip", "straja:whip", 1, 5, 2),
             new ArmoryItem("cuffs", "straja:cuffs", 1, 5, 2),
             new ArmoryItem("sword_diamond", "minecraft:diamond_sword", 1, 10, 3)));
 

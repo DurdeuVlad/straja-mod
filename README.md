@@ -143,9 +143,18 @@ bounded field values.
 Physical items complete the loop: the Order Carnet and mission draft on
 `straja:order_book`, archive folder/document/carbon paper/stamp/envelope
 items, `fine_book`/`fine_notice`, the `training_manual`, cuffs, rope, head
-sack, keys, cutters, crowbar, and room markers all route through the same
+sack, baton, whip, keys, cutters, crowbar, and room markers all route through the same
 inbound ports — item metadata is only a display hint and never grants
 authority.
+
+The Service Whip is available from the Armorer for active Străjeri (rank 2+),
+for the same coin and requisition prices as the service baton. It follows the
+same custody rules: damage is capped above zero health, a lethal hit creates a
+downed state and surrender request, and cuffed, bound or already-downed players
+cannot be struck again. A successful hit plays the eight-frame whip flick,
+holding the two impact poses slightly longer alongside the normal attack swing
+and strong-hit sound. It applies 1.75 knockback strength for its low base
+damage and +2 attack speed for faster follow-up swings.
 
 ## First-time setup
 
@@ -360,7 +369,7 @@ Server is authoritative; rank text never grants authority; UUIDs take
 precedence over names; every economy op is idempotent (receipt-scoped
 deposits); failed delivery/payment persists a review/retry state instead of
 false success; sentence time only ticks while the prisoner is online and active;
-the baton is structurally non-lethal.
+the baton and whip are structurally non-lethal.
 
 ## Known limitations
 
