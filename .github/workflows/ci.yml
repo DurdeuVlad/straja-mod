@@ -88,8 +88,38 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  dependency-submission:
+    name: Dependency graph submission
+    # GitHub's dependency graph cannot scan Groovy build files; resolved
+    # dependencies are submitted instead. Baseline snapshots come from pushes
+    # to main; head snapshots come from same-repo PRs (fork tokens are
+    # read-only and cannot submit).
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+      || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Java 21
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x gradlew
+
+      - name: Submit Gradle dependencies
+        uses: gradle/actions/dependency-submission@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+
   dependency-review:
     name: Dependency review
+    # Blocks newly introduced moderate-or-higher known vulnerabilities on PRs.
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
