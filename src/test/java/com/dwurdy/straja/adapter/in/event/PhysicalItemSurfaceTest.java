@@ -22,6 +22,8 @@ class PhysicalItemSurfaceTest {
                 PhysicalItemSurface.action(item("straja:fine_book")));
         assertEquals(PhysicalItemSurface.Action.FINE_NOTICE,
                 PhysicalItemSurface.action(item("straja:fine_notice")));
+        assertEquals(PhysicalItemSurface.Action.IDENTITY_CARD,
+                PhysicalItemSurface.action(item("straja:identity_card")));
         assertEquals(PhysicalItemSurface.Action.ARCHIVE_TOOL,
                 PhysicalItemSurface.action(item("straja:carbon_paper")));
         assertEquals(PhysicalItemSurface.Action.ARCHIVE_TOOL,

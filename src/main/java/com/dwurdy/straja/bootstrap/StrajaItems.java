@@ -25,6 +25,8 @@ public final class StrajaItems {
             () -> new Item(new Item.Properties().stacksTo(1)));
     public static final DeferredItem<Item> ARCHIVE_DOCUMENT = ITEMS.register("archive_document",
             () -> new Item(new Item.Properties().stacksTo(1)));
+    public static final DeferredItem<Item> IDENTITY_CARD = ITEMS.register("identity_card",
+            () -> new Item(new Item.Properties().stacksTo(1).rarity(Rarity.UNCOMMON)));
     public static final DeferredItem<Item> CARBON_PAPER = ITEMS.register("carbon_paper",
             () -> new Item(new Item.Properties().stacksTo(16)));
     public static final DeferredItem<Item> ARCHIVE_STAMP = ITEMS.register("archive_stamp",

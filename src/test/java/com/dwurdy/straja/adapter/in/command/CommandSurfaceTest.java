@@ -14,7 +14,7 @@ class CommandSurfaceTest {
             "resign", "demisie", "rejoin",
             "salary", "coins", "food", "kit", "merit",
             "report", "message", "request", "inbox",
-            "mission", "cuffs", "prison", "fine", "complaint", "room", "archive");
+            "mission", "cuffs", "prison", "fine", "complaint", "room", "archive", "identity");
 
     @Test
     void gameplayLanesArePermissionTwoOnlyAtTheCommandBoundary() {

@@ -82,6 +82,8 @@ final class NpcPlayerSurface {
                             new ChatAction("Regulament", "rules"),
                             new ChatAction("Stare Străjer", "guard-status"),
                             new ChatAction("Amenzile mele", "fine-list"),
+                            new ChatAction("Emite buletinul meu", "identity-request"),
+                            new ChatAction("Verifică buletinele", "identity-list"),
                             new ChatAction("Stare cameră", "room-status"),
                             new ChatAction("Declară facțiunea nativă", "faction-declare"),
                             faqEntry(RoleRoute.RECEPTIONIST)));

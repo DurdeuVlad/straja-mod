@@ -52,6 +52,7 @@ public final class StrajaRuntime {
     private com.dwurdy.straja.application.service.AdminToolService adminTools;
     private final com.dwurdy.straja.application.service.RoomService rooms;
     private final com.dwurdy.straja.application.service.ArchiveService archive;
+    private final com.dwurdy.straja.application.service.IdentityCardService identityCards;
     private final com.dwurdy.straja.application.service.SecretaryService secretary;
     private final com.dwurdy.straja.application.service.MigrationService migration;
     private final com.dwurdy.straja.application.service.FormSessionService formSessions;
@@ -134,7 +135,8 @@ public final class StrajaRuntime {
                 new EnvelopeDeliveryProvider(server, policies),
                 new com.dwurdy.straja.adapter.out.minecraft.MinecraftWorldGateway(server),
                 new com.dwurdy.straja.adapter.out.faction.ScoreboardFactionGateway(server),
-                new SavedStores.AdminTools(stores));
+                new SavedStores.AdminTools(stores),
+                new SavedStores.IdentityCards(stores));
 
         this.players = new PlayerService(ctx);
         this.audit = new AuditService(ctx);
@@ -151,6 +153,7 @@ public final class StrajaRuntime {
         this.audiences = new com.dwurdy.straja.application.service.AudienceService(ctx, players, audit);
         this.emergency = new com.dwurdy.straja.application.service.EmergencyService(ctx, players, audit);
         this.rooms = new com.dwurdy.straja.application.service.RoomService(ctx, players, audit, ctx.world());
+        this.identityCards = new com.dwurdy.straja.application.service.IdentityCardService(ctx, players, audit);
         this.archive = new com.dwurdy.straja.application.service.ArchiveService(ctx, players, audit);
         this.secretary = new com.dwurdy.straja.application.service.SecretaryService();
         this.migration = new com.dwurdy.straja.application.service.MigrationService(ctx, audit);
@@ -254,6 +257,7 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.port.in.CustodyRoleplayUseCase custodyRoleplay() { return custody; }
     public com.dwurdy.straja.application.port.in.PrisonRoleplayUseCase prisonRoleplay() { return prison; }
     public com.dwurdy.straja.application.port.in.RoomRoleplayUseCase roomRoleplay() { return rooms; }
+    public com.dwurdy.straja.application.port.in.IdentityCardRoleplayUseCase identityCards() { return identityCards; }
     public com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase archiveRoleplay() { return archive; }
     public com.dwurdy.straja.application.port.in.SecretaryRoleplayUseCase secretaryRoleplay() { return secretary; }
     public com.dwurdy.straja.application.port.in.PlayerQueryUseCase playerQueries() { return players; }

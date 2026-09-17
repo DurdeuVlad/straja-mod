@@ -120,6 +120,14 @@ public final class SavedStores {
         @Override public void write(ArchiveStore store) { writeJson(store); }
     }
 
+    public static class IdentityCards extends JsonBackedStore implements IdentityCardRepository {
+        public IdentityCards(StoreAccess access) { super(access, "identity_cards"); }
+        @Override public IdentityCardStore read() {
+            return readJson(IdentityCardStore.class, IdentityCardStore::new);
+        }
+        @Override public void write(IdentityCardStore store) { writeJson(store); }
+    }
+
     public static class Npcs extends JsonBackedStore implements NpcRepository {
         public Npcs(StoreAccess access) { super(access, "npcs"); }
         @Override public NpcRegistry read() { return readJson(NpcRegistry.class, NpcRegistry::new); }

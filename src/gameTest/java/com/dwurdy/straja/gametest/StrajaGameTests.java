@@ -82,7 +82,7 @@ public final class StrajaGameTests {
                 "room_marker", "prison_marker", "npc_wand", "patrol_wand", "survey_rod",
                 "npc_cloner", "cuffs", "cuff_key", "bolt_cutters", "crowbar", "rope",
                 "head_sack", "baton", "whip", "keychain", "fine_book", "fine_notice",
-                "training_manual")) {
+                "training_manual", "identity_card")) {
             helper.assertTrue(BuiltInRegistries.ITEM.get(straja(id)) != Items.AIR,
                     "missing item registration straja:" + id);
         }
@@ -438,6 +438,28 @@ public final class StrajaGameTests {
                 "Secretary must not duplicate archive folders through the generic bookshelf tag");
         helper.assertTrue(player.getInventory().countItem(StrajaItems.ARCHIVE_FOLDER.get()) == 1,
                 "rejecting the copy must leave exactly the original folder");
+        helper.succeed();
+    }
+
+    /** A real server-issued buletin is routed back to its UUID-bound record. */
+    @GameTest(template = "empty")
+    public static void identityCardIssueAndPhysicalRead(GameTestHelper helper) {
+        var runtime = runtime(helper);
+        var issuer = mockPlayer(helper);
+        var holder = mockPlayer(helper);
+        issuer.getServer().getPlayerList().op(issuer.getGameProfile());
+
+        helper.assertTrue(runtime.identityCards().issue(gateway(issuer), gateway(holder)),
+                "an operator must be able to issue a buletin to an online player");
+        holder.getInventory().selected = 0;
+        helper.assertTrue(holder.getInventory().countItem(StrajaItems.IDENTITY_CARD.get()) == 1,
+                "issuing a buletin must deliver exactly one physical card");
+        helper.assertTrue(StrajaEvents.usePhysicalItem(runtime, gateway(holder)),
+                "the registered buletin item must be claimed by the physical-item router");
+        helper.assertTrue(holder.getInventory().getItem(0).getOrDefault(
+                net.minecraft.core.component.DataComponents.CUSTOM_NAME,
+                net.minecraft.network.chat.Component.empty()).getString().contains("Buletin"),
+                "the delivered item must carry a readable buletin name");
         helper.succeed();
     }
 }

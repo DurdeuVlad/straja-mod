@@ -16,7 +16,8 @@ public final class PhysicalItemSurface {
         ARCHIVE_TOOL,
         FINE_BOOK,
         FINE_NOTICE,
-        TRAINING_MANUAL
+        TRAINING_MANUAL,
+        IDENTITY_CARD
     }
 
     private PhysicalItemSurface() {}
@@ -31,6 +32,7 @@ public final class PhysicalItemSurface {
                     "straja:official_envelope" -> Action.ARCHIVE_TOOL;
             case "straja:fine_book" -> Action.FINE_BOOK;
             case "straja:fine_notice" -> Action.FINE_NOTICE;
+            case "straja:identity_card" -> Action.IDENTITY_CARD;
             case "straja:training_manual" -> Action.TRAINING_MANUAL;
             default -> Action.NONE;
         };
