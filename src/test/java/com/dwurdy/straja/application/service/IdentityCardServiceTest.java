@@ -89,6 +89,10 @@ class IdentityCardServiceTest {
         assertEquals(IdentityCardAuthenticity.FORGED.name(), card.authenticity);
         assertEquals(1, citizen.inventory().countOf("straja:identity_card"));
 
+        assertTrue(cards.request(citizen));
+        assertEquals(IdentityCardAuthenticity.AUTHENTIC.name(),
+                ctx.identityCards().read().cards.get("ID-2").authenticity);
+
         commissioner.messages.clear();
         cards.read(commissioner, card.id, citizen.uuid.toString(),
                 IdentityCardAuthenticity.FORGED.name());
@@ -106,6 +110,20 @@ class IdentityCardServiceTest {
         cards.read(commissioner, card.id, commissioner.uuid.toString(),
                 IdentityCardAuthenticity.AUTHENTIC.name());
         assertTrue(commissioner.told("Observație:"));
+    }
+
+    @Test
+    void failedForgeryDeliveryDoesNotConsumeASequenceNumberOrCreateARecord() {
+        commissioner.op = true;
+        for (int slot = 0; slot < citizen.inventory().slots(); slot++) {
+            citizen.inventory.slots.set(slot,
+                    new com.dwurdy.straja.application.port.out.ItemView(
+                            "minecraft:stone", 64, 64, java.util.Map.of()));
+        }
+
+        assertFalse(cards.forge(commissioner, citizen));
+        assertTrue(ctx.identityCards().read().cards.isEmpty());
+        assertEquals(1, ctx.identityCards().read().nextCardNumber);
     }
 
     @Test
