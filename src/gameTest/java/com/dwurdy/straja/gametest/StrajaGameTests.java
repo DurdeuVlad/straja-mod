@@ -22,6 +22,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.tags.ItemTags;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
@@ -416,6 +417,27 @@ public final class StrajaGameTests {
         civilian.selectSlot(0);
         helper.assertFalse(StrajaEvents.usePhysicalItem(runtime, civilian),
                 "non-paper items must not be claimed");
+        helper.succeed();
+    }
+
+    /** Archive papers enter canonical bookshelves but never Secretary copy. */
+    @GameTest(template = "empty")
+    public static void archivePapersAreBookshelfCompatibleWithoutCopyLeak(GameTestHelper helper) {
+        runtime(helper);
+        var folder = new ItemStack(StrajaItems.ARCHIVE_FOLDER.get());
+        var document = new ItemStack(StrajaItems.ARCHIVE_DOCUMENT.get());
+        helper.assertTrue(folder.is(ItemTags.BOOKSHELF_BOOKS),
+                "archive folders must be accepted by the canonical bookshelf tag");
+        helper.assertTrue(document.is(ItemTags.BOOKSHELF_BOOKS),
+                "archive documents must be accepted by the canonical bookshelf tag");
+
+        var player = mockPlayer(helper);
+        player.setItemInHand(InteractionHand.MAIN_HAND, folder);
+        helper.assertTrue(gateway(player).copyMainHandBook()
+                        == com.dwurdy.straja.application.port.out.PlayerGateway.BookCopyResult.NOT_A_BOOK,
+                "Secretary must not duplicate archive folders through the generic bookshelf tag");
+        helper.assertTrue(player.getInventory().countItem(StrajaItems.ARCHIVE_FOLDER.get()) == 1,
+                "rejecting the copy must leave exactly the original folder");
         helper.succeed();
     }
 }

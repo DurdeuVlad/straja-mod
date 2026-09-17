@@ -3,6 +3,7 @@ package com.dwurdy.straja.adapter.out.minecraft;
 import com.dwurdy.straja.application.port.out.InventoryView;
 import com.dwurdy.straja.application.port.out.ItemView;
 import com.dwurdy.straja.application.port.out.PlayerGateway;
+import com.dwurdy.straja.bootstrap.StrajaItems;
 import com.dwurdy.straja.domain.model.ItemSpec;
 import java.util.UUID;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -107,7 +108,7 @@ public class MinecraftPlayerGateway implements PlayerGateway {
         if (p == null) return BookCopyResult.NOT_A_BOOK;
 
         ItemStack source = p.getMainHandItem();
-        if (source.isEmpty() || !source.is(ItemTags.BOOKSHELF_BOOKS)) {
+        if (source.isEmpty() || isArchivePaper(source) || !source.is(ItemTags.BOOKSHELF_BOOKS)) {
             return BookCopyResult.NOT_A_BOOK;
         }
 
@@ -119,6 +120,12 @@ public class MinecraftPlayerGateway implements PlayerGateway {
             return BookCopyResult.NO_SPACE;
         }
         return inventory.add(copy) ? BookCopyResult.COPIED : BookCopyResult.NO_SPACE;
+    }
+
+    /** Archive papers are bookshelf-readable, but are not copyable books. */
+    private static boolean isArchivePaper(ItemStack source) {
+        return source.is(StrajaItems.ARCHIVE_FOLDER.get())
+                || source.is(StrajaItems.ARCHIVE_DOCUMENT.get());
     }
 
     @Override public int selectedSlot() {
