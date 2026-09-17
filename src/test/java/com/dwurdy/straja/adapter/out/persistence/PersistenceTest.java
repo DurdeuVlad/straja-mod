@@ -212,7 +212,7 @@ class PersistenceTest {
     void backupManifestCoversEverySourceStoreWithoutRecursion() {
         var stores = StrajaDataProvider.BackupPolicy.SOURCE_STORES;
         assertEquals(java.util.Set.of("setup", "audit", "inbox", "missions", "fines",
-                "prisons", "rooms", "complaints", "custody", "archive", "npcs",
+                "prisons", "rooms", "complaints", "custody", "archive", "identity_cards", "npcs",
                 "test", "players"), java.util.Set.copyOf(stores),
                 "the snapshot must retain every persisted source store");
         assertFalse(stores.contains("backup"),
