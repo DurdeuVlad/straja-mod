@@ -636,6 +636,15 @@ public final class StrajaEvents {
                 runtime.guardDuty().showRules(player);
                 return true;
             }
+            case IDENTITY_CARD -> {
+                String cardId = PhysicalItemSurface.validRecordId(item.data("IdentityCardId"));
+                if (cardId == null || !cardId.startsWith("ID-")) {
+                    player.tell("Buletinul nu are o referință validă.");
+                } else {
+                    runtime.identityCards().read(player, cardId);
+                }
+                return true;
+            }
             default -> {
                 return false;
             }

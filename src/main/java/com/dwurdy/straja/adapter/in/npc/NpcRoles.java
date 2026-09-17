@@ -148,6 +148,8 @@ public final class NpcRoles {
             case "custody-wake-downed" -> runtime.custodyRoleplay().wakeDowned(gw, "jailer_npc");
             case "cuffs-item" -> runtime.custodyRoleplay().giveCuffs(gw);
             case "fine-list" -> runtime.fineRoleplay().listFines(gw);
+            case "identity-request" -> runtime.identityCards().request(gw);
+            case "identity-list" -> runtime.identityCards().list(gw);
             case "fine-task-list" -> runtime.fineRoleplay().listTasks(gw);
             case "fine-draft-status" -> gw.tell(runtime.fineRoleplay().draftText(gw));
             case "fine-appeal-list" -> runtime.fineRoleplay().listAppeals(gw);

@@ -223,6 +223,7 @@ public final class StrajaCommands {
         root.then(complaintNode());
         root.then(roomNode());
         root.then(archiveNode());
+        root.then(identityCardNode());
 
         // migration from the legacy KubeJS world (console-usable, op-only)
         root.then(migrateNode());
@@ -871,6 +872,23 @@ public final class StrajaCommands {
         node.then(catalog);
         return node;
     }
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> identityCardNode() {
+        var node = adminOnly(Commands.literal("identity"));
+        node.then(Commands.literal("list")
+                .executes(c -> adminActor(c, StrajaRuntime.get().identityCards()::list)));
+        node.then(Commands.literal("issue")
+                .then(Commands.argument("player", EntityArgument.player())
+                        .executes(c -> adminActor(c, p -> StrajaRuntime.get().identityCards()
+                                .issue(p, target(c, "player"))))));
+        node.then(Commands.literal("revoke")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("reason", StringArgumentType.greedyString())
+                                .executes(c -> adminActor(c, p -> StrajaRuntime.get().identityCards()
+                                        .revoke(p, StringArgumentType.getString(c, "id"),
+                                                StringArgumentType.getString(c, "reason")))))));
+        return node;
+    }
+
 
     /** Resolves a player by name/uuid through the query port (includes test virtuals). */
     private static PlayerGateway find(CommandContext<CommandSourceStack> ctx, String name) {
@@ -1033,6 +1051,7 @@ public final class StrajaCommands {
                 "report", "message", "request", "inbox",
                 // roleplay service lanes
                 "mission", "cuffs", "prison", "fine", "complaint", "room", "archive",
+                "identity",
                 // typed setup and administrator operations
                 "promote", "demote", "suspend", "fire", "reinstate", "faction", "specialization",
                 "set-checkpoint", "set-mission-time", "set-location", "setup", "policy",
@@ -1058,7 +1077,7 @@ public final class StrajaCommands {
                     "/straja setup — checklist ghidat | setup here | setup patrol | setup npcs | setup tools",
                     "/straja policy list | get <cheie> | set <cheie> <valoare> | reset <cheie>",
                     "/straja checkpoint add | checkpoint remove <id> | set-checkpoint <id> | set-mission-time <id> <min> | set-location <nume>",
-                    "/straja mission | cuffs | prison | fine | complaint | room | archive — help pe subcomandă",
+                    "/straja mission | cuffs | prison | fine | complaint | room | archive | identity — help pe subcomandă",
                     "/straja npc list|spawn|assign|set-name|set-skin|remove",
                     "/straja migrate <worldPath> | backup | debug ... | test ...");
         }

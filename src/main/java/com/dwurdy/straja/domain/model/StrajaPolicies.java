@@ -18,6 +18,10 @@ public class StrajaPolicies {
     public boolean allowNameFallback = true;
     public String commissionerTitle = "Comisaru'";
     public String environment = "local";
+    // physical identity cards
+    public boolean identityCardsEnabled = true;
+    public int identityCardValidityDays = 30;
+
 
     // deployment gates
     public boolean requireRealCoinProviderOutsideLocal = true;

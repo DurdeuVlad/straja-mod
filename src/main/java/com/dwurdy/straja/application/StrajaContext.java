@@ -34,4 +34,5 @@ public record StrajaContext(
         DeliveryProvider delivery,
         WorldGateway world,
         FactionGateway factions,
-        AdminToolRepository adminTools) {}
+        AdminToolRepository adminTools,
+        IdentityCardRepository identityCards) {}

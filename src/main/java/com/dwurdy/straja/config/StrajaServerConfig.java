@@ -159,6 +159,9 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.BooleanValue REQUIRE_REAL_COIN_PROVIDER_OUTSIDE_LOCAL;
     public static final ModConfigSpec.BooleanValue REQUIRE_COMMISSIONER_UUID_OUTSIDE_LOCAL;
     public static final ModConfigSpec.BooleanValue REQUIRE_DEBUG_DISABLED_OUTSIDE_LOCAL;
+    public static final ModConfigSpec.BooleanValue IDENTITY_CARDS_ENABLED;
+    public static final ModConfigSpec.IntValue IDENTITY_CARD_VALIDITY_DAYS;
+
 
     public static final ModConfigSpec.BooleanValue ENVELOPE_ENABLED;
     public static final ModConfigSpec.BooleanValue ENVELOPE_FALLBACK_TO_CHAT;
@@ -248,6 +251,13 @@ public final class StrajaServerConfig {
         ALLOW_NAME_FALLBACK = B.define("allowNameFallback", true);
         ENVIRONMENT = B.comment("local | staging | production").define("environment", "local");
         B.pop();
+        B.push("identityCards");
+        IDENTITY_CARDS_ENABLED = B.comment("Enable physical buletin issuance and validation.")
+                .define("enabled", defaults.identityCardsEnabled);
+        IDENTITY_CARD_VALIDITY_DAYS = B.comment("Real-time validity period for a newly issued buletin.")
+                .defineInRange("validityDays", defaults.identityCardValidityDays, 1, 3650);
+        B.pop();
+
 
         B.push("timers");
         CHECKPOINT_UNLOCK_MINUTES = B.defineInRange("checkpointUnlockMinutes", 5, 1, 1440);
@@ -874,6 +884,8 @@ public final class StrajaServerConfig {
         p.requireRealCoinProviderOutsideLocal = REQUIRE_REAL_COIN_PROVIDER_OUTSIDE_LOCAL.get();
         p.requireCommissionerUuidOutsideLocal = REQUIRE_COMMISSIONER_UUID_OUTSIDE_LOCAL.get();
         p.requireDebugDisabledOutsideLocal = REQUIRE_DEBUG_DISABLED_OUTSIDE_LOCAL.get();
+        p.identityCardsEnabled = IDENTITY_CARDS_ENABLED.get();
+        p.identityCardValidityDays = IDENTITY_CARD_VALIDITY_DAYS.get();
 
         p.envelopeEnabled = ENVELOPE_ENABLED.get();
         p.envelopeFallbackToChat = ENVELOPE_FALLBACK_TO_CHAT.get();

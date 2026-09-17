@@ -33,6 +33,10 @@ public final class PolicyRegistry {
     }
 
     static {
+        // physical identity cards
+        k("identityCards.enabled", "identityCardsEnabled", Kind.BOOL);
+        k("identityCards.validityDays", "identityCardValidityDays", Kind.INT);
+
         // timers
         k("timers.checkpointUnlockMinutes", "checkpointUnlockMinutes", Kind.INT);
         k("timers.checkpointDeadlineMinutes", "checkpointDeadlineMinutes", Kind.INT);

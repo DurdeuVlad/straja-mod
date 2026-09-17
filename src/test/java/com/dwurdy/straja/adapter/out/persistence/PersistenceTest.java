@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import com.dwurdy.straja.domain.model.AuditEntry;
 import com.dwurdy.straja.domain.model.GuardState;
+import com.dwurdy.straja.domain.model.IdentityCard;
+import com.dwurdy.straja.domain.model.IdentityCardStore;
 import com.dwurdy.straja.domain.model.SetupData;
 import com.dwurdy.straja.support.MemoryStore;
 import java.util.HashMap;
@@ -183,6 +185,27 @@ class PersistenceTest {
         assertEquals(1, loaded.missions.size());
         assertEquals("ACCEPTED", loaded.find("M1").status);
         assertEquals(100, loaded.find("M1").reward);
+    }
+
+    @Test
+    void identityCardsRoundTrip() {
+        var repo = new SavedStores.IdentityCards(access);
+        var store = new IdentityCardStore();
+        var card = new IdentityCard();
+        card.id = "ID-1";
+        card.holderUuid = UUID.randomUUID().toString();
+        card.holderName = "Citizen";
+        card.issuedAt = 1000;
+        card.expiresAt = 2000;
+        store.cards.put(card.id, card);
+        store.nextCardNumber = 2;
+
+        repo.write(store);
+
+        var loaded = repo.read();
+        assertEquals(2, loaded.nextCardNumber);
+        assertEquals("Citizen", loaded.cards.get("ID-1").holderName);
+        assertEquals(2000, loaded.cards.get("ID-1").expiresAt);
     }
 
     @Test
