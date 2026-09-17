@@ -10,6 +10,8 @@ import com.dwurdy.straja.domain.model.ItemSpec;
 import com.dwurdy.straja.domain.model.SetupData;
 import com.dwurdy.straja.domain.model.StrajaPolicies;
 
+import java.time.Instant;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -18,6 +20,7 @@ import java.util.regex.Pattern;
 /** Persistent, UUID-bound identity cards with a physical item projection. */
 public class IdentityCardService implements IdentityCardRoleplayUseCase {
     private static final long DAY_MS = 24L * 60 * 60 * 1000;
+    private static final int MAX_VALIDITY_DAYS = 3650;
     private static final int MAX_REASON_LENGTH = 240;
     private static final Pattern CARD_ID = Pattern.compile("ID-[0-9]{1,10}");
 
@@ -166,14 +169,15 @@ public class IdentityCardService implements IdentityCardRoleplayUseCase {
         card.issuerUuid = issuerUuid == null ? "" : issuerUuid;
         card.issuerName = issuerName == null ? "" : issuerName;
         card.issuedAt = issuedAt;
-        card.expiresAt = issuedAt + Math.max(1, p().identityCardValidityDays) * DAY_MS;
+        int validityDays = Math.min(MAX_VALIDITY_DAYS, Math.max(1, p().identityCardValidityDays));
+        card.expiresAt = issuedAt + (long) validityDays * DAY_MS;
         store.cards.put(id, card);
         store.nextCardNumber = number == Integer.MAX_VALUE ? number : number + 1;
         ctx.identityCards().write(store);
 
         audit.record("identity_card_issue", auditActor.name(), uuid(auditActor),
                 target.name(), uuid(target), "SUCCESS", "cardId=" + id);
-        target.tell("Ai primit buletinul " + id + ". Este valabil până la " + card.expiresAt + ".");
+        target.tell("Ai primit buletinul " + id + ". Este valabil până la " + date(card.expiresAt) + ".");
         if (!uuid(auditActor).equalsIgnoreCase(uuid(target))) {
             auditActor.tell("Buletinul " + id + " a fost emis pentru " + target.name() + ".");
         }
@@ -189,7 +193,7 @@ public class IdentityCardService implements IdentityCardRoleplayUseCase {
             return;
         }
         viewer.tell("Buletin " + card.id + " — titular: " + card.holderName
-                + "; stare: " + status(card) + "; expiră: " + card.expiresAt + ".");
+                + "; stare: " + status(card) + "; expiră: " + date(card.expiresAt) + ".");
         if (IdentityCardStatus.REVOKED.name().equals(card.status)) {
             viewer.tell("Revocat de " + card.revokedByName + ": " + card.revocationReason);
         }
@@ -209,6 +213,10 @@ public class IdentityCardService implements IdentityCardRoleplayUseCase {
         if (card == null) return "NEVALID";
         if (IdentityCardStatus.REVOKED.name().equals(card.status)) return "REVOCAT";
         return card.validAt(now()) ? "VALID" : "EXPIRAT";
+    }
+
+    private static String date(long timestamp) {
+        return Instant.ofEpochMilli(timestamp).atZone(ZoneId.systemDefault()).toLocalDate().toString();
     }
 
     @Override

@@ -70,6 +70,15 @@ class IdentityCardServiceTest {
     }
 
     @Test
+    void validityOverrideCannotOverflowTheExpiryTimestamp() {
+        ctx.policies().identityCardValidityDays = Integer.MAX_VALUE;
+
+        assertTrue(cards.request(citizen));
+        var card = ctx.identityCards().read().cards.get("ID-1");
+        assertEquals(clock.nowMillis() + 3650L * DAY_MS, card.expiresAt);
+    }
+
+    @Test
     void forgedOrUnauthorizedReadsDoNotExposeCardData() {
         assertTrue(cards.request(citizen));
         var outsider = server.add("outsider");
