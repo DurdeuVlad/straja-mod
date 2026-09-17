@@ -880,6 +880,10 @@ public final class StrajaCommands {
                 .then(Commands.argument("player", EntityArgument.player())
                         .executes(c -> adminActor(c, p -> StrajaRuntime.get().identityCards()
                                 .issue(p, target(c, "player"))))));
+        node.then(Commands.literal("forge")
+                .then(Commands.argument("player", EntityArgument.player())
+                        .executes(c -> adminActor(c, p -> StrajaRuntime.get().identityCards()
+                                .forge(p, target(c, "player"))))));
         node.then(Commands.literal("revoke")
                 .then(Commands.argument("id", StringArgumentType.word())
                         .then(Commands.argument("reason", StringArgumentType.greedyString())

@@ -10,6 +10,8 @@ public class IdentityCard {
     public long issuedAt;
     public long expiresAt;
     public String status = IdentityCardStatus.VALID.name();
+    public String authenticity = IdentityCardAuthenticity.AUTHENTIC.name();
+    public String forgeryClue = "";
     public Long revokedAt;
     public String revokedByUuid = "";
     public String revokedByName = "";
