@@ -641,7 +641,8 @@ public final class StrajaEvents {
                 if (cardId == null || !cardId.startsWith("ID-")) {
                     player.tell("Buletinul nu are o referință validă.");
                 } else {
-                    runtime.identityCards().read(player, cardId);
+                    runtime.identityCards().read(player, cardId,
+                            item.data("IdentityCardHolder"), item.data("IdentityCardAuthenticity"));
                 }
                 return true;
             }

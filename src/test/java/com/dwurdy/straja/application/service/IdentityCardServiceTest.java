@@ -1,6 +1,7 @@
 package com.dwurdy.straja.application.service;
 
 import com.dwurdy.straja.application.StrajaContext;
+import com.dwurdy.straja.domain.model.IdentityCardAuthenticity;
 import com.dwurdy.straja.domain.model.IdentityCardStatus;
 import com.dwurdy.straja.domain.model.Rank;
 import com.dwurdy.straja.support.Fakes;
@@ -76,6 +77,35 @@ class IdentityCardServiceTest {
         assertTrue(cards.request(citizen));
         var card = ctx.identityCards().read().cards.get("ID-1");
         assertEquals(clock.nowMillis() + 3650L * DAY_MS, card.expiresAt);
+    }
+
+    @Test
+    void authorityCanCreateAReadableForgeryWithAQuietVerificationClue() {
+        commissioner.op = true;
+
+        assertTrue(cards.forge(commissioner, citizen));
+        var card = ctx.identityCards().read().cards.get("ID-1");
+        assertNotNull(card);
+        assertEquals(IdentityCardAuthenticity.FORGED.name(), card.authenticity);
+        assertEquals(1, citizen.inventory().countOf("straja:identity_card"));
+
+        commissioner.messages.clear();
+        cards.read(commissioner, card.id, citizen.uuid.toString(),
+                IdentityCardAuthenticity.FORGED.name());
+        assertTrue(commissioner.told("Observație:"));
+        assertFalse(commissioner.told("falsificat"));
+    }
+
+    @Test
+    void anItemWithTheWrongHolderLeavesAQuietVerificationClue() {
+        assertTrue(cards.request(citizen));
+        var card = ctx.identityCards().read().cards.get("ID-1");
+
+        commissioner.op = true;
+        commissioner.messages.clear();
+        cards.read(commissioner, card.id, commissioner.uuid.toString(),
+                IdentityCardAuthenticity.AUTHENTIC.name());
+        assertTrue(commissioner.told("Observație:"));
     }
 
     @Test

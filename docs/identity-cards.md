@@ -14,10 +14,13 @@ Un Comisar sau operator poate folosi:
 ```text
 /straja identity list
 /straja identity issue <player>
+/straja identity forge <player>
 /straja identity revoke <ID-n> <motiv>
 ```
 
 Comisarul, operatorii și Străjerii aflați la datorie pot verifica orice card. Un card expirat nu este acceptat ca valid, iar unul revocat rămâne revocat și motivul este păstrat în audit.
+
+`forge` este o rută intenționată de roleplay pentru o autoritate. Buletinul contrafăcut rămâne utilizabil ca recuzită, dar la verificarea de către o autoritate poate lăsa o observație discretă despre sigiliu, laminare, cerneală sau textură.
 
 ## Configurație
 

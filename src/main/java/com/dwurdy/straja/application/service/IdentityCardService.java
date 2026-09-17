@@ -4,6 +4,7 @@ import com.dwurdy.straja.application.StrajaContext;
 import com.dwurdy.straja.application.port.in.IdentityCardRoleplayUseCase;
 import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.domain.model.IdentityCard;
+import com.dwurdy.straja.domain.model.IdentityCardAuthenticity;
 import com.dwurdy.straja.domain.model.IdentityCardStatus;
 import com.dwurdy.straja.domain.model.IdentityCardStore;
 import com.dwurdy.straja.domain.model.ItemSpec;
@@ -23,6 +24,11 @@ public class IdentityCardService implements IdentityCardRoleplayUseCase {
     private static final int MAX_VALIDITY_DAYS = 3650;
     private static final int MAX_REASON_LENGTH = 240;
     private static final Pattern CARD_ID = Pattern.compile("ID-[0-9]{1,10}");
+    private static final List<String> FORGERY_CLUES = List.of(
+            "sigiliul pare ușor deplasat",
+            "laminarea are o margine neuniformă",
+            "cerneala de pe serie pare puțin retușată",
+            "hârtia are o textură neobișnuită");
 
     private final StrajaContext ctx;
     private final PlayerService players;
@@ -85,9 +91,13 @@ public class IdentityCardService implements IdentityCardRoleplayUseCase {
     private IdentityCard currentFor(IdentityCardStore store, PlayerGateway player) {
         long timestamp = now();
         for (IdentityCard card : store.cards.values()) {
-            if (sameHolder(card, player) && card.validAt(timestamp)) return card;
+            if (sameHolder(card, player) && authentic(card) && card.validAt(timestamp)) return card;
         }
         return null;
+    }
+
+    private static boolean authentic(IdentityCard card) {
+        return card != null && !IdentityCardAuthenticity.FORGED.name().equals(card.authenticity);
     }
 
     private boolean administrator(PlayerGateway player) {
@@ -154,6 +164,7 @@ public class IdentityCardService implements IdentityCardRoleplayUseCase {
         var itemData = new LinkedHashMap<String, String>();
         itemData.put("IdentityCardId", id);
         itemData.put("IdentityCardHolder", target.uuid().toString());
+        itemData.put("IdentityCardAuthenticity", IdentityCardAuthenticity.AUTHENTIC.name());
         var item = new ItemSpec("straja:identity_card", 1, itemData,
                 "Buletin — " + safeName(target));
         if (!target.inventory().canReceive(List.of(item)) || !target.giveVerified(item)) {
@@ -185,7 +196,73 @@ public class IdentityCardService implements IdentityCardRoleplayUseCase {
     }
 
     @Override
+    public boolean forge(PlayerGateway actor, PlayerGateway target) {
+        if (actor == null) return false;
+        if (!p().identityCardsEnabled) {
+            actor.tell("Sistemul de buletine este dezactivat.");
+            return false;
+        }
+        if (!administrator(actor)) {
+            actor.tell("Doar Comisaru' sau un operator poate crea buletine contrafăcute.");
+            return false;
+        }
+        if (target == null || !target.isOnline() || target.uuid() == null) {
+            actor.tell("Titularul trebuie să fie conectat.");
+            return false;
+        }
+
+        IdentityCardStore store = normalized(ctx.identityCards().read());
+        int number = store.nextCardNumber;
+        String id = "ID-" + number;
+        while (store.cards.containsKey(id)) {
+            if (number == Integer.MAX_VALUE) {
+                actor.tell("Registrul de buletine este epuizat.");
+                return false;
+            }
+            number++;
+            id = "ID-" + number;
+        }
+        String clue = FORGERY_CLUES.get(Math.floorMod(number, FORGERY_CLUES.size()));
+        var itemData = new LinkedHashMap<String, String>();
+        itemData.put("IdentityCardId", id);
+        itemData.put("IdentityCardHolder", target.uuid().toString());
+        itemData.put("IdentityCardAuthenticity", IdentityCardAuthenticity.FORGED.name());
+        var item = new ItemSpec("straja:identity_card", 1, itemData,
+                "Buletin — " + safeName(target));
+        if (!target.inventory().canReceive(List.of(item)) || !target.giveVerified(item)) {
+            actor.tell("Buletinul contrafăcut nu a putut fi livrat; nu s-a creat niciun registru.");
+            return false;
+        }
+
+        IdentityCard card = new IdentityCard();
+        card.id = id;
+        card.holderUuid = target.uuid().toString();
+        card.holderName = safeName(target);
+        card.issuerUuid = uuid(actor);
+        card.issuerName = safeName(actor);
+        card.issuedAt = now();
+        int validityDays = Math.min(MAX_VALIDITY_DAYS, Math.max(1, p().identityCardValidityDays));
+        card.expiresAt = card.issuedAt + (long) validityDays * DAY_MS;
+        card.authenticity = IdentityCardAuthenticity.FORGED.name();
+        card.forgeryClue = clue;
+        store.cards.put(id, card);
+        store.nextCardNumber = number == Integer.MAX_VALUE ? number : number + 1;
+        ctx.identityCards().write(store);
+
+        audit.record("identity_card_forge", actor.name(), uuid(actor),
+                target.name(), uuid(target), "SUCCESS", "cardId=" + id);
+        actor.tell("Buletin contrafăcut " + id + " pregătit pentru " + target.name() + ".");
+        return true;
+    }
+
+    @Override
     public void read(PlayerGateway viewer, String cardId) {
+        read(viewer, cardId, null, null);
+    }
+
+    @Override
+    public void read(PlayerGateway viewer, String cardId, String itemHolderUuid,
+                     String itemAuthenticity) {
         if (viewer == null) return;
         IdentityCard card = view(viewer, cardId);
         if (card == null) {
@@ -194,6 +271,16 @@ public class IdentityCardService implements IdentityCardRoleplayUseCase {
         }
         viewer.tell("Buletin " + card.id + " — titular: " + card.holderName
                 + "; stare: " + status(card) + "; expiră: " + date(card.expiresAt) + ".");
+        boolean authority = administrator(viewer) || players.isOnDutyGuard(viewer);
+        boolean itemClaimsForgery = IdentityCardAuthenticity.FORGED.name().equals(itemAuthenticity);
+        boolean itemClaimsAnotherHolder = itemHolderUuid != null && !itemHolderUuid.isBlank()
+                && !itemHolderUuid.equalsIgnoreCase(card.holderUuid);
+        if (authority && (IdentityCardAuthenticity.FORGED.name().equals(card.authenticity)
+                || itemClaimsForgery || itemClaimsAnotherHolder)) {
+            String clue = card.forgeryClue == null || card.forgeryClue.isBlank()
+                    ? "sigiliul nu corespunde perfect registrului" : card.forgeryClue;
+            viewer.tell("Observație: " + clue + ".");
+        }
         if (IdentityCardStatus.REVOKED.name().equals(card.status)) {
             viewer.tell("Revocat de " + card.revokedByName + ": " + card.revocationReason);
         }
