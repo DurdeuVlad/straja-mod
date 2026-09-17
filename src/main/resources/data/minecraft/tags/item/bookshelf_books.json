@@ -1,0 +1,7 @@
+{
+  "replace": false,
+  "values": [
+    "straja:archive_folder",
+    "straja:archive_document"
+  ]
+}
