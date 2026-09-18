@@ -49,6 +49,16 @@ public interface FormSessionUseCase {
         TOOL_NPC_NAME("tool-npc-name"),
         TOOL_NPC_SKIN("tool-npc-skin"),
         GIVE_UP("give-up"),
+        INCIDENT_REPORT("incident-report"),
+        BOLO_CREATE("bolo-create"),
+        INCIDENT_RESOLVE("incident-resolve"),
+        EVIDENCE_CONFISCATE("evidence-confiscate"),
+        EVIDENCE_TRANSFER("evidence-transfer"),
+        EVIDENCE_DESTROY("evidence-destroy"),
+        EVIDENCE_CASE_VIEW("evidence-case-view"),
+        ARREST_HANDOFF("arrest-handoff"),
+        REPUTATION_VIEW("reputation-view"),
+        REPUTATION_CORRECTION("reputation-correction"),
         OTHER_REQUEST("other-request");
 
         private final String id;

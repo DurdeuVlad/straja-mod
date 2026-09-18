@@ -362,7 +362,12 @@ public final class Fakes {
                 new SavedStores.Test(access),
                 currency, delivery, new TestWorld(), new TestFactions(),
                 new SavedStores.AdminTools(access),
-                new SavedStores.IdentityCards(access));
+                new SavedStores.IdentityCards(access),
+                new SavedStores.Incidents(access),
+                new SavedStores.Bolos(access),
+                new SavedStores.Evidence(access),
+                new SavedStores.ArrestRecords(access),
+                new SavedStores.Reputation(access));
     }
 
     public static StrajaPolicies policies() {

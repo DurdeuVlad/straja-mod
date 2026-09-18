@@ -322,6 +322,32 @@ At minimum, the system should aim to make these editable without recompiling:
 
 Commands/config files may remain as operator fallback and emergency recovery, but should not be the preferred day-to-day Commissioner workflow.
 
+## 15a. RP expansion: authority, evidence and civic history
+
+The incident loop is deliberately finite and auditable: a citizen report or
+on-duty whistle creates one dispatch record; one guard becomes lead and the
+support list is bounded; the record expires or is resolved with an explicit
+outcome. A completed incident is history, not a permanent wanted flag.
+
+BOLOs are notices. `INFORMATION_ONLY` is never an arrest warrant, and even an
+authoritative BOLO only reflects an existing valid arrest task. Arrest still
+requires the normal server-side task, custody and range checks. Reputation is a
+separate score in `[-1000, 1000]`; it affects recruitment and rehabilitation,
+never detection, rank, or arrest authority.
+
+Search is a server-authoritative read-only snapshot. Confiscation succeeds only
+when the target, custody context, range, slot, full stack and custom data still
+match. The exact serialized stack is moved into a persistent evidence record;
+the bag and receipt are references, not authority. Every transfer appends a
+custody event. Arrest paperwork links the sentence, fine, task, incident,
+evidence, BOLO, complaint and reputation events when those records exist.
+
+Reputation deltas are idempotent ledger entries, clamped to the configured
+range, with a neutral cap for sentence completion and fine payment. Lawful
+guard lethal force requires an active authoritative task, recent hostile damage
+and a target that is not restrained, downed or already in custody. Everything
+else is recorded as a civic event and remains reviewable by the Comisar.
+
 ## 16. Explicit non-goals / postponed decisions
 
 - Jailer/item-dependent custody expansion is postponed for now.

@@ -35,6 +35,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
     private final AuditService audit;
     private final EquipmentService equipment;
     private final java.util.function.Supplier<String> bootId;
+    private java.util.function.Predicate<PlayerGateway> recruitmentEligibility = player -> true;
 
     /** Optional hook for room auto-assignment (wired by M6 RoomService). */
     public interface RankChangeHook { void onPromotedToGuard(PlayerGateway player); }
@@ -67,6 +68,10 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
 
     public void onPromotedToGuard(RankChangeHook hook) {
         if (hook != null) this.roomAutoAssign = hook;
+    }
+
+    public void onRecruitmentEligibility(java.util.function.Predicate<PlayerGateway> predicate) {
+        this.recruitmentEligibility = predicate == null ? player -> true : predicate;
     }
 
     // ------------------------------------------------------------ helpers
@@ -262,6 +267,11 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
     @Override
     public void applyForStraja(PlayerGateway player) {
         GuardState state = players.state(player);
+        if (!recruitmentEligibility.test(player)) {
+            player.tell("Dosarul tău nu permite momentan admiterea în Strajă. "
+                    + "Rezolvă sancțiunile și reabilitează-te înainte de a reaplica.");
+            return;
+        }
         if (state.fired) {
             player.tell(coreError("fired"));
             return;

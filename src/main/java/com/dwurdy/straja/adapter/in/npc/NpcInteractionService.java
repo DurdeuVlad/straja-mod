@@ -50,7 +50,7 @@ public final class NpcInteractionService {
 
     /**
      * Consumes a player-bound, one-use NPC token. A typed command cannot create
-     * one, and the gameplay command roots remain permission-2 gated.
+     * one, and the gameplay command roots remain permission-gated.
      */
     public static String consumeActionToken(String token, UUID playerId) {
         if (token == null || playerId == null) return null;

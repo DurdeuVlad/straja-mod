@@ -22,6 +22,9 @@ eclipse
 run
 runs
 run-data
+run-straja-game-test
+run-rp-expansion-test
+run-rp-expansion-rcon
 
 repo
 
@@ -31,3 +34,6 @@ libs/*.jar
 # python tooling under tools/
 __pycache__/
 *.pyc
+
+# Codex planning scratch files
+.codex-scratch/

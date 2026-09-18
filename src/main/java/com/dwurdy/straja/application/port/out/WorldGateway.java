@@ -12,6 +12,10 @@ public interface WorldGateway {
     boolean setRoomSign(String dimension, int x, int y, int z, String facing,
                       String line1, String line2, String line3);
 
+    /** Plays a bounded local notification sound. Adapters may no-op when unsupported. */
+    default void playSoundAt(String dimension, double x, double y, double z,
+                             double radius, String soundId) {}
+
     record BlockInfo(String id, boolean air, boolean door, boolean solid) {
         public boolean traversable() {
             return !door && (air || !solid);

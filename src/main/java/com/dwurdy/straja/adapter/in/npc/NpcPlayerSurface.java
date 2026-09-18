@@ -22,6 +22,9 @@ final class NpcPlayerSurface {
             "archive-sheet-submit", "archive-sheet-sign", "archive-sheet-copy",
             "archive-sheet-envelope", "archive-sheet-issue", "archive-sheet-revoke",
             "report-review", "audience-review",
+            "incident-accept", "incident-join", "incident-leave", "incident-resolve",
+            "bolo-cancel", "evidence-deposit", "evidence-return", "evidence-transfer",
+            "evidence-destroy",
             "faq",
             "admin-dossier", "admin-promote", "admin-demote", "admin-suspend",
             "admin-fire", "admin-reinstate",
@@ -84,6 +87,8 @@ final class NpcPlayerSurface {
                             new ChatAction("Amenzile mele", "fine-list"),
                             new ChatAction("Emite buletinul meu", "identity-request"),
                             new ChatAction("Verifică buletinele", "identity-list"),
+                            new ChatAction("Raportează incident", "incident-report"),
+                            new ChatAction("Reputația mea", "reputation-self"),
                             new ChatAction("Stare cameră", "room-status"),
                             new ChatAction("Declară facțiunea nativă", "faction-declare"),
                             faqEntry(RoleRoute.RECEPTIONIST)));
@@ -104,6 +109,10 @@ final class NpcPlayerSurface {
                             new ChatAction("Misiunile mele", "mission-list"),
                             new ChatAction("Carnet de ordine", "mission-carnet"),
                             new ChatAction("Stare serviciu", "guard-status"),
+                            new ChatAction("Incidente active", "incident-list"),
+                            new ChatAction("Roster Straja", "duty-roster"),
+                            new ChatAction("BOLO-uri", "bolo-list"),
+                            new ChatAction("Emite BOLO", "bolo-create"),
                             faqEntry(RoleRoute.SECRETARY)));
             case JAILER -> new RoleSurface(
                     RoleRoute.JAILER,
@@ -112,6 +121,8 @@ final class NpcPlayerSurface {
                     List.of(
                             new ChatAction("Stare custodie", "cuffs-status"),
                             new ChatAction("Stare sentință", "prison-status"),
+                            new ChatAction("Predă deținutul Temnicerului", "arrest-handoff"),
+                            new ChatAction("Dosarul meu de arest", "arrest-record"),
                             new ChatAction("Stare leșin", "downed-status"),
                             new ChatAction("Primește cătușe", "cuffs-item"),
                             faqEntry(RoleRoute.JAILER)));
@@ -120,6 +131,8 @@ final class NpcPlayerSurface {
                     "Arhivă",
                     "Îți arăt dosarele pe care ai voie să le citești.",
                     List.of(new ChatAction("Vezi dosarele", "archive-list"),
+                            new ChatAction("Probe în custodie", "evidence-list"),
+                            new ChatAction("Probe pe dosar", "evidence-case-view"),
                             faqEntry(RoleRoute.ARCHIVIST)));
             case ARMORER -> new RoleSurface(
                     RoleRoute.ARMORER,
@@ -548,6 +561,63 @@ final class NpcPlayerSurface {
                 case REVIEW_LIST -> actions.add(new ChatAction("Cereri de audiență", "audience-review-list"));
                 case REVIEW -> parameterizedActionId("audience-review", id)
                         .ifPresent(a -> actions.add(new ChatAction("Decide cererea " + id, a)));
+            }
+        }
+        return List.copyOf(actions);
+    }
+
+    static List<ChatAction> incidentActions(
+            List<com.dwurdy.straja.application.port.in.RoleplayExpansionUseCase.IncidentView> incidents) {
+        if (incidents == null || incidents.isEmpty()) return List.of();
+        var actions = new java.util.ArrayList<ChatAction>();
+        for (var incident : incidents) {
+            if (incident == null) continue;
+            if ("OPEN".equals(incident.status())) {
+                parameterizedActionId("incident-accept", incident.id())
+                        .ifPresent(id -> actions.add(new ChatAction("Preia " + incident.id(), id)));
+            }
+            parameterizedActionId("incident-join", incident.id())
+                    .ifPresent(id -> actions.add(new ChatAction("Sprijin " + incident.id(), id)));
+            parameterizedActionId("incident-resolve", incident.id())
+                    .ifPresent(id -> actions.add(new ChatAction("Încheie " + incident.id(), id)));
+        }
+        return List.copyOf(actions);
+    }
+
+    static List<ChatAction> boloActions(
+            List<com.dwurdy.straja.application.port.in.RoleplayExpansionUseCase.BoloView> bolos) {
+        if (bolos == null || bolos.isEmpty()) return List.of();
+        var actions = new java.util.ArrayList<ChatAction>();
+        for (var bolo : bolos) {
+            if (bolo == null) continue;
+            parameterizedActionId("bolo-cancel", bolo.id())
+                    .ifPresent(id -> actions.add(new ChatAction("Anulează " + bolo.id(), id)));
+        }
+        return List.copyOf(actions);
+    }
+
+    static List<ChatAction> evidenceActions(
+            List<com.dwurdy.straja.domain.model.EvidenceRecord> records) {
+        if (records == null || records.isEmpty()) return List.of();
+        var actions = new java.util.ArrayList<ChatAction>();
+        for (var record : records) {
+            if (record == null) continue;
+            String operation = record.status
+                    == com.dwurdy.straja.domain.model.EvidenceStatus.IN_GUARD_CUSTODY
+                    ? "evidence-deposit"
+                    : record.status == com.dwurdy.straja.domain.model.EvidenceStatus.DEPOSITED
+                    ? "evidence-return" : "";
+            if (!operation.isBlank()) {
+                parameterizedActionId(operation, record.id)
+                        .ifPresent(id -> actions.add(new ChatAction(
+                                ("evidence-deposit".equals(operation) ? "Depune " : "Restituie ") + record.id, id)));
+            }
+            if (record.status == com.dwurdy.straja.domain.model.EvidenceStatus.IN_GUARD_CUSTODY
+                    || record.status == com.dwurdy.straja.domain.model.EvidenceStatus.DEPOSITED) {
+                parameterizedActionId("evidence-transfer", record.id)
+                        .ifPresent(id -> actions.add(new ChatAction("Transferă " + record.id, id)));
+                parameterizedActionId("evidence-destroy", record.id)
+                        .ifPresent(id -> actions.add(new ChatAction("Distruge " + record.id, id)));
             }
         }
         return List.copyOf(actions);

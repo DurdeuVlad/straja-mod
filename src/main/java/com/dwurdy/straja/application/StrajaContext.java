@@ -35,4 +35,9 @@ public record StrajaContext(
         WorldGateway world,
         FactionGateway factions,
         AdminToolRepository adminTools,
-        IdentityCardRepository identityCards) {}
+        IdentityCardRepository identityCards,
+        IncidentRepository incidents,
+        BoloRepository bolos,
+        EvidenceRepository evidence,
+        ArrestRecordRepository arrestRecords,
+        ReputationRepository reputation) {}

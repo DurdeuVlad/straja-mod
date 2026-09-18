@@ -220,6 +220,40 @@ Secretary from duplicating arbitrary held items.
 | Jailer (optional) | custody, sentence, downed status, cuffs, FAQ | custody requests and releases |
 | Archivist (optional) | folders, FAQ | authorized archive folder/sheet/document flows |
 
+## RP expansion role branches
+
+```mermaid
+flowchart TD
+    REC[Recepție] --> IR[Raportează incident]
+    IR --> IS[Formular categorie + descriere]
+    IS --> IC[Incident OPEN; TTL + audit]
+    SEC[Secretariat] --> IL[Incidente active]
+    IL --> LEAD[Preia un singur incident]
+    IL --> SUP[Intră ca sprijin până la limită]
+    IL --> RES[Încheie cu rezultat + note]
+    SEC --> BL[BOLO-uri]
+    SEC --> BC[Emite BOLO]
+    BC --> BOLO[INFORMARE; nu autorizează arestul]
+    GUARD[Străjer activ] --> WH[Fluier]
+    WH --> IC
+    GUARD --> SEARCH[Percheziție la ≤4 blocuri]
+    SEARCH --> SNAP[Snapshot doar pentru citire]
+    SNAP --> CONF[Confiscă stack exact]
+    CONF --> BAG[Pungă + chitanță; ID probă]
+    ARC[Arhivist / Comisar] --> DEP[Depune / restituie]
+    DEP --> CHAIN[Lanț de custodie]
+    JAIL[Temnicer] --> CASE[Dosar arest automat]
+    CASE --> LINKS[Sentință · amendă · task · incident · probă · BOLO · plângere · reputație]
+    COM[Comisar] --> RH[Istoric și corecție reputație]
+```
+
+The Secretary exposes the incident, roster and BOLO projections. The Jailer
+sees the detainee's formal arrest record. The Archivist sees evidence and its
+custody chain. The Comisar gets exact reputation history, correction with a
+mandatory reason, all arrest records and the evidence chain. Every displayed
+action is only a short-lived player-bound token; the owning service repeats all
+authority and freshness checks.
+
 ## Source-of-truth files
 
 - FAQ text, questions, gating and answer return paths:

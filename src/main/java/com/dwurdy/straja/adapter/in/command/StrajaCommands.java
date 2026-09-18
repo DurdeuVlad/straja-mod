@@ -34,13 +34,12 @@ public final class StrajaCommands {
     public static void onRegisterCommands(RegisterCommandsEvent event) {
         CommandDispatcher<CommandSourceStack> dispatcher = event.getDispatcher();
         dispatcher.register(root());
+        AdminCommandHelp.attach(dispatcher);
     }
 
     private static LiteralArgumentBuilder<CommandSourceStack> root() {
         var root = Commands.literal("straja");
 
-        root.executes(StrajaCommands::help);
-        root.then(Commands.literal("help").executes(StrajaCommands::help));
         // NPC clicks use a short-lived, player-bound token; this is not a
         // public gameplay-command alias and is intentionally absent from help.
         root.then(npcActionNode());
@@ -150,8 +149,10 @@ public final class StrajaCommands {
         root.then(adminOnly(setCheckpoint));
         var checkpoint = Commands.literal("checkpoint")
                 .then(Commands.literal("add")
+                        .requires(source -> source.hasPermission(CommandPermissions.SETUP))
                         .executes(c -> adminActor(c, p -> StrajaRuntime.get().guards().addCheckpoint(p))))
                 .then(Commands.literal("remove")
+                        .requires(source -> source.hasPermission(CommandPermissions.SETUP))
                         .then(Commands.argument("id", StringArgumentType.word())
                                 .executes(c -> adminActor(c, p -> StrajaRuntime.get().guards()
                                         .removeCheckpoint(p, StringArgumentType.getString(c, "id"))))));
@@ -225,7 +226,7 @@ public final class StrajaCommands {
         root.then(archiveNode());
         root.then(identityCardNode());
 
-        // migration from the legacy KubeJS world (console-usable, op-only)
+        // migration from the legacy KubeJS world (console-usable, OP 4 only)
         root.then(migrateNode());
 
         // §25 emergency system — usable by the Comisar and op/console; the
@@ -439,7 +440,6 @@ public final class StrajaCommands {
             }
             node.then(builder);
         }
-        node.then(Commands.literal("help").executes(StrajaCommands::missionHelp));
         return node;
     }
 
@@ -471,9 +471,9 @@ public final class StrajaCommands {
         return 1;
     }
 
-    /** §25: Comisar/op console-gated in the service, not by permission level. */
+    /** §25: OP 3 at the command boundary; Comisar authority remains in service. */
     private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> emergencyNode() {
-        var node = Commands.literal("emergency");
+        var node = adminOnly(Commands.literal("emergency"));
         node.then(Commands.literal("alert")
                 .then(Commands.argument("message", StringArgumentType.greedyString())
                         .executes(c -> adminActor(c, p -> StrajaRuntime.get().emergencyRoleplay()
@@ -535,14 +535,6 @@ public final class StrajaCommands {
                                 else custody.refuse(p, StringArgumentType.getString(c, "id"));
                             }))));
         }
-        node.then(Commands.literal("help").executes(ctx -> {
-            String[] lines = {
-                    "/straja cuffs item | status | downed | request <jucător> | surrender <jucător>",
-                    "/straja cuffs accept <id> | refuse <id> | release <jucător> | sack-remove | emergency <jucător>"
-            };
-            for (String line : lines) ctx.getSource().sendSystemMessage(Component.literal(line));
-            return 1;
-        }));
         return node;
     }
 
@@ -612,16 +604,6 @@ public final class StrajaCommands {
 
     private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> fineNode() {
         var node = adminOnly(Commands.literal("fine"));
-        node.then(Commands.literal("help").executes(ctx -> {
-            String[] lines = {
-                    "/straja fine book | write <jucător> <sumă> <lege> <descriere> | draft | issue <jucător>",
-                    "/straja fine pay <F-id> | appeal <F-id> <motiv> | list | cancel <F-id>",
-                    "/straja fine appeals | review <F-id> <uphold|reduce|void> [tarif] [motiv] | recover <F-id> <paid|retry>",
-                    "/straja fine tasks | accept <task> | complete <task> | refuse <task> | arrest <task> [zile] | warrant <jucător> <motiv>"
-            };
-            for (String line : lines) ctx.getSource().sendSystemMessage(Component.literal(line));
-            return 1;
-        }));
         node.then(Commands.literal("book").executes(c -> player(c, p -> {
             if (!StrajaRuntime.get().players().hasCapability(p, com.dwurdy.straja.domain.model.Capability.ISSUE_FINES)) {
                 p.tell("Registrul de Amenzi este disponibil doar Străjerilor activi.");
@@ -872,6 +854,7 @@ public final class StrajaCommands {
         node.then(catalog);
         return node;
     }
+
     private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> identityCardNode() {
         var node = adminOnly(Commands.literal("identity"));
         node.then(Commands.literal("list")
@@ -892,7 +875,6 @@ public final class StrajaCommands {
                                                 StringArgumentType.getString(c, "reason")))))));
         return node;
     }
-
 
     /** Resolves a player by name/uuid through the query port (includes test virtuals). */
     private static PlayerGateway find(CommandContext<CommandSourceStack> ctx, String name) {
@@ -1001,28 +983,22 @@ public final class StrajaCommands {
         return CommandPolicy.helpLines(admin);
     }
 
-    /** Shared typed-command policy: every non-public root is permission level 2. */
+    /** Shared typed-command policy: admin roots require OP 3; setup roots require OP 4. */
     static boolean isAdminOnly(String command) {
         return CommandPolicy.isAdminOnly(command);
     }
 
+    static int requiredPermission(String command) {
+        return CommandPolicy.permissionLevel(command);
+    }
+
     static LiteralArgumentBuilder<CommandSourceStack> adminOnly(
             LiteralArgumentBuilder<CommandSourceStack> node) {
-        if (!isAdminOnly(node.getLiteral())) {
+        int permission = requiredPermission(node.getLiteral());
+        if (permission < CommandPermissions.ADMIN) {
             throw new IllegalArgumentException("Unclassified admin command: " + node.getLiteral());
         }
-        return node.requires(StrajaCommands::hasAdminPermission);
-    }
-
-    private static boolean hasAdminPermission(CommandSourceStack source) {
-        return source.hasPermission(2);
-    }
-
-    private static int help(CommandContext<CommandSourceStack> ctx) {
-        for (String line : helpLines(ctx.getSource().hasPermission(2))) {
-            ctx.getSource().sendSystemMessage(Component.literal(line));
-        }
-        return 1;
+        return node.requires(source -> source.hasPermission(permission));
     }
 
     private static int backup(CommandContext<CommandSourceStack> ctx) {
@@ -1044,46 +1020,39 @@ public final class StrajaCommands {
         return 1;
     }
 
-    /** Pure policy manifest kept separate so command-surface tests need no MC runtime. */
+    /** Pure policy facade kept separate so command-surface tests need no MC runtime. */
     static final class CommandPolicy {
-        private static final Set<String> ADMIN_ONLY_COMMANDS = Set.of(
-                // recruitment and guard lifecycle
-                "invite", "recruit", "recrute", "quiz", "start", "checkpoint", "special",
-                "resign", "demisie", "rejoin",
-                // economy and communication
-                "salary", "coins", "food", "kit", "merit",
-                "report", "message", "request", "inbox",
-                // roleplay service lanes
-                "mission", "cuffs", "prison", "fine", "complaint", "room", "archive",
-                "identity",
-                // typed setup and administrator operations
-                "promote", "demote", "suspend", "fire", "reinstate", "faction", "specialization",
-                "set-checkpoint", "set-mission-time", "set-location", "setup", "policy",
-                "migrate", "backup", "npc", "debug", "test");
-
         private CommandPolicy() {}
 
         static boolean isAdminOnly(String command) {
-            return ADMIN_ONLY_COMMANDS.contains(command);
+            return CommandPermissions.isAdminOnly(command);
+        }
+
+        static int permissionLevel(String command) {
+            return CommandPermissions.permissionLevel(command);
         }
 
         static List<String> helpLines(boolean admin) {
             if (!admin) {
-                return List.of("/straja status | rules | regulament | help");
+                return List.of(
+                        "/straja status — starea și rangul tău",
+                        "/straja rules | regulament — regulamentul",
+                        "/straja stop — încheierea serviciului");
             }
             return List.of(
-                    "/straja status | rules | regulament | help",
-                    "/straja invite <jucător> | recruit | quiz <răspuns> | resign | rejoin",
-                    "/straja start | checkpoint <id> | stop | special <start|resume|complete> <jucător>",
-                    "/straja salary | coins | food | kit | merit | merit dock <jucător> <puncte>",
+                    "§lStraja — help administrativ",
+                    "Detalii: /straja <comandă> help",
+                    "OP 3: backup, recrutare, personal, operațiuni și arhivă",
+                    "OP 4: setup, policy, migrare, NPC, debug și test",
+                    "/straja status | rules | regulament | stop",
+                    "/straja help — acest index; /straja <comandă> help — detalii",
+                    "/straja invite|recruit|recrute|quiz | promote|demote|suspend|fire|reinstate",
+                    "/straja start|special|resign|demisie|rejoin | salary|coins|food|kit|merit",
                     "/straja report|message|request <text> | inbox",
-                    "/straja promote | demote | suspend | reinstate | fire | faction <jucător> <nume>",
-                    "/straja setup — checklist ghidat | setup here | setup patrol | setup npcs | setup tools",
-                    "/straja policy list | get <cheie> | set <cheie> <valoare> | reset <cheie>",
-                    "/straja checkpoint add | checkpoint remove <id> | set-checkpoint <id> | set-mission-time <id> <min> | set-location <nume>",
-                    "/straja mission | cuffs | prison | fine | complaint | room | archive | identity — help pe subcomandă",
-                    "/straja npc list|spawn|assign|set-name|set-skin|remove",
-                    "/straja migrate <worldPath> | backup | debug ... | test ...");
+                    "/straja mission|cuffs|prison|fine|complaint|room|archive|identity",
+                    "/straja emergency ...",
+                    "/straja checkpoint add|remove ... | set-checkpoint | set-mission-time | set-location [OP 4]",
+                    "/straja setup ... | policy ... | migrate ... | npc ... | debug ... | test ... [OP 4]");
         }
     }
 }

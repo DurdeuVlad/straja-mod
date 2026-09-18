@@ -25,6 +25,7 @@ public final class FormSubmissionRouter {
     private final com.dwurdy.straja.application.port.in.AdminRoleplayUseCase admin;
     private final com.dwurdy.straja.application.port.in.AdminToolsUseCase adminTools;
     private final com.dwurdy.straja.application.port.in.CustodyRoleplayUseCase custody;
+    private final com.dwurdy.straja.application.port.in.RoleplayExpansionUseCase expansion;
 
     public FormSubmissionRouter(GuardRecruitmentUseCase guards, MissionRoleplayUseCase missions,
             ComplaintRoleplayUseCase complaints, FineRoleplayUseCase fines,
@@ -33,7 +34,8 @@ public final class FormSubmissionRouter {
             com.dwurdy.straja.application.port.in.AudienceUseCase audiences,
             com.dwurdy.straja.application.port.in.AdminRoleplayUseCase admin,
             com.dwurdy.straja.application.port.in.AdminToolsUseCase adminTools,
-            com.dwurdy.straja.application.port.in.CustodyRoleplayUseCase custody) {
+            com.dwurdy.straja.application.port.in.CustodyRoleplayUseCase custody,
+            com.dwurdy.straja.application.port.in.RoleplayExpansionUseCase expansion) {
         this.guards = guards;
         this.missions = missions;
         this.complaints = complaints;
@@ -44,6 +46,7 @@ public final class FormSubmissionRouter {
         this.admin = admin;
         this.adminTools = adminTools;
         this.custody = custody;
+        this.expansion = expansion;
     }
 
     public void submit(ServerPlayer player, FormSessionUseCase.Submission submission) {
@@ -193,6 +196,63 @@ public final class FormSubmissionRouter {
                     player.sendSystemMessage(net.minecraft.network.chat.Component.translatable(
                             "straja.give_up.stale"));
                 }
+            }
+            case INCIDENT_REPORT ->
+                    expansion.reportIncident(gateway, values.get("category"), values.get("description"));
+            case BOLO_CREATE ->
+                    expansion.createBolo(gateway, values.get("subject"), values.get("reason"),
+                            values.get("notes"), values.get("authority"), values.get("incidentId"));
+            case INCIDENT_RESOLVE ->
+                    expansion.resolveIncident(gateway, submission.recordId(),
+                            values.get("resolution"), values.get("notes"));
+            case EVIDENCE_CONFISCATE -> {
+                Integer slot = parseInt(values.get("slot"));
+                Integer amount = parseInt(values.get("amount"));
+                if (slot == null || amount == null) {
+                    player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                            "Slotul și cantitatea probei trebuie să fie numere."));
+                    return;
+                }
+                expansion.confiscate(gateway, submission.recordId(), slot, amount,
+                        values.get("reason"), values.get("incidentId"));
+            }
+            case EVIDENCE_TRANSFER ->
+                    expansion.transferEvidence(gateway, submission.recordId(),
+                            values.get("custodian"), values.get("reason"));
+            case EVIDENCE_DESTROY ->
+                    expansion.destroyEvidence(gateway, submission.recordId(), values.get("reason"));
+            case EVIDENCE_CASE_VIEW -> {
+                var records = com.dwurdy.straja.bootstrap.StrajaRuntime.get()
+                        .evidence().recordsForCase(gateway, values.get("caseId"));
+                if (records.isEmpty()) gateway.tell("Dosarul nu există sau nu are probe vizibile.");
+                else for (var evidence : records) {
+                    gateway.tell(evidence.id + " — " + evidence.itemId + " x" + evidence.amount
+                            + " — " + evidence.status);
+                }
+            }
+            case ARREST_HANDOFF ->
+                    expansion.finalizeArrest(gateway, values.get("detainee"),
+                            values.get("sentenceId"), values.get("notes"));
+            case REPUTATION_VIEW -> {
+                var history = expansion.reputationHistory(gateway, values.get("subject"));
+                if (history.isEmpty()) {
+                    gateway.tell("Nu există istoric sau subiectul nu este online.");
+                } else {
+                    for (var event : history) {
+                        gateway.tell(event.id() + " " + event.source() + " delta=" + event.delta()
+                                + " scor=" + event.scoreBefore() + "→" + event.scoreAfter()
+                                + " — " + event.reason());
+                    }
+                }
+            }
+            case REPUTATION_CORRECTION -> {
+                Integer delta = parseInt(values.get("delta"));
+                if (delta == null) {
+                    player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                            "Modificarea reputației trebuie să fie un număr."));
+                    return;
+                }
+                expansion.correctReputation(gateway, values.get("subject"), delta, values.get("reason"));
             }
             default -> {}
         }

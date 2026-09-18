@@ -17,13 +17,15 @@ player-facing flow is roleplay-first: normal players and officers use native
 Straja NPCs, physical items, and clickable chat. `rcon:` coverage and the
 command inventory below exercise the administrator/reference surface; they do
 not mean that ordinary players should use typed commands. Manually typed
-gameplay roots are permission-2 admin-gated. Typed setup, administration,
-diagnostics, migration, and test surfaces are also permission-2 gated. The
-public typed conveniences are limited to status/rules/help text. `/straja backup`
+gameplay roots are OP 3 admin-gated. Typed setup, administration, diagnostics,
+migration, and test surfaces are OP 4-gated where they change or inspect the
+operating environment. The
+public typed conveniences are limited to status/rules/regulament/stop; help is
+admin-only. `/straja backup`
 is an administrator-only command that writes a bounded durable SavedData snapshot;
 `_corrupt_backup` remains a separate internal persistence recovery record.
 
-Test suite: **597 unit tests** (`gradlew test`, all green) across
+Test suite: **611 unit tests** (`gradlew test`, all green locally) across
 `ArchitectureBoundaryTest`, `GuardServiceTest`, `DutyEngineTest`,
 `MissionServiceTest`, `CustodyServiceTest`, `PrisonServiceTest`,
 `CivicServiceTest`, `MigrationServiceTest`, `PersistenceTest`,
@@ -32,6 +34,7 @@ Test suite: **597 unit tests** (`gradlew test`, all green) across
 `PhysicalItemSurfaceTest`, `AdminToolSurfaceTest`, `AdminToolServiceTest`,
 `FormSessionServiceTest`, `FormPayloadSurfaceTest`,
 `EventSurfaceTest`, `DeliveryBoundaryTest`.
+The expansion-specific suite is `RoleplayExpansionServiceTest`.
 
 ## Foundation
 
@@ -46,10 +49,10 @@ Test suite: **597 unit tests** (`gradlew test`, all green) across
 | Corrupt-state backup + reset | PASS | `unit:PersistenceTest.corruptAggregateStoreIsBackedUp` |
 | Audit log (bounded retention) | PASS | `unit:PersistenceTest`; every service calls `audit.record` |
 | Commands usable from console/RCON | PASS | `rcon:` full M1–M6 flows driven from `tools/rcon.py`; administrator/reference surface, not ordinary-player UX |
-| Administrator backup command | PASS | `code:StrajaCommands` + `code:StrajaDataProvider.createBackup` — permission-2 `/straja backup`, bounded durable SavedData snapshots |
-| Typed gameplay command boundary | PASS | `unit:CommandSurfaceTest` — gameplay roots are permission-2 admin-only; public help does not advertise them; NPC clicks use the separate token boundary |
+| Administrator backup command | PASS | `code:StrajaCommands` + `code:StrajaDataProvider.createBackup` — OP 3 `/straja backup`, bounded durable SavedData snapshots |
+| Typed gameplay command boundary | PASS | `unit:CommandSurfaceTest` — gameplay roots are OP 3 admin-only; setup/operating roots are OP 4; public help does not advertise hidden routes; NPC clicks use the separate token boundary |
 | Romanian in-game text + EN canonical commands + RO aliases | PASS | `code:StrajaCommands` (`recruit`/`recrute`, `resign`/`demisie`, `regulament`) |
-| Test-mode command surface (gated) | PASS | `rcon:` `/straja test …` exercised continuously; gated by `testing.enableTestCommands` + permission 2; `debug.allowGrantRank` additionally gates `test set-rank` |
+| Test-mode command surface (gated) | PASS | `rcon:` `/straja test …` exercised continuously; gated by `testing.enableTestCommands` + OP 4; `debug.allowGrantRank` additionally gates `test set-rank` |
 
 ## Civil / recruitment lifecycle
 
@@ -124,7 +127,7 @@ services the canonical commands use. Items are non-stackable, non-craftable
 | Feature | Status | Evidence / notes |
 |---|---|---|
 | Tool foundation: items, holder gate, per-holder state store | PASS | `unit:AdminToolServiceTest.wrongHolderIsRefusedEverywhereWithATell`, `opHolderPassesTheGate`, `pendingStateIsPerHolderAndClearsOnLogout`; `code:StrajaItems` (stacksTo(1), no recipes); `unit:AdminToolSurfaceTest` |
-| `/straja setup tools` kit | PASS | `unit:AdminToolServiceTest.kitGivesEveryAdminTool` — six items through the permission-2 `setup` root, gate re-checked in the service; `rcon:` `test tool-kit` gave all six, wrong-holder denied |
+| `/straja setup tools` kit | PASS | `unit:AdminToolServiceTest.kitGivesEveryAdminTool` — six items through the OP 4 `setup` root, gate re-checked in the service; `rcon:` `test tool-kit` gave all six, wrong-holder denied |
 | NPC Wand: registry menu, assign/rename/skin/remove/record | PASS | `unit:AdminToolServiceTest.wandMenu*`/`wandMutations*`; tokens reuse the player-bound one-use boundary; rename/skin via native forms (`tool-npc-name`/`tool-npc-skin`); remove behind a second confirm token; `rcon:` `test tool-wand*` — menu, assign/rename/skin/record, remove + post-remove refusal live |
 | Foreign NPC binding: wand bind/rebind/detach, no appearance change | PASS | `unit:AdminToolServiceTest.wandBind*`/`wandAssignBinds*`/`wandMenuHides*`/`detachDropsOnly*` — unregistered entity gets role menu, assign creates the record keyed by entity UUID, rename/skin hidden for foreign targets, detach drops the record only; `code:StrajaEvents.onEntityInteract` routes bound targets by registry role and owns the click |
 | Cloner apply-mode onto foreign entities | PASS | `unit:AdminToolServiceTest.clonerApplies*`/`clonerWithoutTemplate*` — captured template role binds onto an unregistered entity in place; no spawn, no appearance writes |
@@ -189,6 +192,23 @@ services the canonical commands use. Items are non-stackable, non-craftable
 | Official envelopes + pending delivery recovery | PASS | `unit:CivicServiceTest.archiveEnvelope*`; `deliverPending` on login |
 | Failed delivery never reports success | PASS | payment/delivery boundaries persist `PAYMENT_REVIEW`/`PENDING`/`DELIVERY_FAILED` states; `unit:MissionServiceTest.givePackageFailurePersistsFailedMissionAndReleasesBudget` + `giveChecksBudgetBeforeSendingPackage` (no orphan Envelope packages) |
 
+## RP expansion
+
+| Feature | Status | Evidence / notes |
+|---|---|---|
+| Guard manual: 18-page native Written Book + docs mirror | PASS | `code:GuardManualContent`, `data/straja/manual/guard_manual_ro.json`, `docs/guard-manual.md` |
+| Citizen incident reports, whistle, cooldown and expiry | PASS | `unit:RoleplayExpansionServiceTest`; `code:IncidentService` |
+| One lead, bounded support and one reward outcome | PASS | `unit:RoleplayExpansionServiceTest`; persistent incident store |
+| Persistent callsign roster with collision protection | PASS | `code:RpExpansionService` |
+| BOLO notice separated from arrest authority | PASS | `unit:RoleplayExpansionServiceTest`; `code:BoloService` |
+| Server-authoritative search and stale exact-stack rejection | PASS | `unit:RoleplayExpansionServiceTest`; `code:EvidenceService` |
+| Evidence bag/receipt, persistent custody chain and case link | PASS | `code:EvidenceService`; `code:ArrestRecordService` |
+| Arrest auto-record and cross-links | PASS | `code:ArrestRecordService`; prison/fine hooks |
+| Reputation ledger, bounds, idempotency and lawful-force exception | PASS | `unit:RoleplayExpansionServiceTest`; `code:ReputationService` |
+| NeoForge GameTest batches for upstream surfaces and RP whistle, cuffs, search/evidence, persistence, death, handoff and rehabilitation | PASS | `runGameTestServer`: 8/8 upstream required tests; `runRpExpansionGameTestServer`: 7/7 RP required tests; each uses an isolated server/world |
+| Native NPC, item and form surfaces | PASS | `code:NpcRoles`, `code:PhysicalItemSurface`, `code:FormSubmissionRouter` |
+| Full client rendering and live restart UAT | PARTIAL | Isolated server boot, RCON smoke flow, and one stop/start cycle passed; client rendering and player-facing UAT remain required |
+
 ## Migration & ops
 
 | Feature | Status | Evidence / notes |
@@ -198,7 +218,7 @@ services the canonical commands use. Items are non-stackable, non-craftable
 | Real KubeJS world migration | PASS | `rcon:` migrated the reference `local-server/world` — setup/audit/player state imported |
 | Headless server boot with real deps | PASS | `rcon:` dev server boots with straja + envelope + adys_decorations; configs generated |
 | Restart persistence (server) | PASS | `rcon:` sentences, fines, missions, rooms, archive all persisted across restarts |
-| Debug/test gating | PASS | `code:` `testing.enableTestCommands` + permission 2; virtual players never visible in production |
+| Debug/test gating | PASS | `code:` `testing.enableTestCommands` + OP 4; virtual players never visible in production |
 | Clean build | PASS | `gradlew clean build` from scratch |
 
 ## Known limitations / intentional deviations

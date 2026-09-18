@@ -12,6 +12,8 @@ import com.dwurdy.straja.domain.model.SetupData;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 /**
  * Prison: bounded cells, sentences with online-active-only time, waitlist,
@@ -22,6 +24,8 @@ public class PrisonService implements PrisonRoleplayUseCase {
     private final PlayerService players;
     private final AuditService audit;
     private final CustodyRoleplayUseCase custody;
+    private Consumer<Sentence> arrestHook = sentence -> {};
+    private BiConsumer<Sentence, String> sentenceCompletedHook = (sentence, reason) -> {};
     private long lastTickMs;
 
     public PrisonService(StrajaContext ctx, PlayerService players, AuditService audit,
@@ -30,6 +34,14 @@ public class PrisonService implements PrisonRoleplayUseCase {
         this.players = players;
         this.audit = audit;
         this.custody = custody;
+    }
+
+    public void onArrest(Consumer<Sentence> hook) {
+        this.arrestHook = hook == null ? sentence -> {} : hook;
+    }
+
+    public void onSentenceCompleted(BiConsumer<Sentence, String> hook) {
+        this.sentenceCompletedHook = hook == null ? (sentence, reason) -> {} : hook;
     }
 
     private long now() { return ctx.clock().nowMillis(); }
@@ -282,6 +294,7 @@ public class PrisonService implements PrisonRoleplayUseCase {
             data.waitlist.add(entry);
         }
         ctx.prison().write(data);
+        arrestHook.accept(sentence);
         var online = findFor(sentence);
         if (online != null && !sentence.cellId.isEmpty()) {
             if (custody.enterJail(online, "prison")) {
@@ -337,6 +350,7 @@ public class PrisonService implements PrisonRoleplayUseCase {
         sentence.status = "FORCED_RELEASE".equals(reason) ? "FORCED_RELEASE" : "SERVED";
         sentence.servedAt = now();
         sentence.releaseReason = reason == null ? "SERVED" : reason;
+        if ("SERVED".equals(sentence.status)) sentenceCompletedHook.accept(sentence, sentence.releaseReason);
         if (!sentence.cellId.isEmpty()) data.assignments.remove(sentence.cellId);
         if (target != null) {
             teleportToRelease(target);

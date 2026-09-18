@@ -15,6 +15,7 @@ import net.minecraft.world.level.block.entity.SignText;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.network.chat.Component;
+import net.minecraft.sounds.SoundSource;
 
 /** Minecraft world → WorldGateway (bounded block reads + sign placement). */
 public class MinecraftWorldGateway implements WorldGateway {
@@ -70,6 +71,22 @@ public class MinecraftWorldGateway implements WorldGateway {
             return true;
         } catch (RuntimeException error) {
             return false;
+        }
+    }
+
+    @Override public void playSoundAt(String dimension, double x, double y, double z,
+                                      double radius, String soundId) {
+        ServerLevel level = level(dimension);
+        ResourceLocation id = ResourceLocation.tryParse(soundId);
+        if (level == null || id == null || radius <= 0) return;
+        var sound = net.minecraft.core.registries.BuiltInRegistries.SOUND_EVENT.get(id);
+        if (sound == null) return;
+        double rangeSquared = radius * radius;
+        for (var player : level.players()) {
+            double dx = player.getX() - x, dy = player.getY() - y, dz = player.getZ() - z;
+            if (dx * dx + dy * dy + dz * dz <= rangeSquared) {
+                player.playNotifySound(sound, SoundSource.PLAYERS, 1.0f, 1.0f);
+            }
         }
     }
 }
