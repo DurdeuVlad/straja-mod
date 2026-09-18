@@ -66,6 +66,9 @@ public interface RoleplayExpansionUseCase {
     /** Called by the tick adapter for expiry and transient session cleanup. */
     void tick();
 
+    /** Retries durable evidence-reference deliveries for a player who connected. */
+    void deliverPendingEvidence(PlayerGateway player);
+
     /** Removes active assignments when duty/recruitment status changes. */
     void removeGuardAssignments(PlayerGateway guard, String reason);
 }

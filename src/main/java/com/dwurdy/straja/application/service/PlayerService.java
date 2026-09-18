@@ -123,8 +123,9 @@ public class PlayerService implements com.dwurdy.straja.application.port.in.Play
     /** On-duty guard (rank at least Stagiar) — the jailer-assault exemption rule. */
     @Override
     public boolean isOnDutyGuard(PlayerGateway player) {
+        if (player == null) return false;
         GuardState state = state(player);
-        return state.duty && state.rank >= Rank.STAGIAR.level();
+        return state != null && state.duty && state.rank >= Rank.STAGIAR.level();
     }
 
     /**

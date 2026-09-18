@@ -224,6 +224,11 @@ public final class RpExpansionService implements RoleplayExpansionUseCase {
     }
 
     @Override
+    public void deliverPendingEvidence(PlayerGateway player) {
+        evidence.deliverPending(player);
+    }
+
+    @Override
     public void removeGuardAssignments(PlayerGateway guard, String reason) {
         incidents.removeAssignments(guard, reason);
     }

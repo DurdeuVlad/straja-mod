@@ -41,6 +41,7 @@ public final class EvidenceService {
     private EvidenceStore store() {
         EvidenceStore store = ctx.evidence().read();
         if (store.records == null) store.records = new LinkedHashMap<>();
+        if (store.pendingDeliveries == null) store.pendingDeliveries = new LinkedHashMap<>();
         for (EvidenceRecord record : store.records.values()) {
             if (record == null) continue;
             if (record.itemData == null) record.itemData = new LinkedHashMap<>();
@@ -108,12 +109,27 @@ public final class EvidenceService {
                     target.name(), uuid(target), "REFUSED", "stale_slot");
             return false;
         }
+        EvidenceStore data = store();
+        String previewId = data.nextEvidenceIdPreview();
+        ItemSpec previewBag = evidenceBag(previewId);
+        ItemSpec previewReceipt = confiscationReceipt(previewId);
+        if (!guard.inventory().canReceive(List.of(previewBag))) {
+            guard.tell("Nu ai loc pentru punga de probe; confiscarea a fost refuzată.");
+            audit.record("item_confiscated", guard.name(), uuid(guard),
+                    target.name(), uuid(target), "REFUSED", "guard_inventory_full");
+            return false;
+        }
+        if (!target.inventory().canReceive(List.of(previewReceipt))) {
+            guard.tell("Ținta nu are loc pentru dovada de confiscare; confiscarea a fost refuzată.");
+            audit.record("item_confiscated", guard.name(), uuid(guard),
+                    target.name(), uuid(target), "REFUSED", "target_inventory_full");
+            return false;
+        }
         ItemView taken = target.inventory().extract(slot, amount);
         if (!sameStack(selected.item(), taken)) {
             guard.tell("Stiva nu a putut fi preluată integral; nimic nu a fost înregistrat ca probă.");
             return false;
         }
-        EvidenceStore data = store();
         EvidenceRecord evidence = new EvidenceRecord();
         evidence.id = data.nextEvidenceId();
         evidence.sourcePlayerUuid = uuid(target);
@@ -138,21 +154,64 @@ public final class EvidenceService {
         ctx.evidence().write(data);
         linkCase(evidence);
 
-        ItemSpec bag = ItemSpec.of("straja:evidence_bag", 1)
-                .named("Pungă de probe " + evidence.id)
-                .withData("EvidenceId", evidence.id);
-        guard.giveVerified(bag);
-        ItemSpec receipt = ItemSpec.of("straja:confiscation_receipt", 1)
-                .named("Dovadă de confiscare " + evidence.id)
-                .withData("EvidenceId", evidence.id);
-        target.giveVerified(receipt);
+        ItemSpec bag = evidenceBag(evidence.id);
+        ItemSpec receipt = confiscationReceipt(evidence.id);
+        boolean bagDelivered = guard.giveVerified(bag);
+        boolean receiptDelivered = target.giveVerified(receipt);
+        if (!bagDelivered || !receiptDelivered) {
+            EvidenceStore.PendingDelivery pending = new EvidenceStore.PendingDelivery();
+            pending.evidenceId = evidence.id;
+            pending.guardUuid = uuid(guard);
+            pending.targetUuid = uuid(target);
+            pending.bagDelivered = bagDelivered;
+            pending.receiptDelivered = receiptDelivered;
+            pending.createdAt = now();
+            data.pendingDeliveries.put(evidence.id, pending);
+            ctx.evidence().write(data);
+        }
         String msg = "Confiscat: " + taken.id() + " x" + taken.count()
                 + " | probă " + evidence.id + " | străjer " + guard.name();
         target.tell(msg);
         guard.tell(msg);
+        if (!bagDelivered || !receiptDelivered) {
+            guard.tell("Un document fizic nu a putut fi livrat; va fi reîncercat la reconectare.");
+            target.tell("Dovada fizică va fi reîncercată la reconectare.");
+        }
         audit.record("item_confiscated", guard.name(), uuid(guard),
-                target.name(), uuid(target), "SUCCESS", evidence.id);
+                target.name(), uuid(target),
+                bagDelivered && receiptDelivered ? "SUCCESS" : "SUCCESS_PENDING_DELIVERY", evidence.id);
         return true;
+    }
+
+    /** Retries only the reference item owed to the player who just connected. */
+    public synchronized void deliverPending(PlayerGateway player) {
+        if (player == null || player.uuid() == null) return;
+        EvidenceStore data = store();
+        boolean changed = false;
+        for (EvidenceStore.PendingDelivery pending
+                : new ArrayList<>(data.pendingDeliveries.values())) {
+            if (pending == null || (!uuid(player).equals(pending.guardUuid)
+                    && !uuid(player).equals(pending.targetUuid))) continue;
+            EvidenceRecord evidence = data.records.get(pending.evidenceId);
+            if (evidence == null) continue;
+            if (uuid(player).equals(pending.guardUuid) && !pending.bagDelivered
+                    && player.giveVerified(evidenceBag(evidence.id))) {
+                pending.bagDelivered = true;
+                changed = true;
+            }
+            if (uuid(player).equals(pending.targetUuid) && !pending.receiptDelivered
+                    && player.giveVerified(confiscationReceipt(evidence.id))) {
+                pending.receiptDelivered = true;
+                changed = true;
+            }
+            if (pending.bagDelivered && pending.receiptDelivered) {
+                data.pendingDeliveries.remove(pending.evidenceId);
+                changed = true;
+                player.tell("Documentele fizice pentru proba " + pending.evidenceId
+                        + " au fost livrate.");
+            }
+        }
+        if (changed) ctx.evidence().write(data);
     }
 
     public synchronized boolean deposit(PlayerGateway actor, String evidenceId) {
@@ -351,6 +410,18 @@ public final class EvidenceService {
         return left != null && right != null && !left.isEmpty() && !right.isEmpty()
                 && left.id().equals(right.id()) && left.count() == right.count()
                 && java.util.Objects.equals(left.customData(), right.customData());
+    }
+
+    private static ItemSpec evidenceBag(String evidenceId) {
+        return ItemSpec.of("straja:evidence_bag", 1)
+                .named("Pungă de probe " + evidenceId)
+                .withData("EvidenceId", evidenceId);
+    }
+
+    private static ItemSpec confiscationReceipt(String evidenceId) {
+        return ItemSpec.of("straja:confiscation_receipt", 1)
+                .named("Dovadă de confiscare " + evidenceId)
+                .withData("EvidenceId", evidenceId);
     }
 
     /** Links a newly seized item into the existing formal case when one exists. */

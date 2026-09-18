@@ -156,6 +156,63 @@ class RoleplayExpansionServiceTest {
     }
 
     @Test
+    void confiscationPersistsReferenceDeliveryWhenAdapterFails() {
+        TestPlayer guard = addDuty("delivery-guard", Rank.GUARD);
+        TestPlayer target = server.add("delivery-target");
+        restrain(target);
+        target.inventory.slots.set(0, new com.dwurdy.straja.application.port.out.ItemView(
+                "minecraft:emerald", 1, 64, Map.of("custom", "signed")));
+
+        var search = evidence.beginSearch(guard, target);
+        assertNotNull(search);
+        guard.failVerifiedCalls = 1;
+        assertTrue(evidence.confiscate(guard, search.token(), 0, 1, "Probă", ""));
+
+        var data = ctx.evidence().read();
+        assertNotNull(data.records.get("E-00001"));
+        assertNotNull(data.pendingDeliveries.get("E-00001"));
+        assertFalse(data.pendingDeliveries.get("E-00001").bagDelivered);
+        assertTrue(data.pendingDeliveries.get("E-00001").receiptDelivered);
+
+        evidence.deliverPending(guard);
+        assertTrue(guard.inventory.slots.stream()
+                .anyMatch(item -> "straja:evidence_bag".equals(item.id())));
+        assertFalse(ctx.evidence().read().pendingDeliveries.containsKey("E-00001"));
+    }
+
+    @Test
+    void confiscationRefusesBeforeExtractionWhenReceiptCannotFit() {
+        TestPlayer guard = addDuty("full-target-guard", Rank.GUARD);
+        TestPlayer target = new TestPlayer("full-target", 1);
+        target.server = server;
+        server.players.put(target.uuid, target);
+        restrain(target);
+        target.inventory.slots.set(0, new com.dwurdy.straja.application.port.out.ItemView(
+                "minecraft:emerald", 1, 64, Map.of()));
+
+        var search = evidence.beginSearch(guard, target);
+        assertNotNull(search);
+        assertFalse(evidence.confiscate(guard, search.token(), 0, 1, "Probă", ""));
+        assertEquals("minecraft:emerald", target.inventory.stackAt(0).id());
+        assertTrue(ctx.evidence().read().records.isEmpty());
+        assertTrue(guard.told("nu are loc pentru dovada de confiscare"));
+    }
+
+    @Test
+    void boloCancellationFailsClosedForActorWithoutGuardState() {
+        TestPlayer issuer = addDuty("bolo-issuer", Rank.SERGENT);
+        TestPlayer subject = server.add("bolo-subject");
+        var bolo = bolos.create(issuer, subject, "Verificare", "",
+                BoloAuthority.INFORMATION_ONLY, "");
+        assertNotNull(bolo);
+
+        TestPlayer unknown = server.add("uninitialized-actor");
+        assertDoesNotThrow(() -> assertFalse(bolos.cancel(unknown, bolo.id)));
+        assertEquals(com.dwurdy.straja.domain.model.BoloStatus.ACTIVE,
+                bolos.active().get(0).status);
+    }
+
+    @Test
     void reputationIsIdempotentAndDistinguishesRestrainedAndLawfulDeaths() {
         TestPlayer killer = server.add("killer");
         TestPlayer victim = server.add("victim");

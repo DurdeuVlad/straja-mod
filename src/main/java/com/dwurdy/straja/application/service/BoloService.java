@@ -43,8 +43,9 @@ public final class BoloService {
             if (issuer != null) issuer.tell("Sistemul BOLO este dezactivat.");
             return null;
         }
-        if (!players.isOnDutyGuard(issuer)
-                || players.state(issuer).rank < ctx.policies().boloMinimumIssuerRank) {
+        var issuerState = players.state(issuer);
+        if (!players.isOnDutyGuard(issuer) || issuerState == null
+                || issuerState.rank < ctx.policies().boloMinimumIssuerRank) {
             issuer.tell("Nu ai rangul sau serviciul necesar pentru a emite un BOLO.");
             audit.record("bolo_create", issuer.name(), uuid(issuer), subject.name(),
                     uuid(subject), "REFUSED", "issuer_not_eligible");
@@ -80,7 +81,7 @@ public final class BoloService {
         record.notes = clean(notes, ctx.policies().incidentMaxDescriptionLength);
         record.issuerUuid = uuid(issuer);
         record.issuerName = issuer.name();
-        record.issuerRank = players.state(issuer).rank;
+        record.issuerRank = issuerState.rank;
         record.createdAt = now();
         record.expiresAt = now() + ctx.policies().boloDefaultExpirationSeconds * 1_000L;
         record.authority = requested;
@@ -105,8 +106,10 @@ public final class BoloService {
             return false;
         }
         boolean issuer = actor != null && uuid(actor).equals(record.issuerUuid);
+        var actorState = actor == null ? null : players.state(actor);
         boolean superior = actor != null && (players.isCommissioner(actor)
-                || players.state(actor).rank >= ctx.policies().boloCancellationMinimumRank);
+                || (actorState != null
+                    && actorState.rank >= ctx.policies().boloCancellationMinimumRank));
         if (!issuer && !superior) {
             if (actor != null) actor.tell("Nu ai autoritatea de a anula acest BOLO.");
             return false;
