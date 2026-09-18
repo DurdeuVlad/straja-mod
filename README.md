@@ -21,13 +21,16 @@ domain/model          pure value objects & aggregates (no MC imports — enforce
 application/
   port/in             inbound ports: *RoleplayUseCase, GuardDutyUseCase,
                       GuardRecruitmentUseCase, PlayerQueryUseCase,
-                      NpcRegistryUseCase, FormSessionUseCase
+                      NpcRegistryUseCase, FormSessionUseCase,
+                      RoleplayExpansionUseCase
   port/out            outbound SPI: PlayerGateway, ServerGateway, CurrencyProvider,
                       DeliveryProvider, repositories, WorldGateway, Clock, IdGenerator
   service             use-case services: PlayerService, GuardService, EquipmentService,
                       MissionService, CustodyService, PrisonService, FineService,
                       ComplaintService, RoomService, ArchiveService, NpcAdminService,
-                      MigrationService, AuditService, FormSessionService
+                      MigrationService, AuditService, FormSessionService,
+                      IncidentService, BoloService, EvidenceService,
+                      ArrestRecordService, ReputationService, RpExpansionService
   StrajaContext       the assembled ports record injected into every service
 adapter/
   in/command          Brigadier command trees (Straja/Test/Debug/Npc commands)
@@ -156,6 +159,17 @@ holding the two impact poses slightly longer alongside the normal attack swing
 and strong-hit sound. It applies 1.75 knockback strength for its low base
 damage and +2 attack speed for faster follow-up swings.
 
+The RP expansion adds a closed incident loop: citizens report incidents at the
+Receptionist, on-duty guards can raise a cooldown-bound whistle call, the
+Secretary dispatches one lead and bounded support, and the call resolves into
+an auditable outcome. BOLOs are persistent notices, not arrest authority;
+authority comes from a valid warrant/task and custody validation. A valid
+search produces a read-only inventory snapshot, exact-stack confiscation and a
+chain-of-custody record. Arrest paperwork links the sentence, task, fine,
+incident, evidence, BOLO, complaint and reputation history. Reputation is a
+separate bounded civic score: it affects recruitment and rehabilitation, but
+never grants omniscient detection or the right to arrest.
+
 ## First-time setup
 
 One command drives installation: `/straja setup` prints a checklist —
@@ -220,7 +234,8 @@ damageable in its own mod. Bindings key on entity UUID — if a host mod
 respawns an NPC under a fresh UUID, detach the stale record and rebind.
 
 Commands remain useful as an administrator/reference surface and for console or
-RCON operation. Manually typed gameplay roots are permission-2 admin-gated, so
+RCON operation. Manually typed gameplay roots are OP 3 admin-gated, while setup,
+policy, migration, NPC, debug and test surfaces require OP 4, so
 ordinary players should not need to type them. The inventory below is therefore
 not the target player UX:
 
@@ -242,15 +257,19 @@ not the target player UX:
 - `/straja emergency alert|clear|start|end|status` — §25 urgency calls and the
   sustained emergency mode (Comisar or op/console; `status` is public)
 - `/straja migrate <worldPath>` — import legacy `kubejs_persistent_data.nbt`
-  + `playerdata/*.dat` (op-only, idempotent, audit-logged)
-- `/straja backup` — create a bounded SavedData snapshot (op-only)
+  + `playerdata/*.dat` (OP 4, idempotent, audit-logged)
+- `/straja backup` — create a bounded SavedData snapshot (OP 3)
 
 Typed setup, administration, diagnostics, migration, backup, and test surfaces remain
-permission-2 gated. `/straja status`, `/straja rules`, and `/straja regulament`
+permission-gated: OP 3 for normal administration and OP 4 for setup/operating tools.
+`/straja help` is also OP 3-gated and supports `/straja <comandă> help` on every
+command-tree node. `/straja status`, `/straja rules`, and `/straja regulament`
 are public text conveniences; `/straja npc-action <token>` is an internal
 clickable-chat boundary and is intentionally omitted from help. `/straja backup`
-creates a permission-2, durable SavedData snapshot of Straja's stores; corrupt-state
-preservation remains a separate internal persistence recovery behavior.
+creates an OP 3, durable SavedData snapshot of Straja's stores; corrupt-state
+preservation remains a separate internal persistence recovery behavior. See
+[`docs/admin-command-help.md`](docs/admin-command-help.md) for the full operator
+surface.
 
 ## Economy
 
@@ -266,7 +285,7 @@ registry the provider reports unavailable and all coin operations fail closed.
 Every tunable rule lives in `config/straja-server.toml`, editable by hand or
 through the in-game config screen (mod list → Straja → Config). Changes apply
 on the next server start. Sections include `identity`, `timers`, `mission`,
-`cuffs`, `restraints`, `downed`, `arrestRewards`, `economy`, `salary`,
+`incidents`, `bolo`, `evidence`, `reputation`, `cuffs`, `restraints`, `downed`, `arrestRewards`, `economy`, `salary`,
 `promotion`, `quiz`, `jailer`, `equipment`, `trainer`, `security`, `envelope`, `archive`,
 `rooms`, `fines`, `prison`, `audit`, `complaints`, `ranks`, `reports`,
 `audiences`, `emergency`, `debug`, and `testing`.
@@ -355,11 +374,13 @@ different bytes fails closed. The workflow never deletes remote releases.
 
 ```bash
 ./gradlew test          # unit tests — pure domain, in-memory fakes
+./gradlew runGameTestServer # upstream NeoForge GameTests (8 required tests)
+./gradlew runRpExpansionGameTestServer # RP expansion GameTests (7 required tests)
 ./gradlew runServer     # headless dev server (RCON on :25575, password in run/server.properties)
 ```
 
 Test mode (`config/straja-server.toml → testing.enableTestCommands = true`,
-local environment, permission 2) exposes `/straja test …` — virtual players
+local environment, OP 4) exposes `/straja test …` — virtual players
 with real inventories/positions for deterministic service and integration
 checks. This is an administrator/test surface, not the player UX:
 
@@ -372,6 +393,14 @@ python tools/rcon.py "straja test assert civ1 coins 60"
 ```
 
 Virtual players are never visible when test mode is off.
+
+The coherent expansion smoke flow is available as
+`/straja test rp-expansion-flow` when test commands are enabled. It exercises
+incident reporting/dispatch, callsign allocation, BOLO separation, custody,
+exact-stack evidence and case linking in one server-authoritative path.
+
+The full test matrix, GameTest batch and live-client/restart UAT checklist are
+in [docs/testing.md](docs/testing.md).
 
 ## Persistence & migration
 

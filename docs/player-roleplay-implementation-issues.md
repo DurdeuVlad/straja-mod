@@ -39,7 +39,7 @@ reference system's console-first/player-confusing boundary.
    player UX.
 2. **Commands have an operational boundary.** Backup, setup, migration, NPC
    registry management, diagnostics, test harnesses, rank administration, and
-   other operator actions remain permission-2 typed commands. `/straja backup`
+   other operator actions remain OP 3/OP 4 typed commands. `/straja backup`
    must not be disguised as a player interaction.
 3. **Application services own rules.** NPCs, items, commands, payloads, and
    event hooks translate intent and context. They must not duplicate rank,
@@ -118,7 +118,7 @@ The surface split is intentional:
 
 Shipped state after the implementation pass:
 
-- `/straja backup` is registered as a permission-2 command. It writes a
+- `/straja backup` is registered as an OP 3 command. It writes a
   durable SavedData snapshot containing the Straja stores and keeps the newest
   ten snapshots. The implementation is in
   `src/main/java/com/dwurdy/straja/adapter/in/command/StrajaCommands.java` and
@@ -252,7 +252,7 @@ checkpoint, stop, salary, coins, food, kit, regear, resignation
 begin/confirm/cancel, rejoin, plus `recoverOnLogin`/`tickPlayerDuty`. The NPC
 mapper (`NpcPlayerSurface.dutyActions`) emits state-aware actions from the
 read-only projection; every mutator revalidates persisted state. Promote,
-demote, suspend, fire, reinstate, and special-duty remain permission-2
+demote, suspend, fire, reinstate, and special-duty remain OP 3
 commands. Evidence: `unit:GuardServiceTest`, `unit:DutyEngineTest`,
 `unit:NpcInteractionSurfaceTest.dutyActions*`.
 
@@ -266,7 +266,7 @@ source of truth for rank, duty state, configured location, suspension, fire,
 cooldowns, and audit records.
 
 Do not expose promote/demote/suspend/fire/reinstate as player actions; those
-remain permission-2 admin commands. Special-duty assignment by a commissioner
+remain OP 3 admin commands. Special-duty assignment by a commissioner
 may also remain an administrator command unless a deliberately designed NPC
 workflow is added later.
 
@@ -508,7 +508,7 @@ tests for each state and at least one real server/GameTest path when possible.
 Priority: P0 verification gate.
 
 **Status: PASS (unit/build).** `gradlew test --rerun-tasks` passes
-(331 tests). `CommandSurfaceTest` covers permission-2 gameplay roots,
+(331 tests). `CommandSurfaceTest` covers OP 3 gameplay roots and OP 4 setup
 backup/help policy, hidden `npc-action`, token owner binding, one-use
 consumption, action-shape validation, allowlisted actions, and the TTL seam
 (`npcActionTokenExpiresAfterTtl` + tick purge). `ArchitectureBoundaryTest`
@@ -526,8 +526,8 @@ unavailable.
 
 Before declaring completion, add or update tests for:
 
-- every typed gameplay root being permission-2 gated;
-- `/straja backup` being permission-2 gated and present only in admin help;
+- every typed gameplay root being OP 3-gated;
+- `/straja backup` being OP 3-gated and present only in admin help;
 - public help not advertising gameplay roots or internal `npc-action`;
 - token owner binding, one-use, TTL, malformed action IDs, and record-state
   revalidation;

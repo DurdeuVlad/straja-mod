@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -17,9 +18,11 @@ class CommandSurfaceTest {
             "mission", "cuffs", "prison", "fine", "complaint", "room", "archive", "identity");
 
     @Test
-    void gameplayLanesArePermissionTwoOnlyAtTheCommandBoundary() {
+    void gameplayLanesArePermissionThreeOnlyAtTheCommandBoundary() {
         for (String name : ROLEPLAY_ONLY) {
             assertTrue(StrajaCommands.CommandPolicy.isAdminOnly(name), name + " must be admin-gated");
+            assertEquals(3, StrajaCommands.CommandPolicy.permissionLevel(name),
+                    name + " must require OP 3");
         }
     }
 
@@ -31,6 +34,16 @@ class CommandSurfaceTest {
                 "migrate", "backup", "npc", "debug", "test")) {
             assertTrue(StrajaCommands.CommandPolicy.isAdminOnly(name), name + " must remain admin-typed");
         }
+        for (String name : Set.of(
+                "set-checkpoint", "set-mission-time", "set-location", "setup",
+                "policy", "migrate", "npc", "debug", "test")) {
+            assertEquals(4, StrajaCommands.CommandPolicy.permissionLevel(name),
+                    name + " must require OP 4");
+        }
+        assertEquals(3, StrajaCommands.CommandPolicy.permissionLevel("help"));
+        assertEquals(3, StrajaCommands.CommandPolicy.permissionLevel("identity"));
+        assertEquals(4, StrajaCommands.CommandPolicy.permissionLevel("checkpoint add"));
+        assertEquals(4, StrajaCommands.CommandPolicy.permissionLevel("checkpoint remove"));
     }
 
     @Test
@@ -42,6 +55,7 @@ class CommandSurfaceTest {
         String adminHelp = String.join("\n", StrajaCommands.CommandPolicy.helpLines(true));
         assertFalse(publicHelp.contains("backup"));
         assertTrue(adminHelp.contains("backup"));
+        assertTrue(adminHelp.contains("OP 4"));
         for (String name : ROLEPLAY_ONLY) {
             assertFalse(publicHelp.contains("/straja " + name), "public help advertises " + name);
         }

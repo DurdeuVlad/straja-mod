@@ -12,6 +12,7 @@ import com.dwurdy.straja.adapter.in.compat.OptionalModCompatibility;
 import com.dwurdy.straja.application.StrajaContext;
 import com.dwurdy.straja.application.port.out.Clock;
 import com.dwurdy.straja.application.port.out.IdGenerator;
+import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.application.service.AuditService;
 import com.dwurdy.straja.application.service.EquipmentService;
 import com.dwurdy.straja.application.service.GuardService;
@@ -57,6 +58,12 @@ public final class StrajaRuntime {
     private final com.dwurdy.straja.application.service.MigrationService migration;
     private final com.dwurdy.straja.application.service.FormSessionService formSessions;
     private final com.dwurdy.straja.application.service.PolicyService policyService;
+    private final com.dwurdy.straja.application.service.IncidentService incidents;
+    private final com.dwurdy.straja.application.service.BoloService bolos;
+    private final com.dwurdy.straja.application.service.EvidenceService evidence;
+    private final com.dwurdy.straja.application.service.ArrestRecordService arrestRecords;
+    private final com.dwurdy.straja.application.service.ReputationService reputation;
+    private final com.dwurdy.straja.application.service.RpExpansionService expansion;
     private final com.dwurdy.straja.application.port.out.MutableClock clock;
     private final com.dwurdy.straja.adapter.in.test.TestPlayerRegistry testPlayers =
             new com.dwurdy.straja.adapter.in.test.TestPlayerRegistry();
@@ -136,7 +143,12 @@ public final class StrajaRuntime {
                 new com.dwurdy.straja.adapter.out.minecraft.MinecraftWorldGateway(server),
                 new com.dwurdy.straja.adapter.out.faction.ScoreboardFactionGateway(server),
                 new SavedStores.AdminTools(stores),
-                new SavedStores.IdentityCards(stores));
+                new SavedStores.IdentityCards(stores),
+                new SavedStores.Incidents(stores),
+                new SavedStores.Bolos(stores),
+                new SavedStores.Evidence(stores),
+                new SavedStores.ArrestRecords(stores),
+                new SavedStores.Reputation(stores));
 
         this.players = new PlayerService(ctx);
         this.audit = new AuditService(ctx);
@@ -153,8 +165,8 @@ public final class StrajaRuntime {
         this.audiences = new com.dwurdy.straja.application.service.AudienceService(ctx, players, audit);
         this.emergency = new com.dwurdy.straja.application.service.EmergencyService(ctx, players, audit);
         this.rooms = new com.dwurdy.straja.application.service.RoomService(ctx, players, audit, ctx.world());
-        this.identityCards = new com.dwurdy.straja.application.service.IdentityCardService(ctx, players, audit);
         this.archive = new com.dwurdy.straja.application.service.ArchiveService(ctx, players, audit);
+        this.identityCards = new com.dwurdy.straja.application.service.IdentityCardService(ctx, players, audit);
         this.secretary = new com.dwurdy.straja.application.service.SecretaryService();
         this.migration = new com.dwurdy.straja.application.service.MigrationService(ctx, audit);
         this.formSessions = new com.dwurdy.straja.application.service.FormSessionService(clock, ids);
@@ -172,8 +184,75 @@ public final class StrajaRuntime {
         // Persisted policy overrides cannot re-enable Straja's generic downed
         // owner while an optional provider is present.
         OptionalModCompatibility.applyFailSafe(compatibility, policies);
+        this.incidents = new com.dwurdy.straja.application.service.IncidentService(ctx, players, audit);
+        this.bolos = new com.dwurdy.straja.application.service.BoloService(ctx, players, audit);
+        this.evidence = new com.dwurdy.straja.application.service.EvidenceService(ctx, players, audit);
+        this.arrestRecords = new com.dwurdy.straja.application.service.ArrestRecordService(ctx, players, audit);
+        this.reputation = new com.dwurdy.straja.application.service.ReputationService(
+                ctx, players, audit, incidents, bolos);
+        this.guards.onRecruitmentEligibility(reputation::recruitmentAllowed);
+        this.custody.onCustodyEscape((actor, target) -> {
+            if (target != null) {
+                reputation.recordCustodyEscape(actor, target,
+                        target.uuid() + ":cut:" + ctx.clock().nowMillis());
+            }
+        });
+        this.expansion = new com.dwurdy.straja.application.service.RpExpansionService(
+                ctx, players, incidents, bolos, evidence, arrestRecords, reputation);
+        this.prison.onArrest(expansion::startArrestRecord);
+        this.prison.onSentenceCompleted((sentence, reason) -> {
+            expansion.finalizeArrestRecord(sentence, reason);
+            PlayerGateway target = ctx.server().findPlayer(sentence.targetUuid);
+            if (target != null) {
+                reputation.completeSentence(target, sentence.id);
+            } else {
+                try {
+                    reputation.completeSentence(UUID.fromString(sentence.targetUuid),
+                            sentence.target, sentence.id);
+                } catch (IllegalArgumentException ignored) {
+                    com.dwurdy.straja.StrajaMod.LOGGER.warn(
+                            "[Straja] Could not apply offline sentence rehabilitation for {}", sentence.id);
+                }
+            }
+            arrestRecords.refreshLinksForSubject(sentence.targetUuid);
+        });
+        this.fines.onFinePaid(fine -> {
+            if (fine == null) return;
+            PlayerGateway target = ctx.server().findPlayer(fine.targetUuid);
+            if (target != null) {
+                reputation.completeFinePayment(target, fine.id);
+            } else {
+                try {
+                    reputation.completeFinePayment(UUID.fromString(fine.targetUuid),
+                            fine.target, fine.id);
+                } catch (IllegalArgumentException ignored) {
+                    com.dwurdy.straja.StrajaMod.LOGGER.warn(
+                            "[Straja] Could not apply offline fine rehabilitation for {}", fine.id);
+                }
+            }
+            arrestRecords.refreshLinksForSubject(fine.targetUuid);
+        });
+        this.fines.onFineRefused(task -> {
+            if (task == null || task.targetUuid == null || task.targetUuid.isBlank()) return;
+            PlayerGateway target = ctx.server().findPlayer(task.targetUuid);
+            if (target != null) reputation.recordFineRefusal(target, task.id);
+            arrestRecords.refreshLinksForSubject(task.targetUuid);
+        });
+        this.fines.onFineVoided((actor, fine) -> {
+            if (fine == null || fine.id == null || fine.id.isBlank()) return;
+            var fineData = ctx.fines().read();
+            if (fineData.tasks != null) {
+                for (var task : fineData.tasks) {
+                    if (task != null && fine.id.equals(task.fineId)) {
+                        reputation.reverseSource(actor, "FINE_REFUSAL", task.id);
+                    }
+                }
+            }
+            arrestRecords.refreshLinksForSubject(fine.targetUuid);
+        });
         this.guards.onStatusChange((p, reason) -> this.missions.cancelOpenFor(p, reason));
         this.guards.onStatusChange((p, reason) -> this.rooms.releaseFor(p));
+        this.guards.onStatusChange((p, reason) -> this.incidents.removeAssignments(p, reason));
         this.guards.onPromotedToGuard(p -> this.rooms.assignAutomatically(p));
         this.admin = new com.dwurdy.straja.application.service.AdminService(
                 ctx, players, guards, policyService, emergency);
@@ -189,7 +268,7 @@ public final class StrajaRuntime {
                 new com.dwurdy.straja.adapter.in.form.FormSubmissionRouter(
                         instance.guards, instance.missions, instance.complaints, instance.fines,
                         instance.archive, instance.reports, instance.audiences, instance.admin,
-                        instance.adminTools, instance.custody)::submit);
+                        instance.adminTools, instance.custody, instance.expansion)::submit);
         instance.logDeploymentGates();
         // Absolute custody deadlines survive a server restart. Resolve any
         // already-due canonical states before the first login/tick callback.
@@ -257,9 +336,16 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.port.in.CustodyRoleplayUseCase custodyRoleplay() { return custody; }
     public com.dwurdy.straja.application.port.in.PrisonRoleplayUseCase prisonRoleplay() { return prison; }
     public com.dwurdy.straja.application.port.in.RoomRoleplayUseCase roomRoleplay() { return rooms; }
-    public com.dwurdy.straja.application.port.in.IdentityCardRoleplayUseCase identityCards() { return identityCards; }
     public com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase archiveRoleplay() { return archive; }
+    public com.dwurdy.straja.application.port.in.IdentityCardRoleplayUseCase identityCards() { return identityCards; }
     public com.dwurdy.straja.application.port.in.SecretaryRoleplayUseCase secretaryRoleplay() { return secretary; }
+    public com.dwurdy.straja.application.port.in.RoleplayExpansionUseCase expansionRoleplay() { return expansion; }
+    public com.dwurdy.straja.application.service.RpExpansionService expansion() { return expansion; }
+    public com.dwurdy.straja.application.service.IncidentService incidents() { return incidents; }
+    public com.dwurdy.straja.application.service.BoloService bolos() { return bolos; }
+    public com.dwurdy.straja.application.service.EvidenceService evidence() { return evidence; }
+    public com.dwurdy.straja.application.service.ArrestRecordService arrestRecords() { return arrestRecords; }
+    public com.dwurdy.straja.application.service.ReputationService reputation() { return reputation; }
     public com.dwurdy.straja.application.port.in.PlayerQueryUseCase playerQueries() { return players; }
     public com.dwurdy.straja.application.port.in.NpcRegistryUseCase npcRegistry() { return npcs; }
     public com.dwurdy.straja.application.service.NpcAdminService npcs() { return npcs; }

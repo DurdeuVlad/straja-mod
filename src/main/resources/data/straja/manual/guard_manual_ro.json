@@ -1,0 +1,24 @@
+{
+  "title": "Manualul Străjii",
+  "author": "Straja",
+  "pages": [
+    {"title": "1. Jurământul", "body": "Straja apără oamenii, procedura și dovezile. Autoritatea se exercită numai în limitele rolului, rangului și ordinului activ."},
+    {"title": "2. Serverul decide", "body": "Chatul, obiectele și etichetele sunt interfețe. Starea persistentă a serverului este autoritatea. Nu folosi informații dintr-un obiect ca mandat."},
+    {"title": "3. Serviciul", "body": "Intră și ieși din serviciu la Secretariat, dacă rangul și regulile locale permit. În serviciu ai identificare, responsabilități și obligația de a raporta."},
+    {"title": "4. Apeluri și incidente", "body": "Recepția înregistrează sesizările cetățenilor. Fluierul cere ajutor urgent și informează Straja din apropiere. Acceptă un incident doar dacă îl poți prelua."},
+    {"title": "5. Conducerea intervenției", "body": "Un singur străjer conduce un incident. Sprijinul este limitat și vizibil în registru. La final, notează rezultatul: rezolvat, transferat, fals, expirat sau fără acțiune."},
+    {"title": "6. Indicative", "body": "Indicativul persistent este de forma S-001. Folosește-l în comunicare și în raport. Numele jucătorului rămâne vizibil în roster; indicativul nu schimbă rangul."},
+    {"title": "7. BOLO", "body": "Un BOLO este o alertă de informare: subiect, motiv, emitent și expirare. BOLO-ul singur nu este mandat și nu dă drept de arest."},
+    {"title": "8. Mandatul real", "body": "Autoritatea de arest vine dintr-o sarcină sau procedură autorizată, verificată de server. Nu transforma o bănuială, o reputație sau un BOLO într-o condamnare."},
+    {"title": "9. Când poți căuta", "body": "Căutarea este permisă doar într-un context valid de custodie: încătușat, arestat, închis, doborât, inconștient sau predat legal. Ținta trebuie să fie în apropiere."},
+    {"title": "10. Confiscarea", "body": "Alege slotul din vizualizarea serverului. Dacă slotul s-a schimbat, operația e respinsă. Se confiscă stiva exactă, o singură dată; nu există duplicare sau confiscare din aer."},
+    {"title": "11. Dovada", "body": "Dosarul păstrează identificatorul itemului, cantitatea și datele serializate. Geanta este doar referință. Depune la Arhivistă, predă în dosar și păstrează lanțul de custodie."},
+    {"title": "12. Încătușarea", "body": "ESCORT permite deplasarea controlată; HARD este modul strict. Schimbarea modului cere aceeași autoritate, se auditează și se resetează la eliberare."},
+    {"title": "13. Predarea", "body": "Arestarea produce automat un dosar cu deținut, străjer, sentință, amendă/sarcină, incident și dovezi legate. Temnicerul finalizează predarea și închiderea operațională."},
+    {"title": "14. Reputația", "body": "Reputația este un scor persistent separat de rang și merit. Are jurnal și idempotency. Un BOLO sau un scor negativ nu creează autoritate de aplicare a legii."},
+    {"title": "15. Forța letală", "body": "Excepția legală cere străjer activ, sarcină autoritativă reală, țintă neimobilizată și ostilitate recentă. Uciderea unei persoane încătușate produce flag disciplinar și nu se iartă automat."},
+    {"title": "16. Reabilitarea", "body": "Executarea unei sentințe și plata unei amenzi pot ridica reputația până la neutral. O apelare admisă poate inversa sursa. Comisarul poate corecta doar cu motiv și audit."},
+    {"title": "17. Abuzuri", "body": "Nu spam-a recepția sau fluierul, nu accepta mai multe incidente decât poți gestiona, nu folosi distanța sau lagul pentru a ocoli serverul și nu modifica obiecte pentru a fabrica dovezi."},
+    {"title": "18. Ordinea raportului", "body": "Spune cine, ce, unde, când și ce ai făcut. Înregistrează martori, dovezi și rezultat. Dacă ceva nu este clar, oprește escaladarea și cere un superior. Procedura protejează și Straja, și cetățeanul."}
+  ]
+}

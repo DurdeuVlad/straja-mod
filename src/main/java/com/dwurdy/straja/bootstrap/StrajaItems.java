@@ -7,6 +7,7 @@ import net.minecraft.world.item.Rarity;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
+import com.dwurdy.straja.adapter.out.minecraft.TrainingManualItem;
 
 /**
  * Native Straja items. Registry names keep the legacy kubejs names (minus the
@@ -76,7 +77,14 @@ public final class StrajaItems {
             () -> new Item(new Item.Properties().stacksTo(1)));
 
     public static final DeferredItem<Item> TRAINING_MANUAL = ITEMS.register("training_manual",
-            () -> new Item(new Item.Properties().stacksTo(1).rarity(Rarity.UNCOMMON)));
+            () -> new TrainingManualItem(new Item.Properties().stacksTo(1).rarity(Rarity.UNCOMMON)));
+    public static final DeferredItem<Item> ALARM_WHISTLE = ITEMS.register("alarm_whistle",
+            () -> new com.dwurdy.straja.adapter.out.minecraft.AlarmWhistleItem(
+                    new Item.Properties().stacksTo(1).rarity(Rarity.UNCOMMON)));
+    public static final DeferredItem<Item> EVIDENCE_BAG = ITEMS.register("evidence_bag",
+            () -> new Item(new Item.Properties().stacksTo(16)));
+    public static final DeferredItem<Item> CONFISCATION_RECEIPT = ITEMS.register("confiscation_receipt",
+            () -> new Item(new Item.Properties().stacksTo(16)));
 
     private StrajaItems() {}
 

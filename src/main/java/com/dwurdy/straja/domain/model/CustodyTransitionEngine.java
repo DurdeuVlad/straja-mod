@@ -441,6 +441,7 @@ public final class CustodyTransitionEngine {
         }
         if (state.custody == CustodyStatus.JAILED) return reject("JAILED_RESTRAINT_REQUIRES_RELEASE");
         state.restraint = RestraintStatus.NONE;
+        state.restraintMode = RestraintMode.ESCORT;
         state.restraintActorId = "";
         state.vision = VisionStatus.NORMAL;
         if (state.condition == PlayerCondition.UNCONSCIOUS_CUSTODY) {
@@ -496,6 +497,7 @@ public final class CustodyTransitionEngine {
         if (state.condition != PlayerCondition.DEAD) state.condition = PlayerCondition.ALIVE;
         clearDeadlines(state);
         state.restraint = RestraintStatus.NONE;
+        state.restraintMode = RestraintMode.ESCORT;
         state.custody = CustodyStatus.FREE;
         state.vision = VisionStatus.NORMAL;
         state.carrierId = "";
@@ -543,6 +545,7 @@ public final class CustodyTransitionEngine {
             case CLEAR_ALL, WAKE -> clearAll(state);
             case RELEASE_RESTRAINTS -> {
                 state.restraint = RestraintStatus.NONE;
+                state.restraintMode = RestraintMode.ESCORT;
                 state.vision = VisionStatus.NORMAL;
                 state.custody = CustodyStatus.FREE;
                 state.custodyActorId = "";
@@ -610,6 +613,7 @@ public final class CustodyTransitionEngine {
         state.custody = CustodyStatus.FREE;
         state.transport = TransportStatus.NONE;
         state.restraint = RestraintStatus.NONE;
+        state.restraintMode = RestraintMode.ESCORT;
         state.vision = VisionStatus.NORMAL;
         state.carrierId = "";
         state.restraintActorId = "";

@@ -16,7 +16,7 @@ Product boundary is non-negotiable:
 
 1. Admin operations such as `/straja backup`, setup, migration, NPC registry
    administration, diagnostics, test tooling, and rank administration remain
-   permission-2 typed commands. `/straja backup` must remain an admin command;
+   OP 3/OP 4 typed commands. `/straja backup` must remain an OP 3 admin command;
    do not replace it with an NPC button.
 2. Player/roleplay actions must be reachable through native Straja NPCs,
    physical Straja items, native forms, or clickable chat opened by those

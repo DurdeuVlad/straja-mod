@@ -59,6 +59,12 @@ secrets and are never written to ledgers or logs.
 ## Local reproduction
 
 ```bash
+# upstream NeoForge GameTests (8 required tests)
+./gradlew runGameTestServer --no-daemon
+
+# RP expansion boundary GameTests (7 required tests)
+./gradlew runRpExpansionGameTestServer --no-daemon
+
 # dedicated-server profile (requires ~4 GB free in the work root)
 python tools/ci/server_harness.py --manifest tools/ci/server_manifest.json \
   --profile combined --jar build/libs/straja-<v>.jar \

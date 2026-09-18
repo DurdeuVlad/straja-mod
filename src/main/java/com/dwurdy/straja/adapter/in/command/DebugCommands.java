@@ -87,7 +87,7 @@ final class DebugCommands {
         // Deployment gate: outside local, debug stays off unless the operator
         // explicitly opts out of the gate — debugLocalOnly alone is not enough.
         if (!p.isLocalEnvironment() && p.requireDebugDisabledOutsideLocal) return false;
-        return source.hasPermission(2);
+        return source.hasPermission(StrajaCommands.requiredPermission("debug"));
     }
 
     private static int deny(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {

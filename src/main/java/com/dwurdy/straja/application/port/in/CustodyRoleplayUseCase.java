@@ -50,6 +50,8 @@ public interface CustodyRoleplayUseCase {
     List<VisualState> visualStates();
 
     boolean requestCuffs(PlayerGateway issuer, PlayerGateway target);
+    /** Sneak-interact toggle between ESCORT and HARD for an existing cuff record. */
+    boolean toggleRestraintMode(PlayerGateway issuer, PlayerGateway target);
     boolean accept(PlayerGateway player, String id);
     boolean refuse(PlayerGateway player, String id);
 

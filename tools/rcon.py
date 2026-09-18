@@ -97,9 +97,10 @@ def rcon(host, port, password, command, timeout=15):
         if req_id == -1:
             raise RconAuthError("authentication rejected")
         sock.sendall(_packet(_REQUEST_ID, SERVERDATA_EXECCOMMAND, command))
-        # Terminator: the server answers every exec packet; an empty command
-        # still yields a response, so the sentinel id marks end-of-response.
-        sock.sendall(_packet(_SENTINEL_ID, SERVERDATA_EXECCOMMAND, ""))
+        # Wait for the command response before sending the terminator. Some
+        # NeoForge/Minecraft RCON builds close a pipelined request when the
+        # command performs synchronous SavedData writes; the sentinel is only
+        # needed after the first response and still captures split payloads.
         chunks = []
         deadline = time.time() + timeout
         while time.time() < deadline:
@@ -111,6 +112,10 @@ def rcon(host, port, password, command, timeout=15):
                 raise RconTimeout(f"no response to {command!r}") from None
             if rid == _REQUEST_ID:
                 chunks.append(payload or "")
+                if len(chunks) == 1:
+                    # An empty command still yields a response, so the
+                    # sentinel id marks end-of-response after the real reply.
+                    sock.sendall(_packet(_SENTINEL_ID, SERVERDATA_EXECCOMMAND, ""))
             elif rid == _SENTINEL_ID:
                 break
         else:

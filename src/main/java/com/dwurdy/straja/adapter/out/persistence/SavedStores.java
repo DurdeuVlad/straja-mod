@@ -145,4 +145,34 @@ public final class SavedStores {
         @Override public TestStore read() { return readJson(TestStore.class, TestStore::new); }
         @Override public void write(TestStore store) { writeJson(store); }
     }
+
+    public static class Incidents extends JsonBackedStore implements IncidentRepository {
+        public Incidents(StoreAccess access) { super(access, "incidents"); }
+        @Override public IncidentStore read() { return readJson(IncidentStore.class, IncidentStore::new); }
+        @Override public void write(IncidentStore store) { writeJson(store); }
+    }
+
+    public static class Bolos extends JsonBackedStore implements BoloRepository {
+        public Bolos(StoreAccess access) { super(access, "bolos"); }
+        @Override public BoloStore read() { return readJson(BoloStore.class, BoloStore::new); }
+        @Override public void write(BoloStore store) { writeJson(store); }
+    }
+
+    public static class Evidence extends JsonBackedStore implements EvidenceRepository {
+        public Evidence(StoreAccess access) { super(access, "evidence"); }
+        @Override public EvidenceStore read() { return readJson(EvidenceStore.class, EvidenceStore::new); }
+        @Override public void write(EvidenceStore store) { writeJson(store); }
+    }
+
+    public static class ArrestRecords extends JsonBackedStore implements ArrestRecordRepository {
+        public ArrestRecords(StoreAccess access) { super(access, "arrest_records"); }
+        @Override public ArrestRecordStore read() { return readJson(ArrestRecordStore.class, ArrestRecordStore::new); }
+        @Override public void write(ArrestRecordStore store) { writeJson(store); }
+    }
+
+    public static class Reputation extends JsonBackedStore implements ReputationRepository {
+        public Reputation(StoreAccess access) { super(access, "reputation"); }
+        @Override public ReputationStore read() { return readJson(ReputationStore.class, ReputationStore::new); }
+        @Override public void write(ReputationStore store) { writeJson(store); }
+    }
 }

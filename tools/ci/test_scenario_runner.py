@@ -251,21 +251,33 @@ class RconFramingTests(unittest.TestCase):
                 + rcon_mod._packet(rcon_mod._SENTINEL_ID, 0, ""))
 
         class FakeSock:
-            def __init__(self): self.buf = bytearray(wire)
+            def __init__(self):
+                self.buf = bytearray(wire)
+                self.recv_calls = 0
+                self.sentinel_recv_calls = None
+
             def recv(self, n):
+                self.recv_calls += 1
                 out = bytes(self.buf[:n]); del self.buf[:n]
                 return out
-            def sendall(self, data): pass
+
+            def sendall(self, data):
+                request_id = struct.unpack("<i", data[4:8])[0]
+                if request_id == rcon_mod._SENTINEL_ID:
+                    self.sentinel_recv_calls = self.recv_calls
+
             def settimeout(self, t): pass
             def close(self): pass
 
+        sock = FakeSock()
         orig = rcon_mod.socket.create_connection
-        rcon_mod.socket.create_connection = lambda *a, **k: FakeSock()
+        rcon_mod.socket.create_connection = lambda *a, **k: sock
         try:
             text = rcon_mod.rcon("h", 1, "s3cret", "cmd")
         finally:
             rcon_mod.socket.create_connection = orig
         self.assertEqual(text, "part-1 part-2")
+        self.assertGreaterEqual(sock.sentinel_recv_calls, 4)
 
     def test_timeout_without_response(self):
         wire = rcon_mod._packet(1, 0, "")  # auth ok, then nothing

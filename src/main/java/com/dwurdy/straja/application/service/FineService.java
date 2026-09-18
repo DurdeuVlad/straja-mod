@@ -14,6 +14,8 @@ import com.dwurdy.straja.domain.model.SetupData;
 import com.dwurdy.straja.domain.model.StrajaPolicies;
 
 import java.util.List;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 /**
  * Fines, appeals, escalation, recovery tasks, hearing warrants and jailer
@@ -33,6 +35,9 @@ public class FineService implements FineRoleplayUseCase {
     private final PrisonRoleplayUseCase prison;
     private long lastTickAt;
     private long lastPersistAt;
+    private Consumer<Fine> finePaidHook = fine -> {};
+    private Consumer<FineTask> fineRefusedHook = task -> {};
+    private BiConsumer<PlayerGateway, Fine> fineVoidedHook = (actor, fine) -> {};
 
     public FineService(StrajaContext ctx, PlayerService players, AuditService audit,
                        PrisonRoleplayUseCase prison) {
@@ -40,6 +45,19 @@ public class FineService implements FineRoleplayUseCase {
         this.players = players;
         this.audit = audit;
         this.prison = prison;
+    }
+
+    public void onFinePaid(Consumer<Fine> hook) {
+        this.finePaidHook = hook == null ? fine -> {} : hook;
+    }
+
+    public void onFineRefused(Consumer<FineTask> hook) {
+        this.fineRefusedHook = hook == null ? task -> {} : hook;
+    }
+
+    /** Called after an authorized appeal permanently voids a fine. */
+    public void onFineVoided(BiConsumer<PlayerGateway, Fine> hook) {
+        this.fineVoidedHook = hook == null ? (actor, fine) -> {} : hook;
     }
 
     private StrajaPolicies p() {
@@ -409,6 +427,7 @@ public class FineService implements FineRoleplayUseCase {
         ctx.fines().write(data);
         audit.record("fine_pay", player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), "SUCCESS", "paid_at_reception fineId=" + fine.id + " amount=" + fine.amount);
         player.tell("Amenda " + fine.id + " a fost plătită la recepționistă.");
+        finePaidHook.accept(fine);
         return true;
     }
 
@@ -452,6 +471,7 @@ public class FineService implements FineRoleplayUseCase {
             ctx.fines().write(data);
             audit.record("fine_payment_review", player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), "SUCCESS", "marked_paid_by_commissioner fineId=" + fine.id);
             player.tell("Amenda " + fine.id + " a fost marcată ca plătită după verificarea tranzacției.");
+            finePaidHook.accept(fine);
             return true;
         }
         player.tell("Verificare amendă: " + fine.id + " | status=" + fine.status + " | debitare estimată=" + attempt.amount
@@ -558,6 +578,7 @@ public class FineService implements FineRoleplayUseCase {
         String action = decision == null ? "" : decision.toLowerCase();
         Fine.Appeal appeal = fine.appeal;
         long reviewAt = now();
+        boolean voided = false;
         if (List.of("uphold", "mentine", "menține", "confirm").contains(action)) {
             fine.status = appeal.previousStatus == null || appeal.previousStatus.isEmpty() ? "ISSUED" : appeal.previousStatus;
             fine.onlineLastTickAt = reviewAt;
@@ -576,6 +597,7 @@ public class FineService implements FineRoleplayUseCase {
             fine.status = "WAIVED";
             fine.waivedAt = reviewAt;
             appeal.decision = "VOID";
+            voided = true;
         } else {
             player.tell("Folosește uphold, reduce <tarif-standard> sau void.");
             return false;
@@ -586,6 +608,7 @@ public class FineService implements FineRoleplayUseCase {
         appeal.reviewedByUuid = player.uuid().toString();
         appeal.decisionReason = trimmedReason;
         ctx.fines().write(data);
+        if (voided) fineVoidedHook.accept(player, fine);
         audit.record("fine_appeal_review", player.name(), player.uuid().toString(), fine.target, fine.targetUuid, "SUCCESS", appeal.decision + " fineId=" + fine.id + " appealId=" + appeal.id);
         PlayerGateway target = ctx.server().findPlayer(fine.target);
         if (target != null) {
@@ -787,6 +810,7 @@ public class FineService implements FineRoleplayUseCase {
         task.refusedAt = now();
         task.refusedBy = player.name();
         ctx.fines().write(data);
+        fineRefusedHook.accept(task);
         audit.record("fine_refuse", player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), "SUCCESS", "payment_refused taskId=" + task.id + " fineId=" + fine.id);
         if (task.assignee != null) {
             PlayerGateway assignee = ctx.server().findPlayer(task.assignee);

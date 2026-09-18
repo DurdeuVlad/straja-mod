@@ -17,6 +17,9 @@ public final class PhysicalItemSurface {
         FINE_BOOK,
         FINE_NOTICE,
         TRAINING_MANUAL,
+        ALARM_WHISTLE,
+        EVIDENCE_BAG,
+        CONFISCATION_RECEIPT,
         IDENTITY_CARD
     }
 
@@ -32,8 +35,11 @@ public final class PhysicalItemSurface {
                     "straja:official_envelope" -> Action.ARCHIVE_TOOL;
             case "straja:fine_book" -> Action.FINE_BOOK;
             case "straja:fine_notice" -> Action.FINE_NOTICE;
-            case "straja:identity_card" -> Action.IDENTITY_CARD;
             case "straja:training_manual" -> Action.TRAINING_MANUAL;
+            case "straja:alarm_whistle" -> Action.ALARM_WHISTLE;
+            case "straja:evidence_bag" -> Action.EVIDENCE_BAG;
+            case "straja:confiscation_receipt" -> Action.CONFISCATION_RECEIPT;
+            case "straja:identity_card" -> Action.IDENTITY_CARD;
             default -> Action.NONE;
         };
     }

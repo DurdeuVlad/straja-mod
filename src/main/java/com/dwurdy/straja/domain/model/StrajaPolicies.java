@@ -18,10 +18,10 @@ public class StrajaPolicies {
     public boolean allowNameFallback = true;
     public String commissionerTitle = "Comisaru'";
     public String environment = "local";
+
     // physical identity cards
     public boolean identityCardsEnabled = true;
     public int identityCardValidityDays = 30;
-
 
     // deployment gates
     public boolean requireRealCoinProviderOutsideLocal = true;
@@ -61,6 +61,30 @@ public class StrajaPolicies {
     // §13: rewards above calculated × (1 + margin) require an explicit,
     // audited reason.
     public double missionRewardOverrideMargin = 0.25;
+
+    // operational incidents, whistle and dispatch
+    public boolean incidentsEnabled = true;
+    public int incidentCitizenReportCooldownSeconds = 60;
+    public int incidentMaxActiveCitizenReports = 3;
+    public int incidentDefaultExpirationSeconds = 900;
+    public int incidentMaxSupportingGuards = 3;
+    public int incidentMaxDescriptionLength = 240;
+    public boolean whistleEnabled = true;
+    public int whistleCooldownSeconds = 120;
+    public double whistleSoundRadius = 32;
+
+    // BOLO notices remain distinct from authoritative arrest tasks.
+    public boolean bolosEnabled = true;
+    public int boloMinimumIssuerRank = 3;
+    public int boloCancellationMinimumRank = 4;
+    public int boloDefaultExpirationSeconds = 3600;
+    public int boloMaxReasonLength = 240;
+    public int boloMaxActivePerSubject = 3;
+
+    // search/confiscation/evidence
+    public boolean evidenceEnabled = true;
+    public double searchRangeBlocks = 4;
+    public int evidenceMaxReasonLength = 200;
 
     // cuffs
     public int cuffRequestTimeoutSeconds = 60;
@@ -170,6 +194,27 @@ public class StrajaPolicies {
     public int jailerAssaultSentenceDays = 1;
     public int jailerAssaultMissionMaxAssignees = 4;
     public boolean jailerGuardImmunity = true;
+
+    // persistent reputation, deliberately independent from rank and merit
+    public boolean reputationEnabled = true;
+    public int reputationMinScore = -1000;
+    public int reputationMaxScore = 1000;
+    public int reputationOrdinaryKillDelta = -120;
+    /** Killing a restrained, downed or custody-bound player is a distinct, harsher event. */
+    public int reputationRestrainedKillDelta = -250;
+    public int reputationKillOnDutyGuardDelta = -200;
+    public int reputationJailerKillDelta = -180;
+    public int reputationJailerAssaultDelta = -60;
+    public int reputationGuardExecutionDelta = -250;
+    public int reputationPrisonEscapeDelta = -100;
+    public int reputationCustodyEscapeDelta = -40;
+    public int reputationFineRefusalDelta = -25;
+    public int reputationSentenceCompletionDelta = 60;
+    public int reputationPrisonTaskDelta = 5;
+    public int reputationPrisonTaskCap = 25;
+    public int reputationFinePaymentDelta = 10;
+    public int recruitmentMinReputation = -100;
+    public int lawfulHostilityWindowSeconds = 30;
 
     /** The jailer is damageable; guard immunity only blocks on-duty guards. */
     public boolean jailerDamageAllowed(boolean attackerOnDutyGuard) {

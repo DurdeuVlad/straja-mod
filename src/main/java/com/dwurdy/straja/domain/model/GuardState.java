@@ -26,6 +26,8 @@ public class GuardState {
     public boolean suspended = false;
     public boolean fired = false;
     public String nativeFaction = null;        // self-declared origin faction; Straja applies while on duty
+    /** Stable personnel radio identity; assigned once when the guard first serves. */
+    public String callsign = "";
     public java.util.Set<String> specializations = new java.util.LinkedHashSet<>(); // independent functions: Instructor, Recrutor, … (§2)
     public boolean duty = false;
     public String mode = "OFF_DUTY";           // NORMAL | SPECIAL | FREE | OFF_DUTY

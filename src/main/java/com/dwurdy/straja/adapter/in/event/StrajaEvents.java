@@ -59,6 +59,7 @@ public final class StrajaEvents {
         CustodyVisualSync.sync(runtime.custodyRoleplay().visualStates());
         runtime.prisonRoleplay().tick();
         runtime.fineRoleplay().tick();
+        runtime.expansionRoleplay().tick();
         if (runtime.serverGateway().tickCount() % 20 != 0) return;
         runtime.formSessions().purgeExpired();
         com.dwurdy.straja.adapter.in.npc.NpcInteractionService.purgeExpiredTokens();
@@ -214,6 +215,7 @@ public final class StrajaEvents {
         runtime.missionRoleplay().deliverPendingRewards(gateway);
         runtime.fineRoleplay().recoverOnLogin(gateway);
         runtime.archiveRoleplay().deliverPending(gateway);
+        runtime.expansionRoleplay().deliverPendingEvidence(gateway);
         runtime.emergencyRoleplay().deliverUrgency(gateway);
         runtime.roomRoleplay().assignAutomatically(gateway);
         runtime.roomRoleplay().processWaitlist();
@@ -267,6 +269,9 @@ public final class StrajaEvents {
                 && runtime.custodyRoleplay().actionBlocked(attackerGateway, "combat")) {
             event.setCanceled(true);
             return;
+        }
+        if (attackerGateway != null) {
+            runtime.expansionRoleplay().recordHostileDamage(attackerGateway, targetGateway);
         }
 
         // Baton/whip behavior remains a distinct non-lethal weapon flow. It owns
@@ -435,6 +440,14 @@ public final class StrajaEvents {
             return;
         }
         String held = gateway.mainHand().id();
+        if ("straja:evidence_bag".equals(held)) {
+            var search = runtime.expansionRoleplay().beginSearch(gateway, targetGateway);
+            if (search != null) {
+                NpcRoles.openEvidenceForm(player, search, runtime);
+                event.setCanceled(true);
+            }
+            return;
+        }
         if ("straja:order_book".equals(held) || "straja:mission_carnet".equals(held)) {
             if (runtime.missionRoleplay().issueDraft(gateway, targetGateway)) event.setCanceled(true);
             return;
@@ -444,7 +457,10 @@ public final class StrajaEvents {
             return;
         }
         boolean handled = switch (held) {
-            case "straja:cuffs" -> runtime.custodyRoleplay().requestCuffs(gateway, targetGateway);
+            case "straja:cuffs" -> player.isCrouching()
+                    && runtime.custodyRoleplay().isCuffed(targetGateway)
+                    ? runtime.custodyRoleplay().toggleRestraintMode(gateway, targetGateway)
+                    : runtime.custodyRoleplay().requestCuffs(gateway, targetGateway);
             case "straja:rope" -> runtime.custodyRoleplay().applyRope(gateway, targetGateway);
             case "straja:head_sack" -> runtime.custodyRoleplay().applyHeadSack(gateway, targetGateway);
             case "straja:cuff_key", "straja:crowbar", "straja:bolt_cutters", "straja:keychain" ->
@@ -633,7 +649,15 @@ public final class StrajaEvents {
                 return true;
             }
             case TRAINING_MANUAL -> {
-                runtime.guardDuty().showRules(player);
+                // TrainingManualItem owns the vanilla written-book interaction.
+                return false;
+            }
+            case ALARM_WHISTLE -> {
+                // AlarmWhistleItem owns the server-authoritative use action.
+                return false;
+            }
+            case EVIDENCE_BAG, CONFISCATION_RECEIPT -> {
+                player.tell("Obiect de referință. Autoritatea este în registrul serverului.");
                 return true;
             }
             case IDENTITY_CARD -> {
@@ -736,6 +760,12 @@ public final class StrajaEvents {
         String outcome = event.getEntity().getHealth() <= 0.5f ? "KILLED" : "WOUNDED";
         runtime.fineRoleplay().createJailerAssaultMission(gateway,
                 event.getEntity().getStringUUID(), outcome);
+        runtime.incidents().createJailerAssault(gateway,
+                event.getEntity().getStringUUID(), outcome);
+        if (!"KILLED".equals(outcome)) {
+            runtime.reputation().recordJailerAssault(gateway,
+                    event.getEntity().getStringUUID(), false);
+        }
     }
 
     /**
@@ -746,14 +776,22 @@ public final class StrajaEvents {
     public void onEntityDeath(net.neoforged.neoforge.event.entity.living.LivingDeathEvent event) {
         StrajaRuntime runtime = StrajaRuntime.get();
         if (runtime == null || event.getEntity().level().isClientSide()) return;
-        // Custody always recovers a dying player's restraint state first.
+        net.minecraft.server.level.ServerPlayer attacker = event.getSource().getEntity()
+                instanceof net.minecraft.server.level.ServerPlayer player ? player : null;
+        // Attribute reputation before custody death recovery clears restraint state.
         if (event.getEntity() instanceof net.minecraft.server.level.ServerPlayer victim) {
             var victimGateway = new MinecraftPlayerGateway(victim.getServer(), victim.getUUID());
+            if (attacker != null) {
+                runtime.expansionRoleplay().recordFinalDeath(
+                        new MinecraftPlayerGateway(attacker.getServer(), attacker.getUUID()), victimGateway);
+            }
             runtime.custodyRoleplay().recoverAfterDeath(victimGateway);
         }
-        if (!(event.getSource().getEntity() instanceof net.minecraft.server.level.ServerPlayer attacker)) return;
+        if (attacker == null) return;
         var gateway = new MinecraftPlayerGateway(attacker.getServer(), attacker.getUUID());
         if ("jailer".equals(npcRoleOf(runtime, event.getEntity()))) {
+            runtime.reputation().recordJailerAssault(gateway,
+                    event.getEntity().getStringUUID(), true);
             runtime.fineRoleplay().createJailerAssaultMission(gateway,
                     event.getEntity().getStringUUID(), "KILLED");
             return;

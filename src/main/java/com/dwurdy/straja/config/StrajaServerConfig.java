@@ -48,6 +48,27 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.BooleanValue MISSION_QUICK_CREATE_LOCAL_ONLY;
     public static final ModConfigSpec.DoubleValue MISSION_REWARD_OVERRIDE_MARGIN;
 
+    public static final ModConfigSpec.BooleanValue INCIDENTS_ENABLED;
+    public static final ModConfigSpec.IntValue INCIDENT_CITIZEN_REPORT_COOLDOWN_SECONDS;
+    public static final ModConfigSpec.IntValue INCIDENT_MAX_ACTIVE_CITIZEN_REPORTS;
+    public static final ModConfigSpec.IntValue INCIDENT_DEFAULT_EXPIRATION_SECONDS;
+    public static final ModConfigSpec.IntValue INCIDENT_MAX_SUPPORTING_GUARDS;
+    public static final ModConfigSpec.IntValue INCIDENT_MAX_DESCRIPTION_LENGTH;
+    public static final ModConfigSpec.BooleanValue WHISTLE_ENABLED;
+    public static final ModConfigSpec.IntValue WHISTLE_COOLDOWN_SECONDS;
+    public static final ModConfigSpec.DoubleValue WHISTLE_SOUND_RADIUS;
+
+    public static final ModConfigSpec.BooleanValue BOLOS_ENABLED;
+    public static final ModConfigSpec.IntValue BOLO_MINIMUM_ISSUER_RANK;
+    public static final ModConfigSpec.IntValue BOLO_CANCELLATION_MINIMUM_RANK;
+    public static final ModConfigSpec.IntValue BOLO_DEFAULT_EXPIRATION_SECONDS;
+    public static final ModConfigSpec.IntValue BOLO_MAX_REASON_LENGTH;
+    public static final ModConfigSpec.IntValue BOLO_MAX_ACTIVE_PER_SUBJECT;
+
+    public static final ModConfigSpec.BooleanValue EVIDENCE_ENABLED;
+    public static final ModConfigSpec.DoubleValue SEARCH_RANGE_BLOCKS;
+    public static final ModConfigSpec.IntValue EVIDENCE_MAX_REASON_LENGTH;
+
     public static final ModConfigSpec.IntValue CUFF_REQUEST_TIMEOUT_SECONDS;
     public static final ModConfigSpec.IntValue SURRENDER_TIMEOUT_SECONDS;
     public static final ModConfigSpec.IntValue CUFF_SLOWNESS_TICKS;
@@ -144,6 +165,24 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.IntValue JAILER_ASSAULT_KILLED;
     public static final ModConfigSpec.IntValue JAILER_ASSAULT_SENTENCE_DAYS;
     public static final ModConfigSpec.IntValue JAILER_ASSAULT_MISSION_MAX_ASSIGNEES;
+    public static final ModConfigSpec.BooleanValue REPUTATION_ENABLED;
+    public static final ModConfigSpec.IntValue REPUTATION_MIN_SCORE;
+    public static final ModConfigSpec.IntValue REPUTATION_MAX_SCORE;
+    public static final ModConfigSpec.IntValue REPUTATION_ORDINARY_KILL_DELTA;
+    public static final ModConfigSpec.IntValue REPUTATION_RESTRAINED_KILL_DELTA;
+    public static final ModConfigSpec.IntValue REPUTATION_KILL_ON_DUTY_GUARD_DELTA;
+    public static final ModConfigSpec.IntValue REPUTATION_JAILER_KILL_DELTA;
+    public static final ModConfigSpec.IntValue REPUTATION_JAILER_ASSAULT_DELTA;
+    public static final ModConfigSpec.IntValue REPUTATION_GUARD_EXECUTION_DELTA;
+    public static final ModConfigSpec.IntValue REPUTATION_PRISON_ESCAPE_DELTA;
+    public static final ModConfigSpec.IntValue REPUTATION_CUSTODY_ESCAPE_DELTA;
+    public static final ModConfigSpec.IntValue REPUTATION_FINE_REFUSAL_DELTA;
+    public static final ModConfigSpec.IntValue REPUTATION_SENTENCE_COMPLETION_DELTA;
+    public static final ModConfigSpec.IntValue REPUTATION_PRISON_TASK_DELTA;
+    public static final ModConfigSpec.IntValue REPUTATION_PRISON_TASK_CAP;
+    public static final ModConfigSpec.IntValue REPUTATION_FINE_PAYMENT_DELTA;
+    public static final ModConfigSpec.IntValue RECRUITMENT_MIN_REPUTATION;
+    public static final ModConfigSpec.IntValue LAWFUL_HOSTILITY_WINDOW_SECONDS;
 
     public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> KITS;
     public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> ARMORY_STOCK;
@@ -159,9 +198,9 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.BooleanValue REQUIRE_REAL_COIN_PROVIDER_OUTSIDE_LOCAL;
     public static final ModConfigSpec.BooleanValue REQUIRE_COMMISSIONER_UUID_OUTSIDE_LOCAL;
     public static final ModConfigSpec.BooleanValue REQUIRE_DEBUG_DISABLED_OUTSIDE_LOCAL;
+
     public static final ModConfigSpec.BooleanValue IDENTITY_CARDS_ENABLED;
     public static final ModConfigSpec.IntValue IDENTITY_CARD_VALIDITY_DAYS;
-
 
     public static final ModConfigSpec.BooleanValue ENVELOPE_ENABLED;
     public static final ModConfigSpec.BooleanValue ENVELOPE_FALLBACK_TO_CHAT;
@@ -251,13 +290,13 @@ public final class StrajaServerConfig {
         ALLOW_NAME_FALLBACK = B.define("allowNameFallback", true);
         ENVIRONMENT = B.comment("local | staging | production").define("environment", "local");
         B.pop();
+
         B.push("identityCards");
         IDENTITY_CARDS_ENABLED = B.comment("Enable physical buletin issuance and validation.")
                 .define("enabled", defaults.identityCardsEnabled);
         IDENTITY_CARD_VALIDITY_DAYS = B.comment("Real-time validity period for a newly issued buletin.")
                 .defineInRange("validityDays", defaults.identityCardValidityDays, 1, 3650);
         B.pop();
-
 
         B.push("timers");
         CHECKPOINT_UNLOCK_MINUTES = B.defineInRange("checkpointUnlockMinutes", 5, 1, 1440);
@@ -305,6 +344,47 @@ public final class StrajaServerConfig {
                         "Fraction above the §13 calculated reward that triggers",
                         "the mandatory-reason override gate (0.25 = +25%).")
                 .defineInRange("rewardOverrideMargin", defaults.missionRewardOverrideMargin, 0.0, 10.0);
+        B.pop();
+
+        B.push("incidents");
+        INCIDENTS_ENABLED = B.define("enabled", defaults.incidentsEnabled);
+        INCIDENT_CITIZEN_REPORT_COOLDOWN_SECONDS = B.defineInRange(
+                "citizenReportCooldownSeconds", defaults.incidentCitizenReportCooldownSeconds, 0, 86400);
+        INCIDENT_MAX_ACTIVE_CITIZEN_REPORTS = B.defineInRange(
+                "maxActiveCitizenReports", defaults.incidentMaxActiveCitizenReports, 1, 100);
+        INCIDENT_DEFAULT_EXPIRATION_SECONDS = B.defineInRange(
+                "defaultExpirationSeconds", defaults.incidentDefaultExpirationSeconds, 30, 604800);
+        INCIDENT_MAX_SUPPORTING_GUARDS = B.defineInRange(
+                "maxSupportingGuards", defaults.incidentMaxSupportingGuards, 0, 32);
+        INCIDENT_MAX_DESCRIPTION_LENGTH = B.defineInRange(
+                "maxDescriptionLength", defaults.incidentMaxDescriptionLength, 1, 4000);
+        WHISTLE_ENABLED = B.define("whistleEnabled", defaults.whistleEnabled);
+        WHISTLE_COOLDOWN_SECONDS = B.defineInRange(
+                "whistleCooldownSeconds", defaults.whistleCooldownSeconds, 0, 86400);
+        WHISTLE_SOUND_RADIUS = B.defineInRange(
+                "whistleSoundRadius", defaults.whistleSoundRadius, 1.0, 256.0);
+        B.pop();
+
+        B.push("bolo");
+        BOLOS_ENABLED = B.define("enabled", defaults.bolosEnabled);
+        BOLO_MINIMUM_ISSUER_RANK = B.defineInRange(
+                "minimumIssuerRank", defaults.boloMinimumIssuerRank, 1, 4);
+        BOLO_CANCELLATION_MINIMUM_RANK = B.defineInRange(
+                "cancellationMinimumRank", defaults.boloCancellationMinimumRank, 1, 4);
+        BOLO_DEFAULT_EXPIRATION_SECONDS = B.defineInRange(
+                "defaultExpirationSeconds", defaults.boloDefaultExpirationSeconds, 30, 604800);
+        BOLO_MAX_REASON_LENGTH = B.defineInRange(
+                "maxReasonLength", defaults.boloMaxReasonLength, 1, 4000);
+        BOLO_MAX_ACTIVE_PER_SUBJECT = B.defineInRange(
+                "maxActivePerSubject", defaults.boloMaxActivePerSubject, 1, 100);
+        B.pop();
+
+        B.push("evidence");
+        EVIDENCE_ENABLED = B.define("enabled", defaults.evidenceEnabled);
+        SEARCH_RANGE_BLOCKS = B.defineInRange(
+                "searchRangeBlocks", defaults.searchRangeBlocks, 1.0, 32.0);
+        EVIDENCE_MAX_REASON_LENGTH = B.defineInRange(
+                "maxReasonLength", defaults.evidenceMaxReasonLength, 1, 4000);
         B.pop();
 
         B.push("cuffs");
@@ -548,6 +628,42 @@ public final class StrajaServerConfig {
                 defaults.jailerAssaultMissionMaxAssignees, 1, 64);
         B.pop();
 
+        B.push("reputation");
+        REPUTATION_ENABLED = B.define("enabled", defaults.reputationEnabled);
+        REPUTATION_MIN_SCORE = B.defineInRange("minScore", defaults.reputationMinScore, -100000, 0);
+        REPUTATION_MAX_SCORE = B.defineInRange("maxScore", defaults.reputationMaxScore, 0, 100000);
+        REPUTATION_ORDINARY_KILL_DELTA = B.defineInRange(
+                "ordinaryKillDelta", defaults.reputationOrdinaryKillDelta, -100000, 0);
+        REPUTATION_RESTRAINED_KILL_DELTA = B.defineInRange(
+                "restrainedKillDelta", defaults.reputationRestrainedKillDelta, -100000, 0);
+        REPUTATION_KILL_ON_DUTY_GUARD_DELTA = B.defineInRange(
+                "killOnDutyGuardDelta", defaults.reputationKillOnDutyGuardDelta, -100000, 0);
+        REPUTATION_JAILER_KILL_DELTA = B.defineInRange(
+                "jailerKillDelta", defaults.reputationJailerKillDelta, -100000, 0);
+        REPUTATION_JAILER_ASSAULT_DELTA = B.defineInRange(
+                "jailerAssaultDelta", defaults.reputationJailerAssaultDelta, -100000, 0);
+        REPUTATION_GUARD_EXECUTION_DELTA = B.defineInRange(
+                "guardExecutionDelta", defaults.reputationGuardExecutionDelta, -100000, 0);
+        REPUTATION_PRISON_ESCAPE_DELTA = B.defineInRange(
+                "prisonEscapeDelta", defaults.reputationPrisonEscapeDelta, -100000, 0);
+        REPUTATION_CUSTODY_ESCAPE_DELTA = B.defineInRange(
+                "custodyEscapeDelta", defaults.reputationCustodyEscapeDelta, -100000, 0);
+        REPUTATION_FINE_REFUSAL_DELTA = B.defineInRange(
+                "fineRefusalDelta", defaults.reputationFineRefusalDelta, -100000, 0);
+        REPUTATION_SENTENCE_COMPLETION_DELTA = B.defineInRange(
+                "sentenceCompletionDelta", defaults.reputationSentenceCompletionDelta, 0, 100000);
+        REPUTATION_PRISON_TASK_DELTA = B.defineInRange(
+                "prisonTaskDelta", defaults.reputationPrisonTaskDelta, 0, 100000);
+        REPUTATION_PRISON_TASK_CAP = B.defineInRange(
+                "prisonTaskCap", defaults.reputationPrisonTaskCap, 0, 100000);
+        REPUTATION_FINE_PAYMENT_DELTA = B.defineInRange(
+                "finePaymentDelta", defaults.reputationFinePaymentDelta, 0, 100000);
+        RECRUITMENT_MIN_REPUTATION = B.defineInRange(
+                "recruitmentMinReputation", defaults.recruitmentMinReputation, -100000, 100000);
+        LAWFUL_HOSTILITY_WINDOW_SECONDS = B.defineInRange(
+                "lawfulHostilityWindowSeconds", defaults.lawfulHostilityWindowSeconds, 1, 3600);
+        B.pop();
+
         B.push("equipment");
         KITS = B.comment(
                         "Permanent rank kits granted at rank-up; gear is owned, never reclaimed.",
@@ -770,6 +886,25 @@ public final class StrajaServerConfig {
         p.missionQuickCreateLocalOnly = MISSION_QUICK_CREATE_LOCAL_ONLY.get();
         p.missionRewardOverrideMargin = MISSION_REWARD_OVERRIDE_MARGIN.get();
 
+        p.incidentsEnabled = INCIDENTS_ENABLED.get();
+        p.incidentCitizenReportCooldownSeconds = INCIDENT_CITIZEN_REPORT_COOLDOWN_SECONDS.get();
+        p.incidentMaxActiveCitizenReports = INCIDENT_MAX_ACTIVE_CITIZEN_REPORTS.get();
+        p.incidentDefaultExpirationSeconds = INCIDENT_DEFAULT_EXPIRATION_SECONDS.get();
+        p.incidentMaxSupportingGuards = INCIDENT_MAX_SUPPORTING_GUARDS.get();
+        p.incidentMaxDescriptionLength = INCIDENT_MAX_DESCRIPTION_LENGTH.get();
+        p.whistleEnabled = WHISTLE_ENABLED.get();
+        p.whistleCooldownSeconds = WHISTLE_COOLDOWN_SECONDS.get();
+        p.whistleSoundRadius = WHISTLE_SOUND_RADIUS.get();
+        p.bolosEnabled = BOLOS_ENABLED.get();
+        p.boloMinimumIssuerRank = BOLO_MINIMUM_ISSUER_RANK.get();
+        p.boloCancellationMinimumRank = BOLO_CANCELLATION_MINIMUM_RANK.get();
+        p.boloDefaultExpirationSeconds = BOLO_DEFAULT_EXPIRATION_SECONDS.get();
+        p.boloMaxReasonLength = BOLO_MAX_REASON_LENGTH.get();
+        p.boloMaxActivePerSubject = BOLO_MAX_ACTIVE_PER_SUBJECT.get();
+        p.evidenceEnabled = EVIDENCE_ENABLED.get();
+        p.searchRangeBlocks = SEARCH_RANGE_BLOCKS.get();
+        p.evidenceMaxReasonLength = EVIDENCE_MAX_REASON_LENGTH.get();
+
         p.cuffRequestTimeoutSeconds = CUFF_REQUEST_TIMEOUT_SECONDS.get();
         p.surrenderTimeoutSeconds = SURRENDER_TIMEOUT_SECONDS.get();
         p.cuffSlownessTicks = CUFF_SLOWNESS_TICKS.get();
@@ -869,6 +1004,24 @@ public final class StrajaServerConfig {
         p.jailerAssaultKilledAmount = JAILER_ASSAULT_KILLED.get();
         p.jailerAssaultSentenceDays = JAILER_ASSAULT_SENTENCE_DAYS.get();
         p.jailerAssaultMissionMaxAssignees = JAILER_ASSAULT_MISSION_MAX_ASSIGNEES.get();
+        p.reputationEnabled = REPUTATION_ENABLED.get();
+        p.reputationMinScore = REPUTATION_MIN_SCORE.get();
+        p.reputationMaxScore = REPUTATION_MAX_SCORE.get();
+        p.reputationOrdinaryKillDelta = REPUTATION_ORDINARY_KILL_DELTA.get();
+        p.reputationRestrainedKillDelta = REPUTATION_RESTRAINED_KILL_DELTA.get();
+        p.reputationKillOnDutyGuardDelta = REPUTATION_KILL_ON_DUTY_GUARD_DELTA.get();
+        p.reputationJailerKillDelta = REPUTATION_JAILER_KILL_DELTA.get();
+        p.reputationJailerAssaultDelta = REPUTATION_JAILER_ASSAULT_DELTA.get();
+        p.reputationGuardExecutionDelta = REPUTATION_GUARD_EXECUTION_DELTA.get();
+        p.reputationPrisonEscapeDelta = REPUTATION_PRISON_ESCAPE_DELTA.get();
+        p.reputationCustodyEscapeDelta = REPUTATION_CUSTODY_ESCAPE_DELTA.get();
+        p.reputationFineRefusalDelta = REPUTATION_FINE_REFUSAL_DELTA.get();
+        p.reputationSentenceCompletionDelta = REPUTATION_SENTENCE_COMPLETION_DELTA.get();
+        p.reputationPrisonTaskDelta = REPUTATION_PRISON_TASK_DELTA.get();
+        p.reputationPrisonTaskCap = REPUTATION_PRISON_TASK_CAP.get();
+        p.reputationFinePaymentDelta = REPUTATION_FINE_PAYMENT_DELTA.get();
+        p.recruitmentMinReputation = RECRUITMENT_MIN_REPUTATION.get();
+        p.lawfulHostilityWindowSeconds = LAWFUL_HOSTILITY_WINDOW_SECONDS.get();
         p.kits = mapOrDefault(StrajaPolicies.parseKits(KITS.get()), defaults().kits);
         p.armoryStock = listOrDefault(StrajaPolicies.parseArmoryItems(ARMORY_STOCK.get()),
                 defaults().armoryStock);
@@ -884,6 +1037,7 @@ public final class StrajaServerConfig {
         p.requireRealCoinProviderOutsideLocal = REQUIRE_REAL_COIN_PROVIDER_OUTSIDE_LOCAL.get();
         p.requireCommissionerUuidOutsideLocal = REQUIRE_COMMISSIONER_UUID_OUTSIDE_LOCAL.get();
         p.requireDebugDisabledOutsideLocal = REQUIRE_DEBUG_DISABLED_OUTSIDE_LOCAL.get();
+
         p.identityCardsEnabled = IDENTITY_CARDS_ENABLED.get();
         p.identityCardValidityDays = IDENTITY_CARD_VALIDITY_DAYS.get();
 

@@ -104,6 +104,19 @@ public final class NpcRoles {
             case "training-promote" -> runtime.guardRecruitment().requestPromotion(gw);
             case "training-manual" -> runtime.guardRecruitment().giveManual(gw);
             case "faction-declare" -> openFactionForm(player, runtime, gw);
+            case "incident-report" -> openIncidentForm(player, runtime);
+            case "bolo-create" -> openBoloForm(player, runtime);
+            case "incident-list" -> tellIncidents(runtime, gw);
+            case "duty-roster" -> tellRoster(runtime, gw);
+            case "bolo-list" -> tellBolos(runtime, gw);
+            case "reputation-self" -> tellReputation(runtime, gw);
+            case "arrest-record" -> tellArrestRecord(runtime, gw);
+            case "arrest-record-admin" -> tellArrestRecords(runtime, gw);
+            case "evidence-list" -> tellEvidence(runtime, gw);
+            case "evidence-case-view" -> openEvidenceCaseViewForm(player);
+            case "arrest-handoff" -> openArrestHandoffForm(player);
+            case "reputation-view" -> openReputationViewForm(player);
+            case "reputation-correction" -> openReputationCorrectionForm(player);
             case "duty-start" -> runtime.guardDuty().startDuty(gw);
             case "duty-stop" -> runtime.guardDuty().stopDuty(gw);
             case "duty-salary" -> runtime.guardDuty().salary(gw);
@@ -292,6 +305,15 @@ public final class NpcRoles {
             }
             case "tool-npc-record" -> runtime.adminTools().npcShowRecord(gw, id);
             case "tool-survey-stamp" -> runtime.adminTools().surveyStamp(gw, id);
+            case "incident-accept" -> runtime.expansionRoleplay().acceptIncident(gw, id);
+            case "incident-join" -> runtime.expansionRoleplay().joinIncident(gw, id);
+            case "incident-leave" -> runtime.expansionRoleplay().leaveIncident(gw, id);
+            case "incident-resolve" -> openIncidentResolveForm(player, runtime, id);
+            case "bolo-cancel" -> runtime.expansionRoleplay().cancelBolo(gw, id);
+            case "evidence-deposit" -> runtime.expansionRoleplay().depositEvidence(gw, id);
+            case "evidence-return" -> runtime.expansionRoleplay().returnEvidence(gw, id);
+            case "evidence-transfer" -> openEvidenceTransferForm(player, id);
+            case "evidence-destroy" -> openEvidenceDestroyForm(player, id);
             case "armory-buy" -> runtime.armory().buy(gw, id);
             case "armory-reserve" -> runtime.armory().buyReserve(gw, id);
             default -> { return false; }
@@ -424,6 +446,232 @@ public final class NpcRoles {
                         Component.literal("Apasă pentru a executa.")))
                 .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND,
                         "/straja npc-action " + token)));
+    }
+
+    private static boolean openIncidentForm(Player player,
+                                            com.dwurdy.straja.bootstrap.StrajaRuntime runtime) {
+        if (!(player instanceof ServerPlayer serverPlayer)) return true;
+        FormSessionBridge.open(serverPlayer, new FormSessionUseCase.Request(
+                FormSessionUseCase.Action.INCIDENT_REPORT, "",
+                "Raport de incident", "Descrie pe scurt ce s-a întâmplat și unde.",
+                java.util.List.of(
+                        new FormSessionUseCase.Field("category", "Categorie", 80, false),
+                        new FormSessionUseCase.Field("description", "Descriere",
+                                runtime.policies().incidentMaxDescriptionLength, true))));
+        return true;
+    }
+
+    private static boolean openIncidentResolveForm(Player player,
+                                                   com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                                   String incidentId) {
+        if (!(player instanceof ServerPlayer serverPlayer)) return true;
+        FormSessionBridge.open(serverPlayer, new FormSessionUseCase.Request(
+                FormSessionUseCase.Action.INCIDENT_RESOLVE, incidentId,
+                "Încheiere incident", "Alege rezultatul și notează ce s-a întâmplat.",
+                java.util.List.of(
+                        new FormSessionUseCase.Field("resolution",
+                                "Cod (RESOLVED/TRANSFERRED/FALSE_REPORT/NO_ACTION)", 32, false),
+                        new FormSessionUseCase.Field("notes", "Note",
+                                runtime.policies().incidentMaxDescriptionLength, true))));
+        return true;
+    }
+
+    private static boolean openBoloForm(Player player,
+                                        com.dwurdy.straja.bootstrap.StrajaRuntime runtime) {
+        if (!(player instanceof ServerPlayer serverPlayer)) return true;
+        FormSessionBridge.open(serverPlayer, new FormSessionUseCase.Request(
+                FormSessionUseCase.Action.BOLO_CREATE, "",
+                "Emite BOLO", "BOLO-ul este alertă de informare; nu este mandat de arest.",
+                java.util.List.of(
+                        new FormSessionUseCase.Field("subject", "Jucător online", 64, false),
+                        new FormSessionUseCase.Field("reason", "Motiv", runtime.policies().boloMaxReasonLength, true),
+                        new FormSessionUseCase.Field("notes", "Note", runtime.policies().incidentMaxDescriptionLength, true),
+                        new FormSessionUseCase.Field("authority", "INFORMATION_ONLY", 32, false),
+                        new FormSessionUseCase.Field("incidentId", "Incident legat (opțional)", 80, false))));
+        return true;
+    }
+
+    private static boolean openReputationViewForm(Player player) {
+        if (!(player instanceof ServerPlayer serverPlayer)) return true;
+        FormSessionBridge.open(serverPlayer, new FormSessionUseCase.Request(
+                FormSessionUseCase.Action.REPUTATION_VIEW, "",
+                "Istoric reputație", "Disponibil doar Comisarului; indică un jucător online.",
+                java.util.List.of(new FormSessionUseCase.Field(
+                        "subject", "Jucător", 64, false))));
+        return true;
+    }
+
+    private static boolean openReputationCorrectionForm(Player player) {
+        if (!(player instanceof ServerPlayer serverPlayer)) return true;
+        FormSessionBridge.open(serverPlayer, new FormSessionUseCase.Request(
+                FormSessionUseCase.Action.REPUTATION_CORRECTION, "",
+                "Corecție reputație", "Doar Comisarul poate modifica reputația; motivul este obligatoriu.",
+                java.util.List.of(
+                        new FormSessionUseCase.Field("subject", "Jucător online", 64, false),
+                        new FormSessionUseCase.Field("delta", "Modificare", 8, false),
+                        new FormSessionUseCase.Field("reason", "Motiv", 240, true))));
+        return true;
+    }
+
+    public static boolean openEvidenceForm(
+            Player player,
+            com.dwurdy.straja.application.port.in.RoleplayExpansionUseCase.SearchView search,
+            com.dwurdy.straja.bootstrap.StrajaRuntime runtime) {
+        if (!(player instanceof ServerPlayer serverPlayer) || search == null) return false;
+        String slots = search.slots().stream()
+                .map(entry -> entry.slot() + ": " + entry.item().id() + " x" + entry.item().count())
+                .collect(java.util.stream.Collectors.joining("; "));
+        FormSessionBridge.open(serverPlayer, new FormSessionUseCase.Request(
+                FormSessionUseCase.Action.EVIDENCE_CONFISCATE, search.token(),
+                "Percheziție: " + search.targetName(),
+                "Sloturi disponibile: " + slots,
+                java.util.List.of(
+                        new FormSessionUseCase.Field("slot", "Slot", 3, false),
+                        new FormSessionUseCase.Field("amount", "Cantitate exactă", 4, false),
+                        new FormSessionUseCase.Field("reason", "Motiv",
+                                runtime.policies().evidenceMaxReasonLength, true),
+                        new FormSessionUseCase.Field("incidentId",
+                                "Incident legat (opțional)", 80, false))));
+        return true;
+    }
+
+    private static boolean openEvidenceTransferForm(Player player, String evidenceId) {
+        if (!(player instanceof ServerPlayer serverPlayer)) return true;
+        FormSessionBridge.open(serverPlayer, new FormSessionUseCase.Request(
+                FormSessionUseCase.Action.EVIDENCE_TRANSFER, evidenceId,
+                "Transferă proba " + evidenceId,
+                "Indică numele custodelui autorizat online și motivul transferului.",
+                java.util.List.of(
+                        new FormSessionUseCase.Field("custodian", "Custode", 64, false),
+                        new FormSessionUseCase.Field("reason", "Motiv", 200, true))));
+        return true;
+    }
+
+    private static boolean openEvidenceDestroyForm(Player player, String evidenceId) {
+        if (!(player instanceof ServerPlayer serverPlayer)) return true;
+        FormSessionBridge.open(serverPlayer, new FormSessionUseCase.Request(
+                FormSessionUseCase.Action.EVIDENCE_DESTROY, evidenceId,
+                "Distruge proba " + evidenceId,
+                "Acțiunea este definitivă și disponibilă doar Comisarului. Motivul este obligatoriu.",
+                java.util.List.of(new FormSessionUseCase.Field("reason", "Motiv", 200, true))));
+        return true;
+    }
+
+    private static boolean openEvidenceCaseViewForm(Player player) {
+        if (!(player instanceof ServerPlayer serverPlayer)) return true;
+        FormSessionBridge.open(serverPlayer, new FormSessionUseCase.Request(
+                FormSessionUseCase.Action.EVIDENCE_CASE_VIEW, "",
+                "Probe pe dosar", "Introdu ID-ul dosarului de arest.",
+                java.util.List.of(new FormSessionUseCase.Field("caseId", "Dosar", 80, false))));
+        return true;
+    }
+
+    private static boolean openArrestHandoffForm(Player player) {
+        if (!(player instanceof ServerPlayer serverPlayer)) return true;
+        FormSessionBridge.open(serverPlayer, new FormSessionUseCase.Request(
+                FormSessionUseCase.Action.ARREST_HANDOFF, "",
+                "Predare la Temnicer", "Completează hand-off-ul unei sentințe active.",
+                java.util.List.of(
+                        new FormSessionUseCase.Field("detainee", "Deținut online", 64, false),
+                        new FormSessionUseCase.Field("sentenceId", "ID sentință", 80, false),
+                        new FormSessionUseCase.Field("notes", "Note", 240, true))));
+        return true;
+    }
+
+    private static void tellIncidents(com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                      com.dwurdy.straja.application.port.out.PlayerGateway player) {
+        var incidents = runtime.expansionRoleplay().activeIncidents(player);
+        if (incidents.isEmpty()) {
+            player.tell("Nu există incidente active pentru rosterul tău.");
+            return;
+        }
+        for (var incident : incidents) {
+            player.tell(incident.id() + " [" + incident.priority() + "] "
+                    + incident.title() + " — " + incident.location()
+                    + " — " + incident.status());
+        }
+    }
+
+    private static void tellRoster(com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                   com.dwurdy.straja.application.port.out.PlayerGateway player) {
+        var roster = runtime.expansionRoleplay().dutyRoster(player);
+        if (roster.isEmpty()) {
+            player.tell("Rosterul de serviciu este gol sau nu ai acces.");
+            return;
+        }
+        for (var entry : roster) {
+            player.tell(entry.callsign() + " — " + entry.name() + " — "
+                    + entry.rank() + " — " + entry.operationalState());
+        }
+    }
+
+    private static void tellBolos(com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                  com.dwurdy.straja.application.port.out.PlayerGateway player) {
+        var bolos = runtime.expansionRoleplay().activeBolos(player);
+        if (bolos.isEmpty()) {
+            player.tell("Nu există BOLO-uri active sau nu ai acces.");
+            return;
+        }
+        for (var bolo : bolos) {
+            player.tell(bolo.id() + " — " + bolo.subject() + " — " + bolo.reason()
+                    + " — " + bolo.authority()
+                    + (bolo.arrestAuthority() ? " [task autoritativ]" : " [INFORMARE]"));
+        }
+    }
+
+    private static void tellReputation(com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                       com.dwurdy.straja.application.port.out.PlayerGateway player) {
+        var view = runtime.expansionRoleplay().reputation(player, player);
+        if (view == null) return;
+        player.tell("Reputația ta: " + view.score() + " — " + view.band()
+                + ". Reputația nu este autoritate de arest.");
+    }
+
+    private static void tellArrestRecord(com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                         com.dwurdy.straja.application.port.out.PlayerGateway player) {
+        var records = runtime.arrestRecords().recordsForDetainee(player);
+        if (records.isEmpty()) {
+            player.tell("Nu există un dosar de arest pentru tine.");
+            return;
+        }
+        for (var record : records) {
+            player.tell(record.id + " [" + record.status + "] motiv: "
+                    + record.detentionReason + " — sentință " + record.sentenceDays + " zile");
+        }
+    }
+
+    private static void tellArrestRecords(com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                          com.dwurdy.straja.application.port.out.PlayerGateway player) {
+        var records = runtime.arrestRecords().recordsFor(player);
+        if (records.isEmpty()) {
+            player.tell("Nu există dosare de arest vizibile pentru tine.");
+            return;
+        }
+        for (var record : records) {
+            player.tell(record.id + " [" + record.status + "] " + record.detaineeName
+                    + " — motiv: " + record.detentionReason
+                    + " — probe: " + String.join(", ", record.evidenceIds));
+        }
+    }
+
+    private static void tellEvidence(com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                     com.dwurdy.straja.application.port.out.PlayerGateway player) {
+        var records = runtime.evidence().recordsFor(player);
+        if (records.isEmpty()) {
+            player.tell("Nu există probe vizibile pentru tine.");
+            return;
+        }
+        for (var record : records) {
+            player.tell(record.id + " — " + record.itemId + " x" + record.amount
+                    + " — " + record.status + " — " + record.currentLocation
+                    + (record.caseId == null || record.caseId.isBlank() ? "" : " — dosar " + record.caseId));
+            if (record.custodyHistory != null) {
+                for (var event : record.custodyHistory) {
+                    player.tell("  lanț: " + event.previousStatus + " → " + event.newStatus
+                            + " / " + event.reason + " / " + event.actorName);
+                }
+            }
+        }
     }
 
     private static boolean openQuizForm(Player player, ServerLevel level,
@@ -853,6 +1101,13 @@ public final class NpcRoles {
                     .stream().anyMatch(a -> a.action()
                             == com.dwurdy.straja.application.port.in.AudienceUseCase.Action.REVIEW
                             && id.equals(a.requestId()));
+            case "incident-accept", "incident-join", "incident-leave", "incident-resolve" ->
+                    runtime.expansionRoleplay().activeIncidents(player).stream()
+                            .anyMatch(incident -> id.equals(incident.id()));
+            case "bolo-cancel" -> runtime.expansionRoleplay().activeBolos(player).stream()
+                    .anyMatch(bolo -> id.equals(bolo.id()));
+            case "evidence-deposit", "evidence-return", "evidence-transfer", "evidence-destroy" -> runtime.evidence().recordsFor(player).stream()
+                    .anyMatch(record -> id.equals(record.id));
             case "admin-dossier", "admin-promote", "admin-demote", "admin-suspend",
                     "admin-fire", "admin-reinstate" -> {
                 var expected = adminActionFor(operation);
@@ -970,6 +1225,10 @@ public final class NpcRoles {
         var actions = new ArrayList<NpcPlayerSurface.ChatAction>();
         switch (NpcPlayerSurface.routeFor(roleId)) {
             case SECRETARY -> {
+                actions.addAll(NpcPlayerSurface.incidentActions(
+                        runtime.expansionRoleplay().activeIncidents(gateway)));
+                actions.addAll(NpcPlayerSurface.boloActions(
+                        runtime.expansionRoleplay().activeBolos(gateway)));
                 actions.addAll(NpcPlayerSurface.dutyActions(
                         runtime.guardDuty().dutyView(gateway)));
                 actions.addAll(NpcPlayerSurface.missionActions(
@@ -988,11 +1247,21 @@ public final class NpcRoles {
                         NpcPlayerSurface.RoleRoute.SECRETARY));
                 actions.addAll(NpcPlayerSurface.adminActions(
                         runtime.adminRoleplay().availableActions(gateway)));
+                if (runtime.playerQueries().isCommissioner(gateway)) {
+                    actions.add(new NpcPlayerSurface.ChatAction("Istoric reputație", "reputation-view"));
+                    actions.add(new NpcPlayerSurface.ChatAction("Corectează reputația", "reputation-correction"));
+                    actions.add(new NpcPlayerSurface.ChatAction("Dosare de arest", "arrest-record-admin"));
+                    actions.add(new NpcPlayerSurface.ChatAction("Probe și lanțul custodiei", "evidence-list"));
+                }
             }
             case JAILER -> actions.addAll(NpcPlayerSurface.custodyActions(
                     runtime.custodyRoleplay().availableActions(gateway)));
-            case ARCHIVIST -> actions.addAll(NpcPlayerSurface.archiveActions(
-                    runtime.archiveRoleplay().availableActions(gateway)));
+            case ARCHIVIST -> {
+                actions.addAll(NpcPlayerSurface.archiveActions(
+                        runtime.archiveRoleplay().availableActions(gateway)));
+                actions.addAll(NpcPlayerSurface.evidenceActions(
+                        runtime.evidence().recordsFor(gateway)));
+            }
             case TRAINER -> {
                 var guardState = runtime.playerQueries().readState(gateway);
                 // The physical Instructor also owns admission. Keep the

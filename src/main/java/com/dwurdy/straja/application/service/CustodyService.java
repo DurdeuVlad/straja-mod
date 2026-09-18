@@ -18,6 +18,7 @@ import com.dwurdy.straja.domain.model.Rank;
 import com.dwurdy.straja.domain.model.PlayerCondition;
 import com.dwurdy.straja.domain.model.RecoveryEvent;
 import com.dwurdy.straja.domain.model.RestraintStatus;
+import com.dwurdy.straja.domain.model.RestraintMode;
 import com.dwurdy.straja.domain.model.StateProvider;
 import com.dwurdy.straja.domain.model.TransportStatus;
 import com.dwurdy.straja.domain.model.VisionStatus;
@@ -48,11 +49,17 @@ public class CustodyService implements CustodyRoleplayUseCase {
     private final PlayerService players;
     private final AuditService audit;
     private final CustodyMessageProjector messageProjector = new CustodyMessageProjector();
+    private java.util.function.BiConsumer<PlayerGateway, PlayerGateway> custodyEscapeHook =
+            (actor, target) -> {};
 
     public CustodyService(StrajaContext ctx, PlayerService players, AuditService audit) {
         this.ctx = ctx;
         this.players = players;
         this.audit = audit;
+    }
+
+    public void onCustodyEscape(java.util.function.BiConsumer<PlayerGateway, PlayerGateway> hook) {
+        this.custodyEscapeHook = hook == null ? (actor, target) -> {} : hook;
     }
 
     private long now() { return ctx.clock().nowMillis(); }
@@ -226,8 +233,16 @@ public class CustodyService implements CustodyRoleplayUseCase {
 
     /** Reference policy: guards may not cuff fellow guards without lt+/commissioner. */
     private record Policy(boolean ok, String reason) {}
+    private static boolean sameIdentity(PlayerGateway first, PlayerGateway second) {
+        if (first == null || second == null) return false;
+        if (first.uuid() != null && second.uuid() != null) {
+            return first.uuid().equals(second.uuid());
+        }
+        return PlayerService.canon(first.name()).equals(PlayerService.canon(second.name()));
+    }
+
     private Policy cuffTargetPolicy(PlayerGateway issuer, PlayerGateway target) {
-        if (target == null || PlayerService.canon(target.name()).equals(PlayerService.canon(issuer.name()))) {
+        if (target == null || sameIdentity(issuer, target)) {
             return new Policy(false, "self_target");
         }
         var targetState = players.state(target.uuid());
@@ -545,6 +560,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
                 ctx.policies());
         if (!canonicalResult.ok() && !canonicalResult.idempotent()) return false;
         store.states.put(targetKey, canonical);
+        canonical.restraintMode = RestraintMode.ESCORT;
         var record = new CustodyStore.CuffRecord();
         record.target = target.name();
         record.targetUuid = uuidOf(target);
@@ -692,6 +708,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
         state.custody = CustodyStatus.FREE;
         state.transport = TransportStatus.NONE;
         state.restraint = RestraintStatus.NONE;
+        state.restraintMode = RestraintMode.ESCORT;
         state.vision = VisionStatus.NORMAL;
         state.provider = StateProvider.MIGRATION;
         state.source = record.source == null ? "rp-007" : record.source;
@@ -1237,6 +1254,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
                         uuidOf(actor), "", "", StateProvider.NATIVE, "release", 0),
                 ctx.policies());
         if (!released.ok() && !released.idempotent()) return false;
+        state.restraintMode = RestraintMode.ESCORT;
         if (!leaveRope) return true;
         var rope = store.bound.get(key(target));
         if (rope == null) return true;
@@ -1266,7 +1284,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
             issuer.tell("Alege persoana încătușată.");
             return false;
         }
-        if (PlayerService.canon(issuer.name()).equals(PlayerService.canon(target.name()))) {
+        if (sameIdentity(issuer, target)) {
             issuer.tell("Cătușele pot fi rupte doar de alt jucător.");
             return false;
         }
@@ -1311,6 +1329,9 @@ public class CustodyService implements CustodyRoleplayUseCase {
         }
         if (cutRope) store.bound.remove(targetKey);
         ctx.custody().write(store);
+        if (cutRope && !players.isOnDutyGuard(issuer)) {
+            custodyEscapeHook.accept(issuer, target);
+        }
         target.tell(openedCuffs && cutRope ? "Cătușele și frânghia au fost tăiate de " + issuer.name() + "."
                 : cutRope ? "Frânghia a fost tăiată de " + issuer.name() + "."
                 : "Cătușele au fost deschise de " + issuer.name() + " cu " + kind.toLowerCase() + ".");
@@ -1319,6 +1340,46 @@ public class CustodyService implements CustodyRoleplayUseCase {
         audit.record("restraint_release", issuer.name(), uuidOf(issuer),
                 target.name(), uuidOf(target), "SUCCESS",
                 kind.toLowerCase() + " openedCuffs=" + openedCuffs + " cutRope=" + cutRope);
+        return true;
+    }
+
+    /** Sneak-interact toggle for an already cuffed target; authoritative and audited. */
+    public boolean toggleRestraintMode(PlayerGateway issuer, PlayerGateway target) {
+        if (issuer == null || target == null || !canIssueCuffs(issuer)) {
+            if (issuer != null) issuer.tell("Nu ai autoritatea necesară pentru a schimba modul cătușelor.");
+            return false;
+        }
+        if (sameIdentity(issuer, target)) {
+            issuer.tell("Alege un alt jucător.");
+            return false;
+        }
+        double dx = issuer.x() - target.x(), dy = issuer.y() - target.y(), dz = issuer.z() - target.z();
+        if (!issuer.dimension().equals(target.dimension())
+                || dx * dx + dy * dy + dz * dz > 4 * 4) {
+            issuer.tell("Ținta trebuie să fie în apropiere.");
+            return false;
+        }
+        var store = store();
+        importLegacyProjections(store);
+        if (!store.cuffed.containsKey(key(target))) {
+            issuer.tell(target.name() + " nu este încătușat.");
+            return false;
+        }
+        var state = store.states.get(key(target));
+        if (state == null || state.restraint != RestraintStatus.CUFFED) {
+            issuer.tell("Starea canonică a cătușelor nu este validă.");
+            return false;
+        }
+        if (state.restraintMode == null) state.restraintMode = RestraintMode.ESCORT;
+        state.restraintMode = state.restraintMode == RestraintMode.HARD
+                ? RestraintMode.ESCORT : RestraintMode.HARD;
+        store.states.put(key(target), state);
+        ctx.custody().write(store);
+        String mode = state.restraintMode.name();
+        target.tell("Modul cătușelor este acum " + mode + ".");
+        issuer.tell(target.name() + " — modul cătușelor: " + mode + ".");
+        audit.record("restraint_mode", issuer.name(), uuidOf(issuer),
+                target.name(), uuidOf(target), "SUCCESS", mode);
         return true;
     }
 

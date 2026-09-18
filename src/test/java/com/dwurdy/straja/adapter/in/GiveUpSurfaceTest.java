@@ -43,7 +43,7 @@ class GiveUpSurfaceTest {
         assertTrue(router.contains("case GIVE_UP"));
         assertTrue(router.contains("custody.giveUp(gateway, true)"));
         assertTrue(router.contains("straja.give_up.stale"));
-        assertTrue(runtime.contains("instance.adminTools, instance.custody)::submit"));
+        assertTrue(runtime.contains("instance.adminTools, instance.custody, instance.expansion)::submit"));
         assertFalse(router.contains("application.service."));
     }
 

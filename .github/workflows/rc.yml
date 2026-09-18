@@ -97,7 +97,9 @@ jobs:
         uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
 
       - name: Run NeoForge GameTests
-        run: ./gradlew runGameTestServer --no-daemon --stacktrace
+        run: |
+          ./gradlew runGameTestServer --no-daemon --stacktrace
+          ./gradlew runRpExpansionGameTestServer --no-daemon --stacktrace
 
       - name: Upload GameTest diagnostics
         if: always()
@@ -107,6 +109,10 @@ jobs:
           path: |
             run/logs/
             run/crash-reports/
+            run-straja-game-test/logs/
+            run-straja-game-test/crash-reports/
+            run-rp-expansion-test/logs/
+            run-rp-expansion-test/crash-reports/
           if-no-files-found: ignore
           retention-days: 14
 

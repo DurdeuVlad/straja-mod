@@ -33,10 +33,6 @@ public final class PolicyRegistry {
     }
 
     static {
-        // physical identity cards
-        k("identityCards.enabled", "identityCardsEnabled", Kind.BOOL);
-        k("identityCards.validityDays", "identityCardValidityDays", Kind.INT);
-
         // timers
         k("timers.checkpointUnlockMinutes", "checkpointUnlockMinutes", Kind.INT);
         k("timers.checkpointDeadlineMinutes", "checkpointDeadlineMinutes", Kind.INT);
@@ -63,6 +59,28 @@ public final class PolicyRegistry {
         k("mission.maxAssignees", "missionMaxAssignees", Kind.INT);
         k("mission.retentionLimit", "missionRetentionLimit", Kind.INT);
         k("mission.quickCreateEnabled", "missionQuickCreateEnabled", Kind.BOOL);
+        // incidents, whistle, BOLO and evidence
+        k("incidents.enabled", "incidentsEnabled", Kind.BOOL);
+        k("incidents.citizenReportCooldownSeconds", "incidentCitizenReportCooldownSeconds", Kind.INT);
+        k("incidents.maxActiveCitizenReports", "incidentMaxActiveCitizenReports", Kind.INT);
+        k("incidents.defaultExpirationSeconds", "incidentDefaultExpirationSeconds", Kind.INT);
+        k("incidents.maxSupportingGuards", "incidentMaxSupportingGuards", Kind.INT);
+        k("incidents.maxDescriptionLength", "incidentMaxDescriptionLength", Kind.INT);
+        k("incidents.whistleEnabled", "whistleEnabled", Kind.BOOL);
+        k("incidents.whistleCooldownSeconds", "whistleCooldownSeconds", Kind.INT);
+        k("incidents.whistleSoundRadius", "whistleSoundRadius", Kind.DOUBLE);
+        k("bolo.enabled", "bolosEnabled", Kind.BOOL);
+        k("bolo.minimumIssuerRank", "boloMinimumIssuerRank", Kind.INT);
+        k("bolo.cancellationMinimumRank", "boloCancellationMinimumRank", Kind.INT);
+        k("bolo.defaultExpirationSeconds", "boloDefaultExpirationSeconds", Kind.INT);
+        k("bolo.maxReasonLength", "boloMaxReasonLength", Kind.INT);
+        k("bolo.maxActivePerSubject", "boloMaxActivePerSubject", Kind.INT);
+        k("evidence.enabled", "evidenceEnabled", Kind.BOOL);
+        k("evidence.searchRangeBlocks", "searchRangeBlocks", Kind.DOUBLE);
+        k("evidence.maxReasonLength", "evidenceMaxReasonLength", Kind.INT);
+        // identity cards
+        k("identityCards.enabled", "identityCardsEnabled", Kind.BOOL);
+        k("identityCards.validityDays", "identityCardValidityDays", Kind.INT);
         // cuffs
         k("cuffs.requestTimeoutSeconds", "cuffRequestTimeoutSeconds", Kind.INT);
         k("cuffs.surrenderTimeoutSeconds", "surrenderTimeoutSeconds", Kind.INT);
@@ -126,6 +144,25 @@ public final class PolicyRegistry {
         k("jailer.assaultSentenceDays", "jailerAssaultSentenceDays", Kind.INT);
         k("jailer.assaultMissionMaxAssignees", "jailerAssaultMissionMaxAssignees", Kind.INT);
         k("jailer.guardImmunity", "jailerGuardImmunity", Kind.BOOL);
+        // reputation
+        k("reputation.enabled", "reputationEnabled", Kind.BOOL);
+        k("reputation.minScore", "reputationMinScore", Kind.INT);
+        k("reputation.maxScore", "reputationMaxScore", Kind.INT);
+        k("reputation.ordinaryKillDelta", "reputationOrdinaryKillDelta", Kind.INT);
+        k("reputation.restrainedKillDelta", "reputationRestrainedKillDelta", Kind.INT);
+        k("reputation.killOnDutyGuardDelta", "reputationKillOnDutyGuardDelta", Kind.INT);
+        k("reputation.jailerKillDelta", "reputationJailerKillDelta", Kind.INT);
+        k("reputation.jailerAssaultDelta", "reputationJailerAssaultDelta", Kind.INT);
+        k("reputation.guardExecutionDelta", "reputationGuardExecutionDelta", Kind.INT);
+        k("reputation.prisonEscapeDelta", "reputationPrisonEscapeDelta", Kind.INT);
+        k("reputation.custodyEscapeDelta", "reputationCustodyEscapeDelta", Kind.INT);
+        k("reputation.fineRefusalDelta", "reputationFineRefusalDelta", Kind.INT);
+        k("reputation.sentenceCompletionDelta", "reputationSentenceCompletionDelta", Kind.INT);
+        k("reputation.prisonTaskDelta", "reputationPrisonTaskDelta", Kind.INT);
+        k("reputation.prisonTaskCap", "reputationPrisonTaskCap", Kind.INT);
+        k("reputation.finePaymentDelta", "reputationFinePaymentDelta", Kind.INT);
+        k("reputation.recruitmentMinReputation", "recruitmentMinReputation", Kind.INT);
+        k("reputation.lawfulHostilityWindowSeconds", "lawfulHostilityWindowSeconds", Kind.INT);
         // salary — hourly wage (§10)
         k("salary.perHour", "salaryPerHour", Kind.INT_MAP);
         k("salary.commissionerPerHour", "salaryCommissionerPerHour", Kind.INT);

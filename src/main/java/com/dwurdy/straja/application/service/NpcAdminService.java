@@ -11,7 +11,7 @@ import java.util.Set;
  * NPC registry administration: role assignment, naming, skin and removal are
  * persisted here; the entity adapter only reflects them onto live entities.
  * Authorization lives at the command boundary — every caller is behind
- * {@code /straja npc *}, which requires permission level 2 (op/console).
+ * {@code /straja npc *}, which requires permission level 4 (setup op/console).
  * The {@link NpcRegistryUseCase} view exposes only the read/adopt operations
  * the entity lifecycle events need.
  */

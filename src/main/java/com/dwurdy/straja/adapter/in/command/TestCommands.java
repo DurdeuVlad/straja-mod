@@ -6,6 +6,12 @@ import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.bootstrap.StrajaRuntime;
 import com.dwurdy.straja.domain.model.GuardState;
 import com.dwurdy.straja.domain.model.ItemSpec;
+import com.dwurdy.straja.domain.model.BoloAuthority;
+import com.dwurdy.straja.domain.model.CustodyState;
+import com.dwurdy.straja.domain.model.CustodyStatus;
+import com.dwurdy.straja.domain.model.PlayerCondition;
+import com.dwurdy.straja.domain.model.RestraintStatus;
+import com.dwurdy.straja.domain.model.Sentence;
 import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
@@ -18,7 +24,7 @@ import net.minecraft.network.chat.Component;
 
 /**
  * /straja test * — deterministic, console-first test surface. Hard-gated by
- * testing.enableTestCommands (local environments only) and permission level 2.
+ * testing.enableTestCommands (local environments only) and permission level 4.
  * Virtual players are synthetic {@link PlayerGateway} implementations, so the
  * same application services and permission checks run as for real players.
  */
@@ -277,6 +283,9 @@ final class TestCommands {
                             send(ctx, "clock advanced by " + seconds + "s");
                             return 1;
                         })));
+
+        test.then(Commands.literal("rp-expansion-flow")
+                .executes(ctx -> runRpExpansionFlow(ctx)));
 
         test.then(Commands.literal("dump-state")
                 .then(Commands.argument("id", StringArgumentType.word())
@@ -1445,13 +1454,133 @@ final class TestCommands {
         return 1;
     }
 
+    /** RCON-safe smoke flow for incident → BOLO → custody search → case links. */
+    private static int runRpExpansionFlow(CommandContext<CommandSourceStack> command) {
+        var runtime = gated(command);
+        if (runtime == null) return 0;
+        String suffix = Long.toString(Math.abs(System.nanoTime()));
+        var citizen = runtime.testPlayers().create("rpflow_citizen_" + suffix);
+        var guard = runtime.testPlayers().create("rpflow_guard_" + suffix);
+        var support = runtime.testPlayers().create("rpflow_support_" + suffix);
+        var subject = runtime.testPlayers().create("rpflow_subject_" + suffix);
+        var archivist = runtime.testPlayers().create("rpflow_archivist_" + suffix);
+        var jailer = runtime.testPlayers().create("dwurdy");
+        var failures = new java.util.ArrayList<String>();
+        configureFlowGuard(runtime, guard, 3);
+        configureFlowGuard(runtime, support, 2);
+        var guardState = runtime.players().state(guard);
+        guardState.duty = false;
+        runtime.players().save(guard.uuid(), guardState);
+        runtime.guardDuty().startDuty(guard);
+
+        var incident = runtime.incidents().createCitizenReport(
+                citizen, "intrusion", "Un intrus a intrat în zona de serviciu.");
+        boolean incidentOk = incident != null
+                && runtime.expansionRoleplay().acceptIncident(guard, incident.id)
+                && runtime.expansionRoleplay().joinIncident(support, incident.id);
+        if (!incidentOk) failures.add("incident");
+        boolean ok = incidentOk;
+        boolean hasCallsign = runtime.expansionRoleplay().dutyRoster(guard).stream()
+                .anyMatch(entry -> guard.name().equals(entry.name())
+                        && entry.callsign().matches("S-\\d{3,6}"));
+        if (!hasCallsign) failures.add("callsign");
+        ok &= hasCallsign;
+
+        var bolo = runtime.bolos().create(guard, subject, "Solicitat pentru declarații",
+                "", BoloAuthority.INFORMATION_ONLY, incident == null ? "" : incident.id);
+        boolean boloOk = bolo != null && !runtime.bolos().hasArrestAuthority(bolo);
+        if (!boloOk) failures.add("bolo");
+        ok &= boloOk;
+
+        var custodyStore = runtime.context().custody().read();
+        var custody = new CustodyState();
+        custody.playerId = subject.uuid().toString();
+        custody.playerUuid = subject.uuid().toString();
+        custody.playerName = subject.name();
+        custody.condition = PlayerCondition.CONSCIOUS_RESTRAINED;
+        custody.custody = CustodyStatus.ARRESTED;
+        custody.restraint = RestraintStatus.CUFFED;
+        custody.jailDeliveryDeadlineAt = runtime.context().clock().nowMillis() + 60_000L;
+        custodyStore.states.put(custody.playerUuid, custody);
+        runtime.context().custody().write(custodyStore);
+        subject.give(ItemSpec.of("minecraft:emerald", 3).withData("rpflow", suffix));
+
+        var sentence = new Sentence();
+        sentence.id = "RP-FLOW-S-" + suffix;
+        sentence.target = subject.name();
+        sentence.targetUuid = subject.uuid().toString();
+        sentence.status = "ACTIVE";
+        sentence.sentenceDays = 1;
+        sentence.createdAt = runtime.context().clock().nowMillis();
+        var caseFile = runtime.arrestRecords().startForSentence(sentence);
+        var prisonStore = runtime.context().prison().read();
+        prisonStore.sentences.add(sentence);
+        runtime.context().prison().write(prisonStore);
+        var search = runtime.expansionRoleplay().beginSearch(guard, subject);
+        boolean confiscationOk = caseFile != null && search != null && !search.slots().isEmpty()
+                && runtime.expansionRoleplay().confiscate(guard, search.token(),
+                        search.slots().get(0).slot(), search.slots().get(0).item().count(),
+                        "Probă de test", incident == null ? "" : incident.id);
+        if (!confiscationOk) failures.add("search-confiscation");
+        ok &= confiscationOk;
+        var evidence = search == null ? null
+                : runtime.evidence().find(runtime.context().evidence().read().records.keySet().stream()
+                        .reduce((first, second) -> second).orElse(""));
+        var storedCase = caseFile == null ? null : runtime.arrestRecords().find(caseFile.id);
+        boolean linkOk = evidence != null && storedCase != null && storedCase.id.equals(evidence.caseId)
+                && storedCase.evidenceIds.contains(evidence.id);
+        if (!linkOk) failures.add("case-link(evidence="
+                + (evidence == null ? "null" : evidence.id + "/" + evidence.caseId)
+                + ",case=" + (storedCase == null ? "null" : storedCase.id
+                + "/" + storedCase.detaineeUuid + "/" + storedCase.evidenceIds) + ")");
+        ok &= linkOk;
+        var archive = runtime.context().archive().read();
+        if (archive.archivists == null) archive.archivists = new java.util.LinkedHashMap<>();
+        archive.archivists.put(archivist.uuid().toString(), archivist.name());
+        runtime.context().archive().write(archive);
+        boolean depositOk = evidence != null
+                && runtime.expansionRoleplay().depositEvidence(archivist, evidence.id);
+        if (!depositOk) failures.add("deposit");
+        ok &= depositOk;
+        boolean handoffOk = runtime.expansionRoleplay().finalizeArrest(jailer, subject.name(),
+                sentence.id, "Predare la Temnicer.");
+        if (!handoffOk) failures.add("handoff");
+        ok &= handoffOk;
+        var refusal = runtime.reputation().recordFineRefusal(subject, "RP-FLOW-REFUSAL-" + suffix);
+        var rehab = runtime.reputation().completeSentence(subject, sentence.id);
+        var rehabRetry = runtime.reputation().completeSentence(subject, sentence.id);
+        boolean reputationOk = refusal != null && rehab != null && rehabRetry != null
+                && rehab.id.equals(rehabRetry.id);
+        if (!reputationOk) failures.add("reputation");
+        ok &= reputationOk;
+        if (incident != null) {
+            boolean resolutionOk = runtime.expansionRoleplay().resolveIncident(guard, incident.id,
+                    "ARRESTED", "Predare pentru verificare.");
+            if (!resolutionOk) failures.add("resolution");
+            ok &= resolutionOk;
+        }
+        send(command, ok ? "RP_EXPANSION_FLOW PASS"
+                : "RP_EXPANSION_FLOW FAIL " + String.join(",", failures));
+        return ok ? 1 : 0;
+    }
+
+    private static void configureFlowGuard(StrajaRuntime runtime,
+                                           VirtualPlayerGateway player, int rank) {
+        GuardState state = runtime.players().state(player);
+        state.rank = rank;
+        state.duty = true;
+        state.invited = true;
+        state.quizPassed = true;
+        runtime.players().save(player.uuid(), state);
+    }
+
     private static StrajaRuntime gated(CommandContext<CommandSourceStack> ctx) {
         var runtime = StrajaRuntime.get();
         // Test commands exist for local environments only — the flag can never
         // lift the surface outside local, regardless of configuration.
         if (runtime == null || !runtime.policies().testCommandsEnabled
                 || !runtime.policies().isLocalEnvironment()
-                || !ctx.getSource().hasPermission(2)) {
+                || !ctx.getSource().hasPermission(StrajaCommands.requiredPermission("test"))) {
             ctx.getSource().sendFailure(Component.literal(
                     "Test commands disabled (testing.enableTestCommands, local environment only)."));
             return null;

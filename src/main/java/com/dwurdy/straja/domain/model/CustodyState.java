@@ -22,6 +22,7 @@ public class CustodyState {
     public CustodyStatus custody = CustodyStatus.FREE;
     public TransportStatus transport = TransportStatus.NONE;
     public RestraintStatus restraint = RestraintStatus.NONE;
+    public RestraintMode restraintMode = RestraintMode.ESCORT;
     public VisionStatus vision = VisionStatus.NORMAL;
 
     /** Provider and source are retained separately for provenance checks. */
