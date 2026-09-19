@@ -57,6 +57,7 @@ public final class StrajaRuntime {
     private final com.dwurdy.straja.application.service.SecretaryService secretary;
     private final com.dwurdy.straja.application.service.MigrationService migration;
     private final com.dwurdy.straja.application.service.FormSessionService formSessions;
+    private volatile com.dwurdy.straja.adapter.in.form.FormSubmissionRouter npcFormRouter;
     private final com.dwurdy.straja.application.service.PolicyService policyService;
     private final com.dwurdy.straja.application.service.IncidentService incidents;
     private final com.dwurdy.straja.application.service.BoloService bolos;
@@ -264,11 +265,15 @@ public final class StrajaRuntime {
         instance = new StrajaRuntime(server);
         com.dwurdy.straja.adapter.out.network.CustodyVisualSync.reset();
         com.dwurdy.straja.adapter.in.form.FormSessionBridge.install(instance.formSessions);
+        instance.npcFormRouter = new com.dwurdy.straja.adapter.in.form.FormSubmissionRouter(
+                instance.guards, instance.missions, instance.complaints, instance.fines,
+                instance.archive, instance.reports, instance.audiences, instance.admin,
+                instance.adminTools, instance.custody, instance.expansion);
+        // This is the reusable equivalent of the original
+        // instance.adminTools, instance.custody, instance.expansion)::submit
+        // wiring; NPC and native forms now share the same authenticated route.
         com.dwurdy.straja.adapter.in.form.FormPayloads.setSubmissionConsumer(
-                new com.dwurdy.straja.adapter.in.form.FormSubmissionRouter(
-                        instance.guards, instance.missions, instance.complaints, instance.fines,
-                        instance.archive, instance.reports, instance.audiences, instance.admin,
-                        instance.adminTools, instance.custody, instance.expansion)::submit);
+                instance.npcFormRouter::submit);
         instance.logDeploymentGates();
         // Absolute custody deadlines survive a server restart. Resolve any
         // already-due canonical states before the first login/tick callback.
@@ -306,6 +311,7 @@ public final class StrajaRuntime {
         com.dwurdy.straja.adapter.out.network.CustodyVisualSync.reset();
         com.dwurdy.straja.adapter.in.form.FormSessionBridge.clear();
         com.dwurdy.straja.adapter.in.form.FormPayloads.setSubmissionConsumer(null);
+        if (instance != null) instance.npcFormRouter = null;
         instance = null;
     }
 
@@ -358,6 +364,12 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.service.ArchiveService archive() { return archive; }
     public com.dwurdy.straja.application.service.MigrationService migration() { return migration; }
     public com.dwurdy.straja.application.port.in.FormSessionUseCase formSessions() { return formSessions; }
+    public void submitNpcForm(
+            net.minecraft.server.level.ServerPlayer player,
+            com.dwurdy.straja.application.port.in.FormSessionUseCase.Submission submission) {
+        var router = npcFormRouter;
+        if (router != null) router.submit(player, submission);
+    }
     public com.dwurdy.straja.application.port.in.PolicyConfigUseCase policyConfig() { return policyService; }
     public com.dwurdy.straja.application.port.out.MutableClock clock() { return clock; }
     public com.dwurdy.straja.adapter.in.test.TestPlayerRegistry testPlayers() { return testPlayers; }

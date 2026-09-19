@@ -7,6 +7,7 @@ import com.dwurdy.straja.domain.model.NpcActionResult;
 import com.dwurdy.straja.domain.model.NpcBinding;
 import com.dwurdy.straja.domain.model.NpcContentId;
 import com.dwurdy.straja.domain.model.NpcProviderId;
+import com.dwurdy.straja.domain.model.NpcSurfaceSnapshot;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -64,9 +65,28 @@ public final class NpcSurfaceActionService
     /** Mints a player-bound token only for a currently enabled surface action. */
     @Override
     public String issueToken(UUID playerId, NpcBinding binding, NpcContentId actionId) {
+        NpcSurfaceSnapshot published = providers.surface(binding.bindingId()).orElse(null);
+        return issueToken(playerId, binding, actionId, published);
+    }
+
+    /**
+     * Mints against the surface actually rendered to the player. The surface
+     * is supplied by the provider adapter after its server-side resolver has
+     * projected current state, so player-specific actions do not leak through
+     * a binding-global snapshot.
+     */
+    @Override
+    public String issueToken(
+            UUID playerId,
+            NpcBinding binding,
+            NpcContentId actionId,
+            NpcSurfaceSnapshot surface) {
         Objects.requireNonNull(playerId, "playerId");
         Objects.requireNonNull(binding, "binding");
         Objects.requireNonNull(actionId, "actionId");
+        if (surface == null) {
+            throw new IllegalStateException("cannot issue a token without a published surface");
+        }
         synchronized (tokenLock) {
             purgeExpiredTokens();
             if (tokens.size() >= MAX_ACTIVE_TOKENS
@@ -78,10 +98,11 @@ public final class NpcSurfaceActionService
                     || !providers.binding(binding.bindingId()).filter(binding::equals).isPresent()) {
                 throw new IllegalStateException("cannot issue a token for an unowned binding");
             }
-            boolean enabled = providers.surface(binding.bindingId())
-                    .map(surface -> surface.actions().stream()
-                            .anyMatch(action -> action.actionId().equals(actionId) && action.enabled()))
-                    .orElse(false);
+            if (!binding.equals(surface.binding())) {
+                throw new IllegalStateException("surface does not belong to binding");
+            }
+            boolean enabled = surface.actions().stream()
+                    .anyMatch(action -> action.actionId().equals(actionId) && action.enabled());
             if (!enabled) {
                 throw new IllegalStateException("cannot issue a token for an unavailable action");
             }
@@ -89,7 +110,7 @@ public final class NpcSurfaceActionService
             do {
                 token = UUID.randomUUID().toString().replace("-", "");
             } while (tokens.putIfAbsent(token, new PendingAction(
-                    playerId, binding.bindingId(), binding.providerId(), actionId,
+                    playerId, binding.bindingId(), binding.providerId(), actionId, surface,
                     clock.instant().plus(tokenTtl), new AtomicBoolean(false), new AtomicReference<>())) != null);
             return token;
         }
@@ -121,10 +142,8 @@ public final class NpcSurfaceActionService
             tokens.remove(request.interactionToken(), pending);
             return result(NpcActionResult.Status.EXPIRED, "expired", "NPC action token expired");
         }
-        boolean enabled = providers.surface(request.bindingId())
-                .map(surface -> surface.actions().stream()
-                        .anyMatch(action -> action.actionId().equals(request.actionId()) && action.enabled()))
-                .orElse(false);
+        boolean enabled = pending.surface().actions().stream()
+                .anyMatch(action -> action.actionId().equals(request.actionId()) && action.enabled());
         if (!enabled) {
             return result(NpcActionResult.Status.REJECTED, "action-unavailable",
                     "NPC action is no longer available");
@@ -186,6 +205,7 @@ public final class NpcSurfaceActionService
             String bindingId,
             NpcProviderId providerId,
             NpcContentId actionId,
+            NpcSurfaceSnapshot surface,
             Instant expiresAt,
             AtomicBoolean claimed,
             AtomicReference<NpcActionResult> outcome) {

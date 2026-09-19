@@ -68,6 +68,21 @@ class NpcContentProfileTest {
     }
 
     @Test
+    void secretaryProfileDefinesTheProviderNeutralWorkflowShell() throws Exception {
+        var resource = getClass().getClassLoader().getResourceAsStream(
+                "data/straja/npc/straja.secretary.workflows.json");
+        var profile = new NpcContentProfileJsonLoader().load(
+                new InputStreamReader(resource, StandardCharsets.UTF_8));
+
+        assertEquals(NpcContentId.of("straja.secretary.workflows"), profile.profileId());
+        assertTrue(profile.actions().stream().anyMatch(action ->
+                action.actionId().equals(NpcContentId.of("report-submit"))));
+        assertTrue(profile.requiredCapabilities().contains(
+                com.dwurdy.straja.domain.model.NpcCapability.ACTION_INPUT));
+        assertEquals(NpcContentId.of("secretary-bureaucracy"), profile.quests().getFirst().questId());
+    }
+
+    @Test
     void malformedProfileCannotReferenceAnUnknownAction() {
         assertThrows(IllegalArgumentException.class, () -> new com.dwurdy.straja.domain.model.NpcContentProfile(
                 NpcContentId.of("straja.invalid"),
