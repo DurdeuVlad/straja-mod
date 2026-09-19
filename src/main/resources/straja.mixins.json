@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.dwurdy.straja.mixin.client",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "CustomNpcsNbttagsMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
