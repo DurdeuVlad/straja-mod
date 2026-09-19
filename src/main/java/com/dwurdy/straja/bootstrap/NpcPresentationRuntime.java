@@ -11,6 +11,7 @@ import com.dwurdy.straja.application.port.in.NpcSurfaceActionTokenIssuer;
 import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.application.service.NpcBindingLifecycleService;
 import com.dwurdy.straja.application.service.NpcAdmissionSurfaceService;
+import com.dwurdy.straja.application.service.NpcArmorySurfaceService;
 import com.dwurdy.straja.application.service.NpcContentCatalog;
 import com.dwurdy.straja.application.service.NpcSurfaceActionService;
 import com.dwurdy.straja.application.service.NpcSurfaceProviderRegistry;
@@ -43,6 +44,7 @@ import net.minecraft.world.entity.Entity;
 public final class NpcPresentationRuntime {
     private static final AtomicReference<RuntimeState> STATE = new AtomicReference<>();
     private static final NpcAdmissionSurfaceService ADMISSION_SURFACE = new NpcAdmissionSurfaceService();
+    private static final NpcArmorySurfaceService ARMORY_SURFACE = new NpcArmorySurfaceService();
 
     private NpcPresentationRuntime() {}
 
@@ -103,13 +105,16 @@ public final class NpcPresentationRuntime {
     public static NpcProviderResult bindCustomNpc(
             String hostEntityUuid, String roleId, String stationId) {
         String role = "recruiter".equals(roleId) ? "trainer" : roleId;
-        if (!"receptionist".equals(role) && !"trainer".equals(role)) {
+        if (!"receptionist".equals(role) && !"trainer".equals(role)
+                && !"armorer".equals(role)) {
             return NpcProviderResult.rejected(
-                    "unsupported-role", "M3 admission binding supports receptionist and trainer only");
+                    "unsupported-role", "supported CustomNPC roles are receptionist, trainer, and armorer");
         }
         NpcContentId profile = "receptionist".equals(role)
                 ? NpcContentId.of("straja.reception.admission")
-                : NpcContentId.of("straja.instructor.admission");
+                : "armorer".equals(role)
+                        ? NpcContentId.of("straja.armorer.orders")
+                        : NpcContentId.of("straja.instructor.admission");
         String normalizedUuid;
         try {
             normalizedUuid = UUID.fromString(hostEntityUuid).toString();
@@ -148,7 +153,15 @@ public final class NpcPresentationRuntime {
                 }
                 NpcContentProfile instructor = loader.load(
                         new InputStreamReader(instructorStream, StandardCharsets.UTF_8));
-                return new NpcContentCatalog(List.of(reception, instructor));
+                try (var armorerStream = NpcPresentationRuntime.class.getClassLoader().getResourceAsStream(
+                        "data/straja/npc/straja.armorer.orders.json")) {
+                    if (armorerStream == null) {
+                        throw new IllegalStateException("armorer NPC profile resource is missing");
+                    }
+                    NpcContentProfile armorer = loader.load(
+                            new InputStreamReader(armorerStream, StandardCharsets.UTF_8));
+                    return new NpcContentCatalog(List.of(reception, instructor, armorer));
+                }
             }
         } catch (IOException | RuntimeException exception) {
             throw new IllegalStateException("NPC content catalog failed to load", exception);
@@ -163,6 +176,9 @@ public final class NpcPresentationRuntime {
                 runtime.server(), playerId);
         GuardState state = runtime.playerQueries().readState(player);
         if (state == null) return published;
+        if ("armorer".equals(binding.roleId())) {
+            return ARMORY_SURFACE.resolve(published, runtime.armory().offers(player));
+        }
         java.util.Optional<com.dwurdy.straja.application.port.in.GuardRecruitmentUseCase.QuizPrompt> prompt =
                 java.util.Optional.empty();
         if (("trainer".equals(binding.roleId()) || "recruiter".equals(binding.roleId()))

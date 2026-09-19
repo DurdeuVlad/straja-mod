@@ -53,6 +53,21 @@ class NpcContentProfileTest {
     }
 
     @Test
+    void armorerProfileIsProviderNeutralAndQuestCapable() throws Exception {
+        var resource = getClass().getClassLoader().getResourceAsStream(
+                "data/straja/npc/straja.armorer.orders.json");
+        var profile = new NpcContentProfileJsonLoader().load(
+                new InputStreamReader(resource, StandardCharsets.UTF_8));
+
+        assertEquals(NpcContentId.of("straja.armorer.orders"), profile.profileId());
+        assertEquals(1, profile.actions().size());
+        assertEquals(NpcContentId.of("duty-kit"), profile.actions().getFirst().actionId());
+        assertEquals(1, profile.quests().size());
+        assertTrue(profile.requiredCapabilities().contains(
+                com.dwurdy.straja.domain.model.NpcCapability.QUEST_JOURNAL));
+    }
+
+    @Test
     void malformedProfileCannotReferenceAnUnknownAction() {
         assertThrows(IllegalArgumentException.class, () -> new com.dwurdy.straja.domain.model.NpcContentProfile(
                 NpcContentId.of("straja.invalid"),

@@ -1,0 +1,23 @@
+{
+  "profileId": "straja.armorer.orders",
+  "schemaVersion": 1,
+  "title": "Straja armorer",
+  "body": "The armorer presents rank-eligible equipment and requisition reserves. Every order is checked again when submitted.",
+  "requiredCapabilities": ["DIALOGUE", "GUI", "ACTION_INPUT", "QUEST_JOURNAL"],
+  "optionalCapabilities": ["RICH_TEXT", "PORTRAITS"],
+  "actions": [
+    {"id": "duty-kit", "label": "Request duty kit", "enabled": true}
+  ],
+  "dialogue": [
+    {
+      "id": "straja.armorer.orders",
+      "text": "Inspect the current equipment offers.",
+      "choices": [
+        {"actionId": "duty-kit", "label": "Request duty kit", "enabled": true}
+      ]
+    }
+  ],
+  "quests": [
+    {"id": "armory-orders", "title": "Equipment orders", "state": "LOCKED"}
+  ]
+}
