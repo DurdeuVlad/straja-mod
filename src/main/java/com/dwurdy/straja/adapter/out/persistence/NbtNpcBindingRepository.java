@@ -11,10 +11,11 @@ public final class NbtNpcBindingRepository extends JsonBackedStore implements Np
 
     @Override
     public NpcBindingStore read() {
-        return readJsonVersioned(
-                NpcBindingStore.class,
-                NpcBindingStore::new,
-                NpcBindingStore.CURRENT_SCHEMA_VERSION);
+        NpcBindingStore store = readJson(NpcBindingStore.class, NpcBindingStore::new);
+        if (store.schemaVersion < 1 || store.schemaVersion > NpcBindingStore.CURRENT_SCHEMA_VERSION) {
+            return new NpcBindingStore();
+        }
+        return store;
     }
 
     @Override
