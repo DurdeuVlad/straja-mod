@@ -2,6 +2,7 @@ package com.dwurdy.straja.adapter.in.command;
 
 import com.dwurdy.straja.adapter.in.npc.StrajaNpcEntity;
 import com.dwurdy.straja.bootstrap.StrajaRuntime;
+import com.dwurdy.straja.bootstrap.NpcPresentationRuntime;
 import com.dwurdy.straja.domain.model.NpcRegistry;
 import com.dwurdy.straja.domain.model.SetupData;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -75,6 +76,14 @@ final class NpcCommands {
                                     return 1;
                                 }))));
 
+        npc.then(Commands.literal("bind-custom")
+                .then(Commands.argument("host", StringArgumentType.word())
+                        .then(Commands.argument("role", StringArgumentType.word())
+                                .executes(ctx -> bindCustom(ctx, "hq"))
+                                .then(Commands.argument("station", StringArgumentType.word())
+                                        .executes(ctx -> bindCustom(ctx,
+                                                StringArgumentType.getString(ctx, "station")))))));
+
         npc.then(Commands.literal("set-name")
                 .then(Commands.argument("npc", StringArgumentType.word())
                         .then(Commands.argument("name", StringArgumentType.greedyString())
@@ -139,6 +148,20 @@ final class NpcCommands {
         ctx.getSource().sendSystemMessage(Component.literal(
                 "NPC " + role + " creat: " + entity.getStringUUID()
                         + " la " + (int) pos.x + ", " + (int) pos.y + ", " + (int) pos.z));
+        return 1;
+    }
+
+    private static int bindCustom(CommandContext<CommandSourceStack> ctx, String station) {
+        String host = StringArgumentType.getString(ctx, "host");
+        String role = StringArgumentType.getString(ctx, "role");
+        var result = NpcPresentationRuntime.bindCustomNpc(host, role, station);
+        if (result.status() != com.dwurdy.straja.domain.model.NpcProviderResult.Status.ACCEPTED) {
+            ctx.getSource().sendFailure(Component.literal(
+                    "CustomNPCs binding failed: " + result.code() + " — " + result.message()));
+            return 0;
+        }
+        ctx.getSource().sendSystemMessage(Component.literal(
+                "CustomNPCs NPC bound to the Straja " + role + " admission surface."));
         return 1;
     }
 

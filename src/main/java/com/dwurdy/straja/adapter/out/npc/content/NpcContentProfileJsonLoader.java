@@ -38,11 +38,29 @@ public final class NpcContentProfileJsonLoader {
         for (JsonElement element : requiredArray(json, "actions")) {
             JsonObject action = object(element, "actions entry");
             boolean enabled = optionalBoolean(action, "enabled", true);
+            List<NpcSurfaceAction.InputField> inputs = new ArrayList<>();
+            JsonElement inputArray = action.get("inputs");
+            if (inputArray != null) {
+                if (!inputArray.isJsonArray()) {
+                    throw new IllegalArgumentException("field must be an array: inputs");
+                }
+                for (JsonElement inputElement : inputArray.getAsJsonArray()) {
+                    JsonObject input = object(inputElement, "action input");
+                    inputs.add(new NpcSurfaceAction.InputField(
+                            requiredString(input, "key"),
+                            requiredString(input, "label"),
+                            requiredInt(input, "maxLength"),
+                            optionalBoolean(input, "required", true),
+                            optionalBoolean(input, "visible", true),
+                            optionalString(input, "initialValue", "")));
+                }
+            }
             actions.add(new NpcSurfaceAction(
                     NpcContentId.of(requiredString(action, "id")),
                     requiredString(action, "label"),
                     enabled,
-                    optionalString(action, "disabledReason", "")));
+                    optionalString(action, "disabledReason", ""),
+                    inputs));
         }
 
         List<NpcSurfaceSnapshot.DialogueNode> dialogue = new ArrayList<>();
