@@ -233,7 +233,7 @@ public final class FormSubmissionRouter {
             }
             case ARREST_HANDOFF ->
                     expansion.finalizeArrest(gateway, values.get("detainee"),
-                            values.get("sentenceId"), values.get("notes"));
+                            firstValue(values, "sentence-id", "sentenceId"), values.get("notes"));
             case REPUTATION_VIEW -> {
                 var history = expansion.reputationHistory(gateway, values.get("subject"));
                 if (history.isEmpty()) {

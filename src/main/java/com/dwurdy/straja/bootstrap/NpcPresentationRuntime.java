@@ -14,6 +14,7 @@ import com.dwurdy.straja.application.service.NpcAdmissionSurfaceService;
 import com.dwurdy.straja.application.service.NpcArmorySurfaceService;
 import com.dwurdy.straja.application.service.NpcCareerSurfaceService;
 import com.dwurdy.straja.application.service.NpcCivicSurfaceService;
+import com.dwurdy.straja.application.service.NpcCustodySurfaceService;
 import com.dwurdy.straja.application.service.NpcContentCatalog;
 import com.dwurdy.straja.application.service.NpcSecretarySurfaceService;
 import com.dwurdy.straja.application.service.NpcSurfaceActionService;
@@ -50,6 +51,7 @@ public final class NpcPresentationRuntime {
     private static final NpcArmorySurfaceService ARMORY_SURFACE = new NpcArmorySurfaceService();
     private static final NpcCareerSurfaceService CAREER_SURFACE = new NpcCareerSurfaceService();
     private static final NpcCivicSurfaceService CIVIC_SURFACE = new NpcCivicSurfaceService();
+    private static final NpcCustodySurfaceService CUSTODY_SURFACE = new NpcCustodySurfaceService();
     private static final NpcSecretarySurfaceService SECRETARY_SURFACE = new NpcSecretarySurfaceService();
 
     private NpcPresentationRuntime() {}
@@ -113,14 +115,17 @@ public final class NpcPresentationRuntime {
         String role = "recruiter".equals(roleId) ? "trainer" : roleId;
         if (!"receptionist".equals(role) && !"trainer".equals(role)
                 && !"secretary".equals(role)
+                && !"jailer".equals(role)
                 && !"armorer".equals(role)) {
             return NpcProviderResult.rejected(
-                    "unsupported-role", "supported CustomNPC roles are receptionist, trainer, secretary, and armorer");
+                    "unsupported-role", "supported CustomNPC roles are receptionist, trainer, secretary, jailer, and armorer");
         }
         NpcContentId profile = "receptionist".equals(role)
                 ? NpcContentId.of("straja.reception.admission")
                 : "secretary".equals(role)
                         ? NpcContentId.of("straja.secretary.workflows")
+                        : "jailer".equals(role)
+                        ? NpcContentId.of("straja.jailer.custody")
                         : "armorer".equals(role)
                         ? NpcContentId.of("straja.armorer.orders")
                         : NpcContentId.of("straja.instructor.admission");
@@ -176,7 +181,16 @@ public final class NpcPresentationRuntime {
                         }
                         NpcContentProfile armorer = loader.load(
                                 new InputStreamReader(armorerStream, StandardCharsets.UTF_8));
-                        return new NpcContentCatalog(List.of(reception, instructor, secretary, armorer));
+                        try (var jailerStream = NpcPresentationRuntime.class.getClassLoader().getResourceAsStream(
+                                "data/straja/npc/straja.jailer.custody.json")) {
+                            if (jailerStream == null) {
+                                throw new IllegalStateException("jailer NPC profile resource is missing");
+                            }
+                            NpcContentProfile jailer = loader.load(
+                                    new InputStreamReader(jailerStream, StandardCharsets.UTF_8));
+                            return new NpcContentCatalog(
+                                    List.of(reception, instructor, secretary, jailer, armorer));
+                        }
                     }
                 }
             }
@@ -195,6 +209,15 @@ public final class NpcPresentationRuntime {
         if (state == null) return published;
         if ("armorer".equals(binding.roleId())) {
             return ARMORY_SURFACE.resolve(published, runtime.armory().offers(player));
+        }
+        if ("jailer".equals(binding.roleId())) {
+            return CUSTODY_SURFACE.resolve(
+                    published,
+                    runtime.custodyRoleplay().availableActions(player),
+                    runtime.custodyRoleplay().isCuffed(player),
+                    runtime.custodyRoleplay().isBound(player),
+                    runtime.custodyRoleplay().isDowned(player),
+                    runtime.prisonRoleplay().activeSentence(player));
         }
         if ("secretary".equals(binding.roleId())) {
             return SECRETARY_SURFACE.resolve(published, new NpcSecretarySurfaceService.Inputs(
@@ -271,6 +294,9 @@ public final class NpcPresentationRuntime {
                 : binding != null && "receptionist".equals(binding.roleId())
                 && dispatchReceptionistForm(player, request)
                 ? true
+                : binding != null && "jailer".equals(binding.roleId())
+                && dispatchJailerForm(player, request)
+                ? true
                 : binding != null && admissionAction(binding.roleId(), request.actionId().value())
                 ? dispatchAdmissionAction(player, request)
                 : com.dwurdy.straja.adapter.in.npc.NpcRoles.performAction(
@@ -345,6 +371,16 @@ public final class NpcPresentationRuntime {
         if (runtime == null) return false;
         runtime.submitNpcForm(player, new com.dwurdy.straja.application.port.in.FormSessionUseCase.Submission(
                 action, recordId, request.input()));
+        return true;
+    }
+
+    private static boolean dispatchJailerForm(ServerPlayer player, NpcActionRequest request) {
+        if (!"arrest-handoff".equals(request.actionId().value())) return false;
+        StrajaRuntime runtime = StrajaRuntime.get();
+        if (runtime == null) return false;
+        runtime.submitNpcForm(player, new com.dwurdy.straja.application.port.in.FormSessionUseCase.Submission(
+                com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.ARREST_HANDOFF,
+                "", request.input()));
         return true;
     }
 

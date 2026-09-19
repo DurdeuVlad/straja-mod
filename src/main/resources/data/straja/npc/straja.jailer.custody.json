@@ -1,0 +1,37 @@
+{
+  "profileId": "straja.jailer.custody",
+  "schemaVersion": 1,
+  "title": "Straja jailer",
+  "body": "The jailer handles custody status, safe release, prison delivery, and recovery. Every transition is checked against the canonical custody record.",
+  "requiredCapabilities": ["DIALOGUE", "GUI", "ACTION_INPUT", "QUEST_JOURNAL"],
+  "optionalCapabilities": ["RICH_TEXT", "PORTRAITS"],
+  "actions": [
+    {"id": "cuffs-status", "label": "View custody status", "enabled": true},
+    {"id": "prison-status", "label": "View sentence status", "enabled": true},
+    {"id": "arrest-record", "label": "View arrest record", "enabled": true},
+    {"id": "arrest-handoff", "label": "Hand detainee to prison", "enabled": true,
+      "inputs": [
+        {"key": "detainee", "label": "Detainee", "maxLength": 64, "required": true},
+        {"key": "sentence-id", "label": "Sentence ID", "maxLength": 80, "required": true},
+        {"key": "notes", "label": "Notes", "maxLength": 500, "required": false}
+      ]},
+    {"id": "downed-status", "label": "View downed status", "enabled": true},
+    {"id": "custody-remove-head-sack", "label": "Remove head sack", "enabled": false},
+    {"id": "custody-wake-downed", "label": "Wake downed player", "enabled": false},
+    {"id": "cuffs-item", "label": "Issue cuffs", "enabled": false}
+  ],
+  "dialogue": [
+    {
+      "id": "straja.jailer.custody",
+      "text": "Review the current custody record before accepting, releasing, or delivering anyone.",
+      "choices": [
+        {"actionId": "cuffs-status", "label": "View custody status", "enabled": true},
+        {"actionId": "prison-status", "label": "View sentence status", "enabled": true},
+        {"actionId": "arrest-handoff", "label": "Hand detainee to prison", "enabled": true}
+      ]
+    }
+  ],
+  "quests": [
+    {"id": "custody-recovery", "title": "Custody and recovery", "state": "AVAILABLE"}
+  ]
+}
