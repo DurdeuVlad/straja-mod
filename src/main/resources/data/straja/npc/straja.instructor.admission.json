@@ -1,0 +1,37 @@
+{
+  "profileId": "straja.instructor.admission",
+  "schemaVersion": 1,
+  "title": "Straja instructor",
+  "body": "The instructor conducts the admission exam and records the first training step.",
+  "requiredCapabilities": ["DIALOGUE", "GUI", "ACTION_INPUT", "QUEST_JOURNAL"],
+  "optionalCapabilities": ["RICH_TEXT", "PORTRAITS"],
+  "actions": [
+    {"id": "recruit", "label": "Open admission exam", "enabled": true},
+    {
+      "id": "quiz-answer",
+      "label": "Answer current question",
+      "enabled": true,
+      "inputs": [
+        {"key": "question-id", "label": "Question", "maxLength": 128, "required": true, "visible": false},
+        {"key": "answer", "label": "Answer", "maxLength": 120, "required": true, "visible": true}
+      ]
+    },
+    {"id": "training-progress", "label": "View training progress", "enabled": true},
+    {"id": "training-manual", "label": "Request training manual", "enabled": true}
+  ],
+  "dialogue": [
+    {
+      "id": "straja.instructor.introduction",
+      "text": "The instructor checks your application and presents the next authoritative training step.",
+      "choices": [
+        {"actionId": "recruit", "label": "Open my exam", "enabled": true},
+        {"actionId": "quiz-answer", "label": "Answer the current question", "enabled": true},
+        {"actionId": "training-progress", "label": "Show my progress", "enabled": true},
+        {"actionId": "training-manual", "label": "Request the manual", "enabled": true}
+      ]
+    }
+  ],
+  "quests": [
+    {"id": "training-basic", "title": "Admission and first training", "state": "LOCKED"}
+  ]
+}

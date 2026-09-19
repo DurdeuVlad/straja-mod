@@ -48,6 +48,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
     private final NpcSurfaceActionUseCase actions;
     private final NpcSurfaceActionTokenIssuer tokenIssuer;
     private final Consumer<String> diagnostics;
+    private final SurfaceResolver surfaceResolver;
     private final ReflectionBridge bridge;
     private final Map<String, NpcBinding> bindings = new ConcurrentHashMap<>();
     private final Map<String, NpcSurfaceSnapshot> surfaces = new ConcurrentHashMap<>();
@@ -56,9 +57,18 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             NpcSurfaceActionUseCase actions,
             NpcSurfaceActionTokenIssuer tokenIssuer,
             Consumer<String> diagnostics) {
+        this(actions, tokenIssuer, diagnostics, (playerId, binding, published) -> published);
+    }
+
+    public CustomNpcsNpcSurfaceProvider(
+            NpcSurfaceActionUseCase actions,
+            NpcSurfaceActionTokenIssuer tokenIssuer,
+            Consumer<String> diagnostics,
+            SurfaceResolver surfaceResolver) {
         this.actions = Objects.requireNonNull(actions, "actions");
         this.tokenIssuer = Objects.requireNonNull(tokenIssuer, "tokenIssuer");
         this.diagnostics = Objects.requireNonNull(diagnostics, "diagnostics");
+        this.surfaceResolver = Objects.requireNonNull(surfaceResolver, "surfaceResolver");
         this.bridge = ReflectionBridge.connect(this::onCustomNpcsEvent, diagnostics);
     }
 
@@ -166,8 +176,8 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                 // Unbound CustomNPCs retain their native behavior.
                 return;
             }
-            NpcSurfaceSnapshot surface = surfaces.get(binding.bindingId());
-            if (surface == null) {
+            NpcSurfaceSnapshot published = surfaces.get(binding.bindingId());
+            if (published == null) {
                 // A binding without a published Straja surface must not fall
                 // through into an unexpected native interaction.
                 cancel(event);
@@ -176,6 +186,11 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             Object playerApi = field(event, "player");
             Object rawPlayer = invoke(playerApi, "getMCEntity");
             if (!(rawPlayer instanceof ServerPlayer player)) {
+                cancel(event);
+                return;
+            }
+            NpcSurfaceSnapshot surface = surfaceResolver.resolve(player.getUUID(), binding, published);
+            if (surface == null) {
                 cancel(event);
                 return;
             }
@@ -214,7 +229,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                 Object button = invoke(gui, "addButton", 1_000 + y, choice.label(), 12, y, 190, 20);
                 invoke(button, "setEnabled", choice.enabled() && action.enabled());
                 if (choice.enabled() && action.enabled()) {
-                    setButtonHandler(button, gui, binding, action.actionId());
+                    setButtonHandler(button, gui, binding, action);
                 }
                 y += 23;
             }
@@ -231,7 +246,8 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
         invoke(playerApi, "showCustomGui", gui);
     }
 
-    private void setButtonHandler(Object button, Object gui, NpcBinding binding, NpcContentId actionId) {
+    private void setButtonHandler(
+            Object button, Object gui, NpcBinding binding, NpcSurfaceAction action) {
         try {
             Class<?> callbackType = Class.forName(
                     "noppes.npcs.api.function.gui.GuiComponentClicked",
@@ -239,7 +255,11 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                     button.getClass().getClassLoader());
             InvocationHandler handler = (proxy, method, args) -> {
                 if (method.getName().equals("onClick") && args != null && args.length == 2) {
-                    submitAction(args[0], binding, actionId);
+                    if (action.inputs().isEmpty()) {
+                        submitAction(args[0], binding, action.actionId(), Map.of());
+                    } else {
+                        openInputGui(args[0], binding, action);
+                    }
                 }
                 return null;
             };
@@ -251,7 +271,97 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
         }
     }
 
-    private void submitAction(Object gui, NpcBinding binding, NpcContentId actionId) {
+    private void openInputGui(Object parentGui, NpcBinding binding, NpcSurfaceAction action) {
+        Object playerApi = invoke(parentGui, "getPlayer");
+        Object gui = invoke(
+                bridge.api(),
+                "createCustomGui",
+                422,
+                320,
+                Math.floorMod((binding.bindingId() + action.actionId().value()).hashCode(), 20_000) + 1_000,
+                false,
+                playerApi);
+        invoke(gui, "addLabel", 1, action.label(), 12, 8, 396, 20);
+        Map<String, Integer> fieldIds = new java.util.LinkedHashMap<>();
+        int y = 42;
+        int nextId = 2;
+        for (NpcSurfaceAction.InputField field : action.inputs()) {
+            if (field.visible()) {
+                invoke(gui, "addLabel", 10_000 + nextId, field.label(), 12, y, 396, 18);
+            }
+            Object textField = invoke(gui, "addTextField", nextId, 12, y + 19, 396, 20);
+            if (!field.initialValue().isEmpty()) {
+                invoke(textField, "setText", field.initialValue());
+            }
+            if (!field.visible()) {
+                invoke(textField, "setVisible", false);
+            }
+            fieldIds.put(field.key(), nextId++);
+            y += field.visible() ? 66 : 2;
+        }
+        Object submit = invoke(gui, "addButton", 9_500, "Submit", 12, Math.min(y, 270), 190, 22);
+        setInputButtonHandler(submit, gui, binding, action, fieldIds);
+        invoke(playerApi, "showCustomGui", gui);
+    }
+
+    private void setInputButtonHandler(
+            Object button,
+            Object gui,
+            NpcBinding binding,
+            NpcSurfaceAction action,
+            Map<String, Integer> fieldIds) {
+        try {
+            Class<?> callbackType = Class.forName(
+                    "noppes.npcs.api.function.gui.GuiComponentClicked",
+                    true,
+                    button.getClass().getClassLoader());
+            InvocationHandler handler = (proxy, method, args) -> {
+                if (method.getName().equals("onClick") && args != null && args.length == 2) {
+                    submitInputAction(args[0], binding, action, fieldIds);
+                }
+                return null;
+            };
+            Object callback = Proxy.newProxyInstance(
+                    callbackType.getClassLoader(), new Class<?>[] {callbackType}, handler);
+            invoke(button, "setOnPress", callback);
+        } catch (ClassNotFoundException exception) {
+            throw new IllegalStateException("CustomNPCs GUI callback API is missing", exception);
+        }
+    }
+
+    private void submitInputAction(
+            Object gui,
+            NpcBinding binding,
+            NpcSurfaceAction action,
+            Map<String, Integer> fieldIds) {
+        Map<String, String> input = new java.util.LinkedHashMap<>();
+        for (NpcSurfaceAction.InputField field : action.inputs()) {
+            Object component = invoke(gui, "getComponent", fieldIds.get(field.key()));
+            String value = String.valueOf(invoke(component, "getText"));
+            if (value.length() > field.maxLength()) {
+                showResult(gui, new NpcActionResult(
+                        NpcActionResult.Status.REJECTED,
+                        "input-too-long",
+                        field.label() + " exceeds the allowed length."));
+                return;
+            }
+            if (field.required() && value.isBlank()) {
+                showResult(gui, new NpcActionResult(
+                        NpcActionResult.Status.REJECTED,
+                        "input-required",
+                        field.label() + " is required."));
+                return;
+            }
+            input.put(field.key(), value);
+        }
+        submitAction(gui, binding, action.actionId(), input);
+    }
+
+    private void submitAction(
+            Object gui,
+            NpcBinding binding,
+            NpcContentId actionId,
+            Map<String, String> input) {
         try {
             Object playerApi = invoke(gui, "getPlayer");
             Object rawPlayer = invoke(playerApi, "getMCEntity");
@@ -260,7 +370,18 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             }
             String token = tokenIssuer.issueToken(player.getUUID(), binding, actionId);
             NpcActionResult result = actions.submit(new NpcActionRequest(
-                    providerId(), binding.bindingId(), player.getUUID(), actionId, token, Map.of()));
+                    providerId(), binding.bindingId(), player.getUUID(), actionId, token, input));
+            if (result.status() == NpcActionResult.Status.ACCEPTED) {
+                NpcSurfaceSnapshot published = surfaces.get(binding.bindingId());
+                if (published != null) {
+                    openSurface(
+                            playerApi,
+                            player,
+                            binding,
+                            surfaceResolver.resolve(player.getUUID(), binding, published));
+                    return;
+                }
+            }
             showResult(gui, result);
         } catch (RuntimeException exception) {
             showResult(gui, new NpcActionResult(
@@ -268,6 +389,12 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                     "bridge-failed",
                     "This Straja action is temporarily unavailable."));
         }
+    }
+
+    @FunctionalInterface
+    public interface SurfaceResolver {
+        NpcSurfaceSnapshot resolve(
+                UUID playerId, NpcBinding binding, NpcSurfaceSnapshot published);
     }
 
     private static void showResult(Object gui, NpcActionResult result) {

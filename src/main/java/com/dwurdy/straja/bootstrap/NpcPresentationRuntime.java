@@ -8,18 +8,26 @@ import com.dwurdy.straja.adapter.out.persistence.StoreAccess;
 import com.dwurdy.straja.adapter.out.npc.content.NpcContentProfileJsonLoader;
 import com.dwurdy.straja.adapter.out.npc.customnpcs.CustomNpcsNpcSurfaceProvider;
 import com.dwurdy.straja.application.port.in.NpcSurfaceActionTokenIssuer;
+import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.application.service.NpcBindingLifecycleService;
+import com.dwurdy.straja.application.service.NpcAdmissionSurfaceService;
 import com.dwurdy.straja.application.service.NpcContentCatalog;
 import com.dwurdy.straja.application.service.NpcSurfaceActionService;
 import com.dwurdy.straja.application.service.NpcSurfaceProviderRegistry;
 import com.dwurdy.straja.domain.model.NpcActionRequest;
 import com.dwurdy.straja.domain.model.NpcActionResult;
 import com.dwurdy.straja.domain.model.NpcBinding;
+import com.dwurdy.straja.domain.model.NpcContentId;
+import com.dwurdy.straja.domain.model.NpcContentProfile;
+import com.dwurdy.straja.domain.model.NpcProviderId;
 import com.dwurdy.straja.domain.model.NpcProviderResult;
+import com.dwurdy.straja.domain.model.NpcSurfaceSnapshot;
+import com.dwurdy.straja.domain.model.GuardState;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import net.minecraft.server.MinecraftServer;
@@ -34,6 +42,7 @@ import net.minecraft.world.entity.Entity;
  */
 public final class NpcPresentationRuntime {
     private static final AtomicReference<RuntimeState> STATE = new AtomicReference<>();
+    private static final NpcAdmissionSurfaceService ADMISSION_SURFACE = new NpcAdmissionSurfaceService();
 
     private NpcPresentationRuntime() {}
 
@@ -47,7 +56,8 @@ public final class NpcPresentationRuntime {
         CustomNpcsNpcSurfaceProvider customNpcs = new CustomNpcsNpcSurfaceProvider(
                 actions,
                 actions,
-                message -> StrajaMod.LOGGER.info("{}", message));
+                message -> StrajaMod.LOGGER.info("{}", message),
+                NpcPresentationRuntime::resolveSurface);
         providers.register(customNpcs);
         StoreAccess stores = name -> new NbtStore(StrajaDataProvider.get(server, name));
         NpcBindingLifecycleService lifecycle = new NpcBindingLifecycleService(
@@ -86,6 +96,42 @@ public final class NpcPresentationRuntime {
         return state.lifecycle().bindAndPublish(binding);
     }
 
+    /**
+     * Explicit setup seam for an externally hosted NPC. The provider owns the
+     * host interaction only after this mapping is accepted and published.
+     */
+    public static NpcProviderResult bindCustomNpc(
+            String hostEntityUuid, String roleId, String stationId) {
+        String role = "recruiter".equals(roleId) ? "trainer" : roleId;
+        if (!"receptionist".equals(role) && !"trainer".equals(role)) {
+            return NpcProviderResult.rejected(
+                    "unsupported-role", "M3 admission binding supports receptionist and trainer only");
+        }
+        NpcContentId profile = "receptionist".equals(role)
+                ? NpcContentId.of("straja.reception.admission")
+                : NpcContentId.of("straja.instructor.admission");
+        String normalizedUuid;
+        try {
+            normalizedUuid = UUID.fromString(hostEntityUuid).toString();
+        } catch (IllegalArgumentException exception) {
+            return NpcProviderResult.rejected("invalid-host-identity", "hostEntityUuid must be a UUID");
+        }
+        NpcBinding binding = new NpcBinding(
+                "straja.customnpcs." + role + "." + normalizedUuid.replace("-", ""),
+                NpcProviderId.CUSTOM_NPCS,
+                normalizedUuid,
+                "",
+                role,
+                stationId == null || stationId.isBlank() ? "hq" : stationId,
+                profile,
+                1);
+        try {
+            return bindAndPublish(binding);
+        } catch (IllegalStateException exception) {
+            return NpcProviderResult.unavailable("NPC presentation runtime is not started");
+        }
+    }
+
     private static NpcContentCatalog loadCatalog() {
         try (var stream = NpcPresentationRuntime.class.getClassLoader().getResourceAsStream(
                 "data/straja/npc/straja.reception.admission.json")) {
@@ -93,11 +139,38 @@ public final class NpcPresentationRuntime {
                 throw new IllegalStateException("default NPC profile resource is missing");
             }
             var loader = new NpcContentProfileJsonLoader();
-            return new NpcContentCatalog(List.of(loader.load(
-                    new InputStreamReader(stream, StandardCharsets.UTF_8))));
+            NpcContentProfile reception = loader.load(
+                    new InputStreamReader(stream, StandardCharsets.UTF_8));
+            try (var instructorStream = NpcPresentationRuntime.class.getClassLoader().getResourceAsStream(
+                    "data/straja/npc/straja.instructor.admission.json")) {
+                if (instructorStream == null) {
+                    throw new IllegalStateException("instructor NPC profile resource is missing");
+                }
+                NpcContentProfile instructor = loader.load(
+                        new InputStreamReader(instructorStream, StandardCharsets.UTF_8));
+                return new NpcContentCatalog(List.of(reception, instructor));
+            }
         } catch (IOException | RuntimeException exception) {
             throw new IllegalStateException("NPC content catalog failed to load", exception);
         }
+    }
+
+    private static NpcSurfaceSnapshot resolveSurface(
+            UUID playerId, NpcBinding binding, NpcSurfaceSnapshot published) {
+        StrajaRuntime runtime = StrajaRuntime.get();
+        if (runtime == null) return published;
+        PlayerGateway player = new com.dwurdy.straja.adapter.out.minecraft.MinecraftPlayerGateway(
+                runtime.server(), playerId);
+        GuardState state = runtime.playerQueries().readState(player);
+        if (state == null) return published;
+        java.util.Optional<com.dwurdy.straja.application.port.in.GuardRecruitmentUseCase.QuizPrompt> prompt =
+                java.util.Optional.empty();
+        if (("trainer".equals(binding.roleId()) || "recruiter".equals(binding.roleId()))
+                && !state.fired && !state.suspended && !state.resigned
+                && (state.invited || "APPLIED".equals(state.applicationState))) {
+            prompt = runtime.guardRecruitment().currentQuizPrompt(player);
+        }
+        return ADMISSION_SURFACE.resolve(published, state, prompt);
     }
 
     private static boolean playerAtBinding(MinecraftServer server, UUID playerId, NpcBinding binding) {
@@ -128,14 +201,64 @@ public final class NpcPresentationRuntime {
             return new NpcActionResult(
                     NpcActionResult.Status.UNAUTHORIZED, "player-offline", "player is not online");
         }
-        boolean handled = com.dwurdy.straja.adapter.in.npc.NpcRoles.performAction(
-                request.actionId().value(), player, player.serverLevel());
+        RuntimeState state = STATE.get();
+        NpcBinding binding = state == null
+                ? null
+                : state.lifecycle().inspect(request.bindingId()).binding();
+        boolean handled = binding != null && admissionAction(binding.roleId(), request.actionId().value())
+                ? dispatchAdmissionAction(player, request)
+                : com.dwurdy.straja.adapter.in.npc.NpcRoles.performAction(
+                        request.actionId().value(), player, player.serverLevel());
         return handled
                 ? new NpcActionResult(NpcActionResult.Status.ACCEPTED, "dispatched", "action dispatched")
                 : new NpcActionResult(
                         NpcActionResult.Status.REJECTED,
                         "action-rejected",
                         "the action is no longer available");
+    }
+
+    private static boolean admissionAction(String roleId, String actionId) {
+        boolean admissionRole = "receptionist".equals(roleId)
+                || "trainer".equals(roleId)
+                || "recruiter".equals(roleId);
+        return admissionRole && Set.of(
+                "application-submit", "recruit", "quiz-answer", "training-progress", "training-manual")
+                .contains(actionId);
+    }
+
+    private static boolean dispatchAdmissionAction(ServerPlayer player, NpcActionRequest request) {
+        StrajaRuntime runtime = StrajaRuntime.get();
+        if (runtime == null) return false;
+        PlayerGateway gateway = new com.dwurdy.straja.adapter.out.minecraft.MinecraftPlayerGateway(
+                runtime.server(), player.getUUID());
+        return switch (request.actionId().value()) {
+            case "application-submit" -> {
+                runtime.guardRecruitment().applyForStraja(gateway);
+                yield true;
+            }
+            case "recruit" -> {
+                runtime.guardRecruitment().currentQuizPrompt(gateway);
+                yield true;
+            }
+            case "quiz-answer" -> {
+                String questionId = request.input().get("question-id");
+                String answer = request.input().get("answer");
+                if (questionId == null || questionId.isBlank() || answer == null
+                        || answer.isBlank() || answer.length() > 120) {
+                    yield false;
+                }
+                yield runtime.guardRecruitment().answerQuiz(gateway, questionId, answer);
+            }
+            case "training-progress" -> {
+                runtime.guardRecruitment().showProgress(gateway);
+                yield true;
+            }
+            case "training-manual" -> {
+                runtime.guardRecruitment().giveManual(gateway);
+                yield true;
+            }
+            default -> false;
+        };
     }
 
     public record RuntimeState(

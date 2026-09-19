@@ -37,6 +37,22 @@ class NpcContentProfileTest {
     }
 
     @Test
+    void instructorProfileCarriesBoundedGuiInputsWithoutProviderTypes() throws Exception {
+        var resource = getClass().getClassLoader().getResourceAsStream(
+                "data/straja/npc/straja.instructor.admission.json");
+        var profile = new NpcContentProfileJsonLoader().load(
+                new InputStreamReader(resource, StandardCharsets.UTF_8));
+
+        var answer = profile.actions().stream()
+                .filter(action -> action.actionId().equals(NpcContentId.of("quiz-answer")))
+                .findFirst()
+                .orElseThrow();
+        assertEquals(2, answer.inputs().size());
+        assertEquals(false, answer.inputs().getFirst().visible());
+        assertEquals(120, answer.inputs().getLast().maxLength());
+    }
+
+    @Test
     void malformedProfileCannotReferenceAnUnknownAction() {
         assertThrows(IllegalArgumentException.class, () -> new com.dwurdy.straja.domain.model.NpcContentProfile(
                 NpcContentId.of("straja.invalid"),
