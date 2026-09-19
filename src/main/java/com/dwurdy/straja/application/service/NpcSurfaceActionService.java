@@ -1,5 +1,6 @@
 package com.dwurdy.straja.application.service;
 
+import com.dwurdy.straja.application.port.in.NpcSurfaceActionTokenIssuer;
 import com.dwurdy.straja.application.port.in.NpcSurfaceActionUseCase;
 import com.dwurdy.straja.domain.model.NpcActionRequest;
 import com.dwurdy.straja.domain.model.NpcActionResult;
@@ -21,7 +22,8 @@ import java.util.concurrent.atomic.AtomicReference;
  * this service owns token binding, replay protection, surface availability,
  * provider ownership, and the server-side proximity/dispatch seams.
  */
-public final class NpcSurfaceActionService implements NpcSurfaceActionUseCase {
+public final class NpcSurfaceActionService
+        implements NpcSurfaceActionUseCase, NpcSurfaceActionTokenIssuer {
     private static final Duration DEFAULT_TOKEN_TTL = Duration.ofSeconds(15);
     private static final Duration MAX_TOKEN_TTL = Duration.ofMinutes(5);
     private static final int MAX_ACTIVE_TOKENS = 4_096;
@@ -60,6 +62,7 @@ public final class NpcSurfaceActionService implements NpcSurfaceActionUseCase {
     }
 
     /** Mints a player-bound token only for a currently enabled surface action. */
+    @Override
     public String issueToken(UUID playerId, NpcBinding binding, NpcContentId actionId) {
         Objects.requireNonNull(playerId, "playerId");
         Objects.requireNonNull(binding, "binding");

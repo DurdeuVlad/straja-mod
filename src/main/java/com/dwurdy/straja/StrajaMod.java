@@ -7,6 +7,7 @@ import com.dwurdy.straja.adapter.in.network.CustodyVisualPayload;
 import com.dwurdy.straja.adapter.in.npc.StrajaNpcEntity;
 import com.dwurdy.straja.bootstrap.StrajaItems;
 import com.dwurdy.straja.bootstrap.StrajaMenus;
+import com.dwurdy.straja.bootstrap.NpcPresentationRuntime;
 import com.dwurdy.straja.bootstrap.StrajaRuntime;
 import com.dwurdy.straja.config.StrajaServerConfig;
 import net.minecraft.world.item.CreativeModeTabs;
@@ -43,8 +44,12 @@ public class StrajaMod {
         NeoForge.EVENT_BUS.register(new StrajaEvents());
         NeoForge.EVENT_BUS.addListener(ServerStartedEvent.class,
                 event -> StrajaRuntime.start(event.getServer()));
+        NeoForge.EVENT_BUS.addListener(ServerStartedEvent.class,
+                event -> NpcPresentationRuntime.start(event.getServer()));
         NeoForge.EVENT_BUS.addListener(ServerStoppingEvent.class,
                 event -> StrajaRuntime.stop());
+        NeoForge.EVENT_BUS.addListener(ServerStoppingEvent.class,
+                event -> NpcPresentationRuntime.stop());
         LOGGER.info("Straja mod initialized");
     }
 
