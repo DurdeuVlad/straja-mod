@@ -1,0 +1,80 @@
+package com.dwurdy.straja.npc;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import com.dwurdy.straja.adapter.out.npc.content.NpcContentProfileJsonLoader;
+import com.dwurdy.straja.adapter.out.npc.customnpcs.CustomNpcsNpcSurfaceProvider;
+import com.dwurdy.straja.application.port.in.NpcSurfaceActionTokenIssuer;
+import com.dwurdy.straja.application.port.in.NpcSurfaceActionUseCase;
+import com.dwurdy.straja.domain.model.NpcActionResult;
+import com.dwurdy.straja.domain.model.NpcBinding;
+import com.dwurdy.straja.domain.model.NpcContentId;
+import com.dwurdy.straja.domain.model.NpcProviderId;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import org.junit.jupiter.api.Test;
+
+class NpcContentProfileTest {
+    @Test
+    void packagedProfileLoadsAsCanonicalProviderNeutralContent() throws Exception {
+        var resource = getClass().getClassLoader().getResourceAsStream(
+                "data/straja/npc/straja.reception.admission.json");
+        var profile = new NpcContentProfileJsonLoader().load(
+                new InputStreamReader(resource, StandardCharsets.UTF_8));
+
+        assertEquals(NpcContentId.of("straja.reception.admission"), profile.profileId());
+        assertEquals(2, profile.actions().size());
+        assertEquals(1, profile.dialogue().size());
+        assertEquals(1, profile.quests().size());
+        assertTrue(profile.requiredCapabilities().contains(
+                com.dwurdy.straja.domain.model.NpcCapability.GUI));
+    }
+
+    @Test
+    void malformedProfileCannotReferenceAnUnknownAction() {
+        assertThrows(IllegalArgumentException.class, () -> new com.dwurdy.straja.domain.model.NpcContentProfile(
+                NpcContentId.of("straja.invalid"),
+                1,
+                "Invalid",
+                "Invalid content",
+                List.of(),
+                List.of(new com.dwurdy.straja.domain.model.NpcSurfaceSnapshot.DialogueNode(
+                        NpcContentId.of("straja.invalid.node"),
+                        "Text",
+                        List.of(new com.dwurdy.straja.domain.model.NpcSurfaceSnapshot.Choice(
+                                NpcContentId.of("missing"), "Missing", true)))),
+                List.of(),
+                Set.of(),
+                Set.of()));
+    }
+
+    @Test
+    void optionalProviderFailsClosedWhenCustomNpcsIsNotLoaded() {
+        NpcSurfaceActionUseCase actions = request -> new NpcActionResult(
+                NpcActionResult.Status.ACCEPTED, "ok", "accepted");
+        NpcSurfaceActionTokenIssuer tokens = (playerId, binding, actionId) -> "token";
+        CustomNpcsNpcSurfaceProvider provider = new CustomNpcsNpcSurfaceProvider(
+                actions, tokens, ignored -> {});
+
+        assertEquals(NpcProviderId.CUSTOM_NPCS, provider.providerId());
+        if (!provider.available()) {
+            NpcBinding binding = new NpcBinding(
+                    "straja.reception.desk",
+                    NpcProviderId.CUSTOM_NPCS,
+                    UUID.randomUUID().toString(),
+                    "receptionist-1",
+                    "receptionist",
+                    "hq",
+                    NpcContentId.of("straja.reception.admission"),
+                    1);
+            assertEquals(com.dwurdy.straja.domain.model.NpcProviderResult.Status.UNAVAILABLE,
+                    provider.bind(binding).status());
+        }
+    }
+}

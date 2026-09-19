@@ -1,0 +1,25 @@
+{
+  "profileId": "straja.reception.admission",
+  "schemaVersion": 1,
+  "title": "Straja reception",
+  "body": "The reception desk records admissions and directs new personnel to their first duty.",
+  "requiredCapabilities": ["DIALOGUE", "GUI", "ACTION_INPUT", "QUEST_JOURNAL"],
+  "optionalCapabilities": ["RICH_TEXT", "PORTRAITS"],
+  "actions": [
+    {"id": "application-submit", "label": "Submit admission application", "enabled": true},
+    {"id": "training-progress", "label": "View basic training", "enabled": true}
+  ],
+  "dialogue": [
+    {
+      "id": "straja.reception.introduction",
+      "text": "State your purpose at the desk.",
+      "choices": [
+        {"actionId": "application-submit", "label": "I want to enlist", "enabled": true},
+        {"actionId": "training-progress", "label": "Show me the training path", "enabled": true}
+      ]
+    }
+  ],
+  "quests": [
+    {"id": "training-basic", "title": "Basic training", "state": "AVAILABLE"}
+  ]
+}
