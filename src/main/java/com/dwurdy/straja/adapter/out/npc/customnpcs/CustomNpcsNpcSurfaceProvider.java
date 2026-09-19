@@ -468,6 +468,24 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
         return true;
     }
 
+    static void registerInteractionListener(
+            Object eventBus,
+            Class<?> eventType,
+            Consumer<Object> listener) {
+        Method addListener = java.util.Arrays.stream(eventBus.getClass().getMethods())
+                .filter(method -> method.getName().equals("addListener")
+                        && method.getParameterCount() == 2
+                        && method.getParameterTypes()[0].equals(Class.class)
+                        && Consumer.class.isAssignableFrom(method.getParameterTypes()[1]))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("CustomNPCs addListener(Class, Consumer) is missing"));
+        try {
+            addListener.invoke(eventBus, eventType, listener);
+        } catch (ReflectiveOperationException exception) {
+            throw new IllegalStateException("CustomNPCs listener registration failed", exception);
+        }
+    }
+
     private static final class ReflectionBridge {
         private final Object api;
         private final boolean available;
@@ -487,12 +505,9 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                     return new ReflectionBridge(null, false);
                 }
                 Object eventBus = apiType.getMethod("events").invoke(api);
-                Method addListener = java.util.Arrays.stream(eventBus.getClass().getMethods())
-                        .filter(method -> method.getName().equals("addListener")
-                                && method.getParameterCount() == 1)
-                        .findFirst()
-                        .orElseThrow(() -> new NoSuchMethodException("addListener"));
-                addListener.invoke(eventBus, listener);
+                Class<?> eventType = Class.forName(
+                        "noppes.npcs.api.event.NpcEvent$InteractEvent");
+                registerInteractionListener(eventBus, eventType, listener);
                 return new ReflectionBridge(api, true);
             } catch (ReflectiveOperationException | RuntimeException exception) {
                 diagnostics.accept("CustomNPCs API unavailable: "
