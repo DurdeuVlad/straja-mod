@@ -29,9 +29,9 @@ class NpcContentProfileTest {
                 new InputStreamReader(resource, StandardCharsets.UTF_8));
 
         assertEquals(NpcContentId.of("straja.reception.admission"), profile.profileId());
-        assertEquals(2, profile.actions().size());
+        assertEquals(4, profile.actions().size());
         assertEquals(1, profile.dialogue().size());
-        assertEquals(1, profile.quests().size());
+        assertEquals(2, profile.quests().size());
         assertTrue(profile.requiredCapabilities().contains(
                 com.dwurdy.straja.domain.model.NpcCapability.GUI));
     }

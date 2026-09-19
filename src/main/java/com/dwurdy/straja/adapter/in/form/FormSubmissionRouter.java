@@ -114,7 +114,7 @@ public final class FormSubmissionRouter {
                     fines.appeal(gateway, submission.recordId(), values.get("reason"));
             case FINE_APPEAL_REVIEW -> {
                 String decision = values.get("decision");
-                Integer reduced = parseInt(values.get("reducedAmount"));
+                Integer reduced = parseInt(firstValue(values, "reduced-amount", "reducedAmount"));
                 boolean reduce = decision != null && java.util.List.of(
                         "reduce", "redu", "micsoreaza", "micșorează")
                         .contains(decision.toLowerCase());
