@@ -220,16 +220,30 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
         invoke(body, "setText", surface.body());
         invoke(body, "setEnabled", false);
 
+        Object choiceHost = gui;
+        int choiceX = 12;
+        int choiceWidth = 190;
         int y = 98;
+        try {
+            Object scrollingPanel = invoke(gui, "getScrollingPanel");
+            invoke(scrollingPanel, "init", 12, 98, 195, 178);
+            choiceHost = scrollingPanel;
+            choiceX = 0;
+            choiceWidth = 190;
+            y = 0;
+        } catch (RuntimeException exception) {
+            diagnostics.accept("CustomNPCs scrolling panel unavailable; using bounded fallback layout");
+        }
         for (NpcSurfaceSnapshot.DialogueNode node : surface.dialogue()) {
-            invoke(gui, "addLabel", 100 + y, node.text(), 12, y, 396, 20);
+            invoke(choiceHost, "addLabel", 100 + y, node.text(), choiceX, y, choiceWidth, 20);
             y += 22;
             for (NpcSurfaceSnapshot.Choice choice : node.choices()) {
                 NpcSurfaceAction action = action(surface, choice.actionId());
-                Object button = invoke(gui, "addButton", 1_000 + y, choice.label(), 12, y, 190, 20);
+                Object button = invoke(
+                        choiceHost, "addButton", 1_000 + y, choice.label(), choiceX, y, choiceWidth, 20);
                 invoke(button, "setEnabled", choice.enabled() && action.enabled());
                 if (choice.enabled() && action.enabled()) {
-                    setButtonHandler(button, gui, binding, action);
+                    setButtonHandler(button, gui, binding, surface, action);
                 }
                 y += 23;
             }
@@ -247,7 +261,11 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
     }
 
     private void setButtonHandler(
-            Object button, Object gui, NpcBinding binding, NpcSurfaceAction action) {
+            Object button,
+            Object gui,
+            NpcBinding binding,
+            NpcSurfaceSnapshot surface,
+            NpcSurfaceAction action) {
         try {
             Class<?> callbackType = Class.forName(
                     "noppes.npcs.api.function.gui.GuiComponentClicked",
@@ -256,9 +274,9 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             InvocationHandler handler = (proxy, method, args) -> {
                 if (method.getName().equals("onClick") && args != null && args.length == 2) {
                     if (action.inputs().isEmpty()) {
-                        submitAction(args[0], binding, action.actionId(), Map.of());
+                        submitAction(args[0], binding, surface, action.actionId(), Map.of());
                     } else {
-                        openInputGui(args[0], binding, action);
+                        openInputGui(args[0], binding, surface, action);
                     }
                 }
                 return null;
@@ -271,7 +289,11 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
         }
     }
 
-    private void openInputGui(Object parentGui, NpcBinding binding, NpcSurfaceAction action) {
+    private void openInputGui(
+            Object parentGui,
+            NpcBinding binding,
+            NpcSurfaceSnapshot surface,
+            NpcSurfaceAction action) {
         Object playerApi = invoke(parentGui, "getPlayer");
         Object gui = invoke(
                 bridge.api(),
@@ -283,13 +305,26 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                 playerApi);
         invoke(gui, "addLabel", 1, action.label(), 12, 8, 396, 20);
         Map<String, Integer> fieldIds = new java.util.LinkedHashMap<>();
+        Object fieldHost = gui;
+        int fieldX = 12;
+        int fieldWidth = 396;
         int y = 42;
+        try {
+            Object scrollingPanel = invoke(gui, "getScrollingPanel");
+            invoke(scrollingPanel, "init", 12, 42, 396, 205);
+            fieldHost = scrollingPanel;
+            fieldX = 0;
+            fieldWidth = 396;
+            y = 0;
+        } catch (RuntimeException exception) {
+            diagnostics.accept("CustomNPCs input scrolling panel unavailable; using bounded fallback layout");
+        }
         int nextId = 2;
         for (NpcSurfaceAction.InputField field : action.inputs()) {
             if (field.visible()) {
-                invoke(gui, "addLabel", 10_000 + nextId, field.label(), 12, y, 396, 18);
+                invoke(fieldHost, "addLabel", 10_000 + nextId, field.label(), fieldX, y, fieldWidth, 18);
             }
-            Object textField = invoke(gui, "addTextField", nextId, 12, y + 19, 396, 20);
+            Object textField = invoke(fieldHost, "addTextField", nextId, fieldX, y + 19, fieldWidth, 20);
             if (!field.initialValue().isEmpty()) {
                 invoke(textField, "setText", field.initialValue());
             }
@@ -300,14 +335,15 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             y += field.visible() ? 66 : 2;
         }
         Object submit = invoke(gui, "addButton", 9_500, "Submit", 12, Math.min(y, 270), 190, 22);
-        setInputButtonHandler(submit, gui, binding, action, fieldIds);
+        setInputButtonHandler(submit, fieldHost, binding, surface, action, fieldIds);
         invoke(playerApi, "showCustomGui", gui);
     }
 
     private void setInputButtonHandler(
             Object button,
-            Object gui,
+            Object fieldHost,
             NpcBinding binding,
+            NpcSurfaceSnapshot surface,
             NpcSurfaceAction action,
             Map<String, Integer> fieldIds) {
         try {
@@ -317,7 +353,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                     button.getClass().getClassLoader());
             InvocationHandler handler = (proxy, method, args) -> {
                 if (method.getName().equals("onClick") && args != null && args.length == 2) {
-                    submitInputAction(args[0], binding, action, fieldIds);
+                    submitInputAction(args[0], fieldHost, binding, surface, action, fieldIds);
                 }
                 return null;
             };
@@ -331,12 +367,14 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
 
     private void submitInputAction(
             Object gui,
+            Object fieldHost,
             NpcBinding binding,
+            NpcSurfaceSnapshot surface,
             NpcSurfaceAction action,
             Map<String, Integer> fieldIds) {
         Map<String, String> input = new java.util.LinkedHashMap<>();
         for (NpcSurfaceAction.InputField field : action.inputs()) {
-            Object component = invoke(gui, "getComponent", fieldIds.get(field.key()));
+            Object component = invoke(fieldHost, "getComponent", fieldIds.get(field.key()));
             String value = String.valueOf(invoke(component, "getText"));
             if (value.length() > field.maxLength()) {
                 showResult(gui, new NpcActionResult(
@@ -354,12 +392,13 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             }
             input.put(field.key(), value);
         }
-        submitAction(gui, binding, action.actionId(), input);
+        submitAction(gui, binding, surface, action.actionId(), input);
     }
 
     private void submitAction(
             Object gui,
             NpcBinding binding,
+            NpcSurfaceSnapshot surface,
             NpcContentId actionId,
             Map<String, String> input) {
         try {
@@ -368,7 +407,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             if (!(rawPlayer instanceof ServerPlayer player)) {
                 return;
             }
-            String token = tokenIssuer.issueToken(player.getUUID(), binding, actionId);
+            String token = tokenIssuer.issueToken(player.getUUID(), binding, actionId, surface);
             NpcActionResult result = actions.submit(new NpcActionRequest(
                     providerId(), binding.bindingId(), player.getUUID(), actionId, token, input));
             if (result.status() == NpcActionResult.Status.ACCEPTED) {

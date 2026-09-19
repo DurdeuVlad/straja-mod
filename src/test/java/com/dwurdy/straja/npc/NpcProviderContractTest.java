@@ -102,6 +102,42 @@ class NpcProviderContractTest {
     }
 
     @Test
+    void actionServiceCanAuthorizeAPlayerResolvedSurfaceWithoutMakingItBindingGlobal() {
+        NpcSurfaceProviderRegistry registry = new NpcSurfaceProviderRegistry();
+        registry.register(new DebugTextNpcSurfaceProvider(ignored -> {}));
+        NpcBinding binding = binding(NpcProviderId.DEBUG_TEXT);
+        registry.bind(binding);
+        registry.publish(surface(binding));
+        UUID player = UUID.randomUUID();
+        NpcContentId dynamicAction = NpcContentId.of("armory-buy:armor_iron");
+        NpcSurfaceSnapshot playerSurface = new NpcSurfaceSnapshot(
+                binding,
+                PROFILE,
+                "Reception",
+                "Player-specific offer",
+                List.of(NpcSurfaceAction.enabled(dynamicAction, "Buy iron armor")),
+                List.of(new NpcSurfaceSnapshot.DialogueNode(
+                        NpcContentId.of("straja.reception.introduction"),
+                        "Player-specific choice",
+                        List.of(new NpcSurfaceSnapshot.Choice(dynamicAction, "Buy iron armor", true)))),
+                List.of(),
+                Set.of(NpcCapability.TEXT_MIRROR),
+                Set.of());
+        NpcSurfaceActionService service = new NpcSurfaceActionService(
+                registry,
+                (candidate, target) -> candidate.equals(player),
+                request -> new NpcActionResult(
+                        NpcActionResult.Status.ACCEPTED, "dispatched", "action dispatched"));
+
+        String token = service.issueToken(player, binding, dynamicAction, playerSurface);
+        NpcActionRequest request = new NpcActionRequest(
+                binding.providerId(), binding.bindingId(), player,
+                dynamicAction, token, Map.of());
+
+        assertEquals(NpcActionResult.Status.ACCEPTED, service.submit(request).status());
+    }
+
+    @Test
     void actionServiceRejectsWrongPlayerAndOutOfRangeWithoutConsumingTheToken() {
         NpcSurfaceProviderRegistry registry = new NpcSurfaceProviderRegistry();
         registry.register(new DebugTextNpcSurfaceProvider(ignored -> {}));

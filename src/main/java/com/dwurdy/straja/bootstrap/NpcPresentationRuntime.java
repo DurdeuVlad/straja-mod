@@ -14,6 +14,7 @@ import com.dwurdy.straja.application.service.NpcAdmissionSurfaceService;
 import com.dwurdy.straja.application.service.NpcArmorySurfaceService;
 import com.dwurdy.straja.application.service.NpcCareerSurfaceService;
 import com.dwurdy.straja.application.service.NpcContentCatalog;
+import com.dwurdy.straja.application.service.NpcSecretarySurfaceService;
 import com.dwurdy.straja.application.service.NpcSurfaceActionService;
 import com.dwurdy.straja.application.service.NpcSurfaceProviderRegistry;
 import com.dwurdy.straja.domain.model.NpcActionRequest;
@@ -47,6 +48,7 @@ public final class NpcPresentationRuntime {
     private static final NpcAdmissionSurfaceService ADMISSION_SURFACE = new NpcAdmissionSurfaceService();
     private static final NpcArmorySurfaceService ARMORY_SURFACE = new NpcArmorySurfaceService();
     private static final NpcCareerSurfaceService CAREER_SURFACE = new NpcCareerSurfaceService();
+    private static final NpcSecretarySurfaceService SECRETARY_SURFACE = new NpcSecretarySurfaceService();
 
     private NpcPresentationRuntime() {}
 
@@ -108,13 +110,16 @@ public final class NpcPresentationRuntime {
             String hostEntityUuid, String roleId, String stationId) {
         String role = "recruiter".equals(roleId) ? "trainer" : roleId;
         if (!"receptionist".equals(role) && !"trainer".equals(role)
+                && !"secretary".equals(role)
                 && !"armorer".equals(role)) {
             return NpcProviderResult.rejected(
-                    "unsupported-role", "supported CustomNPC roles are receptionist, trainer, and armorer");
+                    "unsupported-role", "supported CustomNPC roles are receptionist, trainer, secretary, and armorer");
         }
         NpcContentId profile = "receptionist".equals(role)
                 ? NpcContentId.of("straja.reception.admission")
-                : "armorer".equals(role)
+                : "secretary".equals(role)
+                        ? NpcContentId.of("straja.secretary.workflows")
+                        : "armorer".equals(role)
                         ? NpcContentId.of("straja.armorer.orders")
                         : NpcContentId.of("straja.instructor.admission");
         String normalizedUuid;
@@ -155,14 +160,22 @@ public final class NpcPresentationRuntime {
                 }
                 NpcContentProfile instructor = loader.load(
                         new InputStreamReader(instructorStream, StandardCharsets.UTF_8));
-                try (var armorerStream = NpcPresentationRuntime.class.getClassLoader().getResourceAsStream(
-                        "data/straja/npc/straja.armorer.orders.json")) {
-                    if (armorerStream == null) {
-                        throw new IllegalStateException("armorer NPC profile resource is missing");
+                try (var secretaryStream = NpcPresentationRuntime.class.getClassLoader().getResourceAsStream(
+                        "data/straja/npc/straja.secretary.workflows.json")) {
+                    if (secretaryStream == null) {
+                        throw new IllegalStateException("secretary NPC profile resource is missing");
                     }
-                    NpcContentProfile armorer = loader.load(
-                            new InputStreamReader(armorerStream, StandardCharsets.UTF_8));
-                    return new NpcContentCatalog(List.of(reception, instructor, armorer));
+                    NpcContentProfile secretary = loader.load(
+                            new InputStreamReader(secretaryStream, StandardCharsets.UTF_8));
+                    try (var armorerStream = NpcPresentationRuntime.class.getClassLoader().getResourceAsStream(
+                            "data/straja/npc/straja.armorer.orders.json")) {
+                        if (armorerStream == null) {
+                            throw new IllegalStateException("armorer NPC profile resource is missing");
+                        }
+                        NpcContentProfile armorer = loader.load(
+                                new InputStreamReader(armorerStream, StandardCharsets.UTF_8));
+                        return new NpcContentCatalog(List.of(reception, instructor, secretary, armorer));
+                    }
                 }
             }
         } catch (IOException | RuntimeException exception) {
@@ -180,6 +193,20 @@ public final class NpcPresentationRuntime {
         if (state == null) return published;
         if ("armorer".equals(binding.roleId())) {
             return ARMORY_SURFACE.resolve(published, runtime.armory().offers(player));
+        }
+        if ("secretary".equals(binding.roleId())) {
+            return SECRETARY_SURFACE.resolve(published, new NpcSecretarySurfaceService.Inputs(
+                    runtime.missionRoleplay().availableActions(player),
+                    runtime.complaintRoleplay().availableActions(player),
+                    runtime.fineRoleplay().availableActions(player),
+                    runtime.reportRoleplay().availableActions(player),
+                    runtime.audienceRoleplay().availableActions(player),
+                    runtime.expansionRoleplay().activeIncidents(player),
+                    runtime.expansionRoleplay().activeBolos(player),
+                    runtime.adminRoleplay().availableActions(player),
+                    runtime.guardDuty().dutyView(player),
+                    runtime.complaintRoleplay().limits(),
+                    runtime.fineRoleplay().limits()));
         }
         java.util.Optional<com.dwurdy.straja.application.port.in.GuardRecruitmentUseCase.QuizPrompt> prompt =
                 java.util.Optional.empty();
@@ -228,7 +255,10 @@ public final class NpcPresentationRuntime {
         NpcBinding binding = state == null
                 ? null
                 : state.lifecycle().inspect(request.bindingId()).binding();
-        boolean handled = binding != null && admissionAction(binding.roleId(), request.actionId().value())
+        boolean handled = binding != null && "secretary".equals(binding.roleId())
+                && dispatchSecretaryForm(player, request)
+                ? true
+                : binding != null && admissionAction(binding.roleId(), request.actionId().value())
                 ? dispatchAdmissionAction(player, request)
                 : com.dwurdy.straja.adapter.in.npc.NpcRoles.performAction(
                         request.actionId().value(), player, player.serverLevel());
@@ -247,6 +277,42 @@ public final class NpcPresentationRuntime {
         return admissionRole && Set.of(
                 "application-submit", "recruit", "quiz-answer", "training-progress", "training-manual")
                 .contains(actionId);
+    }
+
+    private static boolean dispatchSecretaryForm(ServerPlayer player, NpcActionRequest request) {
+        String raw = request.actionId().value();
+        int separator = raw.indexOf(':');
+        String operation = separator < 0 ? raw : raw.substring(0, separator);
+        String recordId = separator < 0 ? "" : raw.substring(separator + 1);
+        com.dwurdy.straja.application.port.in.FormSessionUseCase.Action action = switch (operation) {
+            case "mission-draft-write" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.MISSION_DRAFT_WRITE;
+            case "mission-draft-scope" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.MISSION_DRAFT_SCOPE;
+            case "mission-budget-adjust" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.MISSION_BUDGET_ADJUST;
+            case "mission-report" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.MISSION_REPORT;
+            case "mission-fail" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.MISSION_FAIL;
+            case "complaint-report" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.COMPLAINT_REPORT;
+            case "complaint-withdraw" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.COMPLAINT_WITHDRAW;
+            case "complaint-review" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.COMPLAINT_REVIEW;
+            case "fine-draft-write" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.FINE_DRAFT;
+            case "fine-warrant" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.FINE_WARRANT;
+            case "report-submit" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.REPORT_SUBMIT;
+            case "report-review" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.REPORT_REVIEW;
+            case "audience-request" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.AUDIENCE_REQUEST;
+            case "audience-review" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.AUDIENCE_REVIEW;
+            case "bolo-create" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.BOLO_CREATE;
+            case "incident-resolve" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.INCIDENT_RESOLVE;
+            case "admin-authorize" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.ADMIN_AUTHORIZE;
+            case "admin-policy-set" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.ADMIN_POLICY_SET;
+            case "admin-emergency-alert" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.ADMIN_EMERGENCY_ALERT;
+            case "admin-emergency-start" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.ADMIN_EMERGENCY_START;
+            default -> null;
+        };
+        if (action == null) return false;
+        StrajaRuntime runtime = StrajaRuntime.get();
+        if (runtime == null) return false;
+        runtime.submitNpcForm(player, new com.dwurdy.straja.application.port.in.FormSessionUseCase.Submission(
+                action, recordId, request.input()));
+        return true;
     }
 
     private static boolean dispatchAdmissionAction(ServerPlayer player, NpcActionRequest request) {

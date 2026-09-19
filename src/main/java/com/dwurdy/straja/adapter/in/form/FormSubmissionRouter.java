@@ -73,13 +73,13 @@ public final class FormSubmissionRouter {
                 missions.draftWrite(gateway, minutes, values.get("start"), reward, values.get("objective"));
             }
             case MISSION_DRAFT_SCOPE -> {
-                Integer maxAssignees = parseInt(values.get("maxAssignees"));
+                Integer maxAssignees = parseInt(firstValue(values, "max-assignees", "maxAssignees"));
                 if (maxAssignees == null) {
                     player.sendSystemMessage(net.minecraft.network.chat.Component
                             .literal("Datele ordinului nu sunt valide."));
                     return;
                 }
-                missions.draftScope(gateway, values.get("minimumRank"), maxAssignees);
+                missions.draftScope(gateway, firstValue(values, "minimum-rank", "minimumRank"), maxAssignees);
             }
             case MISSION_BUDGET_ADJUST ->
                     missions.draftAdjust(gateway, values.get("hours"), values.get("risk"),
@@ -201,7 +201,8 @@ public final class FormSubmissionRouter {
                     expansion.reportIncident(gateway, values.get("category"), values.get("description"));
             case BOLO_CREATE ->
                     expansion.createBolo(gateway, values.get("subject"), values.get("reason"),
-                            values.get("notes"), values.get("authority"), values.get("incidentId"));
+                            values.get("notes"), values.get("authority"),
+                            firstValue(values, "incident-id", "incidentId"));
             case INCIDENT_RESOLVE ->
                     expansion.resolveIncident(gateway, submission.recordId(),
                             values.get("resolution"), values.get("notes"));
@@ -297,5 +298,10 @@ public final class FormSubmissionRouter {
         } catch (NumberFormatException e) {
             return null;
         }
+    }
+
+    private static String firstValue(java.util.Map<String, String> values, String primary, String legacy) {
+        String value = values.get(primary);
+        return value != null ? value : values.get(legacy);
     }
 }
