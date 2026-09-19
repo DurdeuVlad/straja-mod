@@ -67,7 +67,7 @@ public final class NpcAdmissionSurfaceService {
                     case "recruit" -> stateful(action, eligible && state.rank < Rank.STAGIAR.level(),
                             eligible ? "" : "Submit an application at reception first.");
                     case "quiz-answer" -> quizAction(action, prompt);
-                    case "training-progress", "training-manual" -> stateful(action, eligible, 
+                    case "training-progress", "training-manual" -> stateful(action, eligible,
                             eligible ? "" : "The instructor can help after an application is recorded.");
                     default -> action;
                 })
