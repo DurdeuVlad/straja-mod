@@ -83,6 +83,22 @@ class NpcContentProfileTest {
     }
 
     @Test
+    void jailerProfileDefinesCustodyStatusAndHandoffInputs() throws Exception {
+        var resource = getClass().getClassLoader().getResourceAsStream(
+                "data/straja/npc/straja.jailer.custody.json");
+        var profile = new NpcContentProfileJsonLoader().load(
+                new InputStreamReader(resource, StandardCharsets.UTF_8));
+
+        assertEquals(NpcContentId.of("straja.jailer.custody"), profile.profileId());
+        var handoff = profile.actions().stream()
+                .filter(action -> action.actionId().equals(NpcContentId.of("arrest-handoff")))
+                .findFirst().orElseThrow();
+        assertEquals(3, handoff.inputs().size());
+        assertTrue(profile.requiredCapabilities().contains(
+                com.dwurdy.straja.domain.model.NpcCapability.ACTION_INPUT));
+    }
+
+    @Test
     void malformedProfileCannotReferenceAnUnknownAction() {
         assertThrows(IllegalArgumentException.class, () -> new com.dwurdy.straja.domain.model.NpcContentProfile(
                 NpcContentId.of("straja.invalid"),
