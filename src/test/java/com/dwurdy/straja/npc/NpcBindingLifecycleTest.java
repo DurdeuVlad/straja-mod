@@ -106,7 +106,6 @@ class NpcBindingLifecycleTest {
         NpcRegistry.Record record = new NpcRegistry.Record();
         record.entityUuid = UUID.randomUUID().toString();
         record.role = "receptionist";
-        record.stationId = "hq";
         legacy.npcs.put(record.entityUuid, record);
 
         List<NpcBinding> first = new NpcBindingMigrationService().plan(
