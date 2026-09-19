@@ -1,18 +1,21 @@
 package com.dwurdy.straja.bootstrap;
 
 import com.dwurdy.straja.StrajaMod;
+import com.dwurdy.straja.adapter.out.persistence.NbtNpcBindingRepository;
+import com.dwurdy.straja.adapter.out.persistence.NbtStore;
+import com.dwurdy.straja.adapter.out.persistence.StrajaDataProvider;
+import com.dwurdy.straja.adapter.out.persistence.StoreAccess;
 import com.dwurdy.straja.adapter.out.npc.content.NpcContentProfileJsonLoader;
 import com.dwurdy.straja.adapter.out.npc.customnpcs.CustomNpcsNpcSurfaceProvider;
 import com.dwurdy.straja.application.port.in.NpcSurfaceActionTokenIssuer;
+import com.dwurdy.straja.application.service.NpcBindingLifecycleService;
 import com.dwurdy.straja.application.service.NpcContentCatalog;
 import com.dwurdy.straja.application.service.NpcSurfaceActionService;
 import com.dwurdy.straja.application.service.NpcSurfaceProviderRegistry;
 import com.dwurdy.straja.domain.model.NpcActionRequest;
 import com.dwurdy.straja.domain.model.NpcActionResult;
 import com.dwurdy.straja.domain.model.NpcBinding;
-import com.dwurdy.straja.domain.model.NpcContentId;
 import com.dwurdy.straja.domain.model.NpcProviderResult;
-import com.dwurdy.straja.domain.model.NpcSurfaceSnapshot;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
@@ -46,12 +49,23 @@ public final class NpcPresentationRuntime {
                 actions,
                 message -> StrajaMod.LOGGER.info("{}", message));
         providers.register(customNpcs);
+        StoreAccess stores = name -> new NbtStore(StrajaDataProvider.get(server, name));
+        NpcBindingLifecycleService lifecycle = new NpcBindingLifecycleService(
+                providers,
+                new NbtNpcBindingRepository(stores),
+                loadCatalog());
+        NpcBindingLifecycleService.RecoveryReport recovery = lifecycle.recover();
+        recovery.items().stream()
+                .filter(item -> item.result().status() != NpcProviderResult.Status.ACCEPTED)
+                .forEach(item -> StrajaMod.LOGGER.warn(
+                        "NPC binding recovery pending: {} ({})",
+                        item.bindingId(), item.result().code()));
         STATE.set(new RuntimeState(
                 server,
                 providers,
                 actions,
                 customNpcs,
-                loadCatalog()));
+                lifecycle));
         StrajaMod.LOGGER.info("NPC presentation runtime started; CustomNPCs available={}",
                 customNpcs.available());
     }
@@ -69,10 +83,7 @@ public final class NpcPresentationRuntime {
     /** Binds and publishes a canonical profile through the active provider. */
     public static NpcProviderResult bindAndPublish(NpcBinding binding) {
         RuntimeState state = require();
-        NpcProviderResult bound = state.providers().bind(binding);
-        if (bound.status() != NpcProviderResult.Status.ACCEPTED) return bound;
-        NpcSurfaceSnapshot surface = state.catalog().require(binding.surfaceProfileId()).bind(binding);
-        return state.providers().publish(surface);
+        return state.lifecycle().bindAndPublish(binding);
     }
 
     private static NpcContentCatalog loadCatalog() {
@@ -132,5 +143,5 @@ public final class NpcPresentationRuntime {
             NpcSurfaceProviderRegistry providers,
             NpcSurfaceActionTokenIssuer actions,
             CustomNpcsNpcSurfaceProvider customNpcs,
-            NpcContentCatalog catalog) {}
+            NpcBindingLifecycleService lifecycle) {}
 }
