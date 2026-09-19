@@ -28,8 +28,8 @@ The target jar contains and exposes:
 | NPC interaction | `noppes.npcs.api.event.NpcEvent$InteractEvent`, public `npc` and `player` fields, cancellable event | Resolve the host UUID, open the owned surface, cancel only owned interactions |
 | GUI | `NpcAPI.createCustomGui(...)`, `IPlayer.showCustomGui(...)`, `ICustomGui` component methods | Render title, body, dialogue choices, quest journal, and action buttons |
 | Action input | `IButton.setOnPress(GuiComponentClicked)` and `IPlayer.getMCEntity()` | Mint a Straja token and submit an `NpcActionRequest`; no command forwarding |
-| Dialogue | `NpcAPI.getDialogs()`, `IDialogHandler`, `IDialog`, `IDialogOption`, `ICustomNpc.setDialog(...)` | Capability evidence only in M1; canonical dialogue remains Straja-owned |
-| Quest journal | `NpcAPI.getQuests()`, `IQuestHandler`, `IQuest`, `IQuestObjective`, player quest methods | Capability evidence only in M1; quest state remains Straja-owned |
+| Dialogue | `NpcAPI.getDialogs()`, `IDialogHandler`, `IDialog`, `IDialogOption`, `ICustomNpc.setDialog(...)` | API capability recorded; Straja renders canonical dialogue choices in `ICustomGui` and keeps dialogue state authoritative |
+| Quest journal | `NpcAPI.getQuests()`, `IQuestHandler`, `IQuest`, `IQuestObjective`, player quest methods | API capability recorded; Straja renders canonical objectives/progress in `ICustomGui` and keeps quest state authoritative |
 | Player identity | `IEntity.getUUID()`, `IPlayer.getMCEntity()` | Bind external host identity and recover the server player |
 | Event bus | `NpcAPI.events()` returning the NeoForge event bus | Install a listener without linking Straja's classloader to optional API classes |
 
@@ -55,8 +55,20 @@ provider-side scripts or quest persistence the authority for Straja outcomes.
 - Strict canonical profile loader and validation: covered by unit tests.
 - Optional bridge absence/fail-closed behavior: covered by unit tests.
 - Real disposable 1.21.1 server with the target jar and a populated NPC test
-  world: not yet run in this repository; the live acceptance harness remains
-  an explicit M1/M6 release check.
+  world: verified on 2026-09-19 with Minecraft 1.21.1, NeoForge 21.1.248,
+  and the exact SHA-1 recorded above. The server reached `Done` and Straja
+  logged `CustomNPCs available=true`.
+- Real client exercise: verified against a created `EntityCustomNpc`. The
+  client applied `CustomNpcsNbttagsMixin`, opened native
+  `noppes.npcs.client.gui.custom.GuiCustom`, decoded seven native components
+  including `CustomGuiButton` and `CustomGuiTextArea`, invoked a native button
+  callback, and received the refreshed surface.
+- Canonical action/state security: covered by the M3 provider and admission
+  tests, including player-bound tokens, stale-question rejection, bounded
+  inputs, identity checks, and reconstruction after reopening.
+- Native CustomNPCs dialogue and quest handlers are intentionally presentation
+  capability evidence, not Straja persistence. CustomNPCs cannot become the
+  authority for permissions, rewards, progression, or audit state.
 
 ## Rollout and rollback
 
