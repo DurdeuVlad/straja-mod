@@ -17,6 +17,7 @@
       ]
     },
     {"id": "training-progress", "label": "View training progress", "enabled": true},
+    {"id": "training-promote", "label": "Request promotion", "enabled": false},
     {"id": "training-manual", "label": "Request training manual", "enabled": true}
   ],
   "dialogue": [
@@ -27,11 +28,13 @@
         {"actionId": "recruit", "label": "Open my exam", "enabled": true},
         {"actionId": "quiz-answer", "label": "Answer the current question", "enabled": true},
         {"actionId": "training-progress", "label": "Show my progress", "enabled": true},
+        {"actionId": "training-promote", "label": "Request promotion", "enabled": false},
         {"actionId": "training-manual", "label": "Request the manual", "enabled": true}
       ]
     }
   ],
   "quests": [
-    {"id": "training-basic", "title": "Admission and first training", "state": "LOCKED"}
+    {"id": "training-basic", "title": "Admission and first training", "state": "LOCKED"},
+    {"id": "career-progression", "title": "Career progression", "state": "LOCKED"}
   ]
 }

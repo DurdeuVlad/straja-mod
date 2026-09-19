@@ -12,6 +12,7 @@ import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.application.service.NpcBindingLifecycleService;
 import com.dwurdy.straja.application.service.NpcAdmissionSurfaceService;
 import com.dwurdy.straja.application.service.NpcArmorySurfaceService;
+import com.dwurdy.straja.application.service.NpcCareerSurfaceService;
 import com.dwurdy.straja.application.service.NpcContentCatalog;
 import com.dwurdy.straja.application.service.NpcSurfaceActionService;
 import com.dwurdy.straja.application.service.NpcSurfaceProviderRegistry;
@@ -45,6 +46,7 @@ public final class NpcPresentationRuntime {
     private static final AtomicReference<RuntimeState> STATE = new AtomicReference<>();
     private static final NpcAdmissionSurfaceService ADMISSION_SURFACE = new NpcAdmissionSurfaceService();
     private static final NpcArmorySurfaceService ARMORY_SURFACE = new NpcArmorySurfaceService();
+    private static final NpcCareerSurfaceService CAREER_SURFACE = new NpcCareerSurfaceService();
 
     private NpcPresentationRuntime() {}
 
@@ -186,7 +188,12 @@ public final class NpcPresentationRuntime {
                 && (state.invited || "APPLIED".equals(state.applicationState))) {
             prompt = runtime.guardRecruitment().currentQuizPrompt(player);
         }
-        return ADMISSION_SURFACE.resolve(published, state, prompt);
+        NpcSurfaceSnapshot admission = ADMISSION_SURFACE.resolve(published, state, prompt);
+        if ("trainer".equals(binding.roleId()) || "recruiter".equals(binding.roleId())) {
+            return CAREER_SURFACE.resolve(
+                    admission, state, runtime.guardRecruitment().trainingView(player));
+        }
+        return admission;
     }
 
     private static boolean playerAtBinding(MinecraftServer server, UUID playerId, NpcBinding binding) {
