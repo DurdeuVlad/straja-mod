@@ -13,6 +13,7 @@ import com.dwurdy.straja.application.service.NpcBindingLifecycleService;
 import com.dwurdy.straja.application.service.NpcAdmissionSurfaceService;
 import com.dwurdy.straja.application.service.NpcArmorySurfaceService;
 import com.dwurdy.straja.application.service.NpcCareerSurfaceService;
+import com.dwurdy.straja.application.service.NpcCivicSurfaceService;
 import com.dwurdy.straja.application.service.NpcContentCatalog;
 import com.dwurdy.straja.application.service.NpcSecretarySurfaceService;
 import com.dwurdy.straja.application.service.NpcSurfaceActionService;
@@ -48,6 +49,7 @@ public final class NpcPresentationRuntime {
     private static final NpcAdmissionSurfaceService ADMISSION_SURFACE = new NpcAdmissionSurfaceService();
     private static final NpcArmorySurfaceService ARMORY_SURFACE = new NpcArmorySurfaceService();
     private static final NpcCareerSurfaceService CAREER_SURFACE = new NpcCareerSurfaceService();
+    private static final NpcCivicSurfaceService CIVIC_SURFACE = new NpcCivicSurfaceService();
     private static final NpcSecretarySurfaceService SECRETARY_SURFACE = new NpcSecretarySurfaceService();
 
     private NpcPresentationRuntime() {}
@@ -216,6 +218,14 @@ public final class NpcPresentationRuntime {
             prompt = runtime.guardRecruitment().currentQuizPrompt(player);
         }
         NpcSurfaceSnapshot admission = ADMISSION_SURFACE.resolve(published, state, prompt);
+        if ("receptionist".equals(binding.roleId())) {
+            return CIVIC_SURFACE.resolve(
+                    admission,
+                    runtime.complaintRoleplay().availableActions(player),
+                    runtime.fineRoleplay().availableActions(player),
+                    runtime.complaintRoleplay().limits(),
+                    runtime.fineRoleplay().limits());
+        }
         if ("trainer".equals(binding.roleId()) || "recruiter".equals(binding.roleId())) {
             return CAREER_SURFACE.resolve(
                     admission, state, runtime.guardRecruitment().trainingView(player));
@@ -257,6 +267,9 @@ public final class NpcPresentationRuntime {
                 : state.lifecycle().inspect(request.bindingId()).binding();
         boolean handled = binding != null && "secretary".equals(binding.roleId())
                 && dispatchSecretaryForm(player, request)
+                ? true
+                : binding != null && "receptionist".equals(binding.roleId())
+                && dispatchReceptionistForm(player, request)
                 ? true
                 : binding != null && admissionAction(binding.roleId(), request.actionId().value())
                 ? dispatchAdmissionAction(player, request)
@@ -305,6 +318,26 @@ public final class NpcPresentationRuntime {
             case "admin-policy-set" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.ADMIN_POLICY_SET;
             case "admin-emergency-alert" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.ADMIN_EMERGENCY_ALERT;
             case "admin-emergency-start" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.ADMIN_EMERGENCY_START;
+            default -> null;
+        };
+        if (action == null) return false;
+        StrajaRuntime runtime = StrajaRuntime.get();
+        if (runtime == null) return false;
+        runtime.submitNpcForm(player, new com.dwurdy.straja.application.port.in.FormSessionUseCase.Submission(
+                action, recordId, request.input()));
+        return true;
+    }
+
+    private static boolean dispatchReceptionistForm(ServerPlayer player, NpcActionRequest request) {
+        String raw = request.actionId().value();
+        int separator = raw.indexOf(':');
+        String operation = separator < 0 ? raw : raw.substring(0, separator);
+        String recordId = separator < 0 ? "" : raw.substring(separator + 1);
+        com.dwurdy.straja.application.port.in.FormSessionUseCase.Action action = switch (operation) {
+            case "complaint-submit" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.COMPLAINT_SUBMIT;
+            case "complaint-withdraw" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.COMPLAINT_WITHDRAW;
+            case "fine-appeal" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.FINE_APPEAL;
+            case "fine-appeal-review" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.FINE_APPEAL_REVIEW;
             default -> null;
         };
         if (action == null) return false;
