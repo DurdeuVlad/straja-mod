@@ -160,6 +160,42 @@ class ClientModTests(unittest.TestCase):
                  "sha512": "def", "size": 123, "expectedModId": "mct"},
                 os.path.join(home, "cache", "mod"))
 
+    def test_create_client_unwraps_mct_success_envelope(self):
+        manifest = {
+            "client": {"name": "ci-straja", "loader": "neoforge",
+                       "minecraftVersion": "1.21.1", "account": "ci",
+                       "language": "en_us"},
+            "clientMod": {"file": "mct-client-mod.jar", "sha256": "abc"},
+        }
+        with tempfile.TemporaryDirectory() as home:
+            mods_dir = os.path.join(home, "mods")
+            minecraft_dir = os.path.join(home, "minecraft")
+            os.makedirs(mods_dir)
+            os.makedirs(minecraft_dir)
+            jar_path = os.path.join(home, "straja.jar")
+            bridge_path = os.path.join(mods_dir, "mct-client-mod.jar")
+            open(jar_path, "wb").close()
+            open(bridge_path, "wb").close()
+            reply = {"success": True,
+                     "data": {"modsDir": mods_dir,
+                              "minecraftDir": minecraft_dir}}
+            mct = _FakeMct({("client", "create", "ci-straja", "--loader",
+                              "neoforge", "--version", "1.21.1", "--account",
+                              "ci", "--java", "java"): reply})
+            import unittest.mock as mock
+            with mock.patch.object(cu.sh, "verify_artifact") as verify:
+                result = cu.create_client(mct, manifest, jar_path, [], {},
+                                          lambda _: None)
+
+            self.assertEqual(result, "ci-straja")
+            with open(os.path.join(minecraft_dir, "options.txt"),
+                      encoding="utf-8") as fh:
+                self.assertIn("lang:en_us", fh.read())
+            self.assertTrue(os.path.exists(os.path.join(mods_dir,
+                                                         "straja.jar")))
+            verify.assert_called_once_with(bridge_path, sha256="abc",
+                                           label="mct client-mod bridge")
+
 
 class _FakeRcon:
     def __init__(self, out="ok"):

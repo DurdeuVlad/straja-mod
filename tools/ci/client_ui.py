@@ -746,11 +746,16 @@ def create_client(mct: Mct, manifest: dict, jar_path: str,
                   dep_paths: list, env: dict, log) -> str:
     client = manifest["client"]
     name = client["name"]
-    out = mct.json(["client", "create", name,
+    raw = mct.json(["client", "create", name,
                     "--loader", client["loader"],
                     "--version", client["minecraftVersion"],
                     "--account", client["account"],
                     "--java", client.get("java", "java")], timeout=900)
+    # MC Pilot's JSON command returns a success envelope, while older/local
+    # adapters may return the payload directly. Keep this boundary tolerant
+    # so the rest of the harness only deals with the client-create payload.
+    out = raw.get("data", raw) if isinstance(raw, dict) \
+        and isinstance(raw.get("data"), dict) else raw
     mods_dir = out.get("modsDir")
     if not mods_dir or not os.path.isdir(mods_dir):
         raise ClientUiError("client_boot",
