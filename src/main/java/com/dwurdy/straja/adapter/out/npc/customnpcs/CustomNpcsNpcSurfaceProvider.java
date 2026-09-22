@@ -391,7 +391,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
         int y = 58;
         try {
             Object scrollingPanel = invoke(gui, "getScrollingPanel");
-            invoke(scrollingPanel, "init", 12, 58, 396, 190);
+            invoke(scrollingPanel, "init", 12, 58, 396, 150);
             profileHost = scrollingPanel;
             profileX = 0;
             profileWidth = 396;
@@ -423,10 +423,10 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
         }
 
         if (current.isPresent()) {
-            // Keep this alongside the current-assignment label; the lower
-            // rows of the logical 320px GUI are outside a normal 240px client
-            // viewport after CustomNPCs applies its negative top offset.
-            Object unassign = invoke(gui, "addButton", 9_000, "Unassign profile", 218, 30, 190, 22);
+            // Keep this below the compact profile panel; the lower rows of the
+            // logical 320px GUI are outside a normal 240px client viewport
+            // after CustomNPCs applies its negative top offset.
+            Object unassign = invoke(gui, "addButton", 9_000, "Unassign profile", 218, 214, 190, 22);
             setAdminUnassignHandler(unassign, gui, playerApi, player, hostUuid);
         }
         invoke(playerApi, "showCustomGui", gui);
