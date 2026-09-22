@@ -1,0 +1,30 @@
+{
+  "profileId": "straja.archivist.archive",
+  "npcProfileId": "straja:archivist",
+  "schemaVersion": 1,
+  "title": "Straja archive",
+  "body": "The archivist handles authorized folders, evidence, paper records, signatures, and official delivery. Persistent archive state remains authoritative in Straja.",
+  "requiredCapabilities": ["DIALOGUE", "GUI", "ACTION_INPUT", "QUEST_JOURNAL"],
+  "optionalCapabilities": ["RICH_TEXT", "PORTRAITS"],
+  "actions": [
+    {"id": "archive-list", "label": "View archive folders", "enabled": false},
+    {"id": "archive-folder-create", "label": "Create archive folder", "enabled": false,
+      "inputs": [
+        {"key": "title", "label": "Folder title", "maxLength": 200, "required": true},
+        {"key": "department", "label": "Department", "maxLength": 80, "required": false}
+      ]}
+  ],
+  "dialogue": [
+    {
+      "id": "straja.archivist.archive",
+      "text": "Every archive action is checked against the persistent record and your authorization.",
+      "choices": [
+        {"actionId": "archive-list", "label": "View archive folders", "enabled": false},
+        {"actionId": "archive-folder-create", "label": "Create archive folder", "enabled": false}
+      ]
+    }
+  ],
+  "quests": [
+    {"id": "archive-records", "title": "Archive records", "state": "LOCKED"}
+  ]
+}

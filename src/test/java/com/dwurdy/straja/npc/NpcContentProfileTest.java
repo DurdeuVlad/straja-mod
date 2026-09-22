@@ -58,6 +58,18 @@ class NpcContentProfileTest {
     }
 
     @Test
+    void archivistProfileUsesStablePublicIdDistinctFromInternalContentId() throws Exception {
+        var resource = getClass().getClassLoader().getResourceAsStream(
+                "data/straja/npc/straja.archivist.archive.json");
+        var profile = new NpcContentProfileJsonLoader().load(
+                new InputStreamReader(resource, StandardCharsets.UTF_8));
+
+        assertEquals(NpcContentId.of("straja.archivist.archive"), profile.contentId());
+        assertEquals(NpcProfileId.of("straja:archivist"), profile.profileId());
+        assertNotEquals(profile.contentId().value(), profile.profileId().value());
+    }
+
+    @Test
     void legacyResourceWithoutPublicProfileIdGetsDeterministicNamespacedId() throws Exception {
         var profile = new NpcContentProfileJsonLoader().load(new StringReader("""
                 {
@@ -203,6 +215,21 @@ class NpcContentProfileTest {
         assertEquals(3, handoff.inputs().size());
         assertTrue(profile.requiredCapabilities().contains(
                 com.dwurdy.straja.domain.model.NpcCapability.ACTION_INPUT));
+    }
+
+    @Test
+    void archivistProfileDefinesTheProviderNeutralArchiveShell() throws Exception {
+        var resource = getClass().getClassLoader().getResourceAsStream(
+                "data/straja/npc/straja.archivist.archive.json");
+        var profile = new NpcContentProfileJsonLoader().load(
+                new InputStreamReader(resource, StandardCharsets.UTF_8));
+
+        assertEquals(NpcContentId.of("straja.archivist.archive"), profile.profileId());
+        assertTrue(profile.actions().stream().anyMatch(action ->
+                action.actionId().equals(NpcContentId.of("archive-folder-create"))));
+        assertTrue(profile.requiredCapabilities().contains(
+                com.dwurdy.straja.domain.model.NpcCapability.QUEST_JOURNAL));
+        assertEquals(NpcContentId.of("archive-records"), profile.quests().getFirst().questId());
     }
 
     @Test
