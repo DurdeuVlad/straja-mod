@@ -58,9 +58,15 @@
       "type": "screenshot"
     },
     {
+      "name": "native-jailer-gui-layout",
+      "type": "mct",
+      "args": ["gui", "layout"],
+      "expect": [{"rawRegex": "\"scaledWidth\"\\s*:\\s*427"}]
+    },
+    {
       "name": "click-custody-status",
       "type": "mct",
-      "args": ["input", "click", "536", "330"],
+      "args": ["input", "click", "108", "91"],
       "expect": [{"rawRegex": "\"clicked\"\\s*:\\s*true"}]
     },
     {
