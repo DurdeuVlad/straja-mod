@@ -423,12 +423,12 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
         }
 
         if (current.isPresent()) {
-            Object unassign = invoke(gui, "addButton", 9_000, "Unassign profile", 12, 270, 190, 22);
+            // Keep this alongside the current-assignment label; the lower
+            // rows of the logical 320px GUI are outside a normal 240px client
+            // viewport after CustomNPCs applies its negative top offset.
+            Object unassign = invoke(gui, "addButton", 9_000, "Unassign profile", 218, 30, 190, 22);
             setAdminUnassignHandler(unassign, gui, playerApi, player, hostUuid);
         }
-        invoke(gui, "addLabel", 9_001,
-                "Only operators holding the Straja NPC Wand can use this surface.",
-                12, 294, 396, 18);
         invoke(playerApi, "showCustomGui", gui);
     }
 
@@ -477,8 +477,8 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
         invoke(gui, "addLabel", 2,
                 "This NPC will return to native CustomNPCs behavior.",
                 12, 38, 396, 20);
-        Object confirm = invoke(gui, "addButton", 9_200, "Unassign", 12, 220, 190, 22);
-        Object cancel = invoke(gui, "addButton", 9_201, "Cancel", 218, 220, 190, 22);
+        Object confirm = invoke(gui, "addButton", 9_200, "Unassign", 12, 150, 190, 22);
+        Object cancel = invoke(gui, "addButton", 9_201, "Cancel", 218, 150, 190, 22);
         setAdminUnassignConfirmHandler(confirm, gui, playerApi, player, hostUuid);
         setAdminCancelHandler(cancel, gui, playerApi, player, hostUuid);
         invoke(playerApi, "showCustomGui", gui);
