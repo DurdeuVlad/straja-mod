@@ -207,6 +207,23 @@ class _FakeRcon:
         return self.out
 
 
+class RconStepTests(unittest.TestCase):
+    def test_rcon_step_uses_shared_adapter_contract(self):
+        class StrictRcon:
+            def __init__(self):
+                self.commands = []
+
+            def execute(self, command):
+                self.commands.append(command)
+                return "ok"
+
+        rcon = StrictRcon()
+        ctx = _ctx(rcon=rcon)
+        cu._exec_step({"type": "rcon", "command": "list",
+                       "expectContains": "ok"}, ctx, [])
+        self.assertEqual(rcon.commands, ["list"])
+
+
 def _ctx(mct=None, rcon=None):
     return cu.ClientContext(
         mct=mct or _FakeMct(), rcon=rcon or _FakeRcon(),

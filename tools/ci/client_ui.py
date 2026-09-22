@@ -606,7 +606,9 @@ def _exec_step(step: dict, ctx: ClientContext, report_steps: list):
             _form_fill(step, ctx)
         elif stype == "rcon":
             cmd = _interp(step["command"], ctx)
-            out = ctx.rcon.execute(cmd, timeout=timeout)
+            # The shared RCON adapter owns its socket timeout; its public
+            # execute contract accepts only the command text.
+            out = ctx.rcon.execute(cmd)
             ctx.transcript.record("rcon " + cmd, out[:2000])
             _expect_text(out, step, label)
             _capture(step, out, ctx)
