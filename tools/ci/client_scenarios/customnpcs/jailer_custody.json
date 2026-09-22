@@ -72,7 +72,10 @@
     {
       "name": "custody-status-dispatched",
       "type": "mct",
-      "args": ["chat", "wait", "--match", "Nu ești încătușat.", "--timeout", "30"],
+      "args": [
+        "chat", "history", "--last", "20",
+        "--match", "Nu ești încătușat.", "--wait", "10"
+      ],
       "timeout": 60,
       "expect": [{"rawRegex": "Nu ești încătușat"}]
     },
