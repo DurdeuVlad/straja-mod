@@ -18,6 +18,16 @@ public interface NpcSurfaceProvider {
 
     Set<NpcCapability> capabilities();
 
+    /**
+     * Whether this provider can consume a surface with the supplied authored
+     * requirements. Providers such as the diagnostic text mirror may support
+     * the canonical content without pretending to implement every visual
+     * capability of the normal player-facing provider.
+     */
+    default boolean supports(Set<NpcCapability> requiredCapabilities) {
+        return capabilities().containsAll(Set.copyOf(requiredCapabilities));
+    }
+
     /** Whether the provider's external runtime/API is ready for new operations. */
     default boolean available() {
         return true;
