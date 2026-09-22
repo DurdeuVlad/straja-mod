@@ -89,7 +89,7 @@
     {
       "name": "confirm-jailer-profile",
       "type": "mct",
-      "args": ["input", "click", "108", "151"],
+      "args": ["input", "click", "108", "121"],
       "expect": [{"rawRegex": "\\\"clicked\\\"\\s*:\\s*true"}]
     },
     {
@@ -156,7 +156,7 @@
     {
       "name": "confirm-secretary-profile",
       "type": "mct",
-      "args": ["input", "click", "108", "151"],
+      "args": ["input", "click", "108", "121"],
       "expect": [{"rawRegex": "\\\"clicked\\\"\\s*:\\s*true"}]
     },
     {
