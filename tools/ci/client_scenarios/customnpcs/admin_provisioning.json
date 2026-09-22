@@ -24,6 +24,19 @@
       "command": "give ci_straja straja:npc_wand 1"
     },
     {
+      "name": "select-npc-wand",
+      "type": "mct",
+      "setup": true,
+      "args": ["inventory", "hotbar", "0"]
+    },
+    {
+      "name": "npc-wand-is-held",
+      "type": "mct",
+      "args": ["inventory", "held", "--type", "straja:npc_wand", "--wait", "20"],
+      "timeout": 40,
+      "expect": [{"rawRegex": "npc_wand"}]
+    },
+    {
       "name": "spawn-unconfigured-customnpc",
       "type": "rcon",
       "setup": true,
