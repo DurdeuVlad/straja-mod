@@ -36,6 +36,9 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
 
+      - name: Make Gradle wrapper executable
+        run: chmod +x gradlew
+
       - name: Validate release tag contract
         if: startsWith(github.ref, 'refs/tags/')
         run: python3 tools/ci/release_contract.py version --properties gradle.properties --tag "$GITHUB_REF_NAME"
@@ -96,6 +99,9 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
 
+      - name: Make Gradle wrapper executable
+        run: chmod +x gradlew
+
       - name: Run NeoForge GameTests
         run: |
           ./gradlew runGameTestServer --no-daemon --stacktrace
@@ -138,7 +144,7 @@ jobs:
           java-version: '21'
 
       - name: Download staged artifact
-        uses: actions/download-artifact@fdfa46a5c1cdeed02ba81aa0a28576771a4ba60f # v7.0.0
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: straja-jar
           path: staged/
@@ -185,7 +191,7 @@ jobs:
           java-version: '21'
 
       - name: Download staged artifact
-        uses: actions/download-artifact@fdfa46a5c1cdeed02ba81aa0a28576771a4ba60f # v7.0.0
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: straja-jar
           path: staged/
@@ -233,7 +239,7 @@ jobs:
           java-version: '21'
 
       - name: Download staged artifact
-        uses: actions/download-artifact@fdfa46a5c1cdeed02ba81aa0a28576771a4ba60f # v7.0.0
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: straja-jar
           path: staged/
@@ -282,7 +288,7 @@ jobs:
           java-version: '21'
 
       - name: Download staged artifact
-        uses: actions/download-artifact@fdfa46a5c1cdeed02ba81aa0a28576771a4ba60f # v7.0.0
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: straja-jar
           path: staged/
@@ -341,7 +347,7 @@ jobs:
           sudo apt-get install -y -qq xvfb x11-utils mesa-utils libgl1-mesa-dri libegl1 libgl1
 
       - name: Download staged artifact
-        uses: actions/download-artifact@fdfa46a5c1cdeed02ba81aa0a28576771a4ba60f # v7.0.0
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: straja-jar
           path: staged/
@@ -402,7 +408,7 @@ jobs:
           sudo apt-get install -y -qq xvfb x11-utils mesa-utils libgl1-mesa-dri libegl1 libgl1
 
       - name: Download staged artifact
-        uses: actions/download-artifact@fdfa46a5c1cdeed02ba81aa0a28576771a4ba60f # v7.0.0
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: straja-jar
           path: staged/
@@ -446,21 +452,21 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Download advisory report
-        uses: actions/download-artifact@fdfa46a5c1cdeed02ba81aa0a28576771a4ba60f # v7.0.0
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: server-profile-foreign-npc
           path: advisory/
         continue-on-error: true
 
       - name: Download client UI report
-        uses: actions/download-artifact@fdfa46a5c1cdeed02ba81aa0a28576771a4ba60f # v7.0.0
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: client-ui
           path: client-ui/
         continue-on-error: true
 
       - name: Download CustomNPCs client UI report
-        uses: actions/download-artifact@fdfa46a5c1cdeed02ba81aa0a28576771a4ba60f # v7.0.0
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: customnpcs-client-ui
           path: customnpcs-client-ui/
@@ -520,20 +526,20 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Download staged artifact
-        uses: actions/download-artifact@fdfa46a5c1cdeed02ba81aa0a28576771a4ba60f1 # v7.0.0
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: straja-jar
           path: staged/
 
       - name: Download foreign-NPC advisory report
-        uses: actions/download-artifact@fdfa46a5c1cdeed02ba81aa0a28576771a4ba60f1 # v7.0.0
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: server-profile-foreign-npc
           path: advisory/
         continue-on-error: true
 
       - name: Download client UI advisory report
-        uses: actions/download-artifact@fdfa46a5c1cdeed02ba81aa0a28576771a4ba60f1 # v7.0.0
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: client-ui
           path: advisory/
