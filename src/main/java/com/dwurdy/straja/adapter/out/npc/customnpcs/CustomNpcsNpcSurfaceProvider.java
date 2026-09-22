@@ -1,5 +1,6 @@
 package com.dwurdy.straja.adapter.out.npc.customnpcs;
 
+import com.dwurdy.straja.application.port.in.NpcProvisioningUseCase;
 import com.dwurdy.straja.application.port.in.NpcSurfaceActionTokenIssuer;
 import com.dwurdy.straja.application.port.in.NpcSurfaceActionUseCase;
 import com.dwurdy.straja.application.port.out.NpcSurfaceProvider;
@@ -22,6 +23,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import net.minecraft.server.level.ServerPlayer;
 
 /**
@@ -49,6 +51,8 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
     private final NpcSurfaceActionTokenIssuer tokenIssuer;
     private final Consumer<String> diagnostics;
     private final SurfaceResolver surfaceResolver;
+    private final NpcProvisioningUseCase provisioning;
+    private final Predicate<ServerPlayer> adminTool;
     private final ReflectionBridge bridge;
     private final Map<String, NpcBinding> bindings = new ConcurrentHashMap<>();
     private final Map<String, NpcSurfaceSnapshot> surfaces = new ConcurrentHashMap<>();
@@ -57,7 +61,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             NpcSurfaceActionUseCase actions,
             NpcSurfaceActionTokenIssuer tokenIssuer,
             Consumer<String> diagnostics) {
-        this(actions, tokenIssuer, diagnostics, (playerId, binding, published) -> published);
+        this(actions, tokenIssuer, diagnostics, (playerId, binding, published) -> published, null, null);
     }
 
     public CustomNpcsNpcSurfaceProvider(
@@ -65,10 +69,27 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             NpcSurfaceActionTokenIssuer tokenIssuer,
             Consumer<String> diagnostics,
             SurfaceResolver surfaceResolver) {
+        this(actions, tokenIssuer, diagnostics, surfaceResolver, null, null);
+    }
+
+    /**
+     * Full constructor used by the bootstrap composition root. The admin
+     * predicate is deliberately injected so permissions and the physical tool
+     * remain Minecraft concerns, while this adapter only renders the GUI.
+     */
+    public CustomNpcsNpcSurfaceProvider(
+            NpcSurfaceActionUseCase actions,
+            NpcSurfaceActionTokenIssuer tokenIssuer,
+            Consumer<String> diagnostics,
+            SurfaceResolver surfaceResolver,
+            NpcProvisioningUseCase provisioning,
+            Predicate<ServerPlayer> adminTool) {
         this.actions = Objects.requireNonNull(actions, "actions");
         this.tokenIssuer = Objects.requireNonNull(tokenIssuer, "tokenIssuer");
         this.diagnostics = Objects.requireNonNull(diagnostics, "diagnostics");
         this.surfaceResolver = Objects.requireNonNull(surfaceResolver, "surfaceResolver");
+        this.provisioning = provisioning;
+        this.adminTool = adminTool;
         this.bridge = ReflectionBridge.connect(this::onCustomNpcsEvent, diagnostics);
     }
 
@@ -83,6 +104,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
     }
 
     /** True when the supported CustomNPCs API was found and its event hook installed. */
+    @Override
     public boolean available() {
         return bridge.available();
     }
@@ -161,13 +183,30 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
     }
 
     private void onCustomNpcsEvent(Object event) {
-        if (!event.getClass().getName().equals(
-                "noppes.npcs.api.event.NpcEvent$InteractEvent")) {
+        if (!isSupportedInteractionEvent(event)) {
             return;
         }
         try {
             Object npc = field(event, "npc");
             String hostUuid = String.valueOf(invoke(npc, "getUUID"));
+            Object playerApi = playerApi(event);
+            Object rawPlayer = playerApi == null ? null : invoke(playerApi, "getMCEntity");
+            if (!(rawPlayer instanceof ServerPlayer player)) {
+                return;
+            }
+
+            if (provisioning != null && adminTool != null && adminTool.test(player)) {
+                openAdminSelector(playerApi, player, hostUuid);
+                cancel(event);
+                return;
+            }
+
+            // DamagedEvent is registered only to make the NPC wand's
+            // left-click gesture possible. Ordinary players keep the native
+            // CustomNPCs attack behavior; player-facing Straja surfaces open
+            // from InteractEvent instead.
+            if (isDamagedEvent(event)) return;
+
             NpcBinding binding = bindings.values().stream()
                     .filter(candidate -> candidate.hostEntityUuid().equals(hostUuid))
                     .findFirst()
@@ -183,12 +222,6 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                 cancel(event);
                 return;
             }
-            Object playerApi = field(event, "player");
-            Object rawPlayer = invoke(playerApi, "getMCEntity");
-            if (!(rawPlayer instanceof ServerPlayer player)) {
-                cancel(event);
-                return;
-            }
             NpcSurfaceSnapshot surface = surfaceResolver.resolve(player.getUUID(), binding, published);
             if (surface == null) {
                 cancel(event);
@@ -197,8 +230,37 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             openSurface(playerApi, player, binding, surface);
             cancel(event);
         } catch (RuntimeException exception) {
+            try {
+                // A provider bridge failure must not fall through from an
+                // already intercepted CustomNPCs event into an unintended
+                // native action or attack.
+                cancel(event);
+            } catch (RuntimeException cancelFailure) {
+                diagnostics.accept("CustomNPCs event could not be cancelled after bridge failure");
+            }
             diagnostics.accept("CustomNPCs interaction ignored after bridge error: "
                     + exception.getClass().getSimpleName());
+        }
+    }
+
+    private static boolean isSupportedInteractionEvent(Object event) {
+        String name = event.getClass().getName();
+        return name.equals("noppes.npcs.api.event.NpcEvent$InteractEvent")
+                || name.equals("noppes.npcs.api.event.NpcEvent$DamagedEvent");
+    }
+
+    private static boolean isDamagedEvent(Object event) {
+        return event.getClass().getName().endsWith("NpcEvent$DamagedEvent");
+    }
+
+    private static Object playerApi(Object event) {
+        String name = event.getClass().getName();
+        Object actor = field(event, name.endsWith("DamagedEvent") ? "source" : "player");
+        if (actor == null) return null;
+        try {
+            return invoke(actor, "getMCEntity") == null ? null : actor;
+        } catch (RuntimeException ignored) {
+            return null;
         }
     }
 
@@ -259,6 +321,256 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             }
         }
         invoke(playerApi, "showCustomGui", gui);
+    }
+
+    /** Admin-only provisioning surface: select or replace the profile bound to this host NPC. */
+    private void openAdminSelector(Object playerApi, ServerPlayer player, String hostUuid) {
+        Object gui = invoke(
+                bridge.api(),
+                "createCustomGui",
+                Math.floorMod(("provision:" + hostUuid).hashCode(), 20_000) + 20_000,
+                421,
+                320,
+                false,
+                playerApi);
+        invoke(gui, "addLabel", 1, "Straja NPC provisioning", 12, 8, 396, 20);
+
+        var current = provisioning.current(providerId(), hostUuid);
+        String currentText = current
+                .map(assignment -> "Current: " + assignment.profileId()
+                        + " · role " + assignment.roleId())
+                .orElse("Current: unassigned");
+        invoke(gui, "addLabel", 2, currentText, 12, 31, 396, 20);
+
+        Object profileHost = gui;
+        int profileX = 12;
+        int profileWidth = 396;
+        int y = 58;
+        try {
+            Object scrollingPanel = invoke(gui, "getScrollingPanel");
+            invoke(scrollingPanel, "init", 12, 58, 396, 190);
+            profileHost = scrollingPanel;
+            profileX = 0;
+            profileWidth = 396;
+            y = 0;
+        } catch (RuntimeException exception) {
+            diagnostics.accept("CustomNPCs provisioning scroll unavailable; using bounded fallback layout");
+        }
+
+        int buttonId = 2_000;
+        for (NpcProvisioningUseCase.ProfileOption option : provisioning.profiles(providerId())) {
+            boolean selected = current.map(assignment -> assignment.profileId().equals(option.profileId()))
+                    .orElse(false);
+            String label = option.title() + " · " + option.roleId()
+                    + (selected ? " (current)" : "");
+            Object button = invoke(
+                    profileHost,
+                    "addButton",
+                    buttonId++,
+                    label,
+                    profileX,
+                    y,
+                    profileWidth,
+                    22);
+            invoke(button, "setEnabled", option.enabled());
+            if (option.enabled()) {
+                setAdminProfileHandler(button, gui, playerApi, player, hostUuid, option);
+            }
+            y += 25;
+        }
+
+        if (current.isPresent()) {
+            Object unassign = invoke(gui, "addButton", 9_000, "Unassign profile", 12, 270, 190, 22);
+            setAdminUnassignHandler(unassign, gui, playerApi, player, hostUuid);
+        }
+        invoke(gui, "addLabel", 9_001,
+                "Only operators holding the Straja NPC Wand can use this surface.",
+                12, 294, 396, 18);
+        invoke(playerApi, "showCustomGui", gui);
+    }
+
+    private void openAdminConfirmation(
+            Object playerApi,
+            ServerPlayer player,
+            String hostUuid,
+            NpcProvisioningUseCase.ProfileOption option) {
+        Object gui = invoke(
+                bridge.api(),
+                "createCustomGui",
+                Math.floorMod(("confirm:" + hostUuid + option.profileId()).hashCode(), 20_000) + 40_000,
+                421,
+                320,
+                false,
+                playerApi);
+        invoke(gui, "addLabel", 1, "Confirm NPC profile", 12, 8, 396, 20);
+        invoke(gui, "addLabel", 2, option.title() + " · " + option.roleId(), 12, 32, 396, 20);
+        Object summary = invoke(gui, "addTextArea", 3, 12, 58, 396, 136);
+        invoke(summary, "setText", option.summary());
+        invoke(summary, "setEnabled", false);
+        Object confirm = invoke(gui, "addButton", 9_100, "Assign profile", 12, 220, 190, 22);
+        Object cancel = invoke(gui, "addButton", 9_101, "Cancel", 218, 220, 190, 22);
+        setAdminConfirmHandler(confirm, gui, playerApi, player, hostUuid, option);
+        setAdminCancelHandler(cancel, gui, playerApi, player, hostUuid);
+        invoke(playerApi, "showCustomGui", gui);
+    }
+
+    private void openAdminUnassignConfirmation(
+            Object playerApi,
+            ServerPlayer player,
+            String hostUuid) {
+        Object gui = invoke(
+                bridge.api(),
+                "createCustomGui",
+                Math.floorMod(("unassign:" + hostUuid).hashCode(), 20_000) + 60_000,
+                421,
+                320,
+                false,
+                playerApi);
+        invoke(gui, "addLabel", 1, "Remove Straja profile", 12, 8, 396, 20);
+        invoke(gui, "addLabel", 2,
+                "This NPC will return to native CustomNPCs behavior.",
+                12, 38, 396, 20);
+        Object confirm = invoke(gui, "addButton", 9_200, "Unassign", 12, 220, 190, 22);
+        Object cancel = invoke(gui, "addButton", 9_201, "Cancel", 218, 220, 190, 22);
+        setAdminUnassignConfirmHandler(confirm, gui, playerApi, player, hostUuid);
+        setAdminCancelHandler(cancel, gui, playerApi, player, hostUuid);
+        invoke(playerApi, "showCustomGui", gui);
+    }
+
+    private void setAdminProfileHandler(
+            Object button,
+            Object parentGui,
+            Object fallbackPlayerApi,
+            ServerPlayer fallbackPlayer,
+            String hostUuid,
+            NpcProvisioningUseCase.ProfileOption option) {
+        setGuiCallback(button, (args) -> {
+            Object clickedGui = callbackGui(args, parentGui);
+            Object playerApi = guiPlayer(clickedGui, fallbackPlayerApi);
+            ServerPlayer player = serverPlayer(playerApi, fallbackPlayer);
+            openAdminConfirmation(playerApi, player, hostUuid, option);
+        });
+    }
+
+    private void setAdminUnassignHandler(
+            Object button,
+            Object parentGui,
+            Object fallbackPlayerApi,
+            ServerPlayer fallbackPlayer,
+            String hostUuid) {
+        setGuiCallback(button, (args) -> {
+            Object clickedGui = callbackGui(args, parentGui);
+            Object playerApi = guiPlayer(clickedGui, fallbackPlayerApi);
+            ServerPlayer player = serverPlayer(playerApi, fallbackPlayer);
+            openAdminUnassignConfirmation(playerApi, player, hostUuid);
+        });
+    }
+
+    private void setAdminConfirmHandler(
+            Object button,
+            Object parentGui,
+            Object fallbackPlayerApi,
+            ServerPlayer fallbackPlayer,
+            String hostUuid,
+            NpcProvisioningUseCase.ProfileOption option) {
+        setGuiCallback(button, (args) -> {
+            Object clickedGui = callbackGui(args, parentGui);
+            Object playerApi = guiPlayer(clickedGui, fallbackPlayerApi);
+            ServerPlayer player = serverPlayer(playerApi, fallbackPlayer);
+            NpcProvisioningUseCase.ProvisioningResult result = provisioning.assign(
+                    providerId(), hostUuid, player.getUUID().toString(), option.profileId());
+            if (result.status() == NpcProvisioningUseCase.Status.ACCEPTED) {
+                openAdminSelector(playerApi, player, hostUuid);
+            } else {
+                showProvisioningResult(clickedGui, result);
+            }
+        });
+    }
+
+    private void setAdminUnassignConfirmHandler(
+            Object button,
+            Object parentGui,
+            Object fallbackPlayerApi,
+            ServerPlayer fallbackPlayer,
+            String hostUuid) {
+        setGuiCallback(button, (args) -> {
+            Object clickedGui = callbackGui(args, parentGui);
+            Object playerApi = guiPlayer(clickedGui, fallbackPlayerApi);
+            ServerPlayer player = serverPlayer(playerApi, fallbackPlayer);
+            NpcProvisioningUseCase.ProvisioningResult result = provisioning.unassign(
+                    providerId(), hostUuid, player.getUUID().toString());
+            if (result.status() == NpcProvisioningUseCase.Status.ACCEPTED) {
+                openAdminSelector(playerApi, player, hostUuid);
+            } else {
+                showProvisioningResult(clickedGui, result);
+            }
+        });
+    }
+
+    private void setAdminCancelHandler(
+            Object button,
+            Object parentGui,
+            Object fallbackPlayerApi,
+            ServerPlayer fallbackPlayer,
+            String hostUuid) {
+        setGuiCallback(button, args -> {
+            Object clickedGui = callbackGui(args, parentGui);
+            Object playerApi = guiPlayer(clickedGui, fallbackPlayerApi);
+            ServerPlayer player = serverPlayer(playerApi, fallbackPlayer);
+            openAdminSelector(playerApi, player, hostUuid);
+        });
+    }
+
+    private void setGuiCallback(Object button, java.util.function.Consumer<Object[]> callback) {
+        try {
+            Class<?> callbackType = Class.forName(
+                    "noppes.npcs.api.function.gui.GuiComponentClicked",
+                    true,
+                    button.getClass().getClassLoader());
+            InvocationHandler handler = (proxy, method, args) -> {
+                if (method.getName().equals("onClick")) callback.accept(args == null ? new Object[0] : args);
+                return null;
+            };
+            Object callbackProxy = Proxy.newProxyInstance(
+                    callbackType.getClassLoader(), new Class<?>[] {callbackType}, handler);
+            invoke(button, "setOnPress", callbackProxy);
+        } catch (ClassNotFoundException exception) {
+            throw new IllegalStateException("CustomNPCs GUI callback API is missing", exception);
+        }
+    }
+
+    private static Object callbackGui(Object[] args, Object fallback) {
+        if (args.length > 0 && args[0] != null) return args[0];
+        return fallback;
+    }
+
+    private static Object guiPlayer(Object gui, Object fallback) {
+        try {
+            return invoke(gui, "getPlayer");
+        } catch (RuntimeException ignored) {
+            return fallback;
+        }
+    }
+
+    private static ServerPlayer serverPlayer(Object playerApi, ServerPlayer fallback) {
+        try {
+            Object raw = invoke(playerApi, "getMCEntity");
+            return raw instanceof ServerPlayer player ? player : fallback;
+        } catch (RuntimeException ignored) {
+            return fallback;
+        }
+    }
+
+    private static void showProvisioningResult(
+            Object gui,
+            NpcProvisioningUseCase.ProvisioningResult result) {
+        try {
+            invoke(gui, "removeComponent", 9_999);
+        } catch (RuntimeException ignored) {
+            // Optional component replacement varies between CustomNPCs builds.
+        }
+        invoke(gui, "addLabel", 9_999, result.message(), 12, 286, 396, 24);
+        invoke(gui, "update");
     }
 
     private void setButtonHandler(
@@ -546,9 +858,16 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                     return new ReflectionBridge(null, false);
                 }
                 Object eventBus = apiType.getMethod("events").invoke(api);
-                Class<?> eventType = Class.forName(
+                Class<?> interactEventType = Class.forName(
                         "noppes.npcs.api.event.NpcEvent$InteractEvent");
-                registerInteractionListener(eventBus, eventType, listener);
+                registerInteractionListener(eventBus, interactEventType, listener);
+                try {
+                    Class<?> damagedEventType = Class.forName(
+                            "noppes.npcs.api.event.NpcEvent$DamagedEvent");
+                    registerInteractionListener(eventBus, damagedEventType, listener);
+                } catch (ClassNotFoundException ignored) {
+                    diagnostics.accept("CustomNPCs damaged event is unavailable; admin left-click is disabled");
+                }
                 return new ReflectionBridge(api, true);
             } catch (ReflectiveOperationException | RuntimeException exception) {
                 diagnostics.accept("CustomNPCs API unavailable: "

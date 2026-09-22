@@ -1,10 +1,15 @@
 # Foreign NPC Binding — Implementation Issues
 
-**Status:** implemented (issues #77–#80)
-**Decisions:** NPC wand is the bind surface; Straja consumes the click on
-bound NPCs (host dialog suppressed); jailer damage parity is implemented;
-binding keys on entity UUID (host mods that re-key on respawn recover via
-detach + rebind).
+**Status:** implemented for the legacy provider-neutral foreign-entity lane
+(issues #77–#80); CustomNPCs provisioning is now the dedicated profile-GUI
+lane (issues #149–#153).
+**Decisions:** the NPC wand remains the bind surface. For a native CustomNPCs
+entity, an operator left-click with the wand opens the native `GuiCustom`
+profile selector and never the legacy chat role menu. For other foreign
+entities and native Straja NPCs, the existing role menu remains available.
+Bound CustomNPCs player interactions are owned by the CustomNPCs adapter;
+jailer damage parity is implemented; binding keys on entity UUID (host mods
+that re-key on respawn recover via detach + rebind).
 **Motivation:** the server already has placeholder NPCs from a previous
 CustomNPCs-style setup. Admins should be able to attach a Straja role
 (the "script") to an existing foreign entity in place — no respawn, no
@@ -65,10 +70,13 @@ routing via `PlayerInteractEvent.EntityInteract`.
 - Players (`ServerPlayer` targets) must never be routable as NPCs — the
   custody routing keeps precedence and player UUIDs cannot be bound.
 
-## BIND-002 — Wand bind / rebind / detach on foreign entities
+## BIND-002 — Wand bind / rebind / detach on non-CustomNPCs foreign entities
 
 **Decided surface:** the existing NPC wand — it already renders a role
-menu via `tool-npc-assign:<uuid>-<role>` tokens.
+menu via `tool-npc-assign:<uuid>-<role>` tokens for native Straja and foreign
+entities that do not expose the CustomNPCs provider event bridge. CustomNPCs
+uses the provider-neutral profile selector documented in the provisioning
+milestone instead.
 
 - `npcWandMenu` on an **unregistered** bindable entity shows the role
   list ("Atașează un rol"); choosing a role creates the registry record

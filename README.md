@@ -205,13 +205,14 @@ duplicated item is inert in a normal player's hands; pending routes, corners,
 and templates live in a per-holder SavedData store and are dropped on logout.
 The items are non-craftable, non-stackable, and have no mob drops.
 
-- **NPC Wand** — click a registered Straja NPC for a clickable menu: assign
-  role, rename, set skin (native form), remove (behind a confirm click), or
-  print the registry record. Clicking an *unregistered* entity (e.g. an
-  existing CustomNPCs NPC) offers the same role list and **binds the role in
-  place** — the entity keeps its own model, skin and name; Straja just owns
-  the right-click. On a bound foreign NPC the menu hides rename/skin and
-  removal *detaches* the role record without deleting the entity.
+- **NPC Wand** — for a native CustomNPCs entity, an operator left-click opens
+  a native `GuiCustom` profile selector. Choose one of the preconfigured
+  Straja profiles to durably wire its dialog, quest journal, and action surface
+  to the NPC; click again to replace the profile or unassign it. The selector
+  requires operator permission and the wand, so normal players never see it.
+  The `/straja npc bind-custom` command remains a setup/debug seam using the
+  same provider-neutral provisioning service. Native Straja NPCs retain the
+  legacy role-management menu.
 - **Patrol Wand** — click blocks to record the patrol route (re-click removes
   a point), sneak + click air to finish. Writes a variable-length route
   through the same path as `checkpoint add`/`set-checkpoint`; routes cannot

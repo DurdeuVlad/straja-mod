@@ -384,6 +384,13 @@ public final class StrajaEvents {
         var heldTool = AdminToolSurface.tool(gateway.mainHand());
         if (heldTool == AdminToolSurface.Tool.NPC_WAND
                 || heldTool == AdminToolSurface.Tool.NPC_CLONER) {
+            // CustomNPCs owns its own interaction event bus. Let the provider
+            // adapter receive the target so the NPC wand opens the real
+            // CustomNPCs provisioning GUI instead of the legacy chat menu.
+            if (heldTool == AdminToolSurface.Tool.NPC_WAND
+                    && isCustomNpcsEntity(event.getTarget())) {
+                return;
+            }
             event.setCanceled(true);
             if (event.getHand() == net.minecraft.world.InteractionHand.MAIN_HAND) {
                 // The item-use packet trailing this interact must not also
@@ -468,6 +475,10 @@ public final class StrajaEvents {
             default -> false;
         };
         if (handled) event.setCanceled(true);
+    }
+
+    private static boolean isCustomNpcsEntity(net.minecraft.world.entity.Entity entity) {
+        return entity != null && entity.getClass().getName().startsWith("noppes.npcs.");
     }
 
     /** Restrained players cannot use items, blocks or entities. */

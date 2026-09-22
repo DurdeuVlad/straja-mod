@@ -6,8 +6,9 @@ M2 makes provider mappings durable without making a provider authoritative.
 
 `NpcBindingStore` is saved under the `npc_bindings` SavedData key. Each record
 keeps the stable logical binding id, provider id, host entity UUID, optional
-provider NPC id, role, station, canonical profile id, and schema version.
-Pending provider operations are persisted separately in the same aggregate.
+provider NPC id, role, station, canonical profile id, schema version, and the
+operator/time that assigned it. Pending provider operations are persisted
+separately in the same aggregate.
 
 The host entity UUID is a mapping used for proximity and event translation. It
 is not a player permission, reward, quest, or progression key. The logical
@@ -18,11 +19,13 @@ provider changes.
 
 - `bind` refuses a different mapping under an existing logical id. A caller
   must use `rebind` explicitly.
-- `bindAndPublish` binds first, then publishes the canonical profile through
-  the provider registry. A publish failure leaves the binding durable and
-  inspectable but without a trusted published surface.
+- `bindAndPublish` validates the canonical profile before binding, then
+  publishes it through the provider registry. A publish failure leaves the
+  binding durable and inspectable but without a trusted published surface.
 - `rebind` explicitly unbinds the old mapping before binding the replacement.
-  A failed unbind never silently switches ownership.
+  A failed replacement cleans up and restores the previous mapping; if the
+  provider is unavailable during rollback, the old mapping is retained with a
+  pending recovery operation instead of being discarded.
 - `inspect` returns `UNBOUND`, `BOUND`, or `UNKNOWN`; unknown is fail-closed.
 - `unbind` removes the durable record only after the provider confirms removal.
 

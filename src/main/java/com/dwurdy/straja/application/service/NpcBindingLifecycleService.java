@@ -59,14 +59,14 @@ public final class NpcBindingLifecycleService {
     }
 
     public synchronized NpcProviderResult bindAndPublish(NpcBinding binding) {
-        NpcProviderResult bound = bind(binding);
-        if (bound.status() != NpcProviderResult.Status.ACCEPTED) return bound;
         NpcSurfaceSnapshot surface;
         try {
             surface = content.require(binding.surfaceProfileId()).bind(binding);
         } catch (RuntimeException error) {
             return NpcProviderResult.rejected("invalid-profile", error.getMessage());
         }
+        NpcProviderResult bound = bind(binding);
+        if (bound.status() != NpcProviderResult.Status.ACCEPTED) return bound;
         NpcProviderResult published = providers.publish(surface);
         if (requiresRecovery(published)) {
             markPending(binding, NpcProviderOperation.PUBLISH);
@@ -81,7 +81,36 @@ public final class NpcBindingLifecycleService {
         if (current.equals(replacement)) return bindAndPublish(replacement);
         NpcProviderResult removed = unbind(current.bindingId());
         if (removed.status() != NpcProviderResult.Status.ACCEPTED) return removed;
-        return bindAndPublish(replacement);
+        NpcProviderResult replaced = bindAndPublish(replacement);
+        if (replaced.status() == NpcProviderResult.Status.ACCEPTED) return replaced;
+
+        // A failed replacement must not silently turn a configured NPC into an
+        // unbound NPC. Clean up a partially bound replacement before restoring
+        // the previous mapping. UNKNOWN remains failed-closed because the
+        // provider may have mutated state that cannot be safely inferred.
+        if (store.bindings.containsKey(replacement.bindingId())) {
+            NpcProviderResult cleanup = unbind(replacement.bindingId());
+            if (cleanup.status() != NpcProviderResult.Status.ACCEPTED) {
+                return NpcProviderResult.unknown(
+                        "replacement failed and provider cleanup is unresolved");
+            }
+        }
+        NpcProviderResult restored = bindAndPublish(current);
+        if (restored.status() == NpcProviderResult.Status.ACCEPTED) {
+            return new NpcProviderResult(
+                    replaced.status(),
+                    replaced.code(),
+                    replaced.message() + "; previous NPC assignment restored");
+        }
+        // Preserve the logical assignment for restart recovery when the
+        // provider is temporarily unavailable during rollback. The store is
+        // intentionally fail-closed through the pending BIND operation.
+        if (!store.bindings.containsKey(current.bindingId())) {
+            store.bindings.put(current.bindingId(), current);
+            markPending(current, NpcProviderOperation.BIND);
+        }
+        return NpcProviderResult.unknown(
+                "replacement failed and previous NPC assignment could not be restored");
     }
 
     public synchronized NpcProviderResult unbind(String bindingId) {

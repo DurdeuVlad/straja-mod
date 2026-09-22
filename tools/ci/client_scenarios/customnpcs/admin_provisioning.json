@@ -1,0 +1,215 @@
+{
+  "name": "customnpcs-admin-provisioning",
+  "group": "client-customnpcs",
+  "timeoutSeconds": 420,
+  "observable": "an operator uses the Straja NPC Wand on a real CustomNPCs entity, the native CustomNPCs GUI lists preconfigured Straja profiles, a profile selection publishes its player-facing dialog surface, the profile can be replaced in-game, and the assignment survives reconnect",
+  "failure": "the admin-only left-click selector does not open, a disabled/non-admin path exposes the selector, profile selection does not publish a native GuiCustom surface, replacement does not take effect, or the assignment is lost after reconnect",
+  "prerequisites": [
+    "foreign-npc server profile running",
+    "client joined as ci_straja",
+    "CustomNPCs 1.21.1.20251230 present on server and client",
+    "Straja NPC Wand is registered"
+  ],
+  "steps": [
+    {
+      "name": "grant-operator-and-wand",
+      "type": "rcon",
+      "setup": true,
+      "command": "op ci_straja"
+    },
+    {
+      "name": "give-npc-wand",
+      "type": "rcon",
+      "setup": true,
+      "command": "give ci_straja straja:npc_wand 1"
+    },
+    {
+      "name": "spawn-unconfigured-customnpc",
+      "type": "rcon",
+      "setup": true,
+      "command": "execute as ci_straja at @s run noppes npc \"Straja Provisioning Target\" create"
+    },
+    {
+      "name": "capture-customnpc",
+      "type": "mct",
+      "args": ["entity", "list", "--radius", "12"],
+      "expect": [{"rawRegex": "customnpcs:customnpc"}],
+      "capture": {
+        "name": "target_uuid",
+        "regex": "\\\"uuid\\\"\\s*:\\s*\\\"([0-9a-f-]{36})\\\"[^}]*\\\"type\\\"\\s*:\\s*\\\"customnpcs:customnpc\\\""
+      }
+    },
+    {
+      "name": "left-click-with-admin-wand",
+      "type": "mct",
+      "args": ["entity", "attack", "--type", "customnpcs:customnpc", "--nearest", "--max-distance", "8"],
+      "expect": [{"rawRegex": "customnpcs:customnpc"}]
+    },
+    {
+      "name": "admin-selector-opens",
+      "type": "mct",
+      "args": ["gui", "wait-open", "--timeout", "20"],
+      "expect": [{"rawRegex": "\\\"open\\\"\\s*:\\s*true"}]
+    },
+    {
+      "name": "admin-selector-is-native-custom-gui",
+      "type": "mct",
+      "args": ["gui", "info"],
+      "expect": [{"rawRegex": "\\\"type\\\"\\s*:\\s*\\\"GuiCustom\\\""}]
+    },
+    {
+      "name": "admin-selector-layout",
+      "type": "mct",
+      "args": ["gui", "layout"],
+      "expect": [{"rawRegex": "\\\"scaledWidth\\\"\\s*:\\s*427"}]
+    },
+    {
+      "name": "admin-selector-screenshot",
+      "type": "screenshot"
+    },
+    {
+      "name": "choose-jailer-profile",
+      "type": "mct",
+      "args": ["input", "click", "108", "101"],
+      "expect": [{"rawRegex": "\\\"clicked\\\"\\s*:\\s*true"}]
+    },
+    {
+      "name": "confirm-jailer-profile",
+      "type": "mct",
+      "args": ["input", "click", "108", "220"],
+      "expect": [{"rawRegex": "\\\"clicked\\\"\\s*:\\s*true"}]
+    },
+    {
+      "name": "close-admin-selector",
+      "type": "mct",
+      "setup": true,
+      "args": ["gui", "close"]
+    },
+    {
+      "name": "remove-admin-capability",
+      "type": "rcon",
+      "setup": true,
+      "command": "deop ci_straja"
+    },
+    {
+      "name": "player-surface-opens-after-assignment",
+      "type": "mct",
+      "args": ["entity", "interact", "--type", "customnpcs:customnpc", "--nearest", "--max-distance", "8"],
+      "expect": [{"rawRegex": "customnpcs:customnpc"}]
+    },
+    {
+      "name": "player-surface-is-native-custom-gui",
+      "type": "mct",
+      "args": ["gui", "wait-open", "--timeout", "20"],
+      "expect": [{"rawRegex": "\\\"open\\\"\\s*:\\s*true"}]
+    },
+    {
+      "name": "player-surface-action-dispatches",
+      "type": "mct",
+      "args": ["input", "click", "108", "91"],
+      "expect": [{"rawRegex": "\\\"clicked\\\"\\s*:\\s*true"}]
+    },
+    {
+      "name": "jailer-action-reaches-canonical-service",
+      "type": "mct",
+      "args": ["chat", "history", "--last", "20", "--match", "Nu ești încătușat.", "--wait", "10"],
+      "timeout": 60,
+      "expect": [{"rawRegex": "Nu ești încătușat"}]
+    },
+    {
+      "name": "close-player-surface",
+      "type": "mct",
+      "setup": true,
+      "args": ["gui", "close"]
+    },
+    {
+      "name": "regrant-admin-capability",
+      "type": "rcon",
+      "setup": true,
+      "command": "op ci_straja"
+    },
+    {
+      "name": "reopen-admin-selector",
+      "type": "mct",
+      "args": ["entity", "attack", "--type", "customnpcs:customnpc", "--nearest", "--max-distance", "8"],
+      "expect": [{"rawRegex": "customnpcs:customnpc"}]
+    },
+    {
+      "name": "choose-secretary-profile",
+      "type": "mct",
+      "args": ["input", "click", "108", "151"],
+      "expect": [{"rawRegex": "\\\"clicked\\\"\\s*:\\s*true"}]
+    },
+    {
+      "name": "confirm-secretary-profile",
+      "type": "mct",
+      "args": ["input", "click", "108", "220"],
+      "expect": [{"rawRegex": "\\\"clicked\\\"\\s*:\\s*true"}]
+    },
+    {
+      "name": "replacement-surface-visible",
+      "type": "mct",
+      "args": ["gui", "wait-update", "--timeout", "20"],
+      "expect": [{"rawRegex": "\\\"open\\\"\\s*:\\s*true"}]
+    },
+    {
+      "name": "close-replacement-surface",
+      "type": "mct",
+      "setup": true,
+      "args": ["gui", "close"]
+    },
+    {
+      "name": "reconnect-for-persistence-check",
+      "type": "client",
+      "action": "reconnect"
+    },
+    {
+      "name": "remove-wand-before-normal-player-check",
+      "type": "rcon",
+      "setup": true,
+      "command": "clear ci_straja straja:npc_wand"
+    },
+    {
+      "name": "deop-before-persistence-check",
+      "type": "rcon",
+      "setup": true,
+      "command": "deop ci_straja"
+    },
+    {
+      "name": "reconnect-player-surface-after-reload",
+      "type": "mct",
+      "args": ["entity", "interact", "--type", "customnpcs:customnpc", "--nearest", "--max-distance", "8"],
+      "expect": [{"rawRegex": "customnpcs:customnpc"}]
+    },
+    {
+      "name": "persisted-surface-reopens",
+      "type": "mct",
+      "args": ["gui", "wait-open", "--timeout", "20"],
+      "expect": [{"rawRegex": "\\\"open\\\"\\s*:\\s*true"}]
+    },
+    {
+      "name": "persisted-surface-screenshot",
+      "type": "screenshot"
+    }
+  ],
+  "cleanup": [
+    {
+      "name": "close-gui-cleanup",
+      "type": "mct",
+      "args": ["gui", "close"],
+      "setup": true
+    },
+    {
+      "name": "remove-customnpc",
+      "type": "rcon",
+      "command": "noppes npc \"Straja Provisioning Target\" delete",
+      "setup": true
+    },
+    {
+      "name": "deop-client-cleanup",
+      "type": "rcon",
+      "command": "deop ci_straja",
+      "setup": true
+    }
+  ]
+}

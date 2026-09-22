@@ -16,6 +16,7 @@ import com.dwurdy.straja.application.service.NpcCareerSurfaceService;
 import com.dwurdy.straja.application.service.NpcCivicSurfaceService;
 import com.dwurdy.straja.application.service.NpcCustodySurfaceService;
 import com.dwurdy.straja.application.service.NpcContentCatalog;
+import com.dwurdy.straja.application.service.NpcProvisioningService;
 import com.dwurdy.straja.application.service.NpcSecretarySurfaceService;
 import com.dwurdy.straja.application.service.NpcSurfaceActionService;
 import com.dwurdy.straja.application.service.NpcSurfaceProviderRegistry;
@@ -63,17 +64,23 @@ public final class NpcPresentationRuntime {
                 providers,
                 (playerId, binding) -> playerAtBinding(server, playerId, binding),
                 request -> dispatch(server, request));
-        CustomNpcsNpcSurfaceProvider customNpcs = new CustomNpcsNpcSurfaceProvider(
-                actions,
-                actions,
-                message -> StrajaMod.LOGGER.info("{}", message),
-                NpcPresentationRuntime::resolveSurface);
-        providers.register(customNpcs);
+        NpcContentCatalog catalog = loadCatalog();
         StoreAccess stores = name -> new NbtStore(StrajaDataProvider.get(server, name));
         NpcBindingLifecycleService lifecycle = new NpcBindingLifecycleService(
                 providers,
                 new NbtNpcBindingRepository(stores),
-                loadCatalog());
+                catalog);
+        NpcProvisioningService provisioning = new NpcProvisioningService(
+                lifecycle, catalog, providers);
+        CustomNpcsNpcSurfaceProvider customNpcs = new CustomNpcsNpcSurfaceProvider(
+                actions,
+                actions,
+                message -> StrajaMod.LOGGER.info("{}", message),
+                NpcPresentationRuntime::resolveSurface,
+                provisioning,
+                player -> player.hasPermissions(2)
+                        && player.getMainHandItem().is(StrajaItems.NPC_WAND.get()));
+        providers.register(customNpcs);
         NpcBindingLifecycleService.RecoveryReport recovery = lifecycle.recover();
         recovery.items().stream()
                 .filter(item -> item.result().status() != NpcProviderResult.Status.ACCEPTED)
@@ -85,7 +92,8 @@ public final class NpcPresentationRuntime {
                 providers,
                 actions,
                 customNpcs,
-                lifecycle));
+                lifecycle,
+                provisioning));
         StrajaMod.LOGGER.info("NPC presentation runtime started; CustomNPCs available={}",
                 customNpcs.available());
     }
@@ -135,20 +143,27 @@ public final class NpcPresentationRuntime {
         } catch (IllegalArgumentException exception) {
             return NpcProviderResult.rejected("invalid-host-identity", "hostEntityUuid must be a UUID");
         }
-        NpcBinding binding = new NpcBinding(
-                "straja.customnpcs." + role + "." + normalizedUuid.replace("-", ""),
-                NpcProviderId.CUSTOM_NPCS,
-                normalizedUuid,
-                "",
-                role,
-                stationId == null || stationId.isBlank() ? "hq" : stationId,
-                profile,
-                1);
         try {
-            return bindAndPublish(binding);
+            com.dwurdy.straja.application.port.in.NpcProvisioningUseCase.ProvisioningResult result = require().provisioning().assign(
+                    NpcProviderId.CUSTOM_NPCS,
+                    normalizedUuid,
+                    "console",
+                    profile.value(),
+                    stationId);
+            return toProviderResult(result);
         } catch (IllegalStateException exception) {
             return NpcProviderResult.unavailable("NPC presentation runtime is not started");
         }
+    }
+
+    private static NpcProviderResult toProviderResult(
+            com.dwurdy.straja.application.port.in.NpcProvisioningUseCase.ProvisioningResult result) {
+        return switch (result.status()) {
+            case ACCEPTED -> NpcProviderResult.accepted(result.message());
+            case REJECTED -> NpcProviderResult.rejected(result.code(), result.message());
+            case UNAVAILABLE -> NpcProviderResult.unavailable(result.message());
+            case UNKNOWN -> NpcProviderResult.unknown(result.message());
+        };
     }
 
     private static NpcContentCatalog loadCatalog() {
@@ -426,5 +441,6 @@ public final class NpcPresentationRuntime {
             NpcSurfaceProviderRegistry providers,
             NpcSurfaceActionTokenIssuer actions,
             CustomNpcsNpcSurfaceProvider customNpcs,
-            NpcBindingLifecycleService lifecycle) {}
+            NpcBindingLifecycleService lifecycle,
+            NpcProvisioningService provisioning) {}
 }

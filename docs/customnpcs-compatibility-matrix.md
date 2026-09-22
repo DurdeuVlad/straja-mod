@@ -26,6 +26,7 @@ The target jar contains and exposes:
 | Capability | Verified API evidence | Straja use |
 |---|---|---|
 | NPC interaction | `noppes.npcs.api.event.NpcEvent$InteractEvent`, public `npc` and `player` fields, cancellable event | Resolve the host UUID, open the owned surface, cancel only owned interactions |
+| NPC left-click | `noppes.npcs.api.event.NpcEvent$DamagedEvent`, public `npc` and `source` fields, cancellable event | Resolve the operator holding the NPC Wand, open the admin selector, and cancel the attack; ordinary player left-clicks retain native behavior |
 | GUI | `NpcAPI.createCustomGui(...)`, `IPlayer.showCustomGui(...)`, `ICustomGui` component methods | Render title, body, dialogue choices, quest journal, and action buttons |
 | Action input | `IButton.setOnPress(GuiComponentClicked)` and `IPlayer.getMCEntity()` | Mint a Straja token and submit an `NpcActionRequest`; no command forwarding |
 | Dialogue | `NpcAPI.getDialogs()`, `IDialogHandler`, `IDialog`, `IDialogOption`, `ICustomNpc.setDialog(...)` | API capability recorded; Straja renders canonical dialogue choices in `ICustomGui` and keeps dialogue state authoritative |
@@ -46,6 +47,9 @@ provider-side scripts or quest persistence the authority for Straja outcomes.
 - CustomNPCs cannot decide permissions, distance, rewards, progression, quest
   completion, or audit results.
 - Unbound CustomNPCs are never cancelled by Straja and retain native behavior.
+- Admin provisioning is a Straja-owned surface rendered through native
+  `GuiCustom`; it never writes a CustomNPCs script, dialog tree, or quest as
+  gameplay authority.
 - Provider-specific portraits, rich text, and visual styling are optional;
   they cannot change the canonical action set or outcome.
 
@@ -66,6 +70,10 @@ provider-side scripts or quest persistence the authority for Straja outcomes.
 - Canonical action/state security: covered by the M3 provider and admission
   tests, including player-bound tokens, stale-question rejection, bounded
   inputs, identity checks, and reconstruction after reopening.
+- Admin provisioning unit and scenario definitions: catalog capability gating,
+  assignment/replacement/unassignment, audit metadata, rollback, and the
+  declarative real-client flow are implemented. The final live-server
+  provisioning pass remains pending.
 - Native CustomNPCs dialogue and quest handlers are intentionally presentation
   capability evidence, not Straja persistence. CustomNPCs cannot become the
   authority for permissions, rewards, progression, or audit state.

@@ -17,7 +17,9 @@ public record NpcBinding(
         String roleId,
         String stationId,
         NpcContentId surfaceProfileId,
-        int schemaVersion) {
+        int schemaVersion,
+        String assignedBy,
+        long assignedAtEpochMillis) {
 
     private static final Pattern BINDING_ID = Pattern.compile("[a-z][a-z0-9._-]{0,127}");
     private static final Pattern ROLE_OR_STATION_ID = Pattern.compile("[a-z][a-z0-9._-]{0,63}");
@@ -33,6 +35,24 @@ public record NpcBinding(
         if (schemaVersion < 1) {
             throw new IllegalArgumentException("schemaVersion must be positive");
         }
+        assignedBy = optionalText(assignedBy, 128, "assignedBy");
+        if (assignedAtEpochMillis < 0) {
+            throw new IllegalArgumentException("assignedAtEpochMillis must not be negative");
+        }
+    }
+
+    /** Backward-compatible constructor for bindings created before assignment audit metadata. */
+    public NpcBinding(
+            String bindingId,
+            NpcProviderId providerId,
+            String hostEntityUuid,
+            String externalNpcId,
+            String roleId,
+            String stationId,
+            NpcContentId surfaceProfileId,
+            int schemaVersion) {
+        this(bindingId, providerId, hostEntityUuid, externalNpcId, roleId, stationId,
+                surfaceProfileId, schemaVersion, "", 0L);
     }
 
     private static String requireId(String value, Pattern pattern, String name) {

@@ -26,8 +26,23 @@ completion, rank, rewards, or permissions.
 
 ## Setup
 
-An administrator binds the external CustomNPCs entity UUID to the admission
-surface:
+The primary setup path is in-game and does not require an NPC UUID command:
+
+1. An operator spawns or places a native CustomNPCs NPC.
+2. The operator holds the Straja NPC Wand and left-clicks that NPC.
+3. Straja opens a native CustomNPCs `GuiCustom` selector containing the
+   preconfigured provider-neutral profiles.
+4. The operator confirms a profile. Straja durably creates the logical binding
+   and publishes the profile's dialog, quest journal, and action surface.
+5. Repeating the same wand click opens the selector again; selecting another
+   profile performs an explicit rebind, and `Unassign profile` returns the NPC
+   to native CustomNPCs behavior.
+
+The selector requires both operator permission and the NPC Wand. Ordinary
+players never receive it. Their right-click opens the assigned player-facing
+surface through the same native CustomNPCs GUI.
+
+The command remains a setup/debug seam and uses the same provisioning service:
 
 ```text
 /straja npc bind-custom <customnpcs-entity-uuid> receptionist hq
@@ -52,7 +67,8 @@ CustomNPCs adapter resolves a player-specific projection:
   provider quest record is used as authority.
 
 The text provider remains available for contract tests and diagnostics. It is
-not the normal player-facing lane.
+not the normal player-facing lane. The real server/client acceptance pass is
+deferred until the provisioning milestone is complete.
 
 ## Verification
 

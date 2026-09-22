@@ -37,6 +37,17 @@ public final class NpcSurfaceProviderRegistry {
         return Optional.ofNullable(providers.get(Objects.requireNonNull(providerId, "providerId")));
     }
 
+    /** Returns a stable capability snapshot for UI/catalog validation. */
+    public synchronized Set<NpcCapability> capabilities(NpcProviderId providerId) {
+        return find(providerId)
+                .map(provider -> Set.copyOf(provider.capabilities()))
+                .orElseGet(Set::of);
+    }
+
+    public synchronized boolean available(NpcProviderId providerId) {
+        return find(providerId).map(NpcSurfaceProvider::available).orElse(false);
+    }
+
     /**
      * Atomically claims a logical binding for one provider. Provider adapters
      * must be reached through this method so two providers cannot claim the
