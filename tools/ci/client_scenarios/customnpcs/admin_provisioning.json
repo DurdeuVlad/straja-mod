@@ -162,7 +162,7 @@
     {
       "name": "replacement-surface-visible",
       "type": "mct",
-      "args": ["gui", "wait-update", "--timeout", "20"],
+      "args": ["gui", "info"],
       "expect": [{"rawRegex": "\\\"open\\\"\\s*:\\s*true"}]
     },
     {
