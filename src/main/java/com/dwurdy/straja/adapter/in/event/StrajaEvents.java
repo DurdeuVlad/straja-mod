@@ -15,6 +15,7 @@ import com.dwurdy.straja.adapter.out.network.CustodyVisualSync;
 import com.dwurdy.straja.application.port.in.FormSessionUseCase;
 import com.dwurdy.straja.application.port.out.ItemView;
 import com.dwurdy.straja.application.port.out.PlayerGateway;
+import com.dwurdy.straja.bootstrap.NpcPresentationRuntime;
 import com.dwurdy.straja.bootstrap.StrajaRuntime;
 import com.dwurdy.straja.bootstrap.StrajaItems;
 import com.dwurdy.straja.domain.model.Capability;
@@ -475,6 +476,22 @@ public final class StrajaEvents {
             default -> false;
         };
         if (handled) event.setCanceled(true);
+    }
+
+    /**
+     * The CustomNPCs damage event is too late for authoring: that provider
+     * only emits it after an attack has become damage. Capture the Minecraft
+     * attack boundary first so an operator's NPC Wand always opens the
+     * provider-native provisioning GUI and never damages the target.
+     */
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
+    public void onAttackEntity(
+            net.neoforged.neoforge.event.entity.player.AttackEntityEvent event) {
+        if (event.getEntity().level().isClientSide()
+                || !(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) return;
+        if (NpcPresentationRuntime.handleCustomNpcAdminAttack(player, event.getTarget())) {
+            event.setCanceled(true);
+        }
     }
 
     private static boolean isCustomNpcsEntity(net.minecraft.world.entity.Entity entity) {

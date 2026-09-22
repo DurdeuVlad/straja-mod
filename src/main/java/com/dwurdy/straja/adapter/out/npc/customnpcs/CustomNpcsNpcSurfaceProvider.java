@@ -25,6 +25,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
 
 /**
  * Optional CustomNPCs player-facing adapter.
@@ -107,6 +108,40 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
     @Override
     public boolean available() {
         return bridge.available();
+    }
+
+    /**
+     * Handles the Minecraft attack packet before CustomNPCs decides whether
+     * the hit becomes damage. CustomNPCs only emits DamagedEvent after damage
+     * is accepted, so the provider needs this earlier boundary for the NPC
+     * Wand's admin-only left-click gesture.
+     *
+     * @return true when this provider owns the admin gesture and the caller
+     * should cancel the vanilla attack
+     */
+    public boolean handleAdminAttack(ServerPlayer player, Entity target) {
+        if (!bridge.available()
+                || player == null
+                || target == null
+                || !isCustomNpcsEntity(target)
+                || adminTool == null
+                || !adminTool.test(player)) {
+            return false;
+        }
+        try {
+            Object playerApi = playerApi(player);
+            if (playerApi != null) {
+                openAdminSelector(playerApi, player, target.getStringUUID());
+            } else {
+                diagnostics.accept("CustomNPCs admin attack had no player API wrapper");
+            }
+        } catch (RuntimeException exception) {
+            diagnostics.accept("CustomNPCs admin selector failed: "
+                    + exception.getClass().getSimpleName());
+        }
+        // Once the operator/tool predicate matched, never let a bridge
+        // failure turn the authoring gesture into a real NPC attack.
+        return true;
     }
 
     @Override
@@ -253,6 +288,10 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
         return event.getClass().getName().endsWith("NpcEvent$DamagedEvent");
     }
 
+    private static boolean isCustomNpcsEntity(Entity entity) {
+        return entity != null && entity.getClass().getName().startsWith("noppes.npcs.");
+    }
+
     private static Object playerApi(Object event) {
         String name = event.getClass().getName();
         Object actor = field(event, name.endsWith("DamagedEvent") ? "source" : "player");
@@ -262,6 +301,10 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
         } catch (RuntimeException ignored) {
             return null;
         }
+    }
+
+    private Object playerApi(ServerPlayer player) {
+        return invoke(bridge.api(), "getIEntity", player);
     }
 
     private void openSurface(

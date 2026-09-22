@@ -102,6 +102,17 @@ public final class NpcPresentationRuntime {
         STATE.set(null);
     }
 
+    /**
+     * Routes the early Minecraft left-click boundary to the active optional
+     * provider. Keeping the raw entity out of the application services lets
+     * StoryNPC implement the same provisioning contract later without
+     * changing the canonical profile or action model.
+     */
+    public static boolean handleCustomNpcAdminAttack(ServerPlayer player, Entity target) {
+        RuntimeState state = STATE.get();
+        return state != null && state.customNpcs().handleAdminAttack(player, target);
+    }
+
     public static RuntimeState require() {
         RuntimeState state = STATE.get();
         if (state == null) throw new IllegalStateException("NPC presentation runtime is not started");
