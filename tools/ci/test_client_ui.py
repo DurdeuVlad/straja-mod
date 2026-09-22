@@ -141,6 +141,24 @@ class _FakeMct:
         return self.replies.get(tuple(args), {})
 
 
+class ClientModTests(unittest.TestCase):
+    def test_seed_client_mod_uses_server_dependency_contract(self):
+        manifest = {"clientMod": {"file": "mct-bridge.jar",
+                                   "url": "https://example.invalid/bridge",
+                                   "sha256": "abc"}}
+        with tempfile.TemporaryDirectory() as home:
+            env = {"MCT_CACHE_DIR": os.path.join(home, "cache")}
+            import unittest.mock as mock
+            with mock.patch.object(cu.sh, "download_dependency",
+                                   return_value="cached.jar") as download:
+                result = cu.seed_client_mod(manifest, env, lambda _: None)
+            self.assertEqual(result, "cached.jar")
+            download.assert_called_once_with(
+                {"fileName": "mct-bridge.jar",
+                 "url": "https://example.invalid/bridge", "sha256": "abc"},
+                os.path.join(home, "cache", "mod"))
+
+
 class _FakeRcon:
     def __init__(self, out="ok"):
         self.out = out

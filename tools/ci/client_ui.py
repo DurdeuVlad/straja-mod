@@ -176,7 +176,7 @@ def seed_client_mod(manifest: dict, env: dict, log):
         os.path.expanduser("~"), ".mct", "cache")
     dest = os.path.join(cache, "mod")
     jar = sh.download_dependency(
-        {"file": manifest["clientMod"]["file"], **dep}, dest)
+        {"fileName": manifest["clientMod"]["file"], **dep}, dest)
     log(f"client mod cached: {os.path.basename(jar)}")
     return jar
 
