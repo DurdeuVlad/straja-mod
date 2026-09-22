@@ -67,15 +67,22 @@ jobs:
           --version "$(grep -Po '(?<=^mod_version=).*' gradle.properties)"
           --out build/release/sbom.json
 
+      - name: Prepare staged artifact layout
+        run: |
+          set -euo pipefail
+          mkdir -p staged
+          cp build/libs/straja-*.jar staged/
+          cp build/release/straja-*.sha256 staged/
+          cp build/release/straja-*.sha512 staged/
+          if [ -f build/release/sbom.json ]; then
+            cp build/release/sbom.json staged/
+          fi
+
       - name: Upload staged artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: straja-jar
-          path: |
-            build/libs/straja-*.jar
-            build/release/straja-*.jar.sha256
-            build/release/straja-*.jar.sha512
-            build/release/sbom.json
+          path: staged/
           if-no-files-found: error
           overwrite: true
           retention-days: 14
