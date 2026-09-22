@@ -3,7 +3,10 @@
   "mct": {
     "package": "@kzheart_/mc-pilot",
     "version": "0.14.0",
-    "integrity": "sha512-AHYqNQnlATe/aXdhUBbdTaWLsidP3f8ZxnjO3ojReFMT0bmvBSJLISrM0ITvXR2v5VIsw3VItDbKJTXhtIjWUQ=="
+    "integrity": "sha512-AHYqNQnlATe/aXdhUBbdTaWLsidP3f8ZxnjO3ojReFMT0bmvBSJLISrM0ITvXR2v5VIsw3VItDbKJTXhtIjWUQ==",
+    "overrides": {
+      "@xmcl/unzip": "2.1.2"
+    }
   },
   "clientMod": {
     "file": "mct-client-mod-neoforge-1.21.1.jar",

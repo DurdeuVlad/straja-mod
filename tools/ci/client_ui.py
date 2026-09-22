@@ -131,24 +131,36 @@ def preflight(manifest: dict, env: dict, log) -> str:
                 "install_failed",
                 f"npm integrity drift for {spec}: registry reports "
                 f"{got_integrity!r}, manifest pins {integrity!r}")
+    # Install into the disposable MCT home instead of the runner's global
+    # prefix.  The package's transitive dependency graph has historically
+    # published a workspace protocol in a latest @xmcl/unzip release; an
+    # explicit npm override keeps the advisory toolchain reproducible while
+    # leaving the product under test untouched.
+    install_root = os.path.join(env.get("MCT_HOME", os.getcwd()), "npm")
+    os.makedirs(install_root, exist_ok=True)
+    package_json = {
+        "private": True,
+        "dependencies": {pkg: ver},
+        "overrides": manifest["mct"].get("overrides", {}),
+    }
+    with open(os.path.join(install_root, "package.json"), "w",
+              encoding="utf-8") as fh:
+        json.dump(package_json, fh, indent=2)
+        fh.write("\n")
     install = subprocess.run(
-        [npm, "install", "-g", "--no-audit", "--no-fund", spec],
-        capture_output=True, text=True, timeout=600, env=env)
+        [npm, "install", "--no-audit", "--no-fund"],
+        capture_output=True, text=True, timeout=600, env=env,
+        cwd=install_root)
     if install.returncode != 0:
         raise ClientUiError("install_failed",
                             f"npm install {spec} failed: "
                             f"{install.stderr.strip()[:300]}")
-    mct = _which("mct")
-    if not mct:
-        # npm -g prefix may not be on PATH in the runner shell
-        prefix = subprocess.run([npm, "prefix", "-g"], capture_output=True,
-                                text=True, timeout=20).stdout.strip()
-        for cand in (os.path.join(prefix, "bin", "mct"),
-                     os.path.join(prefix, "mct"),
-                     os.path.join(prefix, "mct.cmd")):
-            if os.path.exists(cand):
-                mct = cand
-                break
+    mct = ""
+    for cand in (os.path.join(install_root, "node_modules", ".bin", "mct"),
+                 os.path.join(install_root, "node_modules", ".bin", "mct.cmd")):
+        if os.path.exists(cand):
+            mct = cand
+            break
     if not mct:
         raise ClientUiError("no_tool", "mct not found after npm install")
     log(f"mct installed: {spec} -> {mct}")

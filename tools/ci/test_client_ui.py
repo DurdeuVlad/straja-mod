@@ -3,6 +3,7 @@
 import json
 import os
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -43,6 +44,7 @@ class ValidateScenarioTests(unittest.TestCase):
                          {"type": "sleep", "seconds": 1}])
         self.assertTrue(cu.validate_scenario(raw, "p"))
 
+
     def test_rcon_needs_expect_or_setup(self):
         raw = _scenario([{"type": "rcon", "command": "x"},
                          {"type": "sleep", "seconds": 1}])
@@ -67,6 +69,59 @@ class ValidateScenarioTests(unittest.TestCase):
                          {"type": "rcon", "command": "y",
                           "expectContains": "z"}])
         self.assertTrue(cu.validate_scenario(raw, "p"))
+
+
+class PreflightTests(unittest.TestCase):
+    def test_preflight_installs_mct_in_isolated_home_with_overrides(self):
+        manifest = {
+            "mct": {"package": "@scope/mct", "version": "1.2.3",
+                    "integrity": "sha512-pinned",
+                    "overrides": {"broken-package": "1.0.0"}},
+            "client": {"java": "java"},
+        }
+        with tempfile.TemporaryDirectory() as home:
+            env = {"MCT_HOME": home}
+            calls = []
+
+            def fake_run(command, **kwargs):
+                calls.append((command, kwargs))
+                if command[1] == "--version":
+                    return type("Result", (), {"returncode": 0,
+                                                "stdout": "v20.12.0\n",
+                                                "stderr": ""})()
+                if command[1] == "view":
+                    return type("Result", (), {"returncode": 0,
+                                                "stdout": "sha512-pinned\n",
+                                                "stderr": ""})()
+                if command[1] == "install":
+                    binary = os.path.join(kwargs["cwd"], "node_modules",
+                                          ".bin", "mct")
+                    os.makedirs(os.path.dirname(binary), exist_ok=True)
+                    open(binary, "w", encoding="utf-8").close()
+                    return type("Result", (), {"returncode": 0,
+                                                "stdout": "",
+                                                "stderr": ""})()
+                raise AssertionError(command)
+
+            import unittest.mock as mock
+            with mock.patch.object(cu, "_which",
+                                   side_effect=lambda name: name), \
+                 mock.patch.object(cu.subprocess, "run", side_effect=fake_run):
+                mct = cu.preflight(manifest, env, lambda _: None)
+
+            install_root = os.path.join(home, "npm")
+            self.assertEqual(mct, os.path.join(install_root, "node_modules",
+                                                ".bin", "mct"))
+            with open(os.path.join(install_root, "package.json"),
+                      encoding="utf-8") as fh:
+                package = json.load(fh)
+            self.assertEqual(package["dependencies"],
+                             {"@scope/mct": "1.2.3"})
+            self.assertEqual(package["overrides"],
+                             {"broken-package": "1.0.0"})
+            install_call = next(item for item in calls
+                                if item[0][1] == "install")
+            self.assertEqual(install_call[1]["cwd"], install_root)
 
 
 class _FakeMct:
