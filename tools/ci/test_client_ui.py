@@ -17,6 +17,19 @@ def _scenario(steps, **extra):
 
 
 class ValidateScenarioTests(unittest.TestCase):
+    def test_repository_scenarios_validate(self):
+        root = os.path.join(os.path.dirname(__file__), "client_scenarios")
+        paths = []
+        for directory, _, names in os.walk(root):
+            paths.extend(os.path.join(directory, name)
+                         for name in names if name.endswith(".json"))
+        self.assertTrue(paths)
+        for path in sorted(paths):
+            with self.subTest(path=os.path.relpath(path, root)):
+                with open(path, encoding="utf-8") as fh:
+                    raw = json.load(fh)
+                self.assertEqual(cu.validate_scenario(raw, path), [])
+
     def test_valid_minimal(self):
         raw = _scenario([{"type": "mct", "args": ["status", "health"],
                           "expect": [{"path": "health", "gte": 1}]}])
