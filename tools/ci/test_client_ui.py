@@ -224,6 +224,20 @@ class RconStepTests(unittest.TestCase):
         self.assertEqual(rcon.commands, ["list"])
 
 
+class ClientActionTests(unittest.TestCase):
+    def test_reconnect_preserves_bridge_and_waits_for_world(self):
+        mct = _FakeMct()
+        waited = []
+        ctx = _ctx(mct=mct)
+        ctx.wait_ready = lambda: waited.append(True)
+        cu._exec_step({"type": "client", "action": "reconnect"}, ctx, [])
+        self.assertIn(
+            ["client", "reconnect", "--address", "127.0.0.1:25565"],
+            mct.calls,
+        )
+        self.assertEqual(waited, [True])
+
+
 def _ctx(mct=None, rcon=None):
     return cu.ClientContext(
         mct=mct or _FakeMct(), rcon=rcon or _FakeRcon(),

@@ -88,7 +88,7 @@
     {
       "name": "client-rejoin",
       "type": "client",
-      "action": "rejoin"
+      "action": "reconnect"
     },
     {
       "name": "interact-custom-jailer-after-rejoin",

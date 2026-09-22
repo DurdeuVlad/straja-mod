@@ -32,7 +32,9 @@ Step types:
     mct:         {args: [...], expect: [rules], capture|captures}
     screenshot:  {name}                           — retained evidence
     sleep:       {seconds}
-    client:      {action: stop|rejoin}            — rejoin = stop+launch+wait
+    client:      {action: stop|reconnect|rejoin}  — reconnect preserves the
+                 automation bridge while rejoining the configured server;
+                 rejoin = stop+launch+wait
     npc-action:  {label, historyLast}             — resolve the labelled
                  clickEvent from raw chat components, send its command
     var:         {name, from, rules:[{regex,value}], default?}
@@ -576,6 +578,10 @@ def _exec_step(step: dict, ctx: ClientContext, report_steps: list):
                 ctx.mct(["client", "stop", ctx.client_name], timeout=timeout)
             elif action == "start":
                 ctx.launch_client()
+                ctx.wait_ready()
+            elif action == "reconnect":
+                ctx.mct(["client", "reconnect", "--address",
+                         f"127.0.0.1:{ctx.game_port}"], timeout=timeout)
                 ctx.wait_ready()
             elif action == "rejoin":
                 ctx.mct(["client", "stop", ctx.client_name], timeout=timeout)
