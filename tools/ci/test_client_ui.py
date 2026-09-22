@@ -145,7 +145,8 @@ class ClientModTests(unittest.TestCase):
     def test_seed_client_mod_uses_server_dependency_contract(self):
         manifest = {"clientMod": {"file": "mct-bridge.jar",
                                    "url": "https://example.invalid/bridge",
-                                   "sha256": "abc"}}
+                                   "sha256": "abc", "sha512": "def",
+                                   "size": 123, "expectedModId": "mct"}}
         with tempfile.TemporaryDirectory() as home:
             env = {"MCT_CACHE_DIR": os.path.join(home, "cache")}
             import unittest.mock as mock
@@ -155,7 +156,8 @@ class ClientModTests(unittest.TestCase):
             self.assertEqual(result, "cached.jar")
             download.assert_called_once_with(
                 {"fileName": "mct-bridge.jar",
-                 "url": "https://example.invalid/bridge", "sha256": "abc"},
+                 "url": "https://example.invalid/bridge", "sha256": "abc",
+                 "sha512": "def", "size": 123, "expectedModId": "mct"},
                 os.path.join(home, "cache", "mod"))
 
 

@@ -170,8 +170,8 @@ def preflight(manifest: dict, env: dict, log) -> str:
 def seed_client_mod(manifest: dict, env: dict, log):
     """Place the checksum-verified client-mod jar in the mct mod cache so
     `client create` uses it instead of the catalog's dead release URL."""
-    dep = {"url": manifest["clientMod"]["url"],
-           "sha256": manifest["clientMod"]["sha256"]}
+    dep = {key: manifest["clientMod"][key]
+           for key in ("url", "sha256", "sha512", "size", "expectedModId")}
     cache = env.get("MCT_CACHE_DIR") or os.path.join(
         os.path.expanduser("~"), ".mct", "cache")
     dest = os.path.join(cache, "mod")
