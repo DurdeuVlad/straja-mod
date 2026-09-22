@@ -5,6 +5,8 @@
     "version": "0.14.0",
     "integrity": "sha512-AHYqNQnlATe/aXdhUBbdTaWLsidP3f8ZxnjO3ojReFMT0bmvBSJLISrM0ITvXR2v5VIsw3VItDbKJTXhtIjWUQ==",
     "overrides": {
+      "@xmcl/core": "2.15.1",
+      "@xmcl/installer": "6.1.2",
       "@xmcl/unzip": "2.1.2"
     }
   },
