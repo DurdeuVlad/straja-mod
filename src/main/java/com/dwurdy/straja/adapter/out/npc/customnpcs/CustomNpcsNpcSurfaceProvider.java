@@ -447,11 +447,15 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                 playerApi);
         invoke(gui, "addLabel", 1, "Confirm NPC profile", 12, 8, 396, 20);
         invoke(gui, "addLabel", 2, option.title() + " · " + option.roleId(), 12, 32, 396, 20);
-        Object summary = invoke(gui, "addTextArea", 3, 12, 58, 396, 136);
+        // Keep the action row inside the 240px client viewport. CustomNPCs
+        // reports the logical GUI as 421x320, but a normal client viewport
+        // opens it with a negative top offset; a y=220 button is therefore
+        // not reliably reachable by a player-facing authoring tool.
+        Object summary = invoke(gui, "addTextArea", 3, 12, 58, 396, 76);
         invoke(summary, "setText", option.summary());
         invoke(summary, "setEnabled", false);
-        Object confirm = invoke(gui, "addButton", 9_100, "Assign profile", 12, 220, 190, 22);
-        Object cancel = invoke(gui, "addButton", 9_101, "Cancel", 218, 220, 190, 22);
+        Object confirm = invoke(gui, "addButton", 9_100, "Assign profile", 12, 150, 190, 22);
+        Object cancel = invoke(gui, "addButton", 9_101, "Cancel", 218, 150, 190, 22);
         setAdminConfirmHandler(confirm, gui, playerApi, player, hostUuid, option);
         setAdminCancelHandler(cancel, gui, playerApi, player, hostUuid);
         invoke(playerApi, "showCustomGui", gui);

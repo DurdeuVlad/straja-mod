@@ -83,13 +83,13 @@
     {
       "name": "choose-jailer-profile",
       "type": "mct",
-      "args": ["input", "click", "108", "101"],
+      "args": ["input", "click", "108", "79"],
       "expect": [{"rawRegex": "\\\"clicked\\\"\\s*:\\s*true"}]
     },
     {
       "name": "confirm-jailer-profile",
       "type": "mct",
-      "args": ["input", "click", "108", "220"],
+      "args": ["input", "click", "108", "151"],
       "expect": [{"rawRegex": "\\\"clicked\\\"\\s*:\\s*true"}]
     },
     {
@@ -150,13 +150,13 @@
     {
       "name": "choose-secretary-profile",
       "type": "mct",
-      "args": ["input", "click", "108", "151"],
+      "args": ["input", "click", "108", "129"],
       "expect": [{"rawRegex": "\\\"clicked\\\"\\s*:\\s*true"}]
     },
     {
       "name": "confirm-secretary-profile",
       "type": "mct",
-      "args": ["input", "click", "108", "220"],
+      "args": ["input", "click", "108", "151"],
       "expect": [{"rawRegex": "\\\"clicked\\\"\\s*:\\s*true"}]
     },
     {
