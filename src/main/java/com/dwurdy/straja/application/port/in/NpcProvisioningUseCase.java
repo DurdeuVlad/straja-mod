@@ -1,6 +1,9 @@
 package com.dwurdy.straja.application.port.in;
 
 import com.dwurdy.straja.domain.model.NpcProviderId;
+import com.dwurdy.straja.domain.model.NpcContentId;
+import com.dwurdy.straja.domain.model.NpcProvisioningAuditEntry;
+import com.dwurdy.straja.domain.model.NpcHostLocation;
 import java.util.List;
 import java.util.Optional;
 
@@ -14,16 +17,52 @@ public interface NpcProvisioningUseCase {
 
     Optional<AssignmentView> current(NpcProviderId providerId, String hostEntityUuid);
 
+    /** Opaque durable revision for optimistic-concurrency checks on an admin confirmation. */
+    String assignmentRevision(String hostEntityUuid);
+
     ProvisioningResult assign(
             NpcProviderId providerId,
             String hostEntityUuid,
             String actorId,
             String profileId);
 
+    /** Assigns a profile while recording a last-known host realm/position when available. */
+    ProvisioningResult assignWithLocation(
+            NpcProviderId providerId,
+            String hostEntityUuid,
+            String actorId,
+            String profileId,
+            java.util.Optional<NpcHostLocation> hostLocation);
+
+    /** Assigns only if the host still has the revision shown when its confirmation opened. */
+    ProvisioningResult assignIfRevisionMatches(
+            NpcProviderId providerId,
+            String hostEntityUuid,
+            String actorId,
+            String profileId,
+            java.util.Optional<NpcHostLocation> hostLocation,
+            String expectedRevision);
+
     ProvisioningResult unassign(
             NpcProviderId providerId,
             String hostEntityUuid,
             String actorId);
+
+    /** Unassigns only if no administrator changed the host after its confirmation opened. */
+    ProvisioningResult unassignIfRevisionMatches(
+            NpcProviderId providerId,
+            String hostEntityUuid,
+            String actorId,
+            String expectedRevision);
+
+    ProvisioningResult reproject(
+            NpcProviderId providerId,
+            String hostEntityUuid,
+            String actorId);
+
+    Optional<AssignmentStatus> status(NpcProviderId providerId, String hostEntityUuid);
+
+    List<NpcProvisioningAuditEntry> auditTrail(NpcProviderId providerId, String hostEntityUuid);
 
     record ProfileOption(
             String profileId,
@@ -33,7 +72,10 @@ public interface NpcProvisioningUseCase {
             String stationId,
             int schemaVersion,
             boolean enabled,
-            String disabledReason) {
+            String disabledReason,
+            List<NpcContentId> dialogueContentIds,
+            List<NpcContentId> questContentIds,
+            List<NpcContentId> actionContentIds) {
         public ProfileOption {
             if (profileId == null || profileId.isBlank()) throw new IllegalArgumentException("profileId");
             if (title == null || title.isBlank()) throw new IllegalArgumentException("title");
@@ -42,9 +84,20 @@ public interface NpcProvisioningUseCase {
             if (stationId == null || stationId.isBlank()) throw new IllegalArgumentException("stationId");
             if (schemaVersion < 1) throw new IllegalArgumentException("schemaVersion must be positive");
             if (disabledReason == null) disabledReason = "";
+            dialogueContentIds = contentIds(dialogueContentIds, "dialogueContentIds");
+            questContentIds = contentIds(questContentIds, "questContentIds");
+            actionContentIds = contentIds(actionContentIds, "actionContentIds");
             if (enabled && !disabledReason.isBlank()) {
                 throw new IllegalArgumentException("enabled profiles cannot have a disabled reason");
             }
+        }
+
+        private static List<NpcContentId> contentIds(List<NpcContentId> values, String name) {
+            List<NpcContentId> copy = List.copyOf(java.util.Objects.requireNonNull(values, name));
+            if (copy.size() > 64 || new java.util.HashSet<>(copy).size() != copy.size()) {
+                throw new IllegalArgumentException(name + " must contain at most 64 unique IDs");
+            }
+            return copy;
         }
     }
 
@@ -56,7 +109,24 @@ public interface NpcProvisioningUseCase {
             String roleId,
             String stationId,
             String assignedBy,
-            long assignedAtEpochMillis) {}
+            long assignedAtEpochMillis,
+            int schemaVersion,
+            NpcHostLocation hostLocation) {}
+
+    record AssignmentStatus(
+            AssignmentView assignment,
+            String lifecycleState,
+            String pendingOperation,
+            String lastProjectionError) {
+        public AssignmentStatus {
+            if (assignment == null) throw new IllegalArgumentException("assignment");
+            if (lifecycleState == null || lifecycleState.isBlank()) {
+                throw new IllegalArgumentException("lifecycleState");
+            }
+            if (pendingOperation == null) pendingOperation = "";
+            if (lastProjectionError == null) lastProjectionError = "";
+        }
+    }
 
     record ProvisioningResult(Status status, String code, String message) {
         public ProvisioningResult {

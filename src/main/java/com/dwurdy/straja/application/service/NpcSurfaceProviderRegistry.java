@@ -192,6 +192,50 @@ public final class NpcSurfaceProviderRegistry {
         return result;
     }
 
+    /**
+     * Probes ownership from durable binding intent after a process restart,
+     * when the registry's in-memory unknown-operation marker no longer exists.
+     */
+    public synchronized NpcProviderResult reconcile(NpcBinding expected) {
+        Objects.requireNonNull(expected, "expected");
+        String id = expected.bindingId();
+        UnknownBinding unknown = unknownBindings.get(id);
+        if (unknown != null) {
+            if (!unknown.binding().equals(expected)) {
+                return NpcProviderResult.unknown(
+                        "provider has an unresolved operation for a different binding mapping");
+            }
+            return reconcile(id);
+        }
+
+        NpcBinding current = bindings.get(id);
+        if (current != null) {
+            return current.equals(expected)
+                    ? NpcProviderResult.reconciled("registry confirms the expected binding is owned")
+                    : NpcProviderResult.unknown("registry owns the logical binding with a different mapping");
+        }
+
+        NpcSurfaceProvider provider = find(expected.providerId()).orElse(null);
+        if (provider == null || !provider.available()) {
+            return NpcProviderResult.unavailable("bound NPC provider is unavailable");
+        }
+        NpcProviderResult result = safely(() -> provider.reconcile(expected));
+        if (result.status() == NpcProviderResult.Status.ACCEPTED) {
+            bindings.put(id, expected);
+            surfaces.remove(id);
+            return NpcProviderResult.reconciled("provider confirms ownership after cold-start reconciliation");
+        }
+        if (result.status() == NpcProviderResult.Status.REJECTED) {
+            // Do not erase a different owner that could have appeared while
+            // the provider probe ran (all normal registry mutations are
+            // synchronized on this instance).
+            bindings.remove(id);
+            surfaces.remove(id);
+            return NpcProviderResult.reconciled("provider confirms it does not own the expected mapping");
+        }
+        return result;
+    }
+
     public synchronized boolean owns(String bindingId, NpcProviderId providerId) {
         return binding(bindingId).map(binding -> binding.providerId().equals(providerId)).orElse(false);
     }

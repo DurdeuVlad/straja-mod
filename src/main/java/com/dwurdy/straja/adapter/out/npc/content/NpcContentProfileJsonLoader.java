@@ -3,6 +3,7 @@ package com.dwurdy.straja.adapter.out.npc.content;
 import com.dwurdy.straja.domain.model.NpcCapability;
 import com.dwurdy.straja.domain.model.NpcContentId;
 import com.dwurdy.straja.domain.model.NpcContentProfile;
+import com.dwurdy.straja.domain.model.NpcProfileId;
 import com.dwurdy.straja.domain.model.NpcSurfaceAction;
 import com.dwurdy.straja.domain.model.NpcSurfaceSnapshot;
 import com.google.gson.JsonArray;
@@ -90,8 +91,19 @@ public final class NpcContentProfileJsonLoader {
                             requiredString(quest, "state").toUpperCase(java.util.Locale.ROOT))));
         }
 
+        if (json.has("contentProfileId") == json.has("profileId")) {
+            throw new IllegalArgumentException(
+                    "profile must define exactly one of contentProfileId or legacy profileId");
+        }
+        String contentIdField = json.has("contentProfileId") ? "contentProfileId" : "profileId";
+        NpcContentId contentId = NpcContentId.of(requiredString(json, contentIdField));
+        String configuredProfileId = optionalString(json, "npcProfileId", null);
+        NpcProfileId profileId = configuredProfileId == null
+                ? NpcProfileId.fromContentId(contentId)
+                : NpcProfileId.of(configuredProfileId);
         return new NpcContentProfile(
-                NpcContentId.of(requiredString(json, "profileId")),
+                contentId,
+                profileId,
                 requiredInt(json, "schemaVersion"),
                 requiredString(json, "title"),
                 requiredString(json, "body"),

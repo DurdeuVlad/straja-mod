@@ -1,5 +1,6 @@
 {
-  "profileId": "straja.armorer.orders",
+  "contentProfileId": "straja.armorer.orders",
+  "npcProfileId": "straja:armorer",
   "schemaVersion": 1,
   "title": "Straja armorer",
   "body": "The armorer presents rank-eligible equipment and requisition reserves. Every order is checked again when submitted.",

@@ -1,5 +1,6 @@
 {
-  "profileId": "straja.instructor.admission",
+  "contentProfileId": "straja.instructor.admission",
+  "npcProfileId": "straja:trainer",
   "schemaVersion": 1,
   "title": "Straja instructor",
   "body": "The instructor conducts the admission exam and records the first training step.",

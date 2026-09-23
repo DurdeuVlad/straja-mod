@@ -35,7 +35,7 @@ class NpcSecretarySurfaceTest {
                         StandardCharsets.UTF_8));
         NpcBinding binding = new NpcBinding(
                 "straja.test.secretary", NpcProviderId.CUSTOM_NPCS,
-                UUID.randomUUID().toString(), "", "secretary", "hq", profile.profileId(), 1);
+                UUID.randomUUID().toString(), "", "secretary", "hq", profile.contentId(), 1);
 
         NpcSurfaceSnapshot surface = new NpcSecretarySurfaceService().resolve(
                 profile.bind(binding),

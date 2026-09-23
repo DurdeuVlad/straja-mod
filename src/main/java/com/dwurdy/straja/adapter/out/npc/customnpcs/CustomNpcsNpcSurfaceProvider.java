@@ -9,6 +9,7 @@ import com.dwurdy.straja.domain.model.NpcActionResult;
 import com.dwurdy.straja.domain.model.NpcBinding;
 import com.dwurdy.straja.domain.model.NpcCapability;
 import com.dwurdy.straja.domain.model.NpcContentId;
+import com.dwurdy.straja.domain.model.NpcHostLocation;
 import com.dwurdy.straja.domain.model.NpcProviderId;
 import com.dwurdy.straja.domain.model.NpcProviderResult;
 import com.dwurdy.straja.domain.model.NpcSurfaceAction;
@@ -16,15 +17,21 @@ import com.dwurdy.straja.domain.model.NpcSurfaceSnapshot;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.EnumSet;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 
 /**
@@ -142,6 +149,51 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
         // Once the operator/tool predicate matched, never let a bridge
         // failure turn the authoring gesture into a real NPC attack.
         return true;
+    }
+
+    /** Checks whether a persisted CustomNPC instance can currently be resolved. */
+    public NpcProviderResult inspectHost(MinecraftServer server, String hostEntityUuid) {
+        Objects.requireNonNull(server, "server");
+        if (!bridge.available()) {
+            return NpcProviderResult.unavailable("CustomNPCs provider is unavailable");
+        }
+        UUID hostId;
+        try {
+            hostId = UUID.fromString(hostEntityUuid);
+        } catch (RuntimeException exception) {
+            return NpcProviderResult.rejected("invalid-host-identity", "stored host identity is not a UUID");
+        }
+        for (ServerLevel level : server.getAllLevels()) {
+            Entity entity = level.getEntity(hostId);
+            if (entity == null) continue;
+            if (!isCustomNpcsEntity(entity)) {
+                return NpcProviderResult.rejected(
+                        "host-identity-mismatch", "stored UUID currently identifies a non-CustomNPC entity");
+            }
+            return NpcProviderResult.accepted("loaded in " + level.dimension().location()
+                    + " at " + entity.blockPosition().toShortString());
+        }
+        return NpcProviderResult.unavailable(
+                "CustomNPC is not loaded in any server level; possible orphan. Assignment was preserved.");
+    }
+
+    private Optional<NpcHostLocation> hostLocation(MinecraftServer server, String hostEntityUuid) {
+        UUID hostId;
+        try {
+            hostId = UUID.fromString(hostEntityUuid);
+        } catch (RuntimeException exception) {
+            return Optional.empty();
+        }
+        for (ServerLevel level : server.getAllLevels()) {
+            Entity entity = level.getEntity(hostId);
+            if (entity != null && isCustomNpcsEntity(entity)) {
+                var position = entity.blockPosition();
+                return Optional.of(new NpcHostLocation(
+                        level.dimension().location().toString(),
+                        position.getX(), position.getY(), position.getZ()));
+            }
+        }
+        return Optional.empty();
     }
 
     @Override
@@ -378,10 +430,16 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                 playerApi);
         invoke(gui, "addLabel", 1, "Straja NPC provisioning", 12, 8, 396, 20);
 
+        String displayedRevision = provisioning.assignmentRevision(hostUuid);
         var current = provisioning.current(providerId(), hostUuid);
+        var assignmentStatus = provisioning.status(providerId(), hostUuid);
+        boolean recoveryPending = assignmentStatus
+                .map(status -> "UNKNOWN".equals(status.lifecycleState()))
+                .orElse(false);
         String currentText = current
                 .map(assignment -> "Current: " + assignment.profileId()
-                        + " · role " + assignment.roleId())
+                        + " · role " + assignment.roleId()
+                        + (recoveryPending ? " · provider recovery pending" : ""))
                 .orElse("Current: unassigned");
         invoke(gui, "addLabel", 2, currentText, 12, 31, 396, 20);
 
@@ -404,8 +462,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
         for (NpcProvisioningUseCase.ProfileOption option : provisioning.profiles(providerId())) {
             boolean selected = current.map(assignment -> assignment.profileId().equals(option.profileId()))
                     .orElse(false);
-            String label = option.title() + " · " + option.roleId()
-                    + (selected ? " (current)" : "");
+            String label = profileOptionLabel(option, selected, recoveryPending);
             Object button = invoke(
                     profileHost,
                     "addButton",
@@ -415,9 +472,10 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                     y,
                     profileWidth,
                     22);
-            invoke(button, "setEnabled", option.enabled());
-            if (option.enabled()) {
-                setAdminProfileHandler(button, gui, playerApi, player, hostUuid, option);
+            invoke(button, "setHoverText", (Object) profileOptionHoverText(option, recoveryPending));
+            invoke(button, "setEnabled", option.enabled() && !recoveryPending);
+            if (option.enabled() && !recoveryPending) {
+                setAdminProfileHandler(button, gui, playerApi, player, hostUuid, option, displayedRevision);
             }
             y += 25;
         }
@@ -426,8 +484,17 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             // Keep this below the compact profile panel; the lower rows of the
             // logical 320px GUI are outside a normal 240px client viewport
             // after CustomNPCs applies its negative top offset.
-            Object unassign = invoke(gui, "addButton", 9_000, "Unassign profile", 218, 214, 190, 22);
-            setAdminUnassignHandler(unassign, gui, playerApi, player, hostUuid);
+            Object status = invoke(gui, "addButton", 9_000, "Status", 12, 214, 120, 22);
+            setAdminStatusHandler(status, gui, playerApi, player, hostUuid);
+            if (!recoveryPending) {
+                Object reproject = invoke(gui, "addButton", 9_001, "Re-sync profile", 138, 214, 132, 22);
+                setAdminReprojectHandler(reproject, gui, playerApi, player, hostUuid);
+            }
+            String pendingOperation = assignmentStatus
+                    .map(NpcProvisioningUseCase.AssignmentStatus::pendingOperation).orElse("");
+            String unassignLabel = unassignButtonLabel(recoveryPending, pendingOperation);
+            Object unassign = invoke(gui, "addButton", 9_002, unassignLabel, 276, 214, 132, 22);
+            setAdminUnassignHandler(unassign, gui, playerApi, player, hostUuid, displayedRevision);
         }
         invoke(playerApi, "showCustomGui", gui);
     }
@@ -436,7 +503,8 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             Object playerApi,
             ServerPlayer player,
             String hostUuid,
-            NpcProvisioningUseCase.ProfileOption option) {
+            NpcProvisioningUseCase.ProfileOption option,
+            String expectedRevision) {
         Object gui = invoke(
                 bridge.api(),
                 "createCustomGui",
@@ -446,25 +514,104 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                 false,
                 playerApi);
         invoke(gui, "addLabel", 1, "Confirm NPC profile", 12, 8, 396, 20);
-        invoke(gui, "addLabel", 2, option.title() + " · " + option.roleId(), 12, 32, 396, 20);
+        Object profileLabel = invoke(
+                gui, "addLabel", 2,
+                option.title() + " · " + option.profileId() + " · " + option.roleId(),
+                12, 32, 396, 20);
+        invoke(profileLabel, "setHoverText", option.summary());
         // Keep the action row inside the 240px client viewport. CustomNPCs
         // reports the logical GUI as 421x320, but a normal client viewport
         // opens it with a negative top offset; a y=220 button is therefore
         // not reliably reachable by a player-facing authoring tool.
-        Object summary = invoke(gui, "addTextArea", 3, 12, 58, 396, 76);
-        invoke(summary, "setText", option.summary());
-        invoke(summary, "setEnabled", false);
+        Object referenceHost = gui;
+        int referenceX = 12;
+        int referenceY = 58;
+        try {
+            Object scrollingPanel = invoke(gui, "getScrollingPanel");
+            invoke(scrollingPanel, "init", 12, 58, 396, 78);
+            referenceHost = scrollingPanel;
+            referenceX = 0;
+            referenceY = 0;
+        } catch (RuntimeException exception) {
+            diagnostics.accept("CustomNPCs confirmation scroll unavailable; using bounded reference summary");
+            Object summary = invoke(gui, "addTextArea", 3, 12, 58, 396, 76);
+            invoke(summary, "setText", String.join("\n", profileReferenceRows(option)));
+            invoke(summary, "setHoverText", (Object) profileReferenceRows(option).toArray(String[]::new));
+            invoke(summary, "setEnabled", false);
+        }
+        if (referenceHost != gui) {
+            int rowId = 10_000;
+            for (String row : profileReferenceRows(option)) {
+                invoke(referenceHost, "addLabel", rowId++, row, referenceX, referenceY, 396, 18);
+                referenceY += 18;
+            }
+        }
         Object confirm = invoke(gui, "addButton", 9_100, "Assign profile", 12, 150, 190, 22);
         Object cancel = invoke(gui, "addButton", 9_101, "Cancel", 218, 150, 190, 22);
-        setAdminConfirmHandler(confirm, gui, playerApi, player, hostUuid, option);
+        setAdminConfirmHandler(confirm, gui, playerApi, player, hostUuid, option, expectedRevision);
         setAdminCancelHandler(cancel, gui, playerApi, player, hostUuid);
         invoke(playerApi, "showCustomGui", gui);
+    }
+
+    static String profileOptionLabel(
+            NpcProvisioningUseCase.ProfileOption option,
+            boolean selected,
+            boolean recoveryPending) {
+        String label = option.title() + " · " + option.profileId() + " · " + option.roleId();
+        if (selected) label += " (current)";
+        if (!option.enabled() || recoveryPending) label += " · unavailable";
+        return label;
+    }
+
+    static String[] profileOptionHoverText(
+            NpcProvisioningUseCase.ProfileOption option,
+            boolean recoveryPending) {
+        String availability = recoveryPending
+                ? "Unavailable: provider recovery is pending"
+                : option.enabled() ? "Available"
+                : "Unavailable: " + option.disabledReason();
+        return new String[] {
+                "Profile ID: " + option.profileId(),
+                "Purpose: " + option.summary(),
+                "Role/station: " + option.roleId() + " / " + option.stationId(),
+                "Availability: " + availability,
+                "Wired content: " + option.dialogueContentIds().size() + " dialogue nodes, "
+                        + option.questContentIds().size() + " quests, "
+                        + option.actionContentIds().size() + " actions"
+        };
+    }
+
+    static String unassignButtonLabel(boolean recoveryPending, String pendingOperation) {
+        if (!recoveryPending) return "Unassign";
+        return "UNBIND".equals(pendingOperation) ? "Retry unassign" : "Cancel pending";
+    }
+
+    static java.util.List<String> profileReferenceRows(NpcProvisioningUseCase.ProfileOption option) {
+        java.util.List<String> rows = new java.util.ArrayList<>();
+        addReferenceRows(rows, "Dialogue nodes", option.dialogueContentIds());
+        addReferenceRows(rows, "Quests", option.questContentIds());
+        addReferenceRows(rows, "Actions", option.actionContentIds());
+        return java.util.List.copyOf(rows);
+    }
+
+    private static void addReferenceRows(
+            java.util.List<String> rows,
+            String label,
+            java.util.List<NpcContentId> ids) {
+        rows.add(label + " (" + ids.size() + "):");
+        if (ids.isEmpty()) {
+            rows.add("  none");
+            return;
+        }
+        ids.stream().map(id -> "  " + id.value()).forEach(rows::add);
     }
 
     private void openAdminUnassignConfirmation(
             Object playerApi,
             ServerPlayer player,
-            String hostUuid) {
+            String hostUuid,
+            String expectedRevision,
+            boolean recoveryPending) {
         Object gui = invoke(
                 bridge.api(),
                 "createCustomGui",
@@ -473,15 +620,159 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                 320,
                 false,
                 playerApi);
-        invoke(gui, "addLabel", 1, "Remove Straja profile", 12, 8, 396, 20);
-        invoke(gui, "addLabel", 2,
-                "This NPC will return to native CustomNPCs behavior.",
-                12, 38, 396, 20);
-        Object confirm = invoke(gui, "addButton", 9_200, "Unassign", 12, 150, 190, 22);
+        invoke(gui, "addLabel", 1,
+                recoveryPending ? "Cancel pending NPC assignment" : "Remove Straja profile",
+                12, 8, 396, 20);
+        invoke(gui, "addLabel", 2, recoveryPending
+                ? "Straja will remove this assignment only after the provider confirms it is unbound."
+                : "This NPC will return to native CustomNPCs behavior.",
+                12, 38, 396, 38);
+        Object confirm = invoke(gui, "addButton", 9_200,
+                recoveryPending ? "Confirm cancellation" : "Unassign", 12, 150, 190, 22);
         Object cancel = invoke(gui, "addButton", 9_201, "Cancel", 218, 150, 190, 22);
-        setAdminUnassignConfirmHandler(confirm, gui, playerApi, player, hostUuid);
+        setAdminUnassignConfirmHandler(confirm, gui, playerApi, player, hostUuid, expectedRevision);
         setAdminCancelHandler(cancel, gui, playerApi, player, hostUuid);
         invoke(playerApi, "showCustomGui", gui);
+    }
+
+    private void openAdminStatus(Object playerApi, ServerPlayer player, String hostUuid) {
+        NpcProvisioningUseCase.AssignmentStatus status = provisioning
+                .status(providerId(), hostUuid).orElse(null);
+        if (status == null) {
+            openAdminSelector(playerApi, player, hostUuid);
+            return;
+        }
+        NpcProviderResult host = inspectHost(player.getServer(), hostUuid);
+        var assignment = status.assignment();
+        Object gui = invoke(
+                bridge.api(), "createCustomGui",
+                Math.floorMod(("status:" + hostUuid).hashCode(), 20_000) + 80_000,
+                421, 320, false, playerApi);
+        invoke(gui, "addLabel", 1, "NPC assignment status", 12, 8, 396, 20);
+        Object details = invoke(gui, "addTextArea", 2, 12, 34, 396, 190);
+        String projectionError = status.lastProjectionError().isBlank()
+                ? "none" : status.lastProjectionError();
+        String pending = status.pendingOperation().isBlank() ? "none" : status.pendingOperation();
+        String text = "Provider: " + assignment.providerId()
+                + "\nProvider instance: " + assignment.hostEntityUuid()
+                + "\nBinding: " + assignment.bindingId()
+                + "\nProfile: " + assignment.profileId() + " (schema v" + assignment.schemaVersion() + ")"
+                + "\nLast-known location: " + (assignment.hostLocation() == null
+                        ? "unknown" : assignment.hostLocation().displayValue())
+                + "\nRole/station: " + assignment.roleId() + " / " + assignment.stationId()
+                + "\nLifecycle: " + status.lifecycleState() + " (pending " + pending + ")"
+                + "\nAssignment set by: " + (assignment.assignedBy().isBlank() ? "unknown" : assignment.assignedBy())
+                + "\nAssignment set at: " + formatTimestamp(assignment.assignedAtEpochMillis())
+                + "\nProvider host: " + host.status() + " — " + host.message()
+                + "\nLast projection error: " + projectionError;
+        invoke(details, "setText", text);
+        invoke(details, "setEnabled", false);
+        Object audit = invoke(gui, "addButton", 9_100, "Audit history", 12, 240, 190, 22);
+        Object back = invoke(gui, "addButton", 9_101, "Back", 218, 240, 190, 22);
+        setAdminAuditHandler(audit, gui, playerApi, player, hostUuid);
+        setAdminCancelHandler(back, gui, playerApi, player, hostUuid);
+        invoke(playerApi, "showCustomGui", gui);
+    }
+
+    private void openAdminAudit(Object playerApi, ServerPlayer player, String hostUuid) {
+        NpcProviderId auditProvider = provisioning.current(providerId(), hostUuid)
+                .map(assignment -> NpcProviderId.of(assignment.providerId()))
+                .orElse(providerId());
+        var events = provisioning.auditTrail(auditProvider, hostUuid);
+        Object gui = invoke(
+                bridge.api(), "createCustomGui",
+                Math.floorMod(("audit:" + hostUuid).hashCode(), 20_000) + 100_000,
+                421, 320, false, playerApi);
+        invoke(gui, "addLabel", 1, "Provisioning audit", 12, 8, 396, 20);
+        Object details = invoke(gui, "addTextArea", 2, 12, 34, 396, 190);
+        String history = events.isEmpty() ? "No provisioning events recorded."
+                : events.stream().skip(Math.max(0, events.size() - 10L))
+                        .map(event -> formatTimestamp(event.occurredAtEpochMillis())
+                                + " | " + event.action() + " | " + event.actorId()
+                                + " | " + (event.oldProfileId().isBlank() ? "(none)" : event.oldProfileId())
+                                + " -> " + (event.newProfileId().isBlank() ? "(none)" : event.newProfileId())
+                                + " | " + event.outcome() + "/" + event.resultCode()
+                                + (event.failureReason().isBlank() ? "" : " | " + event.failureReason()))
+                        .collect(java.util.stream.Collectors.joining("\n"));
+        invoke(details, "setText", history);
+        invoke(details, "setEnabled", false);
+        Object back = invoke(gui, "addButton", 9_102, "Back to status", 12, 240, 190, 22);
+        setGuiCallback(back, args -> {
+            Object clickedGui = callbackGui(args, gui);
+            Object currentPlayerApi = guiPlayer(clickedGui, playerApi);
+            ServerPlayer currentPlayer = serverPlayer(currentPlayerApi, player);
+            if (!isAdminToolAuthorized(currentPlayer)) {
+                showAuthorizationResult(clickedGui, currentPlayer);
+                return;
+            }
+            openAdminStatus(currentPlayerApi, currentPlayer, hostUuid);
+        });
+        invoke(playerApi, "showCustomGui", gui);
+    }
+
+    private void setAdminStatusHandler(
+            Object button,
+            Object parentGui,
+            Object fallbackPlayerApi,
+            ServerPlayer fallbackPlayer,
+            String hostUuid) {
+        setGuiCallback(button, args -> {
+            Object clickedGui = callbackGui(args, parentGui);
+            Object playerApi = guiPlayer(clickedGui, fallbackPlayerApi);
+            ServerPlayer player = serverPlayer(playerApi, fallbackPlayer);
+            if (!isAdminToolAuthorized(player)) {
+                showAuthorizationResult(clickedGui, player);
+                return;
+            }
+            openAdminStatus(playerApi, player, hostUuid);
+        });
+    }
+
+    private void setAdminAuditHandler(
+            Object button,
+            Object parentGui,
+            Object fallbackPlayerApi,
+            ServerPlayer fallbackPlayer,
+            String hostUuid) {
+        setGuiCallback(button, args -> {
+            Object clickedGui = callbackGui(args, parentGui);
+            Object playerApi = guiPlayer(clickedGui, fallbackPlayerApi);
+            ServerPlayer player = serverPlayer(playerApi, fallbackPlayer);
+            if (!isAdminToolAuthorized(player)) {
+                showAuthorizationResult(clickedGui, player);
+                return;
+            }
+            openAdminAudit(playerApi, player, hostUuid);
+        });
+    }
+
+    private void setAdminReprojectHandler(
+            Object button,
+            Object parentGui,
+            Object fallbackPlayerApi,
+            ServerPlayer fallbackPlayer,
+            String hostUuid) {
+        setGuiCallback(button, args -> {
+            Object clickedGui = callbackGui(args, parentGui);
+            Object playerApi = guiPlayer(clickedGui, fallbackPlayerApi);
+            ServerPlayer player = serverPlayer(playerApi, fallbackPlayer);
+            if (!isAdminToolAuthorized(player)) {
+                showAuthorizationResult(clickedGui, player);
+                return;
+            }
+            NpcProviderResult host = inspectHost(player.getServer(), hostUuid);
+            if (host.status() != NpcProviderResult.Status.ACCEPTED) {
+                showProvisioningResult(clickedGui, player, provisioningResult(host));
+                return;
+            }
+            NpcProvisioningUseCase.ProvisioningResult result = provisioning.reproject(
+                    providerId(), hostUuid, player.getUUID().toString());
+            if (result.status() == NpcProvisioningUseCase.Status.ACCEPTED) {
+                openAdminSelector(playerApi, player, hostUuid);
+            } else {
+                showProvisioningResult(clickedGui, player, result);
+            }
+        });
     }
 
     private void setAdminProfileHandler(
@@ -490,12 +781,17 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             Object fallbackPlayerApi,
             ServerPlayer fallbackPlayer,
             String hostUuid,
-            NpcProvisioningUseCase.ProfileOption option) {
+            NpcProvisioningUseCase.ProfileOption option,
+            String expectedRevision) {
         setGuiCallback(button, (args) -> {
             Object clickedGui = callbackGui(args, parentGui);
             Object playerApi = guiPlayer(clickedGui, fallbackPlayerApi);
             ServerPlayer player = serverPlayer(playerApi, fallbackPlayer);
-            openAdminConfirmation(playerApi, player, hostUuid, option);
+            if (!isAdminToolAuthorized(player)) {
+                showAuthorizationResult(clickedGui, player);
+                return;
+            }
+            openAdminConfirmation(playerApi, player, hostUuid, option, expectedRevision);
         });
     }
 
@@ -504,12 +800,19 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             Object parentGui,
             Object fallbackPlayerApi,
             ServerPlayer fallbackPlayer,
-            String hostUuid) {
+            String hostUuid,
+            String expectedRevision) {
         setGuiCallback(button, (args) -> {
             Object clickedGui = callbackGui(args, parentGui);
             Object playerApi = guiPlayer(clickedGui, fallbackPlayerApi);
             ServerPlayer player = serverPlayer(playerApi, fallbackPlayer);
-            openAdminUnassignConfirmation(playerApi, player, hostUuid);
+            if (!isAdminToolAuthorized(player)) {
+                showAuthorizationResult(clickedGui, player);
+                return;
+            }
+            boolean recoveryPending = provisioning.status(providerId(), hostUuid)
+                    .map(status -> "UNKNOWN".equals(status.lifecycleState())).orElse(false);
+            openAdminUnassignConfirmation(playerApi, player, hostUuid, expectedRevision, recoveryPending);
         });
     }
 
@@ -519,17 +822,28 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             Object fallbackPlayerApi,
             ServerPlayer fallbackPlayer,
             String hostUuid,
-            NpcProvisioningUseCase.ProfileOption option) {
+            NpcProvisioningUseCase.ProfileOption option,
+            String expectedRevision) {
         setGuiCallback(button, (args) -> {
             Object clickedGui = callbackGui(args, parentGui);
             Object playerApi = guiPlayer(clickedGui, fallbackPlayerApi);
             ServerPlayer player = serverPlayer(playerApi, fallbackPlayer);
-            NpcProvisioningUseCase.ProvisioningResult result = provisioning.assign(
-                    providerId(), hostUuid, player.getUUID().toString(), option.profileId());
+            if (!isAdminToolAuthorized(player)) {
+                showAuthorizationResult(clickedGui, player);
+                return;
+            }
+            NpcProviderResult host = inspectHost(player.getServer(), hostUuid);
+            if (host.status() != NpcProviderResult.Status.ACCEPTED) {
+                showProvisioningResult(clickedGui, player, provisioningResult(host));
+                return;
+            }
+            NpcProvisioningUseCase.ProvisioningResult result = provisioning.assignIfRevisionMatches(
+                    providerId(), hostUuid, player.getUUID().toString(), option.profileId(),
+                    hostLocation(player.getServer(), hostUuid), expectedRevision);
             if (result.status() == NpcProvisioningUseCase.Status.ACCEPTED) {
                 openAdminSelector(playerApi, player, hostUuid);
             } else {
-                showProvisioningResult(clickedGui, result);
+                showProvisioningResult(clickedGui, player, result);
             }
         });
     }
@@ -539,17 +853,22 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             Object parentGui,
             Object fallbackPlayerApi,
             ServerPlayer fallbackPlayer,
-            String hostUuid) {
+            String hostUuid,
+            String expectedRevision) {
         setGuiCallback(button, (args) -> {
             Object clickedGui = callbackGui(args, parentGui);
             Object playerApi = guiPlayer(clickedGui, fallbackPlayerApi);
             ServerPlayer player = serverPlayer(playerApi, fallbackPlayer);
-            NpcProvisioningUseCase.ProvisioningResult result = provisioning.unassign(
-                    providerId(), hostUuid, player.getUUID().toString());
+            if (!isAdminToolAuthorized(player)) {
+                showAuthorizationResult(clickedGui, player);
+                return;
+            }
+            NpcProvisioningUseCase.ProvisioningResult result = provisioning.unassignIfRevisionMatches(
+                    providerId(), hostUuid, player.getUUID().toString(), expectedRevision);
             if (result.status() == NpcProvisioningUseCase.Status.ACCEPTED) {
                 openAdminSelector(playerApi, player, hostUuid);
             } else {
-                showProvisioningResult(clickedGui, result);
+                showProvisioningResult(clickedGui, player, result);
             }
         });
     }
@@ -564,6 +883,10 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             Object clickedGui = callbackGui(args, parentGui);
             Object playerApi = guiPlayer(clickedGui, fallbackPlayerApi);
             ServerPlayer player = serverPlayer(playerApi, fallbackPlayer);
+            if (!isAdminToolAuthorized(player)) {
+                showAuthorizationResult(clickedGui, player);
+                return;
+            }
             openAdminSelector(playerApi, player, hostUuid);
         });
     }
@@ -608,15 +931,54 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
         }
     }
 
-    private static void showProvisioningResult(
+    private boolean isAdminToolAuthorized(ServerPlayer player) {
+        return player != null && adminTool != null && adminTool.test(player);
+    }
+
+    private static NpcProvisioningUseCase.ProvisioningResult provisioningResult(NpcProviderResult result) {
+        return switch (result.status()) {
+            case ACCEPTED, RECONCILED -> NpcProvisioningUseCase.ProvisioningResult.accepted(result.message());
+            case REJECTED -> NpcProvisioningUseCase.ProvisioningResult.rejected(result.code(), result.message());
+            case UNAVAILABLE -> NpcProvisioningUseCase.ProvisioningResult.unavailable(result.message());
+            case UNKNOWN -> NpcProvisioningUseCase.ProvisioningResult.unknown(result.message());
+        };
+    }
+
+    private static String formatTimestamp(long epochMillis) {
+        if (epochMillis <= 0) return "unknown";
+        return DateTimeFormatter.ISO_OFFSET_DATE_TIME
+                .withZone(ZoneOffset.UTC)
+                .format(Instant.ofEpochMilli(epochMillis));
+    }
+
+    private void showAuthorizationResult(Object gui, ServerPlayer player) {
+        showProvisioningResult(gui, player, NpcProvisioningUseCase.ProvisioningResult.rejected(
+                "admin-authorization-required",
+                "NPC Tool permission and held wand are required for this action."));
+    }
+
+    private void showProvisioningResult(
             Object gui,
+            ServerPlayer player,
             NpcProvisioningUseCase.ProvisioningResult result) {
+        if (player != null) {
+            try {
+                Class<?> component = Class.forName(
+                        "net.minecraft.network.chat.Component", true, player.getClass().getClassLoader());
+                Object message = component.getMethod("literal", String.class)
+                        .invoke(null, "[Straja NPC] " + result.message());
+                invoke(player, "sendSystemMessage", message);
+            } catch (ReflectiveOperationException | RuntimeException error) {
+                diagnostics.accept("Could not send NPC provisioning result to player chat: "
+                        + error.getClass().getSimpleName());
+            }
+        }
         try {
             invoke(gui, "removeComponent", 9_999);
         } catch (RuntimeException ignored) {
             // Optional component replacement varies between CustomNPCs builds.
         }
-        invoke(gui, "addLabel", 9_999, result.message(), 12, 286, 396, 24);
+        invoke(gui, "addLabel", 9_999, result.message(), 12, 178, 396, 40);
         invoke(gui, "update");
     }
 

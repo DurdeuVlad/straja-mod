@@ -69,7 +69,7 @@ class NpcProviderContractTest {
         NpcBinding conflicting = new NpcBinding(
                 binding.bindingId(), binding.providerId(), UUID.randomUUID().toString(),
                 binding.externalNpcId(), binding.roleId(), binding.stationId(),
-                binding.surfaceProfileId(), binding.schemaVersion());
+                binding.contentProfileId(), binding.schemaVersion());
 
         assertEquals(NpcProviderResult.Status.ACCEPTED, registry.bind(binding).status());
         assertEquals(NpcProviderResult.Status.REJECTED, registry.bind(conflicting).status());
@@ -280,7 +280,7 @@ class NpcProviderContractTest {
     void bindingIdentityAndSurfaceProfileAreStableAndValidated() {
         NpcBinding binding = binding(NpcProviderId.DEBUG_TEXT);
         assertEquals("straja.reception.desk", binding.bindingId());
-        assertEquals(PROFILE, binding.surfaceProfileId());
+        assertEquals(PROFILE, binding.contentProfileId());
         assertThrows(IllegalArgumentException.class, () -> new NpcBinding(
                 "Bad Binding", NpcProviderId.DEBUG_TEXT, "entity", "external",
                 "receptionist", "hq", PROFILE, 1));
