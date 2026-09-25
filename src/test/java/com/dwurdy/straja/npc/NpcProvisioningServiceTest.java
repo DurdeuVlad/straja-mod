@@ -743,11 +743,13 @@ class NpcProvisioningServiceTest {
     @Test
     void exactDuplicateBindingCanBeUnassignedThroughTheAdminRecoveryPath() {
         Fixture fixture = fixture(false);
+        NpcProviderId secondProviderId = NpcProviderId.of("debug-text");
+        fixture.providers.register(new FakeProvider(secondProviderId, false));
         NpcBinding first = new NpcBinding(
                 "straja.customnpcs.first", PROVIDER, "npc-one", "",
                 "secretary", "hq", FIRST, 1);
         NpcBinding second = new NpcBinding(
-                "straja.customnpcs.second", PROVIDER, "npc-one", "",
+                "straja.debug-text.second", secondProviderId, "npc-one", "",
                 "secretary", "hq", SECOND, 1);
         assertEquals(NpcProviderResult.Status.ACCEPTED, fixture.lifecycle.bindAndPublish(first).status());
         assertEquals(NpcProviderResult.Status.ACCEPTED, fixture.lifecycle.bindAndPublish(second).status());

@@ -303,11 +303,6 @@ public final class NpcProvisioningService implements NpcProvisioningUseCase {
                     actorId, null, "", bindingId,
                     ProvisioningResult.rejected("not-bound", "the requested binding is not assigned to this NPC"));
         }
-        if (!providerId.value().equals(current.providerId().value())) {
-            return audit(NpcProvisioningAuditEntry.Action.UNASSIGN, providerId, hostEntityUuid,
-                    actorId, current, "", bindingId,
-                    ProvisioningResult.rejected("provider-mismatch", "the requested binding belongs to another provider"));
-        }
         if (inspection.state() == NpcBindingLifecycleService.State.UNKNOWN) {
             return audit(NpcProvisioningAuditEntry.Action.UNASSIGN, providerId, hostEntityUuid,
                     actorId, current, "", bindingId,
