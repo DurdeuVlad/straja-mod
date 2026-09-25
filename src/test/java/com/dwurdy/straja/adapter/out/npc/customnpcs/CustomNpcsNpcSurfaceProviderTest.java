@@ -1,6 +1,7 @@
 package com.dwurdy.straja.adapter.out.npc.customnpcs;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.dwurdy.straja.application.port.in.NpcProvisioningUseCase;
@@ -9,6 +10,48 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class CustomNpcsNpcSurfaceProviderTest {
+    @Test
+    void oldOrClosedNativeGuiCannotPassCallbackGuard() {
+        Object firstGui = new Object();
+        Object replacementGui = new Object();
+        NativePlayerGui playerApi = new NativePlayerGui(firstGui);
+
+        assertTrue(CustomNpcsNpcSurfaceProvider.isCurrentAdminGui(playerApi, firstGui));
+        playerApi.current = replacementGui;
+        assertFalse(CustomNpcsNpcSurfaceProvider.isCurrentAdminGui(playerApi, firstGui));
+        assertTrue(CustomNpcsNpcSurfaceProvider.isCurrentAdminGui(playerApi, replacementGui));
+        playerApi.current = null;
+        assertFalse(CustomNpcsNpcSurfaceProvider.isCurrentAdminGui(playerApi, replacementGui));
+        playerApi.unavailable = true;
+        assertFalse(CustomNpcsNpcSurfaceProvider.isCurrentAdminGui(playerApi, replacementGui));
+        assertFalse(CustomNpcsNpcSurfaceProvider.isCurrentAdminGui(null, firstGui));
+    }
+
+    @Test
+    void fallbackSelectorPagesEveryProfileInsideTheVisibleRows() {
+        List<Integer> profiles = List.of(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+
+        assertEquals(List.of(0, 1, 2, 3, 4), CustomNpcsNpcSurfaceProvider.page(profiles, 0, 5));
+        assertEquals(List.of(5, 6, 7, 8, 9), CustomNpcsNpcSurfaceProvider.page(profiles, 1, 5));
+        assertEquals(List.of(10), CustomNpcsNpcSurfaceProvider.page(profiles, 2, 5));
+        assertEquals(List.of(10), CustomNpcsNpcSurfaceProvider.page(profiles, 99, 5));
+        assertEquals(List.of(0, 1, 2, 3), CustomNpcsNpcSurfaceProvider.page(profiles, -1, 4));
+    }
+
+    public static final class NativePlayerGui {
+        private Object current;
+        private boolean unavailable;
+
+        NativePlayerGui(Object current) {
+            this.current = current;
+        }
+
+        public Object getCustomGui() {
+            if (unavailable) throw new IllegalStateException("native GUI unavailable");
+            return current;
+        }
+    }
+
     @Test
     void selectorShowsStableIdAndAvailabilityReason() {
         NpcProvisioningUseCase.ProfileOption unavailable = option(false, "missing GUI capability");
