@@ -10,12 +10,14 @@ import com.dwurdy.straja.adapter.out.npc.customnpcs.CustomNpcsNpcSurfaceProvider
 import com.dwurdy.straja.application.port.in.NpcSurfaceActionTokenIssuer;
 import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.application.service.NpcBindingLifecycleService;
+import com.dwurdy.straja.application.service.NpcBindingRoleResolver;
 import com.dwurdy.straja.application.service.NpcAdmissionSurfaceService;
 import com.dwurdy.straja.application.service.NpcArmorySurfaceService;
 import com.dwurdy.straja.application.service.NpcCareerSurfaceService;
 import com.dwurdy.straja.application.service.NpcCivicSurfaceService;
 import com.dwurdy.straja.application.service.NpcCustodySurfaceService;
 import com.dwurdy.straja.application.service.NpcContentCatalog;
+import com.dwurdy.straja.application.service.NpcProvisioningService;
 import com.dwurdy.straja.application.service.NpcSecretarySurfaceService;
 import com.dwurdy.straja.application.service.NpcSurfaceActionService;
 import com.dwurdy.straja.application.service.NpcSurfaceProviderRegistry;
@@ -32,6 +34,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
@@ -63,17 +66,23 @@ public final class NpcPresentationRuntime {
                 providers,
                 (playerId, binding) -> playerAtBinding(server, playerId, binding),
                 request -> dispatch(server, request));
-        CustomNpcsNpcSurfaceProvider customNpcs = new CustomNpcsNpcSurfaceProvider(
-                actions,
-                actions,
-                message -> StrajaMod.LOGGER.info("{}", message),
-                NpcPresentationRuntime::resolveSurface);
-        providers.register(customNpcs);
+        NpcContentCatalog catalog = loadCatalog();
         StoreAccess stores = name -> new NbtStore(StrajaDataProvider.get(server, name));
         NpcBindingLifecycleService lifecycle = new NpcBindingLifecycleService(
                 providers,
                 new NbtNpcBindingRepository(stores),
-                loadCatalog());
+                catalog);
+        NpcProvisioningService provisioning = new NpcProvisioningService(
+                lifecycle, catalog, providers);
+        CustomNpcsNpcSurfaceProvider customNpcs = new CustomNpcsNpcSurfaceProvider(
+                actions,
+                actions,
+                message -> StrajaMod.LOGGER.info("{}", message),
+                NpcPresentationRuntime::resolveSurface,
+                provisioning,
+                player -> player.hasPermissions(2)
+                        && player.getMainHandItem().is(StrajaItems.NPC_WAND.get()));
+        providers.register(customNpcs);
         NpcBindingLifecycleService.RecoveryReport recovery = lifecycle.recover();
         recovery.items().stream()
                 .filter(item -> item.result().status() != NpcProviderResult.Status.ACCEPTED)
@@ -85,13 +94,25 @@ public final class NpcPresentationRuntime {
                 providers,
                 actions,
                 customNpcs,
-                lifecycle));
+                lifecycle,
+                provisioning));
         StrajaMod.LOGGER.info("NPC presentation runtime started; CustomNPCs available={}",
                 customNpcs.available());
     }
 
     public static synchronized void stop() {
         STATE.set(null);
+    }
+
+    /**
+     * Routes the early Minecraft left-click boundary to the active optional
+     * provider. Keeping the raw entity out of the application services lets
+     * StoryNPC implement the same provisioning contract later without
+     * changing the canonical profile or action model.
+     */
+    public static boolean handleCustomNpcAdminAttack(ServerPlayer player, Entity target) {
+        RuntimeState state = STATE.get();
+        return state != null && state.customNpcs().handleAdminAttack(player, target);
     }
 
     public static RuntimeState require() {
@@ -111,7 +132,7 @@ public final class NpcPresentationRuntime {
      * host interaction only after this mapping is accepted and published.
      */
     public static NpcProviderResult bindCustomNpc(
-            String hostEntityUuid, String roleId, String stationId) {
+            String hostEntityUuid, String roleId, String stationId, String actorId) {
         String role = "recruiter".equals(roleId) ? "trainer" : roleId;
         if (!"receptionist".equals(role) && !"trainer".equals(role)
                 && !"secretary".equals(role)
@@ -135,20 +156,41 @@ public final class NpcPresentationRuntime {
         } catch (IllegalArgumentException exception) {
             return NpcProviderResult.rejected("invalid-host-identity", "hostEntityUuid must be a UUID");
         }
-        NpcBinding binding = new NpcBinding(
-                "straja.customnpcs." + role + "." + normalizedUuid.replace("-", ""),
-                NpcProviderId.CUSTOM_NPCS,
-                normalizedUuid,
-                "",
-                role,
-                stationId == null || stationId.isBlank() ? "hq" : stationId,
-                profile,
-                1);
         try {
-            return bindAndPublish(binding);
+            com.dwurdy.straja.application.port.in.NpcProvisioningUseCase.ProvisioningResult result = require().provisioning().assign(
+                    NpcProviderId.CUSTOM_NPCS,
+                    normalizedUuid,
+                    actorId,
+                    profile.value(),
+                    stationId);
+            return toProviderResult(result);
         } catch (IllegalStateException exception) {
             return NpcProviderResult.unavailable("NPC presentation runtime is not started");
         }
+    }
+
+    /** Whether a provider-owned or unresolved canonical Straja binding claims this host. */
+    public static boolean hasBindingForHost(String hostEntityUuid) {
+        RuntimeState state = STATE.get();
+        return state != null && NpcBindingRoleResolver.hasBindingForHost(state.lifecycle(), hostEntityUuid);
+    }
+
+    /** Canonical provider-neutral role lookup; jailer wins if corrupt duplicate roles exist. */
+    public static Optional<String> assignedRoleForHost(String hostEntityUuid) {
+        RuntimeState state = STATE.get();
+        return state == null
+                ? Optional.empty()
+                : NpcBindingRoleResolver.assignedRoleForHost(state.lifecycle(), hostEntityUuid);
+    }
+
+    private static NpcProviderResult toProviderResult(
+            com.dwurdy.straja.application.port.in.NpcProvisioningUseCase.ProvisioningResult result) {
+        return switch (result.status()) {
+            case ACCEPTED -> NpcProviderResult.accepted(result.message());
+            case REJECTED -> NpcProviderResult.rejected(result.code(), result.message());
+            case UNAVAILABLE -> NpcProviderResult.unavailable(result.message());
+            case UNKNOWN -> NpcProviderResult.unknown(result.message());
+        };
     }
 
     private static NpcContentCatalog loadCatalog() {
@@ -426,5 +468,6 @@ public final class NpcPresentationRuntime {
             NpcSurfaceProviderRegistry providers,
             NpcSurfaceActionTokenIssuer actions,
             CustomNpcsNpcSurfaceProvider customNpcs,
-            NpcBindingLifecycleService lifecycle) {}
+            NpcBindingLifecycleService lifecycle,
+            NpcProvisioningService provisioning) {}
 }

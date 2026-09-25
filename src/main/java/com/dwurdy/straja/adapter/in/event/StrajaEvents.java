@@ -15,6 +15,7 @@ import com.dwurdy.straja.adapter.out.network.CustodyVisualSync;
 import com.dwurdy.straja.application.port.in.FormSessionUseCase;
 import com.dwurdy.straja.application.port.out.ItemView;
 import com.dwurdy.straja.application.port.out.PlayerGateway;
+import com.dwurdy.straja.bootstrap.NpcPresentationRuntime;
 import com.dwurdy.straja.bootstrap.StrajaRuntime;
 import com.dwurdy.straja.bootstrap.StrajaItems;
 import com.dwurdy.straja.domain.model.Capability;
@@ -384,6 +385,13 @@ public final class StrajaEvents {
         var heldTool = AdminToolSurface.tool(gateway.mainHand());
         if (heldTool == AdminToolSurface.Tool.NPC_WAND
                 || heldTool == AdminToolSurface.Tool.NPC_CLONER) {
+            // CustomNPCs owns its own interaction event bus. Let the provider
+            // adapter receive the target so the NPC wand opens the real
+            // CustomNPCs provisioning GUI instead of the legacy chat menu.
+            if (heldTool == AdminToolSurface.Tool.NPC_WAND
+                    && isCustomNpcsEntity(event.getTarget())) {
+                return;
+            }
             event.setCanceled(true);
             if (event.getHand() == net.minecraft.world.InteractionHand.MAIN_HAND) {
                 // The item-use packet trailing this interact must not also
@@ -409,6 +417,10 @@ public final class StrajaEvents {
         // foreign NPC keeps its native dialog and an unregistered
         // StrajaNpcEntity still reaches mobInteract.
         if (!(event.getTarget() instanceof net.minecraft.server.level.ServerPlayer target)) {
+            // Canonical provider bindings own their interaction ahead of
+            // legacy role records. Unassigning preserves any older legacy
+            // record, which resumes without destructive migration.
+            if (NpcPresentationRuntime.hasBindingForHost(event.getTarget().getStringUUID())) return;
             var registration = runtime.npcRegistry().registration(event.getTarget().getStringUUID());
             if (registration != null && registration.role() != null
                     && NpcRoles.isKnown(registration.role())
@@ -468,6 +480,26 @@ public final class StrajaEvents {
             default -> false;
         };
         if (handled) event.setCanceled(true);
+    }
+
+    /**
+     * The CustomNPCs damage event is too late for authoring: that provider
+     * only emits it after an attack has become damage. Capture the Minecraft
+     * attack boundary first so an operator's NPC Wand always opens the
+     * provider-native provisioning GUI and never damages the target.
+     */
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
+    public void onAttackEntity(
+            net.neoforged.neoforge.event.entity.player.AttackEntityEvent event) {
+        if (event.getEntity().level().isClientSide()
+                || !(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) return;
+        if (NpcPresentationRuntime.handleCustomNpcAdminAttack(player, event.getTarget())) {
+            event.setCanceled(true);
+        }
+    }
+
+    private static boolean isCustomNpcsEntity(net.minecraft.world.entity.Entity entity) {
+        return entity != null && entity.getClass().getName().startsWith("noppes.npcs.");
     }
 
     /** Restrained players cannot use items, blocks or entities. */
@@ -739,8 +771,7 @@ public final class StrajaEvents {
         StrajaRuntime runtime = StrajaRuntime.get();
         if (runtime == null || event.getEntity().level().isClientSide()
                 || event.getEntity() instanceof StrajaNpcEntity) return;
-        var registration = runtime.npcRegistry().registration(event.getEntity().getStringUUID());
-        if (registration == null || !"jailer".equals(registration.role())) return;
+        if (!"jailer".equals(npcRoleOf(runtime, event.getEntity()))) return;
         if (!(event.getSource().getEntity() instanceof net.minecraft.server.level.ServerPlayer attacker)) return;
         var gateway = new MinecraftPlayerGateway(attacker.getServer(), attacker.getUUID());
         if (!runtime.policies().jailerDamageAllowed(
@@ -819,6 +850,8 @@ public final class StrajaEvents {
      * {@link StrajaNpcEntity} falls back to its persisted entity field.
      */
     private static String npcRoleOf(StrajaRuntime runtime, net.minecraft.world.entity.Entity entity) {
+        var assignedRole = NpcPresentationRuntime.assignedRoleForHost(entity.getStringUUID());
+        if (assignedRole.isPresent()) return assignedRole.get();
         var registration = runtime.npcRegistry().registration(entity.getStringUUID());
         if (registration != null && registration.role() != null
                 && !registration.role().isEmpty()) {

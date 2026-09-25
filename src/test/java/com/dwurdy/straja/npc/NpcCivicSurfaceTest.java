@@ -29,7 +29,7 @@ class NpcCivicSurfaceTest {
                 StandardCharsets.UTF_8));
         NpcBinding binding = new NpcBinding(
                 "straja.test.reception", NpcProviderId.CUSTOM_NPCS,
-                UUID.randomUUID().toString(), "", "receptionist", "hq", profile.profileId(), 1);
+                UUID.randomUUID().toString(), "", "receptionist", "hq", profile.contentId(), 1);
 
         NpcSurfaceSnapshot surface = new NpcCivicSurfaceService().resolve(
                 profile.bind(binding),

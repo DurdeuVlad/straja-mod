@@ -29,7 +29,7 @@ class NpcCustodySurfaceTest {
                 StandardCharsets.UTF_8));
         NpcBinding binding = new NpcBinding(
                 "straja.test.jailer", NpcProviderId.CUSTOM_NPCS,
-                UUID.randomUUID().toString(), "", "jailer", "hq", profile.profileId(), 1);
+                UUID.randomUUID().toString(), "", "jailer", "hq", profile.contentId(), 1);
         Sentence sentence = new Sentence();
         sentence.id = "S-1";
         sentence.status = "ACTIVE";

@@ -10,7 +10,8 @@ import java.util.Set;
  * CustomNPCs object, script, command, or provider-specific visual setting.
  */
 public record NpcContentProfile(
-        NpcContentId profileId,
+        NpcContentId contentId,
+        NpcProfileId profileId,
         int schemaVersion,
         String title,
         String body,
@@ -21,7 +22,8 @@ public record NpcContentProfile(
         Set<NpcCapability> optionalCapabilities) {
 
     public NpcContentProfile {
-        Objects.requireNonNull(profileId, "profileId");
+        Objects.requireNonNull(contentId, "contentId");
+        if (profileId == null) profileId = NpcProfileId.fromContentId(contentId);
         if (schemaVersion < 1) {
             throw new IllegalArgumentException("schemaVersion must be positive");
         }
@@ -43,12 +45,27 @@ public record NpcContentProfile(
         ensureDialogueActionsExist(dialogue, actions);
     }
 
+    /** Compatibility constructor for authored profiles without an explicit public catalog ID. */
+    public NpcContentProfile(
+            NpcContentId contentId,
+            int schemaVersion,
+            String title,
+            String body,
+            List<NpcSurfaceAction> actions,
+            List<NpcSurfaceSnapshot.DialogueNode> dialogue,
+            List<NpcSurfaceSnapshot.QuestEntry> quests,
+            Set<NpcCapability> requiredCapabilities,
+            Set<NpcCapability> optionalCapabilities) {
+        this(contentId, NpcProfileId.fromContentId(contentId), schemaVersion, title, body,
+                actions, dialogue, quests, requiredCapabilities, optionalCapabilities);
+    }
+
     /** Binds canonical content to a provider-neutral logical NPC identity. */
     public NpcSurfaceSnapshot bind(NpcBinding binding) {
         Objects.requireNonNull(binding, "binding");
         return new NpcSurfaceSnapshot(
                 binding,
-                profileId,
+                contentId,
                 title,
                 body,
                 actions,

@@ -1,5 +1,6 @@
 {
-  "profileId": "straja.reception.admission",
+  "contentProfileId": "straja.reception.admission",
+  "npcProfileId": "straja:receptionist",
   "schemaVersion": 1,
   "title": "Straja reception",
   "body": "The reception desk records admissions and directs new personnel to their first duty.",

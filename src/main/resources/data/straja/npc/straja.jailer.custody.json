@@ -1,5 +1,6 @@
 {
-  "profileId": "straja.jailer.custody",
+  "contentProfileId": "straja.jailer.custody",
+  "npcProfileId": "straja:jailer",
   "schemaVersion": 1,
   "title": "Straja jailer",
   "body": "The jailer handles custody status, safe release, prison delivery, and recovery. Every transition is checked against the canonical custody record.",

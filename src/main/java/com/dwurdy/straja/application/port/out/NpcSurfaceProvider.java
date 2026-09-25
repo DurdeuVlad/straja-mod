@@ -18,6 +18,11 @@ public interface NpcSurfaceProvider {
 
     Set<NpcCapability> capabilities();
 
+    /** Whether the provider's external runtime/API is ready for new operations. */
+    default boolean available() {
+        return true;
+    }
+
     NpcProviderResult bind(NpcBinding binding);
 
     NpcProviderResult unbind(NpcBinding binding);

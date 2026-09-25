@@ -109,7 +109,7 @@ public record NpcSurfaceSnapshot(
     }
 
     private static void ensureProfileMatchesBinding(NpcBinding binding, NpcContentId profileId) {
-        if (!binding.surfaceProfileId().equals(profileId)) {
+        if (!binding.contentProfileId().equals(profileId)) {
             throw new IllegalArgumentException(
                     "surface profile does not match binding: " + profileId.value());
         }
