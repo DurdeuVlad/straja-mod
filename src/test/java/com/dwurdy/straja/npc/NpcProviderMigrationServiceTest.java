@@ -15,6 +15,8 @@ import com.dwurdy.straja.domain.model.NpcBindingStore;
 import com.dwurdy.straja.domain.model.NpcCapability;
 import com.dwurdy.straja.domain.model.NpcContentId;
 import com.dwurdy.straja.domain.model.NpcContentProfile;
+import com.dwurdy.straja.domain.model.NpcHostLocation;
+import com.dwurdy.straja.domain.model.NpcProfileId;
 import com.dwurdy.straja.domain.model.NpcProviderId;
 import com.dwurdy.straja.domain.model.NpcProviderResult;
 import com.dwurdy.straja.domain.model.NpcSurfaceAction;
@@ -30,6 +32,7 @@ class NpcProviderMigrationServiceTest {
     private static final NpcProviderId SOURCE = NpcProviderId.of("source-test");
     private static final NpcProviderId TARGET = NpcProviderId.of("target-test");
     private static final NpcContentId PROFILE = NpcContentId.of("straja.migration.test");
+    private static final NpcProfileId PUBLIC_PROFILE = NpcProfileId.of("straja:migration-desk");
 
     @Test
     void migrationPreservesLogicalIdentityAndProfileForDiagnosticProvider() {
@@ -53,6 +56,8 @@ class NpcProviderMigrationServiceTest {
         assertEquals(original.bindingId(), migrated.bindingId());
         assertEquals(original.hostEntityUuid(), migrated.hostEntityUuid());
         assertEquals(original.surfaceProfileId(), migrated.surfaceProfileId());
+        assertEquals(original.profileId(), migrated.profileId());
+        assertEquals(original.hostLocation(), migrated.hostLocation());
         assertEquals("operator", migrated.assignedBy());
         assertEquals(42L, migrated.assignedAtEpochMillis());
     }
@@ -79,11 +84,13 @@ class NpcProviderMigrationServiceTest {
                 item.result().status() == NpcProviderResult.Status.ACCEPTED));
         assertEquals(SOURCE, lifecycle.inspect(original.bindingId()).binding().providerId());
         assertEquals(SOURCE, lifecycle.inspect(second.bindingId()).binding().providerId());
+        assertEquals(PUBLIC_PROFILE, lifecycle.inspect(original.bindingId()).binding().profileId());
+        assertEquals(original.hostLocation(), lifecycle.inspect(original.bindingId()).binding().hostLocation());
     }
 
     private static NpcContentProfile profile() {
         return new NpcContentProfile(
-                PROFILE, 1, "Migration desk", "Migration surface",
+                PROFILE, PUBLIC_PROFILE, 1, "Migration desk", "Migration surface",
                 List.of(NpcSurfaceAction.enabled(NpcContentId.of("migration-action"), "Open")),
                 List.of(), List.of(), Set.of(NpcCapability.GUI), Set.of());
     }
@@ -95,7 +102,9 @@ class NpcProviderMigrationServiceTest {
     private static NpcBinding binding(NpcProviderId provider, String bindingId) {
         return new NpcBinding(
                 bindingId, provider, UUID.randomUUID().toString(), "",
-                "receptionist", "hq", PROFILE, 1);
+                "receptionist", "hq", PROFILE, PUBLIC_PROFILE, 1,
+                "original-operator", 21L,
+                new NpcHostLocation("minecraft:overworld", 5, 64, 9));
     }
 
     private static final class FakeProvider implements NpcSurfaceProvider {

@@ -59,19 +59,19 @@ public final class NpcProviderMigrationService {
             }
             NpcContentProfile profile;
             try {
-                profile = catalog.require(binding.surfaceProfileId());
+                profile = catalog.require(binding.profileId());
             } catch (IllegalArgumentException error) {
                 return MigrationResult.of(
                         NpcProviderResult.rejected(
                                 "invalid-profile", "binding references an unknown profile: "
-                                        + binding.surfaceProfileId().value()),
+                                        + binding.profileId().value()),
                         List.of(), List.of());
             }
             if (!providers.supports(target, profile.requiredCapabilities())) {
                 return MigrationResult.of(
                         NpcProviderResult.rejected(
                                 "unsupported-capability",
-                                "target provider cannot project profile " + binding.surfaceProfileId().value()),
+                                "target provider cannot project profile " + binding.profileId().value()),
                         List.of(), List.of());
             }
         }
@@ -87,10 +87,12 @@ public final class NpcProviderMigrationService {
                     original.externalNpcId(),
                     original.roleId(),
                     original.stationId(),
-                    original.surfaceProfileId(),
+                    original.contentProfileId(),
+                    original.profileId(),
                     original.schemaVersion(),
                     actorId,
-                    Math.max(0L, clock.getAsLong()));
+                    Math.max(0L, clock.getAsLong()),
+                    original.hostLocation());
             NpcProviderResult result = lifecycle.rebind(replacement);
             items.add(new MigrationItem(original.bindingId(), original, replacement, result));
             if (result.status() != NpcProviderResult.Status.ACCEPTED) {
@@ -122,10 +124,12 @@ public final class NpcProviderMigrationService {
                     original.externalNpcId(),
                     original.roleId(),
                     original.stationId(),
-                    original.surfaceProfileId(),
+                    original.contentProfileId(),
+                    original.profileId(),
                     original.schemaVersion(),
                     actorId,
-                    Math.max(0L, clock.getAsLong()));
+                    Math.max(0L, clock.getAsLong()),
+                    original.hostLocation());
             NpcBindingLifecycleService.Inspection inspection = lifecycle.inspect(original.bindingId());
             NpcBinding active = inspection.binding();
             NpcProviderResult result = active == null
