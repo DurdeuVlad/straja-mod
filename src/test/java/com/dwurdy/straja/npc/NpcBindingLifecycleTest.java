@@ -24,6 +24,7 @@ import com.dwurdy.straja.domain.model.NpcRegistry;
 import com.dwurdy.straja.domain.model.NpcProvisioningAuditEntry;
 import com.dwurdy.straja.domain.model.NpcRebindPhase;
 import com.dwurdy.straja.domain.model.NpcSurfaceAction;
+import com.dwurdy.straja.domain.model.NpcSurfaceSnapshot;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -59,6 +60,102 @@ class NpcBindingLifecycleTest {
         assertEquals(NpcBindingLifecycleService.State.UNBOUND,
                 lifecycle.inspect(first.bindingId()).state());
         assertTrue(repository.store.bindings.isEmpty());
+    }
+
+    @Test
+    void oneCanonicalProfileProjectsTheSameContentToMultipleHostNpcs() {
+        MemoryRepository repository = new MemoryRepository();
+        RecordingProvider provider = new RecordingProvider(NpcProviderId.DEBUG_TEXT);
+        NpcSurfaceProviderRegistry providers = new NpcSurfaceProviderRegistry();
+        providers.register(provider);
+        NpcContentId actionId = NpcContentId.of("shared-intake");
+        NpcContentProfile sharedProfile = new NpcContentProfile(
+                CONTENT.contentId(), CONTENT.profileId(), 1, "Shared reception", "Canonical welcome",
+                List.of(NpcSurfaceAction.enabled(actionId, "Request admission")),
+                List.of(new NpcSurfaceSnapshot.DialogueNode(
+                        NpcContentId.of("shared-greeting"), "Welcome to Straja.",
+                        List.of(new NpcSurfaceSnapshot.Choice(actionId, "Continue", true)))),
+                List.of(new NpcSurfaceSnapshot.QuestEntry(
+                        NpcContentId.of("shared-intake-quest"), "Register your arrival",
+                        NpcSurfaceSnapshot.QuestState.AVAILABLE)),
+                CONTENT.requiredCapabilities(), CONTENT.optionalCapabilities());
+        NpcBindingLifecycleService lifecycle = new NpcBindingLifecycleService(
+                providers, repository, new NpcContentCatalog(List.of(sharedProfile)));
+        NpcBinding first = binding("straja.test.shared-first", UUID.randomUUID().toString());
+        NpcBinding second = binding("straja.test.shared-second", UUID.randomUUID().toString());
+
+        assertEquals(NpcProviderResult.Status.ACCEPTED, lifecycle.bindAndPublish(first).status());
+        assertEquals(NpcProviderResult.Status.ACCEPTED, lifecycle.bindAndPublish(second).status());
+
+        NpcSurfaceSnapshot firstSurface = provider.surfaces.get(first.bindingId());
+        NpcSurfaceSnapshot secondSurface = provider.surfaces.get(second.bindingId());
+        assertEquals(first, firstSurface.binding());
+        assertEquals(second, secondSurface.binding());
+        assertEquals(sharedProfile.contentId(), firstSurface.profileId());
+        assertEquals(sharedProfile.title(), firstSurface.title());
+        assertEquals(sharedProfile.body(), firstSurface.body());
+        assertEquals(sharedProfile.actions(), firstSurface.actions());
+        assertEquals(sharedProfile.actions(), secondSurface.actions());
+        assertEquals(sharedProfile.dialogue(), firstSurface.dialogue());
+        assertEquals(sharedProfile.dialogue(), secondSurface.dialogue());
+        assertEquals(sharedProfile.quests(), firstSurface.quests());
+        assertEquals(sharedProfile.quests(), secondSurface.quests());
+        assertEquals(2, repository.store.bindings.size());
+    }
+
+    @Test
+    void reprojectPublishesTheCurrentCatalogRevisionWithoutChangingTheAssignment() {
+        NpcBinding previous = new NpcBinding(
+                "straja.test.reproject-current", NpcProviderId.DEBUG_TEXT,
+                UUID.randomUUID().toString(), "", "receptionist", "hq",
+                CONTENT.contentId(), CONTENT.profileId(), CONTENT.schemaVersion(), "admin", 12L, null);
+        MemoryRepository repository = new MemoryRepository();
+        repository.store.bindings.put(previous.bindingId(), previous);
+        NpcContentProfile revised = new NpcContentProfile(
+                NpcContentId.of("straja.test.profile.current"), CONTENT.profileId(), 2,
+                "Current catalog title", "Current catalog dialogue body",
+                List.of(NpcSurfaceAction.enabled(NpcContentId.of("current-action"), "Current action")),
+                List.of(new NpcSurfaceSnapshot.DialogueNode(
+                        NpcContentId.of("straja.test.current-node"), "Current dialog text",
+                        List.of(new NpcSurfaceSnapshot.Choice(
+                                NpcContentId.of("current-action"), "Continue", true)))),
+                List.of(new NpcSurfaceSnapshot.QuestEntry(
+                        NpcContentId.of("current-quest"), "Current quest", NpcSurfaceSnapshot.QuestState.AVAILABLE)),
+                CONTENT.requiredCapabilities(), CONTENT.optionalCapabilities());
+        RecordingProvider provider = new RecordingProvider(NpcProviderId.DEBUG_TEXT);
+        NpcSurfaceProviderRegistry providers = new NpcSurfaceProviderRegistry();
+        providers.register(provider);
+        NpcBindingLifecycleService lifecycle = new NpcBindingLifecycleService(
+                providers, repository, new NpcContentCatalog(List.of(revised)));
+        NpcBinding currentAssignment = lifecycle.bindings().get(previous.bindingId());
+        providers.bind(currentAssignment);
+        NpcContentId staleActionId = NpcContentId.of("stale-action");
+        NpcSurfaceSnapshot staleSurface = new NpcSurfaceSnapshot(
+                currentAssignment, revised.contentId(), "Stale catalog title", "Stale catalog body",
+                List.of(NpcSurfaceAction.enabled(staleActionId, "Old action")),
+                List.of(new NpcSurfaceSnapshot.DialogueNode(
+                        NpcContentId.of("stale-node"), "Old dialogue",
+                        List.of(new NpcSurfaceSnapshot.Choice(staleActionId, "Old choice", true)))),
+                List.of(new NpcSurfaceSnapshot.QuestEntry(
+                        NpcContentId.of("stale-quest"), "Old quest", NpcSurfaceSnapshot.QuestState.LOCKED)),
+                revised.requiredCapabilities(), revised.optionalCapabilities());
+        assertEquals(NpcProviderResult.Status.ACCEPTED, provider.publish(staleSurface).status());
+        assertEquals(staleSurface, provider.surfaces.get(previous.bindingId()));
+
+        NpcProviderResult result = lifecycle.reproject(previous.bindingId());
+
+        assertEquals(NpcProviderResult.Status.ACCEPTED, result.status());
+        assertEquals(currentAssignment, lifecycle.bindings().get(previous.bindingId()));
+        assertEquals(currentAssignment, repository.store.bindings.get(previous.bindingId()));
+        assertEquals(2, provider.publishCount);
+        NpcSurfaceSnapshot published = provider.surfaces.get(previous.bindingId());
+        assertFalse(staleSurface.equals(published));
+        assertEquals(revised.contentId(), published.profileId());
+        assertEquals("Current catalog title", published.title());
+        assertEquals("Current catalog dialogue body", published.body());
+        assertEquals(revised.actions(), published.actions());
+        assertEquals(revised.dialogue(), published.dialogue());
+        assertEquals(revised.quests(), published.quests());
     }
 
     @Test
@@ -450,6 +547,46 @@ class NpcBindingLifecycleTest {
                         : NpcProviderResult.rejected("not-bound", "provider does not own the expected mapping");
             }
         };
+    }
+
+    private static final class RecordingProvider implements NpcSurfaceProvider {
+        private final NpcProviderId providerId;
+        private final Map<String, NpcBinding> ownedBindings = new LinkedHashMap<>();
+        private final Map<String, NpcSurfaceSnapshot> surfaces = new LinkedHashMap<>();
+        private int publishCount;
+
+        private RecordingProvider(NpcProviderId providerId) {
+            this.providerId = providerId;
+        }
+
+        @Override public NpcProviderId providerId() { return providerId; }
+        @Override public Set<NpcCapability> capabilities() { return Set.of(NpcCapability.TEXT_MIRROR); }
+        @Override public NpcProviderResult bind(NpcBinding binding) {
+            NpcBinding existing = ownedBindings.putIfAbsent(binding.bindingId(), binding);
+            return existing == null || existing.equals(binding)
+                    ? NpcProviderResult.accepted("bound")
+                    : NpcProviderResult.rejected("binding-owned", "different mapping");
+        }
+        @Override public NpcProviderResult unbind(NpcBinding binding) {
+            if (!ownedBindings.remove(binding.bindingId(), binding)) {
+                return NpcProviderResult.rejected("not-bound", "binding is not owned");
+            }
+            surfaces.remove(binding.bindingId());
+            return NpcProviderResult.accepted("unbound");
+        }
+        @Override public NpcProviderResult publish(NpcSurfaceSnapshot surface) {
+            if (!surface.binding().equals(ownedBindings.get(surface.binding().bindingId()))) {
+                return NpcProviderResult.rejected("not-bound", "surface binding is not owned");
+            }
+            surfaces.put(surface.binding().bindingId(), surface);
+            publishCount++;
+            return NpcProviderResult.accepted("published");
+        }
+        @Override public NpcProviderResult reconcile(NpcBinding binding) {
+            return binding.equals(ownedBindings.get(binding.bindingId()))
+                    ? NpcProviderResult.accepted("provider confirms ownership")
+                    : NpcProviderResult.rejected("not-bound", "provider does not own binding");
+        }
     }
 
     @Test
