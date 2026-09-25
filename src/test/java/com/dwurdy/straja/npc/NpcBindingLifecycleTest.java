@@ -475,7 +475,8 @@ class NpcBindingLifecycleTest {
     void legacyBindingProfileIdIsCanonicalizedAndPersisted() {
         NpcBinding legacyBinding = new NpcBinding(
                 "straja.test.legacy", NpcProviderId.DEBUG_TEXT, UUID.randomUUID().toString(), "",
-                "receptionist", "hq", PROFILE, 1);
+                "receptionist", "hq", PROFILE, 1, "first-operator", 123L,
+                new com.dwurdy.straja.domain.model.NpcHostLocation("minecraft:overworld", 7, 68, 11));
         var legacyJson = new com.google.gson.Gson().toJsonTree(legacyBinding).getAsJsonObject();
         legacyJson.remove("profileId");
         NpcBinding decodedLegacyBinding = new com.google.gson.Gson().fromJson(
@@ -485,6 +486,8 @@ class NpcBindingLifecycleTest {
         repository.store.schemaVersion = 2;
         repository.store.assignmentRevisions = null;
         repository.store.bindings.put(decodedLegacyBinding.bindingId(), decodedLegacyBinding);
+        repository.store.pendingOperations.put(decodedLegacyBinding.bindingId(),
+                new NpcBindingStore.PendingOperation(decodedLegacyBinding, NpcProviderOperation.PUBLISH));
         NpcSurfaceProviderRegistry providers = new NpcSurfaceProviderRegistry();
         providers.register(new DebugTextNpcSurfaceProvider(ignored -> {}));
 
@@ -494,6 +497,21 @@ class NpcBindingLifecycleTest {
         assertEquals(NpcBindingStore.CURRENT_SCHEMA_VERSION, repository.store.schemaVersion);
         assertEquals(NpcProfileId.of("straja:test-desk"),
                 repository.store.bindings.get(legacyBinding.bindingId()).profileId());
+        NpcBinding migrated = repository.store.bindings.get(legacyBinding.bindingId());
+        assertEquals(legacyBinding.bindingId(), migrated.bindingId());
+        assertEquals(legacyBinding.providerId(), migrated.providerId());
+        assertEquals(legacyBinding.hostEntityUuid(), migrated.hostEntityUuid());
+        assertEquals(legacyBinding.hostLocation(), migrated.hostLocation());
+        assertEquals("first-operator", migrated.assignedBy());
+        assertEquals(123L, migrated.assignedAtEpochMillis());
+        assertEquals(NpcProviderOperation.PUBLISH,
+                repository.store.pendingOperations.get(legacyBinding.bindingId()).operation);
+        assertEquals(migrated,
+                repository.store.pendingOperations.get(legacyBinding.bindingId()).binding);
+        var persisted = new com.google.gson.Gson().toJsonTree(repository.store).getAsJsonObject()
+                .getAsJsonObject("bindings").getAsJsonObject(legacyBinding.bindingId());
+        assertEquals(PROFILE.value(), persisted.getAsJsonObject("surfaceProfileId").get("value").getAsString());
+        assertEquals(CONTENT.profileId().value(), persisted.getAsJsonObject("profileId").get("value").getAsString());
         assertTrue(repository.store.assignmentRevisions.isEmpty());
     }
 

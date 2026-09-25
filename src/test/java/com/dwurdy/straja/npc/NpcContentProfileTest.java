@@ -13,11 +13,15 @@ import com.dwurdy.straja.application.service.NpcContentCatalog;
 import com.dwurdy.straja.domain.model.NpcActionResult;
 import com.dwurdy.straja.domain.model.NpcBinding;
 import com.dwurdy.straja.domain.model.NpcContentId;
+import com.dwurdy.straja.domain.model.NpcContentProfile;
 import com.dwurdy.straja.domain.model.NpcProfileId;
 import com.dwurdy.straja.domain.model.NpcProviderId;
 import java.io.InputStreamReader;
 import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -25,6 +29,50 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 class NpcContentProfileTest {
+    @Test
+    void publicProfileIdsRequireCanonicalLowercaseNamespaceAndPath() {
+        assertEquals("straja:jailer", NpcProfileId.of("straja:jailer").value());
+        for (String malformed : List.of("StraJa:jailer", "straja:Jailer", "straja", ":jailer",
+                "straja:", "straja:jailer?", " straja:jailer", "straja:jailer ")) {
+            assertThrows(IllegalArgumentException.class, () -> NpcProfileId.of(malformed), malformed);
+        }
+    }
+
+    @Test
+    void everyPackagedNpcProfileDeclaresAUniquePublicId() throws Exception {
+        Path directory = Path.of("src/main/resources/data/straja/npc");
+        NpcContentProfileJsonLoader loader = new NpcContentProfileJsonLoader();
+        List<NpcContentProfile> profiles = new ArrayList<>();
+        try (var paths = Files.list(directory)) {
+            for (Path path : paths.filter(file -> file.toString().endsWith(".json")).toList()) {
+                try (var reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
+                    var json = com.google.gson.JsonParser.parseReader(reader).getAsJsonObject();
+                    assertTrue(json.has("npcProfileId"), path + " must declare a stable public ID");
+                }
+                try (var reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
+                    profiles.add(loader.load(reader));
+                }
+            }
+        }
+        Set<String> publicIds = profiles.stream().map(profile -> profile.profileId().value())
+                .collect(java.util.stream.Collectors.toSet());
+        assertTrue(publicIds.containsAll(Set.of("straja:receptionist", "straja:trainer",
+                "straja:secretary", "straja:armorer", "straja:jailer", "straja:archivist")));
+        assertEquals(profiles.size(), new NpcContentCatalog(profiles).descriptors().size());
+    }
+
+    @Test
+    void catalogRejectsDuplicatePublicIdsEvenWhenInternalIdsDiffer() {
+        var first = new NpcContentProfile(
+                NpcContentId.of("internal.first"), NpcProfileId.of("straja:duplicate"), 1,
+                "First", "First profile", List.of(), List.of(), List.of(), Set.of(), Set.of());
+        var second = new NpcContentProfile(
+                NpcContentId.of("internal.second"), NpcProfileId.of("straja:duplicate"), 1,
+                "Second", "Second profile", List.of(), List.of(), List.of(), Set.of(), Set.of());
+
+        assertThrows(IllegalArgumentException.class, () -> new NpcContentCatalog(List.of(first, second)));
+    }
+
     @Test
     void packagedProfileLoadsAsCanonicalProviderNeutralContent() throws Exception {
         var resource = getClass().getClassLoader().getResourceAsStream(

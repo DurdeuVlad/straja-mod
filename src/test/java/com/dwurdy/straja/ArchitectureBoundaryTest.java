@@ -19,7 +19,8 @@ class ArchitectureBoundaryTest {
     private static final Path SRC = Path.of("src/main/java/com/dwurdy/straja");
     private static final List<String> FORBIDDEN = List.of(
             "net.minecraft.", "net.neoforged.", "com.mojang.",
-            "io.github.mortuusars.envelope.", "net.mcreator.adysdecorations.");
+            "io.github.mortuusars.envelope.", "net.mcreator.adysdecorations.",
+            "noppes.npcs.", "storynpc.");
 
     private static List<String> violations(Path root) throws IOException {
         List<String> violations = new ArrayList<>();
