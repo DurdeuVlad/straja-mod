@@ -119,8 +119,8 @@ that mapping, while unknown/unavailable keeps the transaction fail-closed.
 from the legacy Straja entity registry. The proposal preserves the entity UUID
 and derives a stable `straja.legacy.<uuid-without-dashes>` logical id. It does
 not claim external provider ownership; an explicit lifecycle bind is required.
-On load, schema-2 bindings that have only the old internal content-profile ID
-are upgraded to schema 3. When that content profile still exists, Straja
+On load, schema-2 bindings and both schema-3 layouts are upgraded to unified
+schema 4. When that content profile still exists, Straja
 resolves and persists its current public `NpcProfileId`; an unknown profile
 remains inspectable and is not deleted as part of migration. When an authored
 resource keeps its public ID but changes its internal content ID or schema,

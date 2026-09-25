@@ -7,7 +7,8 @@ import java.util.Map;
 
 /** Durable provider-aware NPC binding aggregate. */
 public class NpcBindingStore {
-    public static final int CURRENT_SCHEMA_VERSION = 3;
+    /** Schema 4 unifies the rollout-era schema 3 shape with provisioning audit state. */
+    public static final int CURRENT_SCHEMA_VERSION = 4;
 
     public int schemaVersion = CURRENT_SCHEMA_VERSION;
     public Map<String, NpcBinding> bindings = new LinkedHashMap<>();

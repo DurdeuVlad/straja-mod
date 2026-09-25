@@ -509,6 +509,70 @@ class NpcBindingLifecycleTest {
     }
 
     @Test
+    void schemaTwoLayoutMigratesToUnifiedSchemaFour() {
+        MemoryRepository repository = new MemoryRepository();
+        repository.store = new com.google.gson.Gson().fromJson("""
+                {
+                  "schemaVersion": 2,
+                  "bindings": {},
+                  "pendingOperations": {}
+                }
+                """, NpcBindingStore.class);
+
+        new NpcBindingLifecycleService(
+                new NpcSurfaceProviderRegistry(), repository, new NpcContentCatalog(List.of(CONTENT)));
+
+        assertEquals(4, repository.store.schemaVersion);
+        assertTrue(repository.store.pendingRebinds != null);
+        assertTrue(repository.store.assignmentRevisions != null);
+        assertTrue(repository.store.provisioningAudit != null);
+        assertTrue(repository.store.pendingProvisioningCandidates != null);
+    }
+
+    @Test
+    void rolloutSchemaThreeLayoutGainsUnifiedRecoveryFieldsWithoutDataLoss() {
+        MemoryRepository repository = new MemoryRepository();
+        NpcBindingStore decoded = new com.google.gson.Gson().fromJson("""
+                {
+                  "schemaVersion": 3,
+                  "bindings": {},
+                  "pendingOperations": {},
+                  "pendingRebinds": {}
+                }
+                """, NpcBindingStore.class);
+        repository.store = decoded;
+
+        new NpcBindingLifecycleService(
+                new NpcSurfaceProviderRegistry(), repository, new NpcContentCatalog(List.of(CONTENT)));
+
+        assertEquals(4, repository.store.schemaVersion);
+        assertTrue(repository.store.assignmentRevisions.isEmpty());
+        assertTrue(repository.store.provisioningAudit.isEmpty());
+        assertTrue(repository.store.pendingProvisioningCandidates.isEmpty());
+    }
+
+    @Test
+    void provisioningSchemaThreeLayoutPreservesRecoveryFieldsDuringUnifiedMigration() {
+        MemoryRepository repository = new MemoryRepository();
+        NpcBinding candidate = binding(
+                "straja.test.schema-three", UUID.randomUUID().toString(), NpcProviderId.DEBUG_TEXT);
+        NpcBindingStore store = new NpcBindingStore();
+        store.schemaVersion = 3;
+        store.assignmentRevisions.put(candidate.hostEntityUuid(), 17L);
+        store.pendingProvisioningCandidates.put("schema-three-intent", candidate);
+        repository.store = new com.google.gson.Gson().fromJson(
+                new com.google.gson.Gson().toJson(store), NpcBindingStore.class);
+
+        new NpcBindingLifecycleService(
+                new NpcSurfaceProviderRegistry(), repository, new NpcContentCatalog(List.of(CONTENT)));
+
+        assertEquals(4, repository.store.schemaVersion);
+        assertEquals(17L, repository.store.assignmentRevisions.get(candidate.hostEntityUuid()));
+        assertEquals(candidate,
+                repository.store.pendingProvisioningCandidates.get("schema-three-intent"));
+    }
+
+    @Test
     void stablePublicProfileIdSurvivesInternalContentIdAndSchemaChanges() {
         NpcBinding previous = new NpcBinding(
                 "straja.test.renamed-content", NpcProviderId.DEBUG_TEXT,

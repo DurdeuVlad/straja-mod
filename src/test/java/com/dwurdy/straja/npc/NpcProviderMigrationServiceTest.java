@@ -62,12 +62,14 @@ class NpcProviderMigrationServiceTest {
         MemoryRepository repository = new MemoryRepository();
         NpcSurfaceProviderRegistry providers = new NpcSurfaceProviderRegistry();
         providers.register(new FakeProvider(SOURCE, false));
-        providers.register(new FakeProvider(TARGET, true));
+        providers.register(new FakeProvider(TARGET, 2));
         NpcContentCatalog catalog = new NpcContentCatalog(List.of(profile()));
         NpcBindingLifecycleService lifecycle = new NpcBindingLifecycleService(
                 providers, repository, catalog);
-        NpcBinding original = binding(SOURCE);
+        NpcBinding original = binding(SOURCE, "straja.migration.binding.one");
+        NpcBinding second = binding(SOURCE, "straja.migration.binding.two");
         assertEquals(NpcProviderResult.Status.ACCEPTED, lifecycle.bindAndPublish(original).status());
+        assertEquals(NpcProviderResult.Status.ACCEPTED, lifecycle.bindAndPublish(second).status());
 
         var result = new NpcProviderMigrationService(
                 lifecycle, providers, catalog, () -> 43L).migrate(TARGET, "operator");
@@ -76,6 +78,7 @@ class NpcProviderMigrationServiceTest {
         assertTrue(result.rollback().stream().allMatch(item ->
                 item.result().status() == NpcProviderResult.Status.ACCEPTED));
         assertEquals(SOURCE, lifecycle.inspect(original.bindingId()).binding().providerId());
+        assertEquals(SOURCE, lifecycle.inspect(second.bindingId()).binding().providerId());
     }
 
     private static NpcContentProfile profile() {
@@ -86,19 +89,28 @@ class NpcProviderMigrationServiceTest {
     }
 
     private static NpcBinding binding(NpcProviderId provider) {
+        return binding(provider, "straja.migration.binding");
+    }
+
+    private static NpcBinding binding(NpcProviderId provider, String bindingId) {
         return new NpcBinding(
-                "straja.migration.binding", provider, UUID.randomUUID().toString(), "",
+                bindingId, provider, UUID.randomUUID().toString(), "",
                 "receptionist", "hq", PROFILE, 1);
     }
 
     private static final class FakeProvider implements NpcSurfaceProvider {
         private final NpcProviderId id;
-        private final boolean rejectPublish;
+        private final int rejectPublishAt;
         private final Map<String, NpcBinding> bindings = new HashMap<>();
+        private int publishCount;
 
         private FakeProvider(NpcProviderId id, boolean rejectPublish) {
+            this(id, rejectPublish ? 1 : 0);
+        }
+
+        private FakeProvider(NpcProviderId id, int rejectPublishAt) {
             this.id = id;
-            this.rejectPublish = rejectPublish;
+            this.rejectPublishAt = rejectPublishAt;
         }
 
         @Override public NpcProviderId providerId() { return id; }
@@ -115,9 +127,15 @@ class NpcProviderMigrationServiceTest {
                     : NpcProviderResult.rejected("not-bound", "not bound");
         }
         @Override public NpcProviderResult publish(NpcSurfaceSnapshot surface) {
-            return rejectPublish
+            publishCount++;
+            return rejectPublishAt > 0 && publishCount == rejectPublishAt
                     ? NpcProviderResult.rejected("publish-failed", "test target rejected publish")
                     : NpcProviderResult.accepted("published");
+        }
+        @Override public NpcProviderResult reconcile(NpcBinding binding) {
+            return bindings.containsKey(binding.bindingId())
+                    ? NpcProviderResult.accepted("binding is owned")
+                    : NpcProviderResult.rejected("not-bound", "binding is not owned");
         }
     }
 
