@@ -41,6 +41,13 @@ public class Complaint {
     public String rewardBudgetStatus = "NONE"; // NONE | RESERVED
     public java.util.Map<String, Integer> rewardShares = new java.util.LinkedHashMap<>();
     public java.util.Map<String, String> rewardClaims = new java.util.LinkedHashMap<>();
+    // V2 escalation fields; legacy lifecycle fields remain compatible.
+    public Long originalDeadline;
+    public Long overdueAt;
+    public java.util.List<Long> deadlineExtensions = new java.util.ArrayList<>();
+    public String investigationMissionId = "";
+    public String escalationTargetUuid = "";
+    public long version;
 
     public static class Participant {
         public String uuid = "";

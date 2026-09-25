@@ -87,6 +87,9 @@ final class NpcPlayerSurface {
                             new ChatAction("Amenzile mele", "fine-list"),
                             new ChatAction("Emite buletinul meu", "identity-request"),
                             new ChatAction("Verifică buletinele", "identity-list"),
+                            new ChatAction("Fișa mea V2", "v2-personnel-status"),
+                            new ChatAction("Promovarea mea V2", "v2-promotion-status"),
+                            new ChatAction("Actele mele V2", "v2-document-status"),
                             new ChatAction("Raportează incident", "incident-report"),
                             new ChatAction("Reputația mea", "reputation-self"),
                             new ChatAction("Stare cameră", "room-status"),
@@ -99,6 +102,7 @@ final class NpcPlayerSurface {
                     List.of(
                             new ChatAction("Progres și puncte", "training-progress"),
                             new ChatAction("Manual de instruire", "training-manual"),
+                            new ChatAction("Promovarea mea V2", "v2-promotion-status"),
                             faqEntry(RoleRoute.TRAINER)));
             case RECRUITER -> surfaceFor(NpcRoles.TRAINER);
             case SECRETARY -> new RoleSurface(
@@ -109,6 +113,9 @@ final class NpcPlayerSurface {
                             new ChatAction("Misiunile mele", "mission-list"),
                             new ChatAction("Carnet de ordine", "mission-carnet"),
                             new ChatAction("Stare serviciu", "guard-status"),
+                            new ChatAction("Dosarul meu V2", "v2-personnel-status"),
+                            new ChatAction("Campanii active", "v2-campaign-status"),
+                            new ChatAction("Muncă profesională", "v2-professional-work"),
                             new ChatAction("Incidente active", "incident-list"),
                             new ChatAction("Roster Straja", "duty-roster"),
                             new ChatAction("BOLO-uri", "bolo-list"),
@@ -131,6 +138,7 @@ final class NpcPlayerSurface {
                     "Arhivă",
                     "Îți arăt dosarele pe care ai voie să le citești.",
                     List.of(new ChatAction("Vezi dosarele", "archive-list"),
+                            new ChatAction("Actele mele V2", "v2-document-status"),
                             new ChatAction("Probe în custodie", "evidence-list"),
                             new ChatAction("Probe pe dosar", "evidence-case-view"),
                             faqEntry(RoleRoute.ARCHIVIST)));
@@ -140,6 +148,8 @@ final class NpcPlayerSurface {
                     "Vând echipament de rang pe monede și rezerve pe puncte de rechiziție; ofertele depind de rangul tău.",
                     List.of(
                             new ChatAction("Vezi ofertele", "armory-status"),
+                            new ChatAction("Registrul meu de echipament", "v2-equipment-status"),
+                            new ChatAction("Muncă profesională", "v2-professional-work"),
                             new ChatAction("Kit de serviciu", "duty-kit"),
                             faqEntry(RoleRoute.ARMORER)));
             case UNKNOWN -> new RoleSurface(

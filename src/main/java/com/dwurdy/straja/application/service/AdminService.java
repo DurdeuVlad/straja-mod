@@ -41,7 +41,7 @@ public class AdminService implements AdminRoleplayUseCase {
         actions.add(new AvailableAction(Action.ROSTER_ACTIVE, "", ""));
         actions.add(new AvailableAction(Action.AUTHORIZE, "", ""));
         for (UUID id : ctx.players().knownIds()) {
-            GuardState state = ctx.players().read(id);
+            GuardState state = players.state(id);
             if (!isMemberRecord(state)) continue;
             String uuid = id.toString();
             String name = state.lastKnownName != null ? state.lastKnownName
@@ -97,7 +97,7 @@ public class AdminService implements AdminRoleplayUseCase {
         if (!gate(actor)) return;
         var lines = new ArrayList<String>();
         for (UUID id : ctx.players().knownIds()) {
-            GuardState state = ctx.players().read(id);
+            GuardState state = players.state(id);
             if (state.duty) lines.add(dossierLine(id));
         }
         actor.tell(lines.isEmpty() ? "[Straja] Nimeni în serviciu acum."
@@ -110,7 +110,7 @@ public class AdminService implements AdminRoleplayUseCase {
         if (!gate(actor)) return;
         UUID id = parseUuid(actor, memberId);
         if (id == null) return;
-        GuardState state = ctx.players().read(id);
+        GuardState state = players.state(id);
         state.refreshLifecycle();
         actor.tell("[Straja] Dosar " + displayName(state, id) + ":");
         actor.tell("  Rang: " + (state.rank > 0 ? ctx.policies().rankName(state.rank) : "civil")
@@ -212,13 +212,13 @@ public class AdminService implements AdminRoleplayUseCase {
     private List<UUID> roster() {
         var rows = new ArrayList<UUID>();
         for (UUID id : ctx.players().knownIds()) {
-            if (isMemberRecord(ctx.players().read(id))) rows.add(id);
+            if (isMemberRecord(players.state(id))) rows.add(id);
         }
         return rows;
     }
 
     private String dossierLine(UUID id) {
-        GuardState state = ctx.players().read(id);
+        GuardState state = players.state(id);
         state.refreshLifecycle();
         return displayName(state, id) + " — "
                 + (state.rank > 0 ? ctx.policies().rankName(state.rank) : "civil")

@@ -36,6 +36,12 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
     private final EquipmentService equipment;
     private final java.util.function.Supplier<String> bootId;
     private java.util.function.Predicate<PlayerGateway> recruitmentEligibility = player -> true;
+    private PromotionService v2PromotionService;
+    private SettlementService v2SettlementService;
+    private java.util.function.Consumer<PlayerGateway> v2PersonnelProjection = player -> {};
+    @FunctionalInterface
+    public interface V2PersonnelAuthorization { boolean authorize(PlayerGateway actor, PlayerGateway target, int rank); }
+    private V2PersonnelAuthorization v2PersonnelAuthorization;
 
     /** Optional hook for room auto-assignment (wired by M6 RoomService). */
     public interface RankChangeHook { void onPromotedToGuard(PlayerGateway player); }
@@ -74,6 +80,16 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         this.recruitmentEligibility = predicate == null ? player -> true : predicate;
     }
 
+    /** Installed by the V2 composition root; absent in legacy/unit compatibility contexts. */
+    public void useV2Promotions(PromotionService service) { this.v2PromotionService = service; }
+    public void useV2Settlements(SettlementService service) { this.v2SettlementService = service; }
+    public void useV2PersonnelProjection(java.util.function.Consumer<PlayerGateway> projection) {
+        this.v2PersonnelProjection = projection == null ? player -> {} : projection;
+    }
+    public void useV2PersonnelAuthorization(V2PersonnelAuthorization authorization) {
+        this.v2PersonnelAuthorization = authorization;
+    }
+
     // ------------------------------------------------------------ helpers
 
     private long now() { return ctx.clock().nowMillis(); }
@@ -93,7 +109,9 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
 
     /** Sergent+ ranks and the commissioner run shifts at will, without patrol. */
     private boolean freeDutyEligible(PlayerGateway player, GuardState state) {
-        return players.isCommissioner(player) || state.rank >= ctx.policies().freeDutyMinRank;
+        return players.isCommissioner(player)
+                || (state.rank >= ctx.policies().freeDutyMinRank
+                && players.hasCapability(player, com.dwurdy.straja.domain.model.Capability.ROUTINE_PATROL));
     }
 
     private boolean canAuthorize(PlayerGateway actor, String action, String targetName, int targetRank) {
@@ -750,6 +768,10 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
 
     @Override
     public void requestPromotion(PlayerGateway player) {
+        if (v2PromotionService != null) {
+            requestV2Promotion(player);
+            return;
+        }
         GuardState state = players.state(player);
         if (!promotableState(state)) {
             player.tell("Nu ești într-o stare care permite avansarea.");
@@ -782,6 +804,53 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
                 + ". Instructorul te-a confirmat; echipamentul nou este al tău.");
     }
 
+    private void requestV2Promotion(PlayerGateway player) {
+        GuardState state = players.state(player);
+        v2PersonnelProjection.accept(player);
+        if (!promotableState(state)) {
+            player.tell("Nu ești într-o stare care permite avansarea.");
+            return;
+        }
+        var target = switch (Rank.of(state.rank + 1)) {
+            case GUARD -> com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STRAJER;
+            case SERGENT -> com.dwurdy.straja.domain.model.CareerGrade.MILITARY_SERGENT;
+            case INSPECTOR -> com.dwurdy.straja.domain.model.CareerGrade.INSPECTOR;
+            default -> null;
+        };
+        if (target == null) { player.tell("Nu există o avansare disponibilă pentru starea ta curentă."); return; }
+        Integer requiredBlocks = ctx.policies().promotionServiceBlocks.get(state.rank + 1);
+        if (requiredBlocks == null) {
+            player.tell("Avansarea la " + ctx.policies().rankName(state.rank + 1)
+                    + " este decizia Comisarului.");
+            return;
+        }
+        if (state.serviceBlocks < requiredBlocks) {
+            player.tell("Mai sunt necesare " + (requiredBlocks - state.serviceBlocks) + " puncte de serviciu.");
+            return;
+        }
+        if (!pendingModules(state).isEmpty()) {
+            player.tell("Mai întâi finalizează instruirea: " + pendingModules(state).size()
+                    + " module rămase.");
+            return;
+        }
+        try {
+            var application = v2PromotionService.findOpen(player.uuid().toString(), target);
+            if (application == null) application = v2PromotionService.submit(player.uuid().toString(), target);
+            if (application.status != com.dwurdy.straja.domain.model.PromotionStatus.READY_FOR_APPROVAL) {
+                if (pendingModules(state).isEmpty()) {
+                    v2PromotionService.addEvidence(application.applicationId, player.uuid().toString(),
+                            "SERVICE_AND_TRAINING", "legacy_guard_flow", "PASS", null,
+                            "legacy:" + player.uuid() + ":" + target);
+                    application = v2PromotionService.markReady(application.applicationId);
+                }
+            }
+            player.tell("Cererea de avansare " + application.applicationId
+                    + " este pregătită pentru aprobarea Comisarului.");
+        } catch (RuntimeException error) {
+            player.tell("Cererea de avansare nu a putut fi înregistrată: " + error.getMessage());
+        }
+    }
+
     @Override
     public void giveManual(PlayerGateway player) {
         GuardState state = players.state(player);
@@ -810,6 +879,25 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
     // ------------------------------------------------------------ admin rank ops
 
     public void promote(PlayerGateway actor, PlayerGateway target) {
+        if (v2PromotionService != null) {
+            v2PersonnelProjection.accept(actor);
+            v2PersonnelProjection.accept(target);
+            var targetGrade = switch (Rank.of(players.state(target).rank + 1)) {
+                case GUARD -> com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STRAJER;
+                case SERGENT -> com.dwurdy.straja.domain.model.CareerGrade.MILITARY_SERGENT;
+                case INSPECTOR -> com.dwurdy.straja.domain.model.CareerGrade.INSPECTOR;
+                default -> null;
+            };
+            if (targetGrade == null) { actor.tell("Ținta nu are o avansare disponibilă."); return; }
+            try {
+                v2PromotionService.approveOpen(actor.uuid().toString(), target.uuid().toString(), targetGrade);
+                actor.tell(target.name() + " a fost promovat prin fluxul V2.");
+                target.tell("Promovarea ta a fost aprobată de Comisar.");
+            } catch (RuntimeException error) {
+                actor.tell("Promovarea V2 a fost refuzată: " + error.getMessage());
+            }
+            return;
+        }
         if (!players.isCommissioner(actor)) {
             actor.tell("Promovările sunt decizia finală a Comisarului.");
             return;
@@ -912,6 +1000,10 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         }
         if (rank < Rank.STAGIAR.level() || rank > Rank.INSPECTOR.level()) {
             actor.tell("Rang invalid. Folosește un rang între Stagiar și Inspector.");
+            return false;
+        }
+        if (v2PersonnelAuthorization != null && !v2PersonnelAuthorization.authorize(actor, target, rank)) {
+            actor.tell("Autorizarea V2 a fost refuzată; starea V1 nu a fost modificată.");
             return false;
         }
         GuardState state = players.state(target);
@@ -1023,6 +1115,10 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
 
     public void startDuty(PlayerGateway player) {
         GuardState state = players.state(player);
+        if (!players.hasCapability(player, com.dwurdy.straja.domain.model.Capability.ROUTINE_PATROL)) {
+            player.tell("Autorizația centrală nu permite patrulă în stația curentă.");
+            return;
+        }
         if (state.rank >= Rank.STAGIAR.level()) {
             if (state.resignationPending) { player.tell(coreError("resignation_pending")); return; }
             if (state.resigned) { player.tell(coreError("resigned")); return; }
@@ -1093,6 +1189,10 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
 
     public void checkpoint(PlayerGateway player, String id) {
         GuardState state = players.state(player);
+        if (!players.hasCapability(player, com.dwurdy.straja.domain.model.Capability.ROUTINE_PATROL)) {
+            player.tell("Autorizația centrală nu permite patrulă în stația curentă.");
+            return;
+        }
         if (!players.permissionLevel(player, state).atLeast(PermissionLevel.GUARD)) {
             player.tell("Doar un străjer activ poate activa checkpoint-uri.");
             return;
@@ -1119,6 +1219,10 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
 
     public void stopDuty(PlayerGateway player) {
         GuardState state = players.state(player);
+        if (!players.hasCapability(player, com.dwurdy.straja.domain.model.Capability.ROUTINE_PATROL)) {
+            player.tell("Autorizația centrală nu permite patrulă în stația curentă.");
+            return;
+        }
         if (!players.permissionLevel(player, state).atLeast(PermissionLevel.GUARD)) {
             player.tell("Doar un străjer activ poate încheia serviciul.");
             return;
@@ -1346,8 +1450,35 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             player.tell("Moneda externă nu este configurată. Comisaru' trebuie să confirme ID-urile înainte de plata salariilor. Soldul a fost păstrat.");
             return;
         }
+        if (v2SettlementService != null && !"IN_PROGRESS".equals(state.salaryPaymentStatus)
+                && !"REVIEW".equals(state.salaryPaymentStatus)) {
+            String window = state.salaryWindowKey == null ? "legacy" : String.valueOf(state.salaryWindowKey);
+            String settlementKey = "LEGACY_SALARY:" + player.uuid() + ":window=" + window + ":amount=" + amount;
+            var settlement = v2SettlementService.create(player.uuid().toString(),
+                    com.dwurdy.straja.domain.model.Settlement.SettlementCategory.LEGACY_SALARY,
+                    amount, settlementKey, window);
+            var paid = v2SettlementService.payout(settlement, player);
+            if (paid.status == com.dwurdy.straja.domain.model.Settlement.SettlementStatus.PAID) {
+                state.unpaidSalary = 0; state.salaryPaymentStatus = "PAID";
+                state.salaryPaymentError = null; state.salaryPayoutId = null;
+                players.save(player.uuid(), state);
+                player.tell("Salariu plătit în monede fizice.");
+            } else {
+                state.salaryPaymentStatus = paid.status == com.dwurdy.straja.domain.model.Settlement.SettlementStatus.REVIEW
+                        ? "REVIEW" : "PENDING";
+                state.salaryPaymentError = "settlement_" + paid.status;
+                state.salaryPayoutId = paid.settlementId;
+                players.save(player.uuid(), state);
+                player.tell(state.salaryPaymentStatus.equals("REVIEW")
+                        ? "Plata salariului este blocată pentru verificarea Comisarului."
+                        : "Plata salariului rămâne în coada de decontare.");
+            }
+            return;
+        }
         String payoutId = state.salaryPayoutId != null ? state.salaryPayoutId
-                : "salary:" + player.uuid() + ":" + amount;
+                : "salary:" + player.uuid() + ":window="
+                        + (state.salaryWindowKey == null ? "legacy" : state.salaryWindowKey)
+                        + ":amount=" + amount;
         if ("REVIEW".equals(state.salaryPaymentStatus)) {
             player.tell("Plata salariului este blocată pentru verificarea Comisarului.");
             return;

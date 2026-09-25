@@ -3,6 +3,7 @@ package com.dwurdy.straja.adapter.out.minecraft;
 import com.dwurdy.straja.application.port.out.InventoryView;
 import com.dwurdy.straja.application.port.out.ItemView;
 import com.dwurdy.straja.application.port.out.PlayerGateway;
+import com.dwurdy.straja.adapter.in.form.StrajaFormMenu;
 import com.dwurdy.straja.bootstrap.StrajaItems;
 import com.dwurdy.straja.domain.model.ItemSpec;
 import java.util.UUID;
@@ -148,6 +149,11 @@ public class MinecraftPlayerGateway implements PlayerGateway {
     @Override public void closeMenu() {
         ServerPlayer p = entity();
         if (p != null) p.closeContainer();
+    }
+
+    @Override public boolean isActionFormOpen() {
+        ServerPlayer p = entity();
+        return p != null && p.containerMenu instanceof StrajaFormMenu;
     }
 
     @Override public void teleport(String dimension, double x, double y, double z) {

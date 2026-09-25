@@ -32,17 +32,28 @@ public class FormSessionService implements FormSessionUseCase {
     private static final int MAX_LABEL = 80;
 
     private static final Set<Action> RECORDLESS = EnumSet.of(
-            Action.COMPLAINT_SUBMIT, Action.MISSION_DRAFT_WRITE, Action.MISSION_DRAFT_SCOPE,
-            Action.FINE_DRAFT, Action.FINE_WARRANT, Action.ARCHIVE_FOLDER_CREATE,
-            Action.GIVE_UP, Action.OTHER_REQUEST);
+            Action.GIVE_UP, Action.OTHER_REQUEST, Action.FACTION_DECLARE,
+            Action.MISSION_DRAFT_WRITE, Action.MISSION_DRAFT_SCOPE,
+            Action.MISSION_BUDGET_ADJUST, Action.COMPLAINT_SUBMIT, Action.FINE_DRAFT,
+            Action.FINE_WARRANT, Action.ARCHIVE_FOLDER_CREATE, Action.REPORT_SUBMIT,
+            Action.AUDIENCE_REQUEST, Action.ADMIN_AUTHORIZE, Action.ADMIN_POLICY_SET,
+            Action.ADMIN_EMERGENCY_ALERT, Action.ADMIN_EMERGENCY_START, Action.INCIDENT_REPORT,
+            Action.BOLO_CREATE, Action.EVIDENCE_CASE_VIEW,
+            Action.ARREST_HANDOFF, Action.REPUTATION_VIEW, Action.REPUTATION_CORRECTION);
 
     private final Clock clock;
     private final IdGenerator ids;
+    private final DocumentService documents;
     private final ConcurrentHashMap<String, Session> sessions = new ConcurrentHashMap<>();
 
     public FormSessionService(Clock clock, IdGenerator ids) {
+        this(clock, ids, null);
+    }
+
+    public FormSessionService(Clock clock, IdGenerator ids, DocumentService documents) {
         this.clock = clock;
         this.ids = ids;
+        this.documents = documents;
     }
 
     @Override
@@ -60,7 +71,13 @@ public class FormSessionService implements FormSessionUseCase {
 
         String sessionId = ids.token();
         if (sessionId == null || sessionId.isBlank()) return Optional.empty();
-        Session session = new Session(owner, request.action(), recordId, fields,
+        String formRequestId = "";
+        if (documents != null && isStandardBlankForm(request.action())) {
+            var formRequest = documents.requestBlankForm(owner.toString(), request.action().id(),
+                    "FORM_SESSION:" + sessionId);
+            formRequestId = formRequest.requestId;
+        }
+        Session session = new Session(owner, request.action(), recordId, formRequestId, fields,
                 clock.nowMillis() + TTL_MILLIS);
         if (sessions.putIfAbsent(sessionId, session) != null) return Optional.empty();
         return Optional.of(new View(sessionId, request.title(), request.prompt(), fields));
@@ -76,6 +93,8 @@ public class FormSessionService implements FormSessionUseCase {
         Map<String, String> cleaned = validValues(session.fields(), values);
         if (cleaned == null) return Optional.empty();
         if (!sessions.remove(sessionId, session)) return Optional.empty();
+        if (documents != null && !session.formRequestId().isBlank())
+            documents.completeFormRequest(session.formRequestId());
         return Optional.of(new Submission(session.action(), session.recordId(), cleaned));
     }
 
@@ -134,6 +153,12 @@ public class FormSessionService implements FormSessionUseCase {
         return cleaned;
     }
 
-    private record Session(UUID owner, Action action, String recordId,
+    private static boolean isStandardBlankForm(Action action) {
+        return action == Action.COMPLAINT_SUBMIT || action == Action.REPORT_SUBMIT
+                || action == Action.MISSION_DRAFT_WRITE || action == Action.FINE_DRAFT
+                || action == Action.OTHER_REQUEST;
+    }
+
+    private record Session(UUID owner, Action action, String recordId, String formRequestId,
                            List<Field> fields, long expiresAt) {}
 }

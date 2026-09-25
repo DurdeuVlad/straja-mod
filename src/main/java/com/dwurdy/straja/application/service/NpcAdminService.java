@@ -85,6 +85,16 @@ public class NpcAdminService implements NpcRegistryUseCase {
         return Result.pass();
     }
 
+    public Result bindStation(String entityUuid, String stationId) {
+        if (stationId == null || stationId.isBlank()) return Result.fail("station_required");
+        NpcRegistry registry = ctx.npcs().read();
+        NpcRegistry.Record record = registry.npcs.get(entityUuid);
+        if (record == null) return Result.fail("unknown_npc");
+        record.stationId = stationId;
+        ctx.npcs().write(registry);
+        return Result.pass();
+    }
+
     public Result remove(String entityUuid) {
         NpcRegistry registry = ctx.npcs().read();
         if (registry.npcs.remove(entityUuid) == null) return Result.fail("unknown_npc");
@@ -100,7 +110,8 @@ public class NpcAdminService implements NpcRegistryUseCase {
     public Registration registration(String entityUuid) {
         NpcRegistry.Record record = ctx.npcs().read().npcs.get(entityUuid);
         if (record == null) return null;
-        return new Registration(record.role, record.skin, record.displayName);
+        return new Registration(record.role, record.skin, record.displayName,
+                record.stationId == null || record.stationId.isBlank() ? "hq" : record.stationId);
     }
 
     @Override

@@ -2594,7 +2594,9 @@ public class CustodyService implements CustodyRoleplayUseCase {
                 }
             }
             if (target.health() <= 0 || target.health() > 1) target.setHealth(1);
-            target.closeMenu();
+            // Keep the server-issued give-up form alive while the player is
+            // downed. Other menus are still closed every tick by default.
+            if (!target.isActionFormOpen()) target.closeMenu();
             target.applyEffect("minecraft:slowness",
                     Math.max(20, ctx.policies().downedSlownessTicks), ctx.policies().downedSlownessAmplifier);
         }

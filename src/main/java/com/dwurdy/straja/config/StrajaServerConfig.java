@@ -22,6 +22,7 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.ConfigValue<String> ENVIRONMENT;
     public static final ModConfigSpec.ConfigValue<String> NPC_PROVIDER_MODE;
     public static final ModConfigSpec.BooleanValue NPC_DEBUG_TEXT_ENABLED;
+    public static final ModConfigSpec.ConfigValue<String> DISCORD_WEBHOOK_URL;
 
     public static final ModConfigSpec.IntValue CHECKPOINT_UNLOCK_MINUTES;
     public static final ModConfigSpec.IntValue CHECKPOINT_DEADLINE_MINUTES;
@@ -137,6 +138,10 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.IntValue SALARY_WINDOW_MINUTES;
     public static final ModConfigSpec.IntValue SALARY_ACTIVITY_GRACE_SECONDS;
     public static final ModConfigSpec.DoubleValue SALARY_ACTIVITY_MOVE_THRESHOLD;
+    public static final ModConfigSpec.BooleanValue WEEKLY_STIPEND_ENABLED;
+    public static final ModConfigSpec.IntValue WEEKLY_STIPEND_AMOUNT;
+    public static final ModConfigSpec.IntValue WEEKLY_STIPEND_REQUIRED_SERVICE_BLOCKS;
+    public static final ModConfigSpec.IntValue MOBILIZATION_PAY;
     public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> RANK_NAMES;
     public static final ModConfigSpec.BooleanValue RANK_PREFIX_CHAT;
     public static final ModConfigSpec.BooleanValue RANK_PREFIX_TAB;
@@ -264,6 +269,7 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.IntValue COMPLAINT_DEFAULT_SEVERITY;
     public static final ModConfigSpec.IntValue COMPLAINT_MAX_REWARD;
     public static final ModConfigSpec.IntValue COMPLAINT_MAX_REWARD_PER_REVIEWER_PER_DAY;
+    public static final ModConfigSpec.IntValue COMPLAINT_SLA_DAYS;
     public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> COMPLAINT_REWARD_BY_SEVERITY;
 
     public static final ModConfigSpec.BooleanValue DEBUG_ENABLED;
@@ -301,6 +307,13 @@ public final class StrajaServerConfig {
         NPC_DEBUG_TEXT_ENABLED = B.comment(
                         "Explicitly permits the debug-text provider; it never becomes a normal player surface.")
                 .define("debugTextEnabled", defaults.npcDebugTextEnabled);
+        B.pop();
+
+        B.push("outbound");
+        DISCORD_WEBHOOK_URL = B.comment(
+                        "Optional Discord webhook URL. Leave blank to disable outbound delivery.",
+                        "Never expose this value through commands or diagnostics.")
+                .define("discordWebhookUrl", "");
         B.pop();
 
         B.push("identityCards");
@@ -519,6 +532,13 @@ public final class StrajaServerConfig {
         SALARY_WINDOW_MINUTES = B.defineInRange("windowMinutes", 1440, 1, 100000);
         SALARY_ACTIVITY_GRACE_SECONDS = B.defineInRange("activityGraceSeconds", 90, 5, 3600);
         SALARY_ACTIVITY_MOVE_THRESHOLD = B.defineInRange("activityMoveThreshold", 0.15, 0.0, 10.0);
+        B.pop();
+
+        B.push("v2Settlements");
+        WEEKLY_STIPEND_ENABLED = B.define("weeklyStipendEnabled", true);
+        WEEKLY_STIPEND_AMOUNT = B.defineInRange("weeklyStipendAmount", 0, 0, 1000000);
+        WEEKLY_STIPEND_REQUIRED_SERVICE_BLOCKS = B.defineInRange("weeklyStipendRequiredServiceBlocks", 0, 0, 1000000);
+        MOBILIZATION_PAY = B.defineInRange("mobilizationPay", 0, 0, 1000000);
         B.pop();
 
         B.push("ranks");
@@ -830,6 +850,7 @@ public final class StrajaServerConfig {
                 defaults.complaintDefaultSeverity, 1, 4);
         COMPLAINT_MAX_REWARD = B.defineInRange("maxReward", 250, 0, 1000000);
         COMPLAINT_MAX_REWARD_PER_REVIEWER_PER_DAY = B.defineInRange("maxRewardPerReviewerPerDay", 1000, 0, 1000000);
+        COMPLAINT_SLA_DAYS = B.defineInRange("slaDays", 7, 1, 3650);
         COMPLAINT_REWARD_BY_SEVERITY = B.comment(
                         "Investigator reward per complaint severity.",
                         "Entries: \"severity=coins\".")
@@ -872,6 +893,7 @@ public final class StrajaServerConfig {
         p.environment = ENVIRONMENT.get();
         p.npcProviderMode = NPC_PROVIDER_MODE.get();
         p.npcDebugTextEnabled = NPC_DEBUG_TEXT_ENABLED.get();
+        p.discordWebhookUrl = DISCORD_WEBHOOK_URL.get();
 
         p.checkpointUnlockMinutes = CHECKPOINT_UNLOCK_MINUTES.get();
         p.checkpointDeadlineMinutes = CHECKPOINT_DEADLINE_MINUTES.get();
@@ -989,6 +1011,10 @@ public final class StrajaServerConfig {
         p.salaryWindowMinutes = SALARY_WINDOW_MINUTES.get();
         p.salaryActivityGraceSeconds = SALARY_ACTIVITY_GRACE_SECONDS.get();
         p.salaryActivityMoveThreshold = SALARY_ACTIVITY_MOVE_THRESHOLD.get();
+        p.weeklyStipendEnabled = WEEKLY_STIPEND_ENABLED.get();
+        p.weeklyStipendAmount = WEEKLY_STIPEND_AMOUNT.get();
+        p.weeklyStipendRequiredServiceBlocks = WEEKLY_STIPEND_REQUIRED_SERVICE_BLOCKS.get();
+        p.mobilizationPay = MOBILIZATION_PAY.get();
         p.rankNames = mapOrDefault(StrajaPolicies.parseIntStringMap(RANK_NAMES.get()),
                 defaults().rankNames);
         p.rankPrefixChat = RANK_PREFIX_CHAT.get();
@@ -1116,6 +1142,7 @@ public final class StrajaServerConfig {
         p.complaintDefaultSeverity = COMPLAINT_DEFAULT_SEVERITY.get();
         p.complaintMaxReward = COMPLAINT_MAX_REWARD.get();
         p.complaintMaxRewardPerReviewerPerDay = COMPLAINT_MAX_REWARD_PER_REVIEWER_PER_DAY.get();
+        p.complaintSlaMillis = COMPLAINT_SLA_DAYS.get() * 24L * 60 * 60 * 1000;
         p.complaintRewardBySeverity = mapOrDefault(
                 StrajaPolicies.parseIntMap(COMPLAINT_REWARD_BY_SEVERITY.get()),
                 defaults().complaintRewardBySeverity);

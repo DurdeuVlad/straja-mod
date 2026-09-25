@@ -68,6 +68,29 @@ public class Mission {
     /** §13: template flag — the mission substitutes patrol duty for assignees. */
     public boolean supersedesPatrol;
 
+    // V2 fields. Legacy string fields remain for migration and compatibility.
+    public String stationId = "hq";
+    public String jurisdiction = "";
+    public String missionType = "";
+    public String profession = "";
+    public String campaignId = "";
+    public String predecessorId = "";
+    public String beneficiaryUuid = "";
+    public String creatorUuid = "";
+    public String actorUuid = "";
+    public List<String> evidenceRefs = new ArrayList<>();
+    public List<MissionEvidence> evidence = new ArrayList<>();
+    public String claimReceiptId = "";
+    public int assignmentRevision;
+    /** Immutable assignment audit trail; the current actor is never enough to reconstruct history. */
+    public List<Assignment> assignmentHistory = new ArrayList<>();
+    public String quotaReservationId = "";
+    public List<String> paymentSettlementIds = new ArrayList<>();
+    public String auditCorrelationId = "";
+    public MissionStatus v2Status;
+    public Long originalDeadline;
+    public List<Long> deadlineExtensions = new ArrayList<>();
+
     public static class Identity {
         public String uuid = "";
         public String name = "";
@@ -91,6 +114,14 @@ public class Mission {
         public String payoutId = "";
         public Long paidAt;
         public Long recoveredAt;
+    }
+
+    public static class Assignment {
+        public String actorUuid = "";
+        public String assignedBy = "";
+        public String receiptId = "";
+        public long assignedAt;
+        public String reason = "";
     }
 
     public boolean isOpen() {

@@ -20,7 +20,9 @@ public final class PhysicalItemSurface {
         ALARM_WHISTLE,
         EVIDENCE_BAG,
         CONFISCATION_RECEIPT,
-        IDENTITY_CARD
+        IDENTITY_CARD,
+        OFFICIAL_DOCUMENT,
+        OFFICIAL_INSTRUMENT
     }
 
     private PhysicalItemSurface() {}
@@ -40,6 +42,8 @@ public final class PhysicalItemSurface {
             case "straja:evidence_bag" -> Action.EVIDENCE_BAG;
             case "straja:confiscation_receipt" -> Action.CONFISCATION_RECEIPT;
             case "straja:identity_card" -> Action.IDENTITY_CARD;
+            case "straja:official_document" -> Action.OFFICIAL_DOCUMENT;
+            case "straja:official_instrument" -> Action.OFFICIAL_INSTRUMENT;
             default -> Action.NONE;
         };
     }

@@ -175,4 +175,77 @@ public final class SavedStores {
         @Override public ReputationStore read() { return readJson(ReputationStore.class, ReputationStore::new); }
         @Override public void write(ReputationStore store) { writeJson(store); }
     }
+
+    public static class Personnel extends JsonBackedStore implements PersonnelRepository {
+        public Personnel(StoreAccess access) { super(access, "personnel"); }
+        @Override public PersonnelStore read() { return readJsonVersioned(PersonnelStore.class, PersonnelStore::new, PersonnelStore.CURRENT_SCHEMA_VERSION); }
+        @Override public void write(PersonnelStore store) { writeJson(store); }
+    }
+
+    public static class Promotions extends JsonBackedStore implements PromotionRepository {
+        public Promotions(StoreAccess access) { super(access, "promotions"); }
+        @Override public PromotionStore read() { return readJsonVersioned(PromotionStore.class, PromotionStore::new, PromotionStore.CURRENT_SCHEMA_VERSION); }
+        @Override public void write(PromotionStore store) { writeJson(store); }
+    }
+
+    public static class Stations extends JsonBackedStore implements StationRepository {
+        public Stations(StoreAccess access) { super(access, "stations"); }
+        @Override public StationStore read() { return readJsonVersioned(StationStore.class, StationStore::defaults, StationStore.CURRENT_SCHEMA_VERSION); }
+        @Override public void write(StationStore store) { writeJson(store); }
+    }
+
+    public static class Documents extends JsonBackedStore implements DocumentRepository {
+        public Documents(StoreAccess access) { super(access, "documents"); }
+        @Override public DocumentStore read() {
+            DocumentStore store = readJsonVersioned(DocumentStore.class, DocumentStore::new, DocumentStore.CURRENT_SCHEMA_VERSION);
+            if (store.documents == null) store.documents = new java.util.LinkedHashMap<>();
+            if (store.instruments == null) store.instruments = new java.util.LinkedHashMap<>();
+            if (store.redemptions == null) store.redemptions = new java.util.LinkedHashMap<>();
+            if (store.idempotencyIndex == null) store.idempotencyIndex = new java.util.LinkedHashMap<>();
+            if (store.formRequests == null) store.formRequests = new java.util.LinkedHashMap<>();
+            if (store.formRequestIndex == null) store.formRequestIndex = new java.util.LinkedHashMap<>();
+            return store;
+        }
+        @Override public void write(DocumentStore store) { writeJson(store); }
+    }
+
+    public static class EquipmentLedger extends JsonBackedStore implements EquipmentRepository {
+        public EquipmentLedger(StoreAccess access) { super(access, "equipment_ledger"); }
+        @Override public EquipmentStore read() { return readJsonVersioned(EquipmentStore.class, EquipmentStore::new, EquipmentStore.CURRENT_SCHEMA_VERSION); }
+        @Override public void write(EquipmentStore store) { writeJson(store); }
+    }
+
+    public static class Mobilizations extends JsonBackedStore implements MobilizationRepository {
+        public Mobilizations(StoreAccess access) { super(access, "mobilizations"); }
+        @Override public MobilizationStore read() { return readJsonVersioned(MobilizationStore.class, MobilizationStore::new, MobilizationStore.CURRENT_SCHEMA_VERSION); }
+        @Override public void write(MobilizationStore store) { writeJson(store); }
+    }
+
+    public static class Campaigns extends JsonBackedStore implements CampaignRepository {
+        public Campaigns(StoreAccess access) { super(access, "campaigns"); }
+        @Override public CampaignStore read() { return readJsonVersioned(CampaignStore.class, CampaignStore::new, CampaignStore.CURRENT_SCHEMA_VERSION); }
+        @Override public void write(CampaignStore store) { writeJson(store); }
+    }
+
+    public static class Settlements extends JsonBackedStore implements SettlementRepository {
+        public Settlements(StoreAccess access) { super(access, "settlements"); }
+        @Override public SettlementStore read() { return readJsonVersioned(SettlementStore.class, SettlementStore::new, SettlementStore.CURRENT_SCHEMA_VERSION); }
+        @Override public void write(SettlementStore store) { writeJson(store); }
+    }
+
+    public static class Operations extends JsonBackedStore implements OperationRepository {
+        public Operations(StoreAccess access) { super(access, "operations"); }
+        @Override public OperationStore read() { return readJsonVersioned(OperationStore.class, OperationStore::new, OperationStore.CURRENT_SCHEMA_VERSION); }
+        @Override public void write(OperationStore store) { writeJson(store); }
+    }
+
+    public static class Outbox extends JsonBackedStore implements OutboxRepository {
+        public Outbox(StoreAccess access) { super(access, "outbox"); }
+        @Override public List<OutboxEvent> read() {
+            List<OutboxEvent> list = readJson(List.class, ArrayList::new);
+            return GSON.fromJson(GSON.toJsonTree(list),
+                    new com.google.gson.reflect.TypeToken<List<OutboxEvent>>() {}.getType());
+        }
+        @Override public void write(List<OutboxEvent> events) { writeJson(events); }
+    }
 }

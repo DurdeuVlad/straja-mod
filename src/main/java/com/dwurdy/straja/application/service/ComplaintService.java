@@ -8,9 +8,11 @@ import com.dwurdy.straja.domain.model.Complaint;
 import com.dwurdy.straja.domain.model.ComplaintStore;
 import com.dwurdy.straja.domain.model.SetupData;
 import com.dwurdy.straja.domain.model.StrajaPolicies;
+import com.dwurdy.straja.domain.model.GuardState;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /** Citizen complaints: submission, investigation, report, review and rewards. */
 public class ComplaintService implements ComplaintRoleplayUseCase {
@@ -22,11 +24,16 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
     private final StrajaContext ctx;
     private final PlayerService players;
     private final AuditService audit;
+    private ComplaintEscalationService v2Escalation;
 
     public ComplaintService(StrajaContext ctx, PlayerService players, AuditService audit) {
         this.ctx = ctx;
         this.players = players;
         this.audit = audit;
+    }
+
+    public void useV2Escalation(ComplaintEscalationService escalation) {
+        this.v2Escalation = escalation;
     }
 
     private StrajaPolicies p() {
@@ -63,6 +70,49 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
 
     private static boolean blank(String value) {
         return value == null || value.isEmpty();
+    }
+
+    private record AccusedIdentity(String name, String uuid) {}
+
+    /**
+     * Resolve an accused player by live identity first, then by persisted
+     * identity history. A historical display name is only accepted when it
+     * maps to exactly one persisted UUID; arbitrary offline names are never
+     * treated as identities.
+     */
+    private AccusedIdentity resolveAccused(String input) {
+        PlayerGateway live = ctx.server().findPlayer(input);
+        if (live != null && live.isOnline()) {
+            String uuid = live.uuid() == null ? "" : live.uuid().toString();
+            return new AccusedIdentity(live.name(), uuid);
+        }
+
+        UUID requestedUuid = null;
+        try {
+            requestedUuid = UUID.fromString(input);
+        } catch (IllegalArgumentException ignored) {
+            // The input may be a previously persisted display name.
+        }
+
+        UUID match = requestedUuid;
+        String matchName = null;
+        if (match != null && !ctx.players().knownIds().contains(match)) return null;
+        if (match == null) {
+            for (UUID knownId : ctx.players().knownIds()) {
+                GuardState state = ctx.players().read(knownId);
+                if (state.lastKnownName != null && state.lastKnownName.equalsIgnoreCase(input)) {
+                    if (match != null) return null; // ambiguous historical name
+                    match = knownId;
+                    matchName = state.lastKnownName;
+                }
+            }
+        }
+        if (match == null) return null;
+        if (matchName == null) {
+            GuardState state = ctx.players().read(match);
+            matchName = blank(state.lastKnownName) ? match.toString() : state.lastKnownName;
+        }
+        return new AccusedIdentity(matchName, match.toString());
     }
 
     private static Complaint.Participant participantOf(Complaint complaint, PlayerGateway player) {
@@ -190,13 +240,13 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
                     + p().complaintMaxDescriptionLength + " caractere).");
             return false;
         }
-        PlayerGateway target = ctx.server().findPlayer(accusedName);
-        if (target == null || !target.isOnline()) {
-            player.tell("Jucătorul acuzat trebuie să fie conectat pentru a primi o plângere.");
+        AccusedIdentity target = resolveAccused(accusedName);
+        if (target == null) {
+            player.tell("Acuzatul nu poate fi identificat printr-un cont conectat sau prin istoricul UUID persistent.");
             return false;
         }
         if (PlayerService.identityMatches(player,
-                target.uuid() == null ? "" : target.uuid().toString(), target.name())) {
+                target.uuid(), target.name())) {
             player.tell("Nu poți depune o plângere împotriva ta.");
             return false;
         }
@@ -213,7 +263,7 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
         complaint.complainant = player.name();
         complaint.complainantUuid = key;
         complaint.accused = target.name();
-        complaint.accusedUuid = target.uuid() == null ? "" : target.uuid().toString();
+        complaint.accusedUuid = target.uuid();
         complaint.category = categoryName;
         complaint.description = text;
         complaint.severity = Math.max(1, p().complaintDefaultSeverity);
@@ -221,6 +271,10 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
         complaint.createdAt = now();
         data.complaints.add(complaint);
         ctx.complaints().write(data);
+        if (v2Escalation != null) {
+            v2Escalation.assignDeadline(complaint.id, p().complaintSlaMillis);
+            v2Escalation.linkInvestigationMission(complaint.id);
+        }
         audit.record("complaint_submit", player.name(), key, complaint.accused, complaint.accusedUuid, "SUCCESS", "submitted complaintId=" + complaint.id + " category=" + complaint.category);
         player.tell("Plângerea " + complaint.id + " a fost înregistrată. Vei putea confirma rezultatul la recepționistă.");
         return true;

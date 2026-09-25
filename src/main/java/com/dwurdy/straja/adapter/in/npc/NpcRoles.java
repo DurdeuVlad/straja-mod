@@ -97,6 +97,12 @@ public final class NpcRoles {
         switch (actionId) {
             case "rules" -> runtime.guardDuty().showRules(gw);
             case "guard-status" -> runtime.guardDuty().showStatus(gw);
+            case "v2-personnel-status" -> tellV2Personnel(runtime, gw);
+            case "v2-promotion-status" -> tellV2Promotion(runtime, gw);
+            case "v2-document-status" -> tellV2Documents(runtime, gw);
+            case "v2-equipment-status" -> tellV2Equipment(runtime, gw);
+            case "v2-campaign-status" -> tellV2Campaigns(runtime, gw);
+            case "v2-professional-work" -> tellV2ProfessionalWork(runtime, gw);
             case "application-submit" -> runtime.guardRecruitment().applyForStraja(gw);
             case "recruit" -> runtime.guardRecruitment().recruit(gw);
             case "quiz-answer" -> openQuizForm(player, level, runtime, gw);
@@ -202,6 +208,85 @@ public final class NpcRoles {
             default -> { return false; }
         }
         return true;
+    }
+
+    private static void tellV2Personnel(com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                        com.dwurdy.straja.application.port.out.PlayerGateway player) {
+        var record = runtime.v2Personnel().find(player.uuid().toString());
+        if (record == null) {
+            player.tell("Fișa V2 nu este încă proiectată. Reautentifică-te sau vorbește cu Recepția.");
+            return;
+        }
+        player.tell("Fișă V2: " + record.serviceNumber + " | " + record.membershipStatus
+                + " | " + record.careerGrade + " | " + record.employmentMode
+                + " | stație: " + record.homeStationId + " | versiune: " + record.version);
+    }
+
+    private static void tellV2Promotion(com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                        com.dwurdy.straja.application.port.out.PlayerGateway player) {
+        var applications = runtime.v2Promotions().all().stream()
+                .filter(application -> player.uuid().toString().equals(application.subjectUuid))
+                .toList();
+        if (applications.isEmpty()) {
+            player.tell("Nu există o cerere de promovare V2 deschisă pentru tine.");
+            return;
+        }
+        applications.forEach(application -> player.tell("Promovare V2 " + application.applicationId
+                + ": " + application.fromGrade + " → " + application.targetGrade
+                + " | " + application.status));
+    }
+
+    private static void tellV2Documents(com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                        com.dwurdy.straja.application.port.out.PlayerGateway player) {
+        var documents = runtime.v2Documents().documents().stream()
+                .filter(document -> player.uuid().toString().equals(document.subject))
+                .toList();
+        player.tell(documents.isEmpty() ? "Nu ai acte V2 emise." : "Acte V2 active: " + documents.size());
+        documents.forEach(document -> player.tell(document.documentId + " | " + document.type + " | " + document.status));
+    }
+
+    private static void tellV2Equipment(com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                        com.dwurdy.straja.application.port.out.PlayerGateway player) {
+        var obligations = runtime.v2EquipmentLedger().obligationsFor(player.uuid().toString());
+        player.tell(obligations.isEmpty() ? "Nu ai obligații în registrul de echipament V2."
+                : "Obligații echipament V2: " + obligations.size());
+        obligations.forEach(obligation -> player.tell(obligation.itemId + " "
+                + obligation.outstandingQuantity + "/" + obligation.issuedQuantity + " | " + obligation.status));
+    }
+
+    private static void tellV2Campaigns(com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                        com.dwurdy.straja.application.port.out.PlayerGateway player) {
+        var active = runtime.v2Campaigns().all().stream()
+                .filter(campaign -> campaign.status == com.dwurdy.straja.domain.model.MissionCampaign.CampaignStatus.ACTIVE)
+                .toList();
+        player.tell(active.isEmpty() ? "Nu există campanii V2 active." : "Campanii V2 active: " + active.size());
+        active.forEach(campaign -> player.tell(campaign.campaignId + " | " + campaign.type
+                + " | cotă " + campaign.quantityAccepted + "/" + campaign.globalQuota));
+    }
+
+    private static void tellV2ProfessionalWork(com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                               com.dwurdy.straja.application.port.out.PlayerGateway player) {
+        var personnel = runtime.v2Personnel().find(player.uuid().toString());
+        if (personnel == null || personnel.professions == null || personnel.professions.isEmpty()) {
+            player.tell("Nu ai încă o profesie V2 în fișa de personal. Cere o numire profesională la Comisar.");
+            return;
+        }
+        String profession = personnel.professions.get(0).toUpperCase(java.util.Locale.ROOT);
+        if (!runtime.v2Generators().professions().contains(profession)) {
+            player.tell("Profesia " + profession + " nu are încă un generator activ.");
+            return;
+        }
+        try {
+            long now = runtime.nowMillis();
+            var mission = runtime.v2Generators().publishFor(profession, player.uuid().toString(),
+                    personnel.homeStationId, "", now,
+                    "generator:" + profession + ":" + player.uuid() + ":" + (now / 86_400_000L),
+                    runtime.v2Missions());
+            player.tell("Ofertă profesională V2: " + mission.id + " — " + mission.objective
+                    + " (scadentă la " + mission.dueAt + ").");
+        } catch (RuntimeException error) {
+            player.tell("Nu există momentan o ofertă profesională: " + error.getMessage());
+        }
     }
 
     private static boolean performParameterizedAction(NpcPlayerSurface.ActionRef action,

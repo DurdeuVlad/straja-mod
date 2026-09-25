@@ -34,6 +34,11 @@ public final class StrajaItems {
             () -> new Item(new Item.Properties().stacksTo(1)));
     public static final DeferredItem<Item> OFFICIAL_ENVELOPE = ITEMS.register("official_envelope",
             () -> new Item(new Item.Properties().stacksTo(16)));
+    /** Generic physical projections for V2 document/instrument records. */
+    public static final DeferredItem<Item> OFFICIAL_DOCUMENT = ITEMS.register("official_document",
+            () -> new Item(new Item.Properties().stacksTo(1).rarity(Rarity.UNCOMMON)));
+    public static final DeferredItem<Item> OFFICIAL_INSTRUMENT = ITEMS.register("official_instrument",
+            () -> new Item(new Item.Properties().stacksTo(16).rarity(Rarity.UNCOMMON)));
 
     public static final DeferredItem<Item> ROOM_MARKER = ITEMS.register("room_marker",
             () -> new Item(new Item.Properties().stacksTo(1).rarity(Rarity.UNCOMMON)));

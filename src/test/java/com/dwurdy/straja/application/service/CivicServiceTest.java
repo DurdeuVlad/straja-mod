@@ -550,6 +550,20 @@ class CivicServiceTest {
     }
 
     @Test
+    void complaintSubmitCanUsePersistedOfflineIdentityHistory() {
+        var offline = server.add("historical-name");
+        offline.online = false;
+        var state = players.state(offline.uuid());
+        state.lastKnownName = offline.name();
+        players.save(offline.uuid(), state);
+
+        assertTrue(complaints.submit(civ, "historical-name", "furt", "d"));
+        var complaint = ctx.complaints().read().complaints.get(0);
+        assertEquals(offline.uuid().toString(), complaint.accusedUuid);
+        assertEquals("historical-name", complaint.accused);
+    }
+
+    @Test
     void complaintSubmitRejectsOversizedFields() {
         server.add("raufacator");
         assertFalse(complaints.submit(civ, "r".repeat(81), "furt", "d"));

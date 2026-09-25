@@ -4,6 +4,12 @@ This document is the implementation-independent contract for the Straja system.
 
 It describes **what the system should do**, not how it must be coded. The implementation agent may choose the technical structure as long as these player-facing rules and invariants are preserved.
 
+The next validated expansion is specified separately in
+[`roleplay-career-bureaucracy-design.md`](roleplay-career-bureaucracy-design.md).
+That document records the proposed parallel Specialist path, multi-station
+administration, time-bounded campaigns, escalation, and Discord notifications;
+it is not yet part of the shipped runtime contract.
+
 ## 1. Core principles
 
 - Straja membership/authorization is persistent personnel state. It is **not** inferred from a scoreboard team/faction.

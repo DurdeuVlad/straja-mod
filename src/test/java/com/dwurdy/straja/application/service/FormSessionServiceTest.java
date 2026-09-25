@@ -156,6 +156,12 @@ class FormSessionServiceTest {
     }
 
     @Test
+    void reportSubmitOpensWithoutARecordId() {
+        assertTrue(forms.open(owner, request(Action.REPORT_SUBMIT, "")).isPresent());
+        assertTrue(forms.open(owner, request(Action.REPORT_SUBMIT, "R-1")).isEmpty());
+    }
+
+    @Test
     void quizAnswerBindsServerQuestionId() {
         var view = forms.open(owner, request(Action.QUIZ_ANSWER, "juramant")).orElseThrow();
         var submission = forms.submit(owner, view.sessionId(), Map.of("details", "x")).orElseThrow();

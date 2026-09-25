@@ -22,6 +22,8 @@ public class StrajaPolicies {
     public String npcProviderMode = "customnpcs";
     /** Explicit second gate for the diagnostic text provider. */
     public boolean npcDebugTextEnabled = false;
+    /** Optional secret; never included in diagnostics or persisted domain data. */
+    public String discordWebhookUrl = "";
 
     // physical identity cards
     public boolean identityCardsEnabled = true;
@@ -237,6 +239,13 @@ public class StrajaPolicies {
     public int salaryActivityGraceSeconds = 90;
     public double salaryActivityMoveThreshold = 0.15;
 
+    // V2 settlement policy. A zero amount disables the corresponding payout
+    // while still allowing the authoritative entitlement to be audited.
+    public boolean weeklyStipendEnabled = true;
+    public long weeklyStipendAmount = 0;
+    public long weeklyStipendRequiredServiceBlocks = 0;
+    public long mobilizationPay = 0;
+
     // rank display names (§2 ladder: Stagiar → Străjer → Sergent → Inspector;
     // Comisar is a personnel flag, not a ladder step)
     public Map<Integer, String> rankNames = new LinkedHashMap<>(Map.of(
@@ -423,6 +432,7 @@ public class StrajaPolicies {
     public Map<Integer, Integer> complaintRewardBySeverity = new LinkedHashMap<>(Map.of(1, 25, 2, 50, 3, 100, 4, 200));
     public int complaintMaxReward = 250;
     public int complaintMaxRewardPerReviewerPerDay = 1000;
+    public long complaintSlaMillis = 7L * 24 * 60 * 60 * 1000;
 
     // debug / test
     public boolean debugEnabled = true;

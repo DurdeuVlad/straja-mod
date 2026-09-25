@@ -1,53 +1,33 @@
-# Help administrativ Straja
+# Administrator command help
 
-Suprafața `/straja` este pentru administratori și consolă/RCON. Jucătorii
-obișnuiți folosesc NPC-urile, obiectele și acțiunile clickable; ruta internă
-`/straja npc-action <token>` nu este listată în help.
+The commands below are OP3 unless marked OP4. The command layer is only an
+adapter; authorization, station scope, version checks, and idempotency are
+enforced by the application services.
 
-## Niveluri de acces
+## V2 groups
 
-- **OP 3** — comenzi administrative obișnuite: recrutare, personal, serviciu,
-  misiuni, contenție, închisoare, amenzi, plângeri, camere, arhivă,
-  legitimații, urgențe, backup și help.
-- **OP 4** — setup și operare sensibilă: modificarea checkpoint-urilor,
-  locații, politici,
-  migrare, administrare NPC, debug și test.
-- **Public** — `status`, `rules`, `regulament` și `stop`. Ajutorul rămâne
-  protejat la OP 3, inclusiv pentru comenzile publice.
+| Group | Purpose |
+|---|---|
+| `/straja personnel` | Roster, dossiers, authorization, suspension, reinstatement and termination |
+| `/straja promotion` | Submit, attach evidence, readiness, approval and rejection |
+| `/straja document` | Inspect/revoke documents and issue/redeem instruments |
+| `/straja equipment ledger` | Inspect authoritative equipment obligations |
+| `/straja mobilization` | Inspect, muster and end specialist mobilizations |
+| `/straja campaign` | Inspect, start/end campaigns, reserve quota, fulfill delivery and release reservations |
+| `/straja settlement` | Inspect and place ambiguous payouts in review |
+| `/straja station` | Inspect and validate station fallback configuration |
+| `/straja outbox` | Inspect, retry and list dead-letter outbound events |
 
-## Cum se folosește
+## Doctor
 
-```text
-/straja help
-/straja archive help
-/straja archive folder help
-/straja identity forge help
-/straja setup help
-```
+`/straja doctor consistency` runs every read-only invariant check. The scoped
+forms `/straja doctor operations`, `equipment`, `settlements`, `stations`, and
+`outbox` limit the report to one operational area. Reports intentionally omit
+webhook secrets, evidence bodies, coordinates, and internal approval details.
 
-Fiecare nod al arborelui are sufixul `help`, inclusiv după argumente:
+## Compatibility
 
-```text
-/straja identity issue help
-/straja identity issue Jucator help
-```
-
-Help-ul arată descrierea nodului, nivelul cerut și subcomenzile permise pentru
-executorul curent. La OP 3, rutele OP 4 sunt ascunse din index și din listele
-de subcomenzi; ele nu sunt doar marcate ca inaccesibile după execuție.
-
-## Categorii
-
-| Categorie | Exemple |
-| --- | --- |
-| Informare | `status`, `rules`, `regulament`, `stop` |
-| Personal | `invite`, `recruit`, `quiz`, `promote`, `suspend`, `reinstate` |
-| Serviciu | `start`, `special`, `resign`, `salary`, `merit` |
-| Operațiuni | `mission`, `cuffs`, `prison`, `fine`, `complaint`, `room`, `emergency` |
-| Arhivă și identitate | `archive`, `identity` |
-| Setup OP 4 | `checkpoint add/remove`, `setup`, `policy`, `set-location`, `migrate` |
-| Operare OP 4 | `npc`, `debug`, `test` |
-
-Descrierile din acest document și cele afișate în joc trebuie menținute în
-aceeași limbă și cu aceleași niveluri. Politica numerică este centralizată în
-`CommandPermissions`; renderer-ul help-ului doar proiectează arborele Brigadier.
+Existing V1 commands remain available as compatibility aliases. A V1 command
+may update the legacy projection, but migrated sensitive paths first consult
+the V2 personnel record when one exists. Physical items, NPC names, scoreboard
+membership, and command visibility never grant authority.
