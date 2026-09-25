@@ -5,6 +5,12 @@ on:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+'
   workflow_dispatch:
+    inputs:
+      final_mc_acceptance:
+        description: Run the real CustomNPCs server/client acceptance only after issues #128-#134 and #149-#153 are complete.
+        required: true
+        type: boolean
+        default: false
 
 concurrency:
   group: rc-${{ github.ref }}
@@ -181,7 +187,14 @@ jobs:
   foreign-npc-advisory:
     name: Advisory — foreign-npc
     # Advisory profile: reports pass/fail/blocked but never blocks release.
-    needs: package
+    # It starts a disposable Minecraft server with the foreign-NPC provider,
+    # so defer it with the other live acceptance scenarios until preflight.
+    needs: [package, npc-final-acceptance-preflight]
+    if: >-
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
+      || (github.event_name == 'workflow_dispatch'
+          && inputs.final_mc_acceptance
+          && github.ref == 'refs/heads/main')
     continue-on-error: true
     runs-on: ubuntu-24.04
     timeout-minutes: 25
@@ -382,13 +395,60 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  npc-final-acceptance-preflight:
+    name: Verify NPC implementation issues are complete
+    if: >-
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
+      || (github.event_name == 'workflow_dispatch'
+          && inputs.final_mc_acceptance
+          && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      issues: read
+    steps:
+      - name: Require every non-deferred implementation issue to be closed
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+          import urllib.request
+
+          repo = os.environ["GITHUB_REPOSITORY"]
+          token = os.environ["GITHUB_TOKEN"]
+          required = [*range(128, 135), *range(149, 154)]
+          open_issues = []
+          for number in required:
+              request = urllib.request.Request(
+                  f"https://api.github.com/repos/{repo}/issues/{number}",
+                  headers={
+                      "Accept": "application/vnd.github+json",
+                      "Authorization": f"Bearer {token}",
+                      "X-GitHub-Api-Version": "2022-11-28",
+                  },
+              )
+              with urllib.request.urlopen(request, timeout=20) as response:
+                  issue = json.load(response)
+              print(f"#{number}: {issue['state']} — {issue['title']}")
+              if issue["state"] != "closed":
+                  open_issues.append(number)
+          if open_issues:
+              print("::error::Final live acceptance is deferred; implementation issues remain open: "
+                    + ", ".join(f"#{number}" for number in open_issues))
+              sys.exit(1)
+          PY
+
   customnpcs-client-ui:
     name: Advisory — CustomNPCs client UI
     # CI-008b: the provider boundary needs a real CustomNPCs client and
     # server, not the combined profile used by the provider-neutral UI suite.
     # Keep this advisory so unavailable hosted graphics remain explicit rather
     # than blocking publication, while profiles-gate still requires a report.
-    needs: package
+    needs: [package, npc-final-acceptance-preflight]
     continue-on-error: true
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -448,8 +508,13 @@ jobs:
     # Explicit aggregate: every blocking profile must have passed; the
     # advisory report must exist and carry an explicit status — a missing
     # or silent advisory report fails the gate.
-    needs: [package, game-tests, server-profiles, foreign-npc-advisory, rc-scenarios, rc-performance, client-ui-advisory, customnpcs-client-ui]
-    if: always()
+    needs: [package, game-tests, server-profiles, foreign-npc-advisory, rc-scenarios, rc-performance, client-ui-advisory, npc-final-acceptance-preflight, customnpcs-client-ui]
+    if: >-
+      always()
+      && ((github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
+          || (github.event_name == 'workflow_dispatch'
+              && inputs.final_mc_acceptance
+              && github.ref == 'refs/heads/main'))
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -486,8 +551,9 @@ jobs:
           PROFILES: ${{ needs.server-profiles.result }}
           SCENARIOS: ${{ needs.rc-scenarios.result }}
           PERF: ${{ needs.rc-performance.result }}
+          FINAL_PREFLIGHT: ${{ needs.npc-final-acceptance-preflight.result }}
         run: |
-          for pair in "package=$PKG" "game-tests=$GT" "server-profiles=$PROFILES" "rc-scenarios=$SCENARIOS" "rc-performance=$PERF"; do
+          for pair in "package=$PKG" "game-tests=$GT" "server-profiles=$PROFILES" "rc-scenarios=$SCENARIOS" "rc-performance=$PERF" "npc-final-acceptance-preflight=$FINAL_PREFLIGHT"; do
             name="${pair%%=*}"; res="${pair#*=}"
             echo "$name: $res"
             if [ "$res" != "success" ]; then
@@ -508,7 +574,10 @@ jobs:
           case "$VERDICT" in pass|fail|blocked) ;; *) exit 1;; esac
           NPC_VERDICT=$(python3 -c "import json;print(json.load(open('customnpcs-client-ui/client-report.json'))['verdict'])")
           echo "CustomNPCs client-ui advisory verdict: $NPC_VERDICT"
-          case "$NPC_VERDICT" in pass|fail|blocked) ;; *) exit 1;; esac
+          if [ "$NPC_VERDICT" != "pass" ]; then
+            echo "::error::final CustomNPCs acceptance must pass, got '$NPC_VERDICT'"
+            exit 1
+          fi
 
   publish-beta:
     name: Publish beta (RC evidence ledger)
