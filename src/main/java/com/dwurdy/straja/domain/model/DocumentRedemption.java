@@ -7,6 +7,7 @@ public class DocumentRedemption {
     public String actor = "";
     public String stationId = "";
     public String idempotencyKey = "";
+    public String requestFingerprint = "";
     public String fulfillmentOperationId = "";
     public DocumentStatus status = DocumentStatus.ISSUED;
     public long createdAt;

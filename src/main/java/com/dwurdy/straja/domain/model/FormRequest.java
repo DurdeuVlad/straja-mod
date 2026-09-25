@@ -6,6 +6,7 @@ public class FormRequest {
     public String requesterUuid = "";
     public String formType = "";
     public String idempotencyKey = "";
+    public String requestFingerprint = "";
     public String status = "ISSUED"; // ISSUED | SUBMITTED | CANCELLED
     public long createdAt;
     public long updatedAt;

@@ -47,6 +47,9 @@ public final class MissionV2Service {
         mission.jurisdiction = jurisdiction == null ? "" : jurisdiction; mission.missionType = missionType == null ? "" : missionType;
         mission.dueAt = deadline; mission.originalDeadline = deadline; mission.maxAssignees = maxAssignees;
         mission.auditCorrelationId = ids.token(); mission.v2Status = MissionStatus.AVAILABLE; mission.status = "ISSUED";
+        mission.outboundIntents.add(com.dwurdy.straja.domain.model.OutboxIntent.of(
+                "IMPORTANT_MISSION_CREATED", "mission:" + mission.id,
+                mission.id, mission.beneficiaryUuid, clock.nowMillis()));
         store.missions.add(mission); repository.write(store); publicationListener.accept(mission); return mission;
     }
 
@@ -61,9 +64,15 @@ public final class MissionV2Service {
             if (!authorization.allowed(context)) throw new IllegalStateException("DENIED_PROFESSIONAL_AUTHORITY");
         }
         MissionStore store = repository.read();
+        String requestFingerprint = RequestFingerprint.of(generatorId, beneficiaryUuid, stationId,
+                jurisdiction, objective, profession, deadline, maxAssignees, offerKey);
         if (offerKey != null && !offerKey.isBlank()) {
             for (Mission existing : store.missions) {
-                if (existing != null && offerKey.equals(existing.auditCorrelationId)) return existing;
+                if (existing != null && offerKey.equals(existing.auditCorrelationId)) {
+                    if (!requestFingerprint.equals(existing.requestFingerprint))
+                        throw new IllegalStateException("IDEMPOTENCY_PAYLOAD_MISMATCH");
+                    return existing;
+                }
             }
         }
         if (deadline <= clock.nowMillis() || maxAssignees <= 0) throw new IllegalArgumentException("invalid generated mission");
@@ -76,8 +85,12 @@ public final class MissionV2Service {
         mission.objective = objective == null ? "" : objective; mission.dueAt = deadline;
         mission.originalDeadline = deadline; mission.maxAssignees = maxAssignees;
         mission.auditCorrelationId = offerKey == null || offerKey.isBlank() ? ids.token() : offerKey;
+        mission.requestFingerprint = requestFingerprint;
         mission.origin = "GENERATOR:" + mission.profession;
         mission.v2Status = MissionStatus.AVAILABLE; mission.status = "ISSUED";
+        mission.outboundIntents.add(com.dwurdy.straja.domain.model.OutboxIntent.of(
+                "IMPORTANT_MISSION_CREATED", "mission:" + mission.id,
+                mission.id, mission.beneficiaryUuid, clock.nowMillis()));
         store.missions.add(mission); repository.write(store); publicationListener.accept(mission); return mission;
     }
 

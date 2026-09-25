@@ -12,6 +12,8 @@ public class EquipmentStore {
     public Map<String, EquipmentObligation> obligations = new LinkedHashMap<>();
     /** Return operation key -> quantity returned; prevents reconnect replay. */
     public Map<String, Long> returnOperations = new LinkedHashMap<>();
+    /** Return operation key -> canonical request identity. */
+    public Map<String, String> returnOperationFingerprints = new LinkedHashMap<>();
     /** Return operation key -> generated proof document ID. */
     public Map<String, String> returnProofs = new LinkedHashMap<>();
 }

@@ -26,9 +26,16 @@ public final class SettlementService {
         SettlementStore store = repository.read();
         if (store.settlementKeyIndex == null) store.settlementKeyIndex = new java.util.LinkedHashMap<>();
         String existingId = store.settlementKeyIndex.get(settlementKey);
-        if (existingId != null && store.settlements.get(existingId) != null) return store.settlements.get(existingId);
+        String fingerprint = RequestFingerprint.of(playerUuid, category, amount, settlementKey, workUnitId);
+        if (existingId != null && store.settlements.get(existingId) != null) {
+            Settlement existing = store.settlements.get(existingId);
+            if (!fingerprint.equals(existing.requestFingerprint))
+                throw new IllegalStateException("IDEMPOTENCY_PAYLOAD_MISMATCH");
+            return existing;
+        }
         Settlement settlement = new Settlement(); settlement.settlementId = ids.newId("SET");
-        settlement.settlementKey = settlementKey; settlement.playerUuid = playerUuid;
+        settlement.settlementKey = settlementKey; settlement.requestFingerprint = fingerprint;
+        settlement.playerUuid = playerUuid;
         settlement.category = category; settlement.amount = amount; settlement.workUnitId = workUnitId == null ? "" : workUnitId;
         settlement.createdAt = clock.nowMillis();
         store.settlements.put(settlement.settlementId, settlement); store.settlementKeyIndex.put(settlementKey, settlement.settlementId);
@@ -53,7 +60,8 @@ public final class SettlementService {
         if (current == null) throw new IllegalArgumentException("unknown settlement");
         if (current.status == Settlement.SettlementStatus.PAID) return current;
         if (current.status == Settlement.SettlementStatus.VOID) throw new IllegalStateException("settlement is void");
-        if (current.status == Settlement.SettlementStatus.IN_PROGRESS) return current;
+        if (current.status == Settlement.SettlementStatus.IN_PROGRESS
+                || current.status == Settlement.SettlementStatus.REVIEW) return current;
         if (player == null || !player.isOnline() || currency == null || !currency.available()) {
             current.status = Settlement.SettlementStatus.FAILED_RETRYABLE;
             store.storeRevision++; repository.write(store); return current;
@@ -67,8 +75,15 @@ public final class SettlementService {
         CurrencyProvider.Deposit result = currency.deposit(player, (int) current.amount, current.settlementId);
         if (result.ok()) {
             current.status = Settlement.SettlementStatus.PAID; current.paidAt = clock.nowMillis(); attempt.status = "PAID";
+        } else if (result.delivered() > 0 || "partial_receipt_requires_review".equals(result.error())) {
+            // A provider that violates the atomic deposit contract, or an
+            // old partial receipt discovered during recovery, is never
+            // retried automatically: doing so could duplicate value.
+            current.status = Settlement.SettlementStatus.REVIEW;
+            attempt.status = "REVIEW"; attempt.error = result.error();
         } else {
-            current.status = Settlement.SettlementStatus.REVIEW; attempt.status = "REVIEW"; attempt.error = result.error();
+            current.status = Settlement.SettlementStatus.FAILED_RETRYABLE;
+            attempt.status = "FAILED_RETRYABLE"; attempt.error = result.error();
         }
         current.version++; store.storeRevision++; repository.write(store); return current;
     }
@@ -78,8 +93,8 @@ public final class SettlementService {
         if (store.settlements == null) return java.util.List.of();
         return store.settlements.values().stream()
                 .filter(value -> value != null && java.util.Objects.equals(playerUuid, value.playerUuid)
-                        && value.status != Settlement.SettlementStatus.PAID
-                        && value.status != Settlement.SettlementStatus.VOID)
+                        && (value.status == Settlement.SettlementStatus.PENDING
+                        || value.status == Settlement.SettlementStatus.FAILED_RETRYABLE))
                 .toList();
     }
 
@@ -98,6 +113,8 @@ public final class SettlementService {
         if (settlement == null) throw new IllegalArgumentException("unknown settlement");
         if (settlement.status == Settlement.SettlementStatus.PAID
                 || settlement.status == Settlement.SettlementStatus.VOID) return settlement;
+        if (settlement.status == Settlement.SettlementStatus.REVIEW)
+            throw new IllegalStateException("settlement requires manual review");
         settlement.status = Settlement.SettlementStatus.PENDING;
         settlement.version++; store.storeRevision++; repository.write(store); return settlement;
     }

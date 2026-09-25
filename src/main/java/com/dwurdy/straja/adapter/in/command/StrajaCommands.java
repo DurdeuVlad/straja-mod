@@ -1100,9 +1100,9 @@ public final class StrajaCommands {
         node.then(Commands.literal("evidence").then(Commands.argument("id", StringArgumentType.word())
                 .then(Commands.argument("kind", StringArgumentType.word())
                         .then(Commands.argument("result", StringArgumentType.word()).executes(c -> {
-                            var evidence = StrajaRuntime.get().v2Promotions().addEvidence(
+                            var evidence = StrajaRuntime.get().v2Promotions().recordCommissionerEvidence(
                                     StringArgumentType.getString(c, "id"), actor(c).uuid().toString(),
-                                    StringArgumentType.getString(c, "kind"), "COMMAND",
+                                    StringArgumentType.getString(c, "kind"),
                                     StringArgumentType.getString(c, "result"), null,
                                     "command:" + actor(c).uuid() + ":" + StringArgumentType.getString(c, "id")
                                             + ":" + StringArgumentType.getString(c, "kind"));

@@ -19,6 +19,8 @@ Implemented foundations:
 - specialist mobilization with time-bounded temporary authority;
 - typed mission lifecycle, campaign quota reservations, and settlement keys;
 - persistent operation journal and redacted allowlisted outbound outbox;
+- aggregate-local outbound intents with server-thread projection and bounded
+  asynchronous delivery;
 - schema metadata on all new stores and backup coverage for every production
   SavedData store.
 
@@ -28,8 +30,13 @@ promotion application when the runtime is using the V2 composition root; unit
 and compatibility contexts retain their existing behavior until cutover.
 
 The V2 composition root, native command surfaces, physical-item projections,
-restart recovery, and release checks are wired. V1 services that still contain
+provider-neutral CustomNPC GUI/dialogue/quest surfaces, restart recovery, and
+release checks are wired. V1 services that still contain
 legacy rank predicates are compatibility paths; they do not authorize V2
 records, documents, equipment, missions, campaign quota, settlements, or
 outbox delivery. Those paths remain intentionally additive until the cutover
 window removes the legacy projection.
+
+The automated suite is the current verification boundary for this foundation.
+Real Minecraft server/client acceptance is deliberately deferred until the
+final NPC milestone; this checkpoint does not claim that live-server gate.

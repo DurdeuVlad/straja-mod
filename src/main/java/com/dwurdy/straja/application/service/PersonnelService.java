@@ -92,12 +92,36 @@ public final class PersonnelService implements com.dwurdy.straja.application.por
                                                   EmploymentMode employment, String source, String stationId,
                                                   String idempotencyKey) {
         if (subjectUuid == null || subjectUuid.isBlank() || grade == null) throw new IllegalArgumentException("subject and grade required");
-        requireAuthorization(actorUuid, subjectUuid, source);
+        requireAuthorization(actorUuid, subjectUuid);
+        return authorizeUnchecked(actorUuid, subjectUuid, grade, employment, source, stationId, idempotencyKey);
+    }
+
+    /** Composition-root-only projection path; never expose this as a command. */
+    synchronized PersonnelRecord authorizeInternal(String actorUuid, String subjectUuid, CareerGrade grade,
+                                                   EmploymentMode employment, String source, String stationId,
+                                                   String idempotencyKey) {
+        if (subjectUuid == null || subjectUuid.isBlank() || grade == null)
+            throw new IllegalArgumentException("subject and grade required");
+        return authorizeUnchecked(actorUuid, subjectUuid, grade, employment, source, stationId, idempotencyKey);
+    }
+
+    private PersonnelRecord authorizeUnchecked(String actorUuid, String subjectUuid, CareerGrade grade,
+                                               EmploymentMode employment, String source, String stationId,
+                                               String idempotencyKey) {
         PersonnelStore store = repository.read();
         if (store.records == null) store.records = new java.util.LinkedHashMap<>();
         PersonnelRecord existing = store.records.get(subjectUuid);
         if (existing != null && existing.active()) {
-            if (idempotencyKey != null && idempotencyKey.equals(existing.authorizationOperationKey)) return existing;
+            EmploymentMode requestedMode = employment == null ? EmploymentMode.PART_TIME : employment;
+            String requestedStation = stationId == null || stationId.isBlank() ? "hq" : stationId;
+            if (idempotencyKey != null && idempotencyKey.equals(existing.authorizationOperationKey)) {
+                boolean sameRequest = existing.careerGrade == grade
+                        && existing.employmentMode == requestedMode
+                        && java.util.Objects.equals(existing.authorizationSource, source == null ? "" : source)
+                        && java.util.Objects.equals(existing.homeStationId, requestedStation);
+                if (!sameRequest) throw new IllegalStateException("IDEMPOTENCY_PAYLOAD_MISMATCH");
+                return existing;
+            }
             throw new IllegalStateException("personnel already authorized");
         }
         long now = clock.nowMillis();
@@ -124,6 +148,10 @@ public final class PersonnelService implements com.dwurdy.straja.application.por
         if (record.createdAt == 0) record.createdAt = now;
         record.updatedAt = now;
         record.version++;
+        if (record.outboundIntents == null) record.outboundIntents = new java.util.ArrayList<>();
+        record.outboundIntents.add(com.dwurdy.straja.domain.model.OutboxIntent.of(
+                "PERSONNEL_AUTHORIZED", "personnel:" + subjectUuid + ":v" + record.version,
+                record.serviceNumber, subjectUuid, now));
         store.records.put(subjectUuid, record);
         store.storeRevision++;
         repository.write(store);
@@ -140,18 +168,60 @@ public final class PersonnelService implements com.dwurdy.straja.application.por
         return record;
     }
 
+    /**
+     * Repairs a legacy projection before the configured commissioner is
+     * appointed. Existing lower-grade or part-time records are normalized to
+     * the configured commissioner's full-time inspector identity.
+     */
+    public synchronized PersonnelRecord ensureCommissioner(String subjectUuid) {
+        if (subjectUuid == null || subjectUuid.isBlank())
+            throw new IllegalArgumentException("commissioner subject required");
+        PersonnelStore store = repository.read();
+        if (store.records == null) store.records = new java.util.LinkedHashMap<>();
+        PersonnelRecord record = store.records.get(subjectUuid);
+        if (record == null) {
+            return authorizeInternal("bootstrap", subjectUuid, CareerGrade.INSPECTOR,
+                    EmploymentMode.FULL_TIME, "COMMISSIONER_BOOTSTRAP", "hq",
+                    "commissioner:" + subjectUuid);
+        }
+        long now = clock.nowMillis();
+        boolean changed = record.membershipStatus != PersonnelStatus.AUTHORIZED_ACTIVE
+                || record.careerGrade != CareerGrade.INSPECTOR
+                || record.careerTrack != CareerTrack.MILITARY
+                || record.careerOrigin != CareerTrack.MILITARY
+                || record.employmentMode != EmploymentMode.FULL_TIME
+                || !"hq".equals(record.homeStationId);
+        if (changed) {
+            record.membershipStatus = PersonnelStatus.AUTHORIZED_ACTIVE;
+            record.careerTrack = CareerTrack.MILITARY;
+            record.careerGrade = CareerGrade.INSPECTOR;
+            record.careerOrigin = CareerTrack.MILITARY;
+            record.employmentMode = EmploymentMode.FULL_TIME;
+            record.homeStationId = "hq";
+            record.authorizationSource = "COMMISSIONER_BOOTSTRAP";
+            record.authorizationActorUuid = "bootstrap";
+            record.authorizationOperationKey = "commissioner:" + subjectUuid;
+            if (record.authorizedAt == 0) record.authorizedAt = now;
+            record.updatedAt = now;
+            record.version++;
+            store.storeRevision++;
+            repository.write(store);
+        }
+        return record;
+    }
+
     public synchronized PersonnelRecord suspend(String actorUuid, String subjectUuid, String reason) {
-        requireAuthorization(actorUuid, subjectUuid, "COMMAND");
+        requireAuthorization(actorUuid, subjectUuid);
         return changeStatus(subjectUuid, PersonnelStatus.SUSPENDED, reason);
     }
 
     public synchronized PersonnelRecord reinstate(String actorUuid, String subjectUuid) {
-        requireAuthorization(actorUuid, subjectUuid, "COMMAND");
+        requireAuthorization(actorUuid, subjectUuid);
         return changeStatus(subjectUuid, PersonnelStatus.AUTHORIZED_ACTIVE, "");
     }
 
     public synchronized PersonnelRecord terminate(String actorUuid, String subjectUuid, String reason) {
-        requireAuthorization(actorUuid, subjectUuid, "COMMAND");
+        requireAuthorization(actorUuid, subjectUuid);
         return changeStatus(subjectUuid, PersonnelStatus.TERMINATED, reason);
     }
 
@@ -216,7 +286,7 @@ public final class PersonnelService implements com.dwurdy.straja.application.por
                                                           long startsAt, Long endsAt) {
         PersonnelStore store = repository.read();
         PersonnelRecord record = require(store, subjectUuid);
-        if (authorization != null && !isInternalProjection(actorUuid)) {
+        if (authorization != null) {
             AuthorizationContext context = AuthorizationContext.of(actorUuid, "AUTHORIZE_PERSONNEL");
             context.subjectUuid = subjectUuid; context.beneficiaryUuid = subjectUuid;
             context.requiresIndependentApproval = true;
@@ -244,7 +314,7 @@ public final class PersonnelService implements com.dwurdy.straja.application.por
         PersonnelRecord record = require(store, subjectUuid);
         if (record.careerGrade == null || !record.careerGrade.isProfessional())
             throw new IllegalStateException("profession requires professional career");
-        if (authorization != null && !isInternalProjection(actorUuid)) {
+        if (authorization != null) {
             AuthorizationContext context = AuthorizationContext.of(actorUuid, "AUTHORIZE_PERSONNEL");
             context.subjectUuid = subjectUuid; context.beneficiaryUuid = subjectUuid;
             context.requiresIndependentApproval = true;
@@ -271,7 +341,7 @@ public final class PersonnelService implements com.dwurdy.straja.application.por
             default -> null;
         };
         if (grade == null || !"AUTHORIZED".equals(legacy.applicationState)) return find(playerUuid.toString());
-        return authorize(actorUuid, playerUuid.toString(), grade,
+        return authorizeInternal(actorUuid, playerUuid.toString(), grade,
                 grade.fullTimeRequired() ? EmploymentMode.FULL_TIME : EmploymentMode.PART_TIME,
                 "LEGACY_PROJECTION", "hq", "legacy:" + playerUuid);
     }
@@ -295,20 +365,14 @@ public final class PersonnelService implements com.dwurdy.straja.application.por
         return record;
     }
 
-    private void requireAuthorization(String actorUuid, String subjectUuid, String source) {
-        if (authorization == null || isInternalProjection(source)) return;
+    private void requireAuthorization(String actorUuid, String subjectUuid) {
+        if (authorization == null) return;
         AuthorizationContext context = AuthorizationContext.of(actorUuid, "AUTHORIZE_PERSONNEL");
         context.subjectUuid = subjectUuid == null ? "" : subjectUuid;
         context.beneficiaryUuid = context.subjectUuid;
         context.requiresIndependentApproval = true;
         var decision = authorization.authorize(context);
         if (!decision.allowed) throw new IllegalStateException("personnel authorization denied: " + decision.reasonCode);
-    }
-
-    private static boolean isInternalProjection(String source) {
-        return "LEGACY_PROJECTION".equals(source)
-                || "COMMISSIONER_BOOTSTRAP".equals(source)
-                || "BOOTSTRAP".equals(source);
     }
 
     private static PersonnelRecord require(PersonnelStore store, String uuid) {

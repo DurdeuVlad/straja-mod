@@ -87,9 +87,12 @@ public class Mission {
     public String quotaReservationId = "";
     public List<String> paymentSettlementIds = new ArrayList<>();
     public String auditCorrelationId = "";
+    /** Canonical request identity for generated-offer replay protection. */
+    public String requestFingerprint = "";
     public MissionStatus v2Status;
     public Long originalDeadline;
     public List<Long> deadlineExtensions = new ArrayList<>();
+    public List<OutboxIntent> outboundIntents = new ArrayList<>();
 
     public static class Identity {
         public String uuid = "";

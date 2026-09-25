@@ -18,5 +18,9 @@ public class PromotionApplication {
     public Long decisionAt;
     public String decisionReason = "";
     public long expectedPersonnelVersion;
+    /** Durable cross-store approval marker used by restart reconciliation. */
+    public String personnelSyncState = "PENDING";
+    public Long personnelAppliedAt;
+    public List<OutboxIntent> outboundIntents = new ArrayList<>();
     public long version;
 }

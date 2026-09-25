@@ -838,8 +838,8 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             if (application == null) application = v2PromotionService.submit(player.uuid().toString(), target);
             if (application.status != com.dwurdy.straja.domain.model.PromotionStatus.READY_FOR_APPROVAL) {
                 if (pendingModules(state).isEmpty()) {
-                    v2PromotionService.addEvidence(application.applicationId, player.uuid().toString(),
-                            "SERVICE_AND_TRAINING", "legacy_guard_flow", "PASS", null,
+                    v2PromotionService.recordServerTrainingEvidence(application.applicationId,
+                            player.uuid().toString(), "SERVICE_AND_TRAINING", true, null,
                             "legacy:" + player.uuid() + ":" + target);
                     application = v2PromotionService.markReady(application.applicationId);
                 }

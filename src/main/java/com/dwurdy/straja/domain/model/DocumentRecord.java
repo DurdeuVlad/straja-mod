@@ -14,6 +14,7 @@ public class DocumentRecord {
     public DocumentStatus status = DocumentStatus.DRAFT;
     public String payloadRef = "";
     public String correlationId = "";
+    public String requestFingerprint = "";
     public String predecessorId = "";
     public String supersedesId = "";
     public long version;

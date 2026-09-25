@@ -53,7 +53,9 @@ public final class CampaignService {
         if (c.status == MissionCampaign.CampaignStatus.ACTIVE) return c;
         if (c.status != MissionCampaign.CampaignStatus.SCHEDULED && c.status != MissionCampaign.CampaignStatus.DRAFT)
             throw new IllegalStateException("invalid campaign state");
-        c.status = MissionCampaign.CampaignStatus.ACTIVE; c.version++; store.storeRevision++; repository.write(store);
+        c.status = MissionCampaign.CampaignStatus.ACTIVE; c.version++;
+        addLifecycleIntent(c, "CAMPAIGN_STARTED");
+        store.storeRevision++; repository.write(store);
         lifecycleListener.accept(c); return c;
     }
 
@@ -63,7 +65,9 @@ public final class CampaignService {
         if (c.status == MissionCampaign.CampaignStatus.COMPLETED) return c;
         if (c.status != MissionCampaign.CampaignStatus.ACTIVE && c.status != MissionCampaign.CampaignStatus.CLOSING)
             throw new IllegalStateException("invalid campaign state");
-        c.status = MissionCampaign.CampaignStatus.COMPLETED; c.version++; store.storeRevision++; repository.write(store);
+        c.status = MissionCampaign.CampaignStatus.COMPLETED; c.version++;
+        addLifecycleIntent(c, "CAMPAIGN_ENDED");
+        store.storeRevision++; repository.write(store);
         lifecycleListener.accept(c); return c;
     }
 
@@ -76,6 +80,7 @@ public final class CampaignService {
         c.status = MissionCampaign.CampaignStatus.CANCELLED;
         c.cancellationReason = reason == null ? "" : reason;
         c.version++;
+        addLifecycleIntent(c, "CAMPAIGN_ENDED");
         releaseOutstanding(store, c, clock.nowMillis());
         store.storeRevision++; repository.write(store); lifecycleListener.accept(c); return c;
     }
@@ -245,5 +250,12 @@ public final class CampaignService {
         AuthorizationContext context = AuthorizationContext.of(actorUuid, "MANAGE_CAMPAIGNS");
         context.stationId = stationId; context.jurisdiction = jurisdiction;
         if (!authorization.allowed(context)) throw new IllegalStateException("DENIED_AUTHORIZATION");
+    }
+
+    private void addLifecycleIntent(MissionCampaign campaign, String eventType) {
+        if (campaign.outboundIntents == null) campaign.outboundIntents = new java.util.ArrayList<>();
+        campaign.outboundIntents.add(com.dwurdy.straja.domain.model.OutboxIntent.of(
+                eventType, eventType + ":" + campaign.campaignId + ":v" + campaign.version,
+                campaign.campaignId, campaign.stationId, clock.nowMillis()));
     }
 }

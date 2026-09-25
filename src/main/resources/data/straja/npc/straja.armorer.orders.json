@@ -7,18 +7,23 @@
   "requiredCapabilities": ["DIALOGUE", "GUI", "ACTION_INPUT", "QUEST_JOURNAL"],
   "optionalCapabilities": ["RICH_TEXT", "PORTRAITS"],
   "actions": [
-    {"id": "duty-kit", "label": "Request duty kit", "enabled": true}
+    {"id": "duty-kit", "label": "Request duty kit", "enabled": true},
+    {"id": "v2-equipment-status", "label": "View V2 equipment ledger", "enabled": true},
+    {"id": "v2-professional-work", "label": "View professional work", "enabled": true}
   ],
   "dialogue": [
     {
       "id": "straja.armorer.orders",
       "text": "Inspect the current equipment offers.",
       "choices": [
-        {"actionId": "duty-kit", "label": "Request duty kit", "enabled": true}
+        {"actionId": "duty-kit", "label": "Request duty kit", "enabled": true},
+        {"actionId": "v2-equipment-status", "label": "View my V2 equipment ledger", "enabled": true},
+        {"actionId": "v2-professional-work", "label": "View professional work", "enabled": true}
       ]
     }
   ],
   "quests": [
-    {"id": "armory-orders", "title": "Equipment orders", "state": "LOCKED"}
+    {"id": "armory-orders", "title": "Equipment orders", "state": "LOCKED"},
+    {"id": "v2-equipment-ledger", "title": "V2 equipment ledger", "state": "AVAILABLE"}
   ]
 }

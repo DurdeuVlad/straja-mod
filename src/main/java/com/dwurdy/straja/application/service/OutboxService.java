@@ -5,6 +5,7 @@ import com.dwurdy.straja.application.port.out.DiscordWebhookGateway;
 import com.dwurdy.straja.application.port.out.IdGenerator;
 import com.dwurdy.straja.application.port.out.OutboxRepository;
 import com.dwurdy.straja.domain.model.OutboxEvent;
+import com.dwurdy.straja.domain.model.OutboxIntent;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
@@ -41,20 +42,91 @@ public final class OutboxService {
 
     public synchronized int dispatchDue(DiscordWebhookGateway gateway, int maxEvents) {
         if (gateway == null || maxEvents <= 0) return 0;
-        List<OutboxEvent> events = repository.read(); int sent = 0; long now = clock.nowMillis();
-        for (OutboxEvent event : events) {
-            if (sent >= maxEvents) break;
-            if (event == null || (event.status != OutboxEvent.OutboxStatus.PENDING && event.status != OutboxEvent.OutboxStatus.RETRY)
-                    || event.nextAttemptAt > now) continue;
-            event.status = OutboxEvent.OutboxStatus.SENDING; event.attempts++;
+        int sent = 0;
+        for (DeliveryClaim claim : claimDue(maxEvents)) {
             boolean delivered = false;
-            try { delivered = gateway.send(event.safePayload); }
-            catch (RuntimeException error) { event.lastError = error.getClass().getSimpleName(); }
-            if (delivered) { event.status = OutboxEvent.OutboxStatus.SENT; event.sentAt = now; sent++; }
-            else if (event.attempts >= 5) event.status = OutboxEvent.OutboxStatus.DEAD_LETTER;
-            else { event.status = OutboxEvent.OutboxStatus.RETRY; event.nextAttemptAt = now + Math.min(300_000L, 1_000L << Math.min(8, event.attempts)); }
+            String error = "";
+            try {
+                delivered = gateway.send(claim.safePayload());
+            } catch (RuntimeException failure) {
+                error = failure.getClass().getSimpleName();
+            }
+            if (completeDelivery(claim, delivered, error)) sent++;
         }
-        repository.write(events); return sent;
+        return sent;
+    }
+
+    /** Projects an aggregate-local intent into the shared delivery queue. */
+    public synchronized OutboxEvent enqueue(OutboxIntent intent) {
+        if (intent == null) throw new IllegalArgumentException("outbox intent required");
+        return enqueue(intent.eventType, intent.dedupeKey,
+                SafePayload.projection(intent.eventType, intent.aggregateId, intent.subject));
+    }
+
+    /** Replays durable aggregate intents; queue dedupe makes this safe per tick. */
+    public synchronized int reconcile(java.util.Collection<OutboxIntent> intents) {
+        if (intents == null) return 0;
+        int projected = 0;
+        for (OutboxIntent intent : intents) {
+            if (intent == null || intent.dedupeKey == null || intent.dedupeKey.isBlank()) continue;
+            enqueue(intent);
+            projected++;
+        }
+        return projected;
+    }
+
+    /**
+     * Claims delivery work and persists the SENDING transition. This method
+     * is intentionally separate from HTTP delivery so it can only be called
+     * from the server executor in production.
+     */
+    public synchronized List<DeliveryClaim> claimDue(int maxEvents) {
+        if (maxEvents <= 0) return List.of();
+        List<OutboxEvent> events = repository.read();
+        List<DeliveryClaim> claims = new java.util.ArrayList<>();
+        long now = clock.nowMillis();
+        for (OutboxEvent event : events) {
+            if (claims.size() >= maxEvents) break;
+            if (event == null || (event.status != OutboxEvent.OutboxStatus.PENDING
+                    && event.status != OutboxEvent.OutboxStatus.RETRY)
+                    || event.nextAttemptAt > now) continue;
+            event.status = OutboxEvent.OutboxStatus.SENDING;
+            event.attempts++;
+            claims.add(new DeliveryClaim(event.eventId, event.attempts, event.safePayload));
+        }
+        if (!claims.isEmpty()) repository.write(events);
+        return List.copyOf(claims);
+    }
+
+    /**
+     * Applies the delivery result and persists retry/dead-letter state. The
+     * attempt number prevents a late worker result from changing a newer
+     * server-thread state.
+     */
+    public synchronized boolean completeDelivery(DeliveryClaim claim, boolean delivered, String error) {
+        if (claim == null) return false;
+        List<OutboxEvent> events = repository.read();
+        for (OutboxEvent event : events) {
+            if (event == null || !claim.eventId().equals(event.eventId)
+                    || event.status != OutboxEvent.OutboxStatus.SENDING
+                    || event.attempts != claim.attempt()) continue;
+            long now = clock.nowMillis();
+            if (delivered) {
+                event.status = OutboxEvent.OutboxStatus.SENT;
+                event.sentAt = now;
+            } else if (event.attempts >= 5) {
+                event.status = OutboxEvent.OutboxStatus.DEAD_LETTER;
+                event.lastError = error == null ? "delivery_failed" : error;
+            } else {
+                event.status = OutboxEvent.OutboxStatus.RETRY;
+                event.nextAttemptAt = now + Math.min(300_000L,
+                        1_000L << Math.min(8, event.attempts));
+                event.lastError = error == null ? "delivery_failed" : error;
+            }
+            repository.write(events);
+            return delivered;
+        }
+        return false;
     }
 
     /** Converts an interrupted send back to a retryable state after restart. */
@@ -113,6 +185,8 @@ public final class OutboxService {
                     .replace("\n", " ").replace("\r", " ");
         }
     }
+
+    public record DeliveryClaim(String eventId, int attempt, String safePayload) {}
 
     private static String redact(String payload) {
         if (payload == null || payload.isBlank()) return "{}";

@@ -189,8 +189,12 @@ public class ItemCoinCurrencyProvider implements CurrencyProvider {
     }
 
     @Override public Deposit deposit(PlayerGateway player, int amount, String payoutId) {
-        if (payoutId != null && hasReceipt(player, payoutId)) {
+        if (amount < 0) return Deposit.failed("invalid_amount");
+        if (payoutId != null && hasReceipt(player, payoutId, amount)) {
             return Deposit.ok(0); // replay: already delivered
+        }
+        if (payoutId != null && hasAnyReceipt(player, payoutId)) {
+            return Deposit.failed("partial_receipt_requires_review");
         }
         List<ItemSpec> stacks = stacksFor(amount, payoutId);
         InventoryView inventory = player.inventory();
@@ -198,19 +202,50 @@ public class ItemCoinCurrencyProvider implements CurrencyProvider {
         int delivered = 0;
         for (ItemSpec stack : stacks) {
             if (!player.giveVerified(stack)) {
-                return new Deposit(false, delivered, "delivery_failed_at_denomination");
+                reclaimDelivered(player.inventory(), payoutId);
+                return new Deposit(false, 0, "delivery_failed_at_denomination");
             }
-            delivered++;
+            delivered += stack.count() * denominationsTable().entrySet().stream()
+                    .filter(entry -> entry.getValue().equals(stack.id()))
+                    .mapToInt(Map.Entry::getKey).findFirst().orElse(0);
         }
         return Deposit.ok(delivered);
     }
 
     @Override public boolean hasReceipt(PlayerGateway player, String payoutId) {
+        return hasAnyReceipt(player, payoutId);
+    }
+
+    @Override public boolean hasReceipt(PlayerGateway player, String payoutId, int expectedAmount) {
+        if (expectedAmount < 0) return false;
+        InventoryView inventory = player.inventory();
+        if (inventory == null) return false;
+        int total = 0;
+        for (var entry : denominationsTable().entrySet()) {
+            for (int slot = 0; slot < inventory.slots(); slot++) {
+                ItemView stack = inventory.stackAt(slot);
+                if (entry.getValue().equals(stack.id()) && payoutId.equals(stack.data(RECEIPT_TAG)))
+                    total += stack.count() * entry.getKey();
+            }
+        }
+        return total == expectedAmount;
+    }
+
+    private boolean hasAnyReceipt(PlayerGateway player, String payoutId) {
         InventoryView inventory = player.inventory();
         if (inventory == null) return false;
         for (int slot = 0; slot < inventory.slots(); slot++) {
             if (payoutId.equals(inventory.stackAt(slot).data(RECEIPT_TAG))) return true;
         }
         return false;
+    }
+
+    /** Removes only this payout's tagged stacks after a non-atomic provider failure. */
+    private void reclaimDelivered(InventoryView inventory, String payoutId) {
+        if (inventory == null || payoutId == null) return;
+        for (int slot = 0; slot < inventory.slots(); slot++) {
+            ItemView stack = inventory.stackAt(slot);
+            if (payoutId.equals(stack.data(RECEIPT_TAG))) inventory.extract(slot, stack.count());
+        }
     }
 }

@@ -8,6 +8,7 @@ import java.util.Map;
 public class OperationRecord {
     public String operationId = "";
     public String idempotencyKey = "";
+    public String requestFingerprint = "";
     public String kind = "";
     public String actorUuid = "";
     public String subjectUuid = "";

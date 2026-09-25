@@ -28,6 +28,7 @@ public class PersonnelRecord {
     public long version;
     public long createdAt;
     public long updatedAt;
+    public List<OutboxIntent> outboundIntents = new ArrayList<>();
 
     public boolean active() { return membershipStatus == PersonnelStatus.AUTHORIZED_ACTIVE; }
     public boolean fullTimeRequired() { return careerGrade != null && careerGrade.fullTimeRequired(); }

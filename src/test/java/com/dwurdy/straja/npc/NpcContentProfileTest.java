@@ -34,9 +34,9 @@ class NpcContentProfileTest {
 
         assertEquals(NpcContentId.of("straja.reception.admission"), profile.contentId());
         assertEquals(NpcProfileId.of("straja:receptionist"), profile.profileId());
-        assertEquals(4, profile.actions().size());
+        assertEquals(7, profile.actions().size());
         assertEquals(1, profile.dialogue().size());
-        assertEquals(2, profile.quests().size());
+        assertEquals(4, profile.quests().size());
         assertTrue(profile.requiredCapabilities().contains(
                 com.dwurdy.straja.domain.model.NpcCapability.GUI));
 
@@ -47,12 +47,17 @@ class NpcContentProfileTest {
                 NpcContentId.of("application-submit"),
                 NpcContentId.of("training-progress"),
                 NpcContentId.of("complaint-submit"),
-                NpcContentId.of("fine-list")), descriptor.actionContentIds());
+                NpcContentId.of("fine-list"),
+                NpcContentId.of("v2-personnel-status"),
+                NpcContentId.of("v2-promotion-status"),
+                NpcContentId.of("v2-document-status")), descriptor.actionContentIds());
         assertEquals(List.of(NpcContentId.of("straja.reception.introduction")),
                 descriptor.dialogueContentIds());
         assertEquals(List.of(
                 NpcContentId.of("training-basic"),
-                NpcContentId.of("civic-accountability")), descriptor.questContentIds());
+                NpcContentId.of("civic-accountability"),
+                NpcContentId.of("v2-personnel-file"),
+                NpcContentId.of("v2-documents")), descriptor.questContentIds());
         assertEquals(descriptor,
                 new NpcContentCatalog(List.of(profile)).descriptor("straja.reception.admission"));
     }
@@ -177,9 +182,9 @@ class NpcContentProfileTest {
 
         assertEquals(NpcContentId.of("straja.armorer.orders"), profile.contentId());
         assertEquals(NpcProfileId.of("straja:armorer"), profile.profileId());
-        assertEquals(1, profile.actions().size());
+        assertEquals(3, profile.actions().size());
         assertEquals(NpcContentId.of("duty-kit"), profile.actions().getFirst().actionId());
-        assertEquals(1, profile.quests().size());
+        assertEquals(2, profile.quests().size());
         assertTrue(profile.requiredCapabilities().contains(
                 com.dwurdy.straja.domain.model.NpcCapability.QUEST_JOURNAL));
     }

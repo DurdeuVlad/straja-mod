@@ -42,22 +42,37 @@ public final class EquipmentLedgerService {
             if (!authorization.allowed(context)) throw new IllegalStateException("DENIED_AUTHORIZATION");
         }
         EquipmentStore store = repository.read();
-        if (operationId != null && !operationId.isBlank()) {
-            for (EquipmentIssue existing : store.issues.values()) {
-                if (existing != null && operationId.equals(existing.operationId)) return existing;
-            }
-        }
         String effectiveOperationId = operationId == null || operationId.isBlank()
                 ? ids.newId("OP") : operationId;
         String effectiveStationId = stationId == null || stationId.isBlank() ? "hq" : stationId;
-        if (stations != null && stations.get(effectiveStationId) == null)
-            throw new IllegalStateException("DENIED_STATION");
         java.util.Map<String, Long> requestedByItem = new java.util.LinkedHashMap<>();
         for (RequestedLine request : requested) {
             if (request == null || request.quantity <= 0 || request.itemId == null || request.itemId.isBlank())
                 throw new IllegalArgumentException("invalid equipment line");
             requestedByItem.merge(request.itemId, request.quantity, Long::sum);
         }
+        String requestFingerprint = RequestFingerprint.of(playerUuid, effectiveStationId,
+                sourceInstrumentId, mobilizationId, requestedByItem);
+        if (operationId != null && !operationId.isBlank()) {
+            for (EquipmentIssue existing : store.issues.values()) {
+                if (existing != null && operationId.equals(existing.operationId)) {
+                    String existingFingerprint = existing.requestFingerprint;
+                    if (existingFingerprint == null || existingFingerprint.isBlank()) {
+                        java.util.Map<String, Long> existingLines = new java.util.LinkedHashMap<>();
+                        for (EquipmentIssue.Line line : existing.lines) {
+                            if (line != null) existingLines.merge(line.itemId, line.requestedQuantity, Long::sum);
+                        }
+                        existingFingerprint = RequestFingerprint.of(existing.playerUuid, existing.stationId,
+                                existing.sourceInstrumentId, existing.mobilizationId, existingLines);
+                    }
+                    if (!requestFingerprint.equals(existingFingerprint))
+                        throw new IllegalStateException("OPERATION_PAYLOAD_MISMATCH");
+                    return existing;
+                }
+            }
+        }
+        if (stations != null && stations.get(effectiveStationId) == null)
+            throw new IllegalStateException("DENIED_STATION");
         if (stations != null) {
             var station = stations.get(effectiveStationId);
             if (station != null && station.inventoryAccounts != null && !station.inventoryAccounts.isEmpty()) {
@@ -82,6 +97,7 @@ public final class EquipmentLedgerService {
         issue.operationId = effectiveOperationId;
         issue.issuedAt = clock.nowMillis();
         issue.status = EquipmentIssue.EquipmentStatus.RESERVED;
+        issue.requestFingerprint = requestFingerprint;
         for (RequestedLine request : requested) {
             EquipmentIssue.Line line = new EquipmentIssue.Line();
             line.lineId = ids.newId("EQL");
@@ -108,10 +124,13 @@ public final class EquipmentLedgerService {
         EquipmentIssue issue = requireIssue(store, issueId);
         EquipmentIssue.Line line = requireLine(issue, lineId);
         if (line.fulfillmentOperations == null) line.fulfillmentOperations = new java.util.LinkedHashMap<>();
+        if (line.fulfillmentFingerprints == null) line.fulfillmentFingerprints = new java.util.LinkedHashMap<>();
         if (operationId != null && !operationId.isBlank()) {
             Long previousQuantity = line.fulfillmentOperations.get(operationId);
             if (previousQuantity != null) {
-                if (previousQuantity.longValue() != quantity) throw new IllegalStateException("OPERATION_PAYLOAD_MISMATCH");
+                String fingerprint = line.fulfillmentFingerprints.get(operationId);
+                if (fingerprint == null || !fingerprint.equals(RequestFingerprint.of(quantity, assetId)))
+                    throw new IllegalStateException("OPERATION_PAYLOAD_MISMATCH");
                 return issue;
             }
         }
@@ -119,7 +138,10 @@ public final class EquipmentLedgerService {
         if (quantity > remaining) throw new IllegalArgumentException("delivery exceeds requested quantity");
         line.deliveredQuantity += quantity;
         line.assetId = assetId == null ? line.assetId : assetId;
-        if (operationId != null && !operationId.isBlank()) line.fulfillmentOperations.put(operationId, quantity);
+        if (operationId != null && !operationId.isBlank()) {
+            line.fulfillmentOperations.put(operationId, quantity);
+            line.fulfillmentFingerprints.put(operationId, RequestFingerprint.of(quantity, assetId));
+        }
         line.fulfillmentStatus = line.deliveredQuantity == line.requestedQuantity ? "DELIVERED" : "PARTIAL";
         long delivered = issue.lines.stream().mapToLong(l -> l.deliveredQuantity).sum();
         long requested = issue.lines.stream().mapToLong(l -> l.requestedQuantity).sum();
@@ -148,9 +170,13 @@ public final class EquipmentLedgerService {
         if (operationId == null || operationId.isBlank()) return new ReturnResult(false, "IDEMPOTENCY_REQUIRED", 0);
         EquipmentStore store = repository.read();
         if (store.returnOperations == null) store.returnOperations = new java.util.LinkedHashMap<>();
+        if (store.returnOperationFingerprints == null) store.returnOperationFingerprints = new java.util.LinkedHashMap<>();
         Long replayQuantity = store.returnOperations.get(operationId);
         if (replayQuantity != null) {
-            if (replayQuantity.longValue() != quantity) return new ReturnResult(false, "OPERATION_PAYLOAD_MISMATCH", 0);
+            String fingerprint = store.returnOperationFingerprints.get(operationId);
+            if (fingerprint == null || !fingerprint.equals(RequestFingerprint.of(
+                    playerUuid, itemId, quantity, returnedCondition)))
+                return new ReturnResult(false, "OPERATION_PAYLOAD_MISMATCH", 0);
             return new ReturnResult(true, "REPLAYED", quantity);
         }
         if (actorUuid != null && playerUuid != null && !actorUuid.equals(playerUuid) && authorization != null) {
@@ -175,6 +201,8 @@ public final class EquipmentLedgerService {
         }
         if (left == quantity) return new ReturnResult(false, "NO_OUTSTANDING_OBLIGATION", 0);
         store.returnOperations.put(operationId, quantity);
+        store.returnOperationFingerprints.put(operationId,
+                RequestFingerprint.of(playerUuid, itemId, quantity, returnedCondition));
         String proofId = store.returnProofs.get(operationId);
         if ((proofId == null || proofId.isBlank()) && documents != null) {
             var proof = documents.issueInternalSystem(playerUuid,

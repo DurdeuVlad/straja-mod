@@ -12,7 +12,8 @@
       "inputs": [
         {"key": "title", "label": "Folder title", "maxLength": 200, "required": true},
         {"key": "department", "label": "Department", "maxLength": 80, "required": false}
-      ]}
+      ]},
+    {"id": "v2-document-status", "label": "View V2 documents", "enabled": true}
   ],
   "dialogue": [
     {
@@ -20,11 +21,13 @@
       "text": "Every archive action is checked against the persistent record and your authorization.",
       "choices": [
         {"actionId": "archive-list", "label": "View archive folders", "enabled": false},
-        {"actionId": "archive-folder-create", "label": "Create archive folder", "enabled": false}
+        {"actionId": "archive-folder-create", "label": "Create archive folder", "enabled": false},
+        {"actionId": "v2-document-status", "label": "View my V2 documents", "enabled": true}
       ]
     }
   ],
   "quests": [
-    {"id": "archive-records", "title": "Archive records", "state": "LOCKED"}
+    {"id": "archive-records", "title": "Archive records", "state": "LOCKED"},
+    {"id": "v2-document-ledger", "title": "V2 official documents", "state": "AVAILABLE"}
   ]
 }

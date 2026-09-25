@@ -13,6 +13,8 @@ public class EquipmentIssue {
     public long issuedAt;
     public EquipmentStatus status = EquipmentStatus.RESERVED;
     public String operationId = "";
+    /** Canonical request identity for operation replay protection. */
+    public String requestFingerprint = "";
 
     public enum EquipmentStatus { RESERVED, ISSUED, OUTSTANDING, PARTIALLY_RETURNED, RETURNED, FAILED }
 
@@ -24,5 +26,6 @@ public class EquipmentIssue {
         public String assetId = "";
         public String fulfillmentStatus = "PENDING";
         public java.util.Map<String, Long> fulfillmentOperations = new java.util.LinkedHashMap<>();
+        public java.util.Map<String, String> fulfillmentFingerprints = new java.util.LinkedHashMap<>();
     }
 }

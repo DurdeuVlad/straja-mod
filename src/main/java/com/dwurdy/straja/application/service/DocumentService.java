@@ -60,9 +60,16 @@ public final class DocumentService {
                                           String payloadRef, String correlationId, String idempotencyKey) {
         DocumentStore store = repository.read();
         if (store.idempotencyIndex == null) store.idempotencyIndex = new java.util.LinkedHashMap<>();
+        String fingerprint = RequestFingerprint.of(issuer, subject, type, scope, stationId, jurisdiction,
+                expiresAt, payloadRef, correlationId);
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
             String existingId = store.idempotencyIndex.get(idempotencyKey);
-            if (existingId != null && store.documents.get(existingId) != null) return store.documents.get(existingId);
+            if (existingId != null && store.documents.get(existingId) != null) {
+                DocumentRecord existing = store.documents.get(existingId);
+                if (!fingerprint.equals(existing.requestFingerprint))
+                    throw new IllegalStateException("IDEMPOTENCY_PAYLOAD_MISMATCH");
+                return existing;
+            }
         }
         DocumentRecord document = new DocumentRecord();
         document.documentId = ids.newId("DOC");
@@ -77,6 +84,7 @@ public final class DocumentService {
         document.status = DocumentStatus.ACTIVE;
         document.payloadRef = payloadRef == null ? "" : payloadRef;
         document.correlationId = correlationId == null ? document.documentId : correlationId;
+        document.requestFingerprint = fingerprint;
         document.version = 1;
         store.documents.put(document.documentId, document);
         if (idempotencyKey != null && !idempotencyKey.isBlank()) store.idempotencyIndex.put(idempotencyKey, document.documentId);
@@ -100,9 +108,15 @@ public final class DocumentService {
         requireDocumentAuthority(issuer, holder, stationId, "");
         DocumentStore store = repository.read();
         if (store.idempotencyIndex == null) store.idempotencyIndex = new java.util.LinkedHashMap<>();
+        String fingerprint = RequestFingerprint.of(issuer, holder, type, quantity, scope, stationId, expiresAt);
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
             String existingId = store.idempotencyIndex.get(idempotencyKey);
-            if (existingId != null && store.instruments.get(existingId) != null) return store.instruments.get(existingId);
+            if (existingId != null && store.instruments.get(existingId) != null) {
+                DocumentInstrument existing = store.instruments.get(existingId);
+                if (!fingerprint.equals(existing.requestFingerprint))
+                    throw new IllegalStateException("IDEMPOTENCY_PAYLOAD_MISMATCH");
+                return existing;
+            }
         }
         DocumentInstrument instrument = new DocumentInstrument();
         instrument.instrumentId = ids.newId("INS");
@@ -115,6 +129,7 @@ public final class DocumentService {
         instrument.remainingQuantity = quantity;
         instrument.issuedAt = clock.nowMillis();
         instrument.expiresAt = expiresAt;
+        instrument.requestFingerprint = fingerprint;
         instrument.status = DocumentStatus.ACTIVE;
         instrument.version = 1;
         store.instruments.put(instrument.instrumentId, instrument);
@@ -131,8 +146,13 @@ public final class DocumentService {
         DocumentStore store = repository.read();
         if (store.redemptions == null) store.redemptions = new java.util.LinkedHashMap<>();
         if (store.redemptions != null) {
+            String fingerprint = RequestFingerprint.of(actorUuid, instrumentId, quantity, stationId);
             for (DocumentRedemption existing : store.redemptions.values()) {
-                if (existing != null && idempotencyKey.equals(existing.idempotencyKey)) return RedemptionResult.replayed(existing);
+                if (existing != null && idempotencyKey.equals(existing.idempotencyKey)) {
+                    if (!fingerprint.equals(existing.requestFingerprint))
+                        return RedemptionResult.failed("IDEMPOTENCY_PAYLOAD_MISMATCH");
+                    return RedemptionResult.replayed(existing);
+                }
             }
         }
         DocumentInstrument instrument = store.instruments == null ? null : store.instruments.get(instrumentId);
@@ -164,6 +184,7 @@ public final class DocumentService {
         redemption.actor = actorUuid == null ? "" : actorUuid;
         redemption.stationId = stationId == null ? "" : stationId;
         redemption.idempotencyKey = idempotencyKey;
+        redemption.requestFingerprint = RequestFingerprint.of(actorUuid, instrumentId, quantity, stationId);
         redemption.fulfillmentOperationId = operation == null ? ids.newId("OP") : operation.operationId;
         redemption.status = instrument.remainingQuantity == 0 ? DocumentStatus.REDEEMED : DocumentStatus.PARTIALLY_REDEEMED;
         redemption.createdAt = clock.nowMillis();
@@ -183,11 +204,9 @@ public final class DocumentService {
         return RedemptionResult.accepted(redemption);
     }
 
-    public synchronized DocumentRecord revoke(String documentId) {
-        return revoke(null, documentId);
-    }
-
     public synchronized DocumentRecord revoke(String actorUuid, String documentId) {
+        if (actorUuid == null || actorUuid.isBlank() || authorization == null)
+            throw new IllegalStateException("DENIED_AUTHORIZATION");
         DocumentStore store = repository.read();
         DocumentRecord document = store.documents.get(documentId);
         if (document == null) throw new IllegalArgumentException("unknown document");
@@ -231,8 +250,17 @@ public final class DocumentService {
         requireDocumentAuthority(actorUuid, prior.subject, prior.stationId, prior.jurisdiction);
         String key = idempotencyKey == null || idempotencyKey.isBlank()
                 ? "reprint:" + documentId : idempotencyKey;
+        if (store.idempotencyIndex == null) store.idempotencyIndex = new java.util.LinkedHashMap<>();
+        String fingerprint = RequestFingerprint.of(actorUuid, prior.subject, prior.type, prior.scope,
+                prior.stationId, prior.jurisdiction, prior.expiresAt, prior.payloadRef,
+                "reprint:" + documentId);
         String existing = store.idempotencyIndex.get(key);
-        if (existing != null && store.documents.get(existing) != null) return store.documents.get(existing);
+        if (existing != null && store.documents.get(existing) != null) {
+            DocumentRecord replay = store.documents.get(existing);
+            if (!fingerprint.equals(replay.requestFingerprint))
+                throw new IllegalStateException("IDEMPOTENCY_PAYLOAD_MISMATCH");
+            return replay;
+        }
         DocumentRecord copy = issueUnchecked(actorUuid, prior.subject, prior.type, prior.scope, prior.stationId,
                 prior.jurisdiction, prior.expiresAt, prior.payloadRef, "reprint:" + documentId, key);
         copy.predecessorId = prior.documentId;
@@ -275,11 +303,17 @@ public final class DocumentService {
         String key = idempotencyKey == null || idempotencyKey.isBlank()
                 ? "FORM:" + requesterUuid + ":" + formType + ":" + clock.nowMillis() : idempotencyKey;
         String existingId = store.formRequestIndex.get(key);
-        if (existingId != null && store.formRequests.get(existingId) != null)
-            return store.formRequests.get(existingId);
+        String fingerprint = RequestFingerprint.of(requesterUuid, formType);
+        if (existingId != null && store.formRequests.get(existingId) != null) {
+            FormRequest existing = store.formRequests.get(existingId);
+            if (!fingerprint.equals(existing.requestFingerprint))
+                throw new IllegalStateException("IDEMPOTENCY_PAYLOAD_MISMATCH");
+            return existing;
+        }
         FormRequest request = new FormRequest();
         request.requestId = ids.newId("FORM"); request.requesterUuid = requesterUuid;
         request.formType = formType; request.idempotencyKey = key;
+        request.requestFingerprint = fingerprint;
         request.createdAt = clock.nowMillis(); request.updatedAt = request.createdAt;
         request.version = 1;
         store.formRequests.put(request.requestId, request); store.formRequestIndex.put(key, request.requestId);

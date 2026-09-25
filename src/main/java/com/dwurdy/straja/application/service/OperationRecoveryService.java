@@ -34,7 +34,11 @@ public final class OperationRecoveryService {
         String existingId = store.idempotencyIndex.get(idempotencyKey);
         if (existingId != null && store.operations.get(existingId) != null) {
             OperationRecord existing = store.operations.get(existingId);
-            if (!java.util.Objects.equals(existing.kind, kind == null ? "" : kind)
+            String fingerprint = RequestFingerprint.of(kind, actorUuid, subjectUuid, correlationId,
+                    aggregateRefs == null ? List.of() : aggregateRefs,
+                    expectedVersions == null ? Map.of() : expectedVersions);
+            if (!java.util.Objects.equals(existing.requestFingerprint, fingerprint)
+                    || !java.util.Objects.equals(existing.kind, kind == null ? "" : kind)
                     || !java.util.Objects.equals(existing.actorUuid, actorUuid == null ? "" : actorUuid)
                     || !java.util.Objects.equals(existing.subjectUuid, subjectUuid == null ? "" : subjectUuid))
                 throw new IllegalStateException("OPERATION_PAYLOAD_MISMATCH");
@@ -45,6 +49,9 @@ public final class OperationRecoveryService {
         OperationRecord operation = new OperationRecord();
         operation.operationId = ids.newId("OP");
         operation.idempotencyKey = idempotencyKey;
+        operation.requestFingerprint = RequestFingerprint.of(kind, actorUuid, subjectUuid, correlationId,
+                aggregateRefs == null ? List.of() : aggregateRefs,
+                expectedVersions == null ? Map.of() : expectedVersions);
         operation.kind = kind == null ? "" : kind;
         operation.actorUuid = actorUuid == null ? "" : actorUuid;
         operation.subjectUuid = subjectUuid == null ? "" : subjectUuid;

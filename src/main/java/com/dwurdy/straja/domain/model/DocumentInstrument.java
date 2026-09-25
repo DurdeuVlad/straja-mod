@@ -11,6 +11,7 @@ public class DocumentInstrument {
     public long remainingQuantity;
     public long issuedAt;
     public Long expiresAt;
+    public String requestFingerprint = "";
     public DocumentStatus status = DocumentStatus.ISSUED;
     public long version;
 

@@ -80,6 +80,10 @@ public final class StrajaRuntime {
     private final com.dwurdy.straja.application.service.OutboxService v2Outbox;
     private final com.dwurdy.straja.application.service.OutboxDispatcher v2OutboxDispatcher;
     private final com.dwurdy.straja.application.port.out.DiscordWebhookGateway v2DiscordGateway;
+    private final com.dwurdy.straja.application.port.out.PersonnelRepository v2PersonnelRepository;
+    private final com.dwurdy.straja.application.port.out.PromotionRepository v2PromotionRepository;
+    private final com.dwurdy.straja.application.port.out.CampaignRepository v2CampaignRepository;
+    private final com.dwurdy.straja.application.port.out.MissionRepository v2MissionRepository;
     private final com.dwurdy.straja.application.service.ComplaintEscalationService v2ComplaintEscalation;
     private final com.dwurdy.straja.application.service.ConsistencyService v2Consistency;
     private final com.dwurdy.straja.application.port.out.MutableClock clock;
@@ -168,13 +172,16 @@ public final class StrajaRuntime {
                 new SavedStores.ArrestRecords(stores),
                 new SavedStores.Reputation(stores));
 
-        var personnelRepository = new SavedStores.Personnel(stores);
-        var promotionRepository = new SavedStores.Promotions(stores);
+        this.v2PersonnelRepository = new SavedStores.Personnel(stores);
+        this.v2PromotionRepository = new SavedStores.Promotions(stores);
+        var personnelRepository = v2PersonnelRepository;
+        var promotionRepository = v2PromotionRepository;
         var stationRepository = new SavedStores.Stations(stores);
         var documentRepository = new SavedStores.Documents(stores);
         var equipmentRepository = new SavedStores.EquipmentLedger(stores);
         var mobilizationRepository = new SavedStores.Mobilizations(stores);
-        var campaignRepository = new SavedStores.Campaigns(stores);
+        this.v2CampaignRepository = new SavedStores.Campaigns(stores);
+        var campaignRepository = v2CampaignRepository;
         var settlementRepository = new SavedStores.Settlements(stores);
         var operationRepository = new SavedStores.Operations(stores);
         var outboxRepository = new SavedStores.Outbox(stores);
@@ -205,8 +212,9 @@ public final class StrajaRuntime {
                 settlementRepository, clock, ids, this.ctx.currency());
         this.v2Settlements.reconcile();
         this.v2Mobilizations.useSettlementService(v2Settlements, policies.mobilizationPay);
+        this.v2MissionRepository = this.ctx.missions();
         this.v2Missions = new com.dwurdy.straja.application.service.MissionV2Service(
-                this.ctx.missions(), v2Authorization, v2Settlements, clock, ids);
+                v2MissionRepository, v2Authorization, v2Settlements, clock, ids);
         this.v2Missions.useCampaignService(v2Campaigns);
         this.v2Generators = new com.dwurdy.straja.application.service.MissionGeneratorService();
         this.v2Generators.registerDefaults();
@@ -217,17 +225,22 @@ public final class StrajaRuntime {
                 policies.discordWebhookUrl);
         this.v2Outbox.recoverInFlight();
         this.v2Personnel.onAuthorized(record -> v2Outbox.enqueue(
-                "PERSONNEL_AUTHORIZED", "personnel:" + record.playerUuid,
+                "PERSONNEL_AUTHORIZED", "personnel:" + record.playerUuid + ":v" + record.version,
                 com.dwurdy.straja.application.service.OutboxService.SafePayload.projection(
                         "PERSONNEL_AUTHORIZED", record.serviceNumber, record.playerUuid)));
         this.v2Promotions.onApproved(application -> v2Outbox.enqueue(
-                "PROMOTION_COMPLETED", "promotion:" + application.applicationId,
+                "PROMOTION_COMPLETED", "promotion:" + application.applicationId + ":v" + application.version,
                 com.dwurdy.straja.application.service.OutboxService.SafePayload.projection(
                         "PROMOTION_COMPLETED", application.applicationId, application.subjectUuid)));
+        // An approval intent is persisted before its personnel projection.
+        // Reconcile it after the outbox listener is installed so a recovered
+        // approval can emit the same idempotent notification as a live one.
+        this.v2Promotions.reconcileApprovals();
+        reconcileV2OutboxIntents();
         this.v2Campaigns.onLifecycle(campaign -> {
             String type = campaign.status == com.dwurdy.straja.domain.model.MissionCampaign.CampaignStatus.ACTIVE
                     ? "CAMPAIGN_STARTED" : "CAMPAIGN_ENDED";
-            v2Outbox.enqueue(type, type + ":" + campaign.campaignId,
+            v2Outbox.enqueue(type, type + ":" + campaign.campaignId + ":v" + campaign.version,
                     com.dwurdy.straja.application.service.OutboxService.SafePayload.projection(
                             type, campaign.campaignId, campaign.stationId));
         });
@@ -491,8 +504,32 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.service.MissionGeneratorService v2Generators() { return v2Generators; }
     public com.dwurdy.straja.application.service.OutboxService v2Outbox() { return v2Outbox; }
     public void dispatchOutbox() {
+        reconcileV2OutboxIntents();
         if (!policies.discordWebhookUrl.isBlank())
-            v2OutboxDispatcher.dispatch(v2Outbox, v2DiscordGateway, 8);
+            v2OutboxDispatcher.dispatch(v2Outbox, v2DiscordGateway, 8, server::execute);
+    }
+
+    /** Runs on the server thread before the asynchronous HTTP sender. */
+    private void reconcileV2OutboxIntents() {
+        var intents = new java.util.ArrayList<com.dwurdy.straja.domain.model.OutboxIntent>();
+        var personnelStore = v2PersonnelRepository.read();
+        if (personnelStore.records != null) for (var record : personnelStore.records.values()) {
+            if (record != null && record.outboundIntents != null) intents.addAll(record.outboundIntents);
+        }
+        var promotionStore = v2PromotionRepository.read();
+        if (promotionStore.applications != null) for (var application : promotionStore.applications.values()) {
+            if (application != null && application.outboundIntents != null) intents.addAll(application.outboundIntents);
+        }
+        var campaignStore = v2CampaignRepository.read();
+        if (campaignStore.campaigns != null) for (var campaign : campaignStore.campaigns.values()) {
+            if (campaign != null && campaign.outboundIntents != null) intents.addAll(campaign.outboundIntents);
+        }
+        var missionStore = v2MissionRepository.read();
+        if (missionStore.missions == null) return;
+        for (var mission : missionStore.missions) {
+            if (mission != null && mission.outboundIntents != null) intents.addAll(mission.outboundIntents);
+        }
+        v2Outbox.reconcile(intents);
     }
     public com.dwurdy.straja.application.service.ComplaintEscalationService v2ComplaintEscalation() { return v2ComplaintEscalation; }
     public com.dwurdy.straja.application.service.ConsistencyService v2Consistency() { return v2Consistency; }
@@ -521,12 +558,7 @@ public final class StrajaRuntime {
             var legacy = ctx.players().read(player.uuid());
             var record = v2Personnel.projectLegacy(player.uuid(), legacy, player.uuid().toString());
             if (configuredCommissioner) {
-                if (record == null) {
-                    record = v2Personnel.authorize("bootstrap", player.uuid().toString(),
-                            com.dwurdy.straja.domain.model.CareerGrade.INSPECTOR,
-                            com.dwurdy.straja.domain.model.EmploymentMode.FULL_TIME,
-                            "COMMISSIONER_BOOTSTRAP", "hq", "commissioner:" + player.uuid());
-                }
+                record = v2Personnel.ensureCommissioner(player.uuid().toString());
                 if (!record.hasAppointment(com.dwurdy.straja.domain.model.AppointmentType.COMMISSIONER, clock.nowMillis())) {
                     v2Personnel.appointInternal(player.uuid().toString(),
                             com.dwurdy.straja.domain.model.AppointmentType.COMMISSIONER, "hq", "", null);

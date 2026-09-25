@@ -20,6 +20,7 @@ public class MissionCampaign {
     public String rewardPolicy = "";
     public String cancellationReason = "";
     public long version;
+    public List<OutboxIntent> outboundIntents = new ArrayList<>();
 
     public enum CampaignStatus { DRAFT, SCHEDULED, ACTIVE, CLOSING, COMPLETED, CANCELLED, EXPIRED }
 

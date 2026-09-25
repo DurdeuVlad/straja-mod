@@ -61,13 +61,52 @@ public final class PromotionService implements com.dwurdy.straja.application.por
         return application;
     }
 
+    /** Legacy caller-asserted evidence is deliberately rejected. */
     public synchronized QualificationEvidence addEvidence(String applicationId, String actorUuid, String kind,
                                                            String source, String result, Double score,
                                                            String payloadFingerprint) {
+        throw new IllegalStateException("TRUSTED_ASSESSMENT_REQUIRED");
+    }
+
+    /** Records a result produced by the server-owned training ledger. */
+    public synchronized QualificationEvidence recordServerTrainingEvidence(
+            String applicationId, String actorUuid, String kind, boolean passed,
+            Double score, String assessmentFingerprint) {
+        if (assessmentFingerprint == null || assessmentFingerprint.isBlank())
+            throw new IllegalArgumentException("trusted assessment fingerprint required");
+        return addEvidenceInternal(applicationId, actorUuid, kind, "SERVER_TRAINING_LEDGER",
+                passed ? "PASS" : "FAIL", score, assessmentFingerprint);
+    }
+
+    /** Records a commissioner decision after checking the V2 authority gate. */
+    public synchronized QualificationEvidence recordCommissionerEvidence(
+            String applicationId, String actorUuid, String kind, String result,
+            Double score, String assessmentFingerprint) {
+        PromotionStore store = promotions.read();
+        PromotionApplication application = requireApplication(store, applicationId);
+        AuthorizationContext context = AuthorizationContext.of(actorUuid, "APPROVE_PROMOTION");
+        context.subjectUuid = application.subjectUuid;
+        context.beneficiaryUuid = application.subjectUuid;
+        context.requiresIndependentApproval = true;
+        if (authorization == null || !authorization.allowed(context))
+            throw new IllegalStateException("DENIED_ASSESSMENT_AUTHORITY");
+        if (assessmentFingerprint == null || assessmentFingerprint.isBlank())
+            throw new IllegalArgumentException("trusted assessment fingerprint required");
+        String normalized = result == null ? "" : result.trim().toUpperCase(java.util.Locale.ROOT);
+        if (!"PASS".equals(normalized) && !"FAIL".equals(normalized))
+            throw new IllegalArgumentException("assessment result must be PASS or FAIL");
+        return addEvidenceInternal(applicationId, actorUuid, kind, "COMMISSIONER_ASSESSMENT",
+                normalized, score, assessmentFingerprint);
+    }
+
+    private QualificationEvidence addEvidenceInternal(String applicationId, String actorUuid, String kind,
+                                                       String source, String result, Double score,
+                                                       String payloadFingerprint) {
         PromotionStore store = promotions.read();
         PromotionApplication application = requireApplication(store, applicationId);
         if (!isOpen(application.status)) throw new IllegalStateException("application is closed");
-        String fingerprint = payloadFingerprint == null ? "" : payloadFingerprint;
+        String fingerprint = payloadFingerprint == null ? "" : payloadFingerprint.trim();
+        if (fingerprint.isBlank()) throw new IllegalArgumentException("assessment fingerprint required");
         for (QualificationEvidence existing : store.evidence.values()) {
             if (existing != null && applicationId.equals(existing.applicationId)
                     && fingerprint.equals(existing.payloadFingerprint) && !fingerprint.isBlank()) return existing;
@@ -113,6 +152,10 @@ public final class PromotionService implements com.dwurdy.straja.application.por
                                                        long expectedApplicationVersion) {
         PromotionStore store = promotions.read();
         PromotionApplication application = requireApplication(store, applicationId);
+        if (application.status == PromotionStatus.APPROVED) {
+            reconcileApproval(application, store);
+            return requireApplication(promotions.read(), applicationId);
+        }
         if (application.version != expectedApplicationVersion)
             throw new IllegalStateException("STALE_STATE");
         if (application.status != PromotionStatus.READY_FOR_APPROVAL)
@@ -130,22 +173,84 @@ public final class PromotionService implements com.dwurdy.straja.application.por
             if (person.employmentMode != EmploymentMode.FULL_TIME || person.hasIncompatibleAffiliation(clock.nowMillis()))
                 throw new IllegalStateException("DENIED_AFFILIATION_CONFLICT");
         }
-        person.careerGrade = application.targetGrade;
-        person.careerTrack = application.targetGrade.track();
-        person.careerOrigin = application.careerOrigin;
-        person.membershipStatus = PersonnelStatus.AUTHORIZED_ACTIVE;
-        person.version++;
-        person.updatedAt = clock.nowMillis();
         application.status = PromotionStatus.APPROVED;
         application.reviewedBy = actorUuid;
         application.decisionAt = clock.nowMillis();
+        application.personnelSyncState = "PENDING";
+        application.personnelAppliedAt = null;
         application.version++;
-        people.storeRevision++;
+        if (application.outboundIntents == null) application.outboundIntents = new java.util.ArrayList<>();
+        application.outboundIntents.add(com.dwurdy.straja.domain.model.OutboxIntent.of(
+                "PROMOTION_COMPLETED", "promotion:" + application.applicationId + ":v" + application.version,
+                application.applicationId, application.subjectUuid, clock.nowMillis()));
         store.storeRevision++;
-        personnel.write(people);
+        // The promotion decision is the recovery intent. If the process dies
+        // after this write, reconcileApprovals() can finish the personnel
+        // projection on the next server start.
         promotions.write(store);
-        approvalListener.accept(application);
-        return application;
+        reconcileApproval(application, store);
+        PromotionApplication persisted = requireApplication(promotions.read(), applicationId);
+        approvalListener.accept(persisted);
+        return persisted;
+    }
+
+    /**
+     * Completes approved applications left between the promotion and
+     * personnel repository writes. Safe to call on every server start.
+     */
+    public synchronized int reconcileApprovals() {
+        PromotionStore store = promotions.read();
+        int repaired = 0;
+        if (store.applications == null) return 0;
+        for (PromotionApplication application : store.applications.values()) {
+            if (application == null || application.status != PromotionStatus.APPROVED
+                    || "COMPLETE".equals(application.personnelSyncState)) continue;
+            try {
+                reconcileApproval(application, store);
+                approvalListener.accept(application);
+                repaired++;
+            } catch (IllegalStateException conflict) {
+                // Keep the server alive and leave a durable CONFLICT marker
+                // for an administrator instead of silently changing a newer
+                // personnel record.
+            }
+        }
+        return repaired;
+    }
+
+    private void reconcileApproval(PromotionApplication application, PromotionStore promotionStore) {
+        PersonnelStore people = personnel.read();
+        if (people.records == null) people.records = new java.util.LinkedHashMap<>();
+        PersonnelRecord person = people.records.get(application.subjectUuid);
+        if (person == null) {
+            application.personnelSyncState = "CONFLICT";
+            promotionStore.storeRevision++;
+            promotions.write(promotionStore);
+            throw new IllegalStateException("PROMOTION_PERSONNEL_MISSING");
+        }
+        boolean alreadyApplied = person.careerGrade == application.targetGrade
+                && person.careerTrack == application.targetGrade.track()
+                && person.membershipStatus == PersonnelStatus.AUTHORIZED_ACTIVE;
+        if (!alreadyApplied) {
+            if (person.version != application.expectedPersonnelVersion) {
+                application.personnelSyncState = "CONFLICT";
+                promotionStore.storeRevision++;
+                promotions.write(promotionStore);
+                throw new IllegalStateException("PROMOTION_PERSONNEL_STALE");
+            }
+            person.careerGrade = application.targetGrade;
+            person.careerTrack = application.targetGrade.track();
+            person.careerOrigin = application.careerOrigin;
+            person.membershipStatus = PersonnelStatus.AUTHORIZED_ACTIVE;
+            person.version++;
+            person.updatedAt = clock.nowMillis();
+            people.storeRevision++;
+            personnel.write(people);
+        }
+        application.personnelSyncState = "COMPLETE";
+        application.personnelAppliedAt = clock.nowMillis();
+        promotionStore.storeRevision++;
+        promotions.write(promotionStore);
     }
 
     public synchronized PromotionApplication findOpen(String subjectUuid, CareerGrade targetGrade) {

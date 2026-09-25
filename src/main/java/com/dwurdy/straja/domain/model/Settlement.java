@@ -6,6 +6,7 @@ import java.util.List;
 public class Settlement {
     public String settlementId = "";
     public String settlementKey = "";
+    public String requestFingerprint = "";
     public String playerUuid = "";
     public SettlementCategory category = SettlementCategory.MISSION_REWARD;
     public long amount;

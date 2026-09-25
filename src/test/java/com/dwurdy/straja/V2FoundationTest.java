@@ -58,8 +58,10 @@ class V2FoundationTest {
         var repo = new SavedStores.Operations(access);
         var journal = new OperationRecoveryService(repo, clock, ids);
         var first = journal.prepare("redeem:1", "REDEEM", "a", "s", "c", java.util.List.of("i"), Map.of("i", 1L));
-        var second = journal.prepare("redeem:1", "REDEEM", "a", "s", "c", java.util.List.of(), Map.of());
+        var second = journal.prepare("redeem:1", "REDEEM", "a", "s", "c", java.util.List.of("i"), Map.of("i", 1L));
         assertEquals(first.operationId, second.operationId);
+        assertThrows(IllegalStateException.class,
+                () -> journal.prepare("redeem:1", "REDEEM", "a", "s", "c", java.util.List.of(), Map.of()));
         journal.transition(first.operationId, OperationRecord.OperationStatus.DOMAIN_COMMITTED, "ok");
         assertEquals(OperationRecord.OperationStatus.DOMAIN_COMMITTED, journal.findByIdempotencyKey("redeem:1").status);
     }
@@ -90,7 +92,7 @@ class V2FoundationTest {
         var promotions = new PromotionService(new SavedStores.Promotions(access), people, auth, clock, ids);
         var application = promotions.submit(candidate.playerUuid, CareerGrade.MILITARY_STRAJER);
         assertEquals(CareerGrade.MILITARY_STAGIAR, personnel.find("candidate").careerGrade);
-        promotions.addEvidence(application.applicationId, "instructor", "EXAM", "unit", "PASS", 100d, "fingerprint");
+        promotions.recordServerTrainingEvidence(application.applicationId, "instructor", "EXAM", true, 100d, "fingerprint");
         promotions.markReady(application.applicationId);
         promotions.approve("commissioner", application.applicationId, 2);
         assertEquals(PromotionStatus.APPROVED, new SavedStores.Promotions(access).read().applications.get(application.applicationId).status);
@@ -174,6 +176,9 @@ class V2FoundationTest {
         var issue = equipment.createIssue("issuer", "player", "hq", "ticket", "", java.util.List.of(
                 new EquipmentLedgerService.RequestedLine("straja:baton", 2)), "op");
         equipment.fulfillLine(issue.issueId, issue.lines.get(0).lineId, 2, "asset");
+        assertThrows(IllegalStateException.class, () -> equipment.createIssue(
+                "issuer", "other-player", "hq", "ticket", "", java.util.List.of(
+                        new EquipmentLedgerService.RequestedLine("straja:baton", 2)), "op"));
         assertEquals(2, equipment.returnQuantity("player", "player", "straja:baton", 2).returnedQuantity());
         assertEquals(0, equipment.returnQuantity("player", "player", "straja:baton", 1).returnedQuantity());
         var secondIssue = equipment.createIssue("issuer", "player", "hq", "ticket", "",
@@ -181,14 +186,19 @@ class V2FoundationTest {
         equipment.fulfillLine(secondIssue.issueId, secondIssue.lines.get(0).lineId, 1, "asset-2", "deliver-2");
         assertEquals(1, equipment.returnQuantity("player", "player", "straja:sword", 1, "return-2").returnedQuantity());
         assertEquals("REPLAYED", equipment.returnQuantity("player", "player", "straja:sword", 1, "return-2").reason());
+        assertEquals("OPERATION_PAYLOAD_MISMATCH",
+                equipment.returnQuantity("player", "other-item", "straja:sword", 1, "return-2").reason());
     }
 
     @Test
     void settlementKeyIsUniqueAndOutboxPayloadIsSafe() {
         var settlement = new SettlementService(new SavedStores.Settlements(access), clock, ids, null);
         var first = settlement.create("player", com.dwurdy.straja.domain.model.Settlement.SettlementCategory.JOB, 5, "JOB:m1:player", "m1");
-        var second = settlement.create("player", com.dwurdy.straja.domain.model.Settlement.SettlementCategory.JOB, 99, "JOB:m1:player", "m1");
+        var second = settlement.create("player", com.dwurdy.straja.domain.model.Settlement.SettlementCategory.JOB, 5, "JOB:m1:player", "m1");
         assertEquals(first.settlementId, second.settlementId);
+        assertThrows(IllegalStateException.class, () -> settlement.create(
+                "player", com.dwurdy.straja.domain.model.Settlement.SettlementCategory.JOB,
+                99, "JOB:m1:player", "m1"));
         var outbox = new OutboxService(new SavedStores.Outbox(access), clock, ids);
         var event = outbox.enqueue("PERSONNEL_AUTHORIZED", "personnel:player",
                 OutboxService.SafePayload.projection("PERSONNEL_AUTHORIZED", "p1", "player\nsecret"));
@@ -246,6 +256,19 @@ class V2FoundationTest {
     }
 
     @Test
+    void generatedMissionOfferKeyRejectsChangedPayloadOnReplay() {
+        var missions = new MissionV2Service(new SavedStores.Missions(access), null, null, clock, ids);
+        var first = missions.publishGenerated("generator", "worker", "hq", "district",
+                "Inspect the gate", "GUARD", 20_000, 1, "offer-1");
+
+        assertEquals(first.id, missions.publishGenerated("generator", "worker", "hq", "district",
+                "Inspect the gate", "GUARD", 20_000, 1, "offer-1").id);
+        assertThrows(IllegalStateException.class, () -> missions.publishGenerated(
+                "generator", "worker", "hq", "district", "Inspect the vault", "GUARD",
+                20_000, 1, "offer-1"));
+    }
+
+    @Test
     void standardFormOpeningCreatesOnePersistentNonAuthorizingRequest() {
         var documents = new DocumentService(new SavedStores.Documents(access), clock, ids);
         var forms = new FormSessionService(clock, ids, documents);
@@ -256,6 +279,18 @@ class V2FoundationTest {
         forms.submit(owner, view.sessionId(), Map.of("accused", "offline-player")).orElseThrow();
         assertEquals(1, documents.formRequests().size());
         assertEquals("SUBMITTED", documents.formRequests().get(0).status);
+    }
+
+    @Test
+    void documentReprintRejectsAReusedKeyWithDifferentRequestData() {
+        var documents = new DocumentService(new SavedStores.Documents(access), clock, ids);
+        var original = documents.issue("issuer", "subject", DocumentType.APPOINTMENT_ORDER,
+                "Inspector", "hq", "", null, "payload-a", "correlation-a");
+        var reprint = documents.reprint("issuer", original.documentId, "reprint-key");
+
+        assertEquals(reprint.documentId, documents.reprint("issuer", original.documentId, "reprint-key").documentId);
+        assertThrows(IllegalStateException.class, () -> documents.reprint(
+                "different-issuer", original.documentId, "reprint-key"));
     }
 
     @Test
@@ -275,5 +310,114 @@ class V2FoundationTest {
         assertEquals(1, settlements.reconcile());
         assertEquals(com.dwurdy.straja.domain.model.Settlement.SettlementStatus.FAILED_RETRYABLE,
                 settlements.find(interrupted.settlementId).status);
+    }
+
+    @Test
+    void configuredCommissionerNormalizesAStaleLegacyRecordBeforeAppointment() {
+        var people = new SavedStores.Personnel(access);
+        var personnel = new PersonnelService(people, clock, ids);
+        personnel.authorize("bootstrap", "commissioner", CareerGrade.MILITARY_STAGIAR,
+                EmploymentMode.PART_TIME, "LEGACY_PROJECTION", "hq", "legacy:commissioner");
+
+        var normalized = personnel.ensureCommissioner("commissioner");
+        assertEquals(CareerGrade.INSPECTOR, normalized.careerGrade);
+        assertEquals(EmploymentMode.FULL_TIME, normalized.employmentMode);
+        assertEquals(com.dwurdy.straja.domain.model.PersonnelStatus.AUTHORIZED_ACTIVE,
+                normalized.membershipStatus);
+        assertDoesNotThrow(() -> personnel.appointInternal("commissioner", AppointmentType.COMMISSIONER,
+                "hq", "", null));
+    }
+
+    @Test
+    void callerSelectedProjectionSourceCannotBypassPersonnelAuthority() {
+        var people = new SavedStores.Personnel(access);
+        var personnel = new PersonnelService(people, clock, ids);
+        personnel.authorize("bootstrap", "commissioner", CareerGrade.INSPECTOR,
+                EmploymentMode.FULL_TIME, "BOOTSTRAP", "hq", "bootstrap:commissioner");
+        personnel.appointInternal("commissioner", AppointmentType.COMMISSIONER, "hq", "", null);
+        personnel.useAuthorization(new AuthorizationService(people, clock));
+
+        assertThrows(IllegalStateException.class, () -> personnel.authorize(
+                "unregistered", "candidate", CareerGrade.MILITARY_STAGIAR,
+                EmploymentMode.PART_TIME, "LEGACY_PROJECTION", "hq", "forged-source"));
+    }
+
+    @Test
+    void promotionApprovalIntentReconcilesThePersonnelProjectionAfterRestart() {
+        var people = new SavedStores.Personnel(access);
+        var personnel = new PersonnelService(people, clock, ids);
+        personnel.authorize("commissioner", "candidate", CareerGrade.MILITARY_STAGIAR,
+                EmploymentMode.PART_TIME, "TEST", "hq", "auth:candidate");
+        personnel.authorize("commissioner", "commissioner", CareerGrade.INSPECTOR,
+                EmploymentMode.FULL_TIME, "TEST", "hq", "auth:commissioner");
+        personnel.appointInternal("commissioner", AppointmentType.COMMISSIONER, "hq", "", null);
+        var promotions = new PromotionService(new SavedStores.Promotions(access), people,
+                new AuthorizationService(people, clock), clock, ids);
+        var application = promotions.submit("candidate", CareerGrade.MILITARY_STRAJER);
+        promotions.recordServerTrainingEvidence(application.applicationId, "server", "EXAM", true,
+                100d, "assessment:1");
+        promotions.markReady(application.applicationId);
+
+        var stored = new SavedStores.Promotions(access).read();
+        var interrupted = stored.applications.get(application.applicationId);
+        interrupted.status = PromotionStatus.APPROVED;
+        interrupted.personnelSyncState = "PENDING";
+        interrupted.version++;
+        new SavedStores.Promotions(access).write(stored);
+
+        assertEquals(CareerGrade.MILITARY_STAGIAR, personnel.find("candidate").careerGrade);
+        assertEquals(1, promotions.reconcileApprovals());
+        assertEquals(CareerGrade.MILITARY_STRAJER, personnel.find("candidate").careerGrade);
+        assertEquals("COMPLETE", promotions.find(application.applicationId).personnelSyncState);
+    }
+
+    @Test
+    void partialSettlementIsReviewOnlyAndNeverEntersAutomaticRetry() {
+        var currency = new Fakes.TestCurrency();
+        currency.returnPartialDeposit = true;
+        var settlements = new SettlementService(new SavedStores.Settlements(access), clock, ids, currency);
+        var player = new Fakes.TestPlayer("partial", 4);
+        var settlement = settlements.create(player.uuid().toString(),
+                com.dwurdy.straja.domain.model.Settlement.SettlementCategory.JOB,
+                10, "JOB:partial", "job");
+
+        var result = settlements.payout(settlement, player);
+        assertEquals(com.dwurdy.straja.domain.model.Settlement.SettlementStatus.REVIEW, result.status);
+        assertTrue(settlements.pendingFor(player.uuid().toString()).isEmpty());
+        assertThrows(IllegalStateException.class, () -> settlements.retry(settlement.settlementId));
+    }
+
+    @Test
+    void outboxClaimAndCompletionKeepStateTransitionsExplicit() {
+        var outbox = new OutboxService(new SavedStores.Outbox(access), clock, ids);
+        var event = outbox.enqueue("MAJOR_INCIDENT", "incident:v1",
+                OutboxService.SafePayload.projection("MAJOR_INCIDENT", "incident-1", "player"));
+        var claims = outbox.claimDue(1);
+        assertEquals(1, claims.size());
+        assertEquals(com.dwurdy.straja.domain.model.OutboxEvent.OutboxStatus.SENDING,
+                outbox.all().get(0).status);
+        assertFalse(outbox.completeDelivery(claims.getFirst(), false, "offline"));
+        assertEquals(com.dwurdy.straja.domain.model.OutboxEvent.OutboxStatus.RETRY,
+                outbox.all().get(0).status);
+        clock.advance(2_000);
+        var retry = outbox.claimDue(1).getFirst();
+        assertTrue(outbox.completeDelivery(retry, true, ""));
+        assertEquals(com.dwurdy.straja.domain.model.OutboxEvent.OutboxStatus.SENT,
+                outbox.all().get(0).status);
+    }
+
+    @Test
+    void trustedEvidenceRejectsCallerAssertedResultAndPersistsAggregateIntent() {
+        var people = new SavedStores.Personnel(access);
+        var personnel = new PersonnelService(people, clock, ids);
+        var candidate = personnel.authorize("commissioner", "candidate", CareerGrade.MILITARY_STAGIAR,
+                EmploymentMode.PART_TIME, "TEST", "hq", "auth:candidate");
+        var outbox = new OutboxService(new SavedStores.Outbox(access), clock, ids);
+        assertFalse(candidate.outboundIntents.isEmpty());
+        assertEquals(1, outbox.reconcile(candidate.outboundIntents));
+        assertThrows(IllegalStateException.class, () -> new PromotionService(
+                new SavedStores.Promotions(access), people, null, clock, ids).addEvidence(
+                        "missing", "caller", "EXAM", "COMMAND", "PASS", null, "fingerprint"));
+        assertEquals("personnel:candidate:v1", outbox.all().getFirst().dedupeKey);
     }
 }

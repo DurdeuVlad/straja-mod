@@ -416,8 +416,11 @@ public final class NpcRoles {
         }
         var state = runtime.playerQueries().readState(gw);
         int rank = state == null ? com.dwurdy.straja.domain.model.Rank.CIVIL.level() : state.rank;
+        var personnel = runtime.v2Personnel().find(gw.uuid().toString());
+        String stationId = personnel == null || personnel.homeStationId == null
+                || personnel.homeStationId.isBlank() ? "hq" : personnel.homeStationId;
         var context = NpcFaqSurface.Context.from(state, runtime.playerQueries().isCommissioner(gw),
-                runtime.policies().rankName(rank));
+                runtime.policies().rankName(rank), runtime.v2Stations().messageTemplates(stationId));
         var targetRef = parsed.get();
         if (!NpcFaqSurface.targetAvailable(targetRef, context)) {
             gw.tell("[FAQ] Ramura nu mai este disponibilă pentru statutul tău.");
