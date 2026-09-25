@@ -87,6 +87,43 @@ class EventSurfaceTest {
     }
 
     @Test
+    void customNpcAdminAttackCancelsAtEarlyAttackBoundary() throws IOException {
+        String src = source();
+        int handler = src.indexOf("void onAttackEntity(");
+        int route = src.indexOf("NpcPresentationRuntime.handleCustomNpcAdminAttack(player, event.getTarget())", handler);
+        int cancel = src.indexOf("event.setCanceled(true)", route);
+        assertTrue(handler >= 0 && route > handler && cancel > route);
+        int annotation = src.lastIndexOf("@SubscribeEvent(priority = EventPriority.HIGHEST)", handler);
+        assertTrue(annotation >= 0 && handler - annotation < 250);
+        assertTrue(src.substring(handler, route).contains("isClientSide()"));
+        assertTrue(src.substring(handler, route).contains("ServerPlayer player"));
+    }
+
+    @Test
+    void attackAuthorizationRequiresServerOperatorAndMainHandWand() throws IOException {
+        String runtime = Files.readString(Path.of(
+                "src/main/java/com/dwurdy/straja/bootstrap/NpcPresentationRuntime.java"));
+        assertTrue(java.util.regex.Pattern.compile(
+                "player\\.hasPermissions\\(2\\)\\s*&& player\\.getMainHandItem\\(\\)"
+                        + "\\.is\\(StrajaItems\\.NPC_WAND\\.get\\(\\)\\)")
+                .matcher(runtime).find());
+        String provider = Files.readString(Path.of(
+                "src/main/java/com/dwurdy/straja/adapter/out/npc/customnpcs/CustomNpcsNpcSurfaceProvider.java"));
+        assertTrue(provider.contains("decision.hostId().toString()"),
+                "selector identity must come from the server attack target");
+        assertFalse(provider.contains("registerInteractionListener(eventBus, damagedEventType"),
+                "post-damage interception cannot own the admin gesture");
+        String interaction = provider.substring(provider.indexOf("private void onCustomNpcsEvent("),
+                provider.indexOf("private static boolean isSupportedInteractionEvent("));
+        assertFalse(interaction.contains("openAdminSelector("),
+                "right-click must not enter the admin selector");
+        String selector = provider.substring(provider.indexOf("private void openAdminSelector("),
+                provider.indexOf("private void openAdminDuplicateCleanup("));
+        assertFalse(selector.contains("provisioning.assignIfRevisionMatches("),
+                "the selector must not assign before confirmation");
+    }
+
+    @Test
     void activeProvisionedBindingPrecedesLegacyNpcRegistration() throws IOException {
         String src = source();
         int provisionedRoute = src.indexOf(
