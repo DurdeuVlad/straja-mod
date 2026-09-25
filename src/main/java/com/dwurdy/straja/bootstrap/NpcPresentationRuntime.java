@@ -12,6 +12,7 @@ import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.application.service.NpcBindingLifecycleService;
 import com.dwurdy.straja.application.service.NpcBindingRoleResolver;
 import com.dwurdy.straja.application.service.NpcAdmissionSurfaceService;
+import com.dwurdy.straja.application.service.NpcArchiveSurfaceService;
 import com.dwurdy.straja.application.service.NpcArmorySurfaceService;
 import com.dwurdy.straja.application.service.NpcCareerSurfaceService;
 import com.dwurdy.straja.application.service.NpcCivicSurfaceService;
@@ -51,6 +52,7 @@ import net.minecraft.world.entity.Entity;
 public final class NpcPresentationRuntime {
     private static final AtomicReference<RuntimeState> STATE = new AtomicReference<>();
     private static final NpcAdmissionSurfaceService ADMISSION_SURFACE = new NpcAdmissionSurfaceService();
+    private static final NpcArchiveSurfaceService ARCHIVE_SURFACE = new NpcArchiveSurfaceService();
     private static final NpcArmorySurfaceService ARMORY_SURFACE = new NpcArmorySurfaceService();
     private static final NpcCareerSurfaceService CAREER_SURFACE = new NpcCareerSurfaceService();
     private static final NpcCivicSurfaceService CIVIC_SURFACE = new NpcCivicSurfaceService();
@@ -137,9 +139,10 @@ public final class NpcPresentationRuntime {
         if (!"receptionist".equals(role) && !"trainer".equals(role)
                 && !"secretary".equals(role)
                 && !"jailer".equals(role)
-                && !"armorer".equals(role)) {
+                && !"armorer".equals(role)
+                && !"archivist".equals(role)) {
             return NpcProviderResult.rejected(
-                    "unsupported-role", "supported CustomNPC roles are receptionist, trainer, secretary, jailer, and armorer");
+                    "unsupported-role", "supported CustomNPC roles are receptionist, trainer, secretary, jailer, armorer, and archivist");
         }
         NpcContentId profile = "receptionist".equals(role)
                 ? NpcContentId.of("straja.reception.admission")
@@ -149,6 +152,8 @@ public final class NpcPresentationRuntime {
                         ? NpcContentId.of("straja.jailer.custody")
                         : "armorer".equals(role)
                         ? NpcContentId.of("straja.armorer.orders")
+                        : "archivist".equals(role)
+                        ? NpcContentId.of("straja.archivist.archive")
                         : NpcContentId.of("straja.instructor.admission");
         String normalizedUuid;
         try {
@@ -221,17 +226,25 @@ public final class NpcPresentationRuntime {
                         if (armorerStream == null) {
                             throw new IllegalStateException("armorer NPC profile resource is missing");
                         }
-                        NpcContentProfile armorer = loader.load(
-                                new InputStreamReader(armorerStream, StandardCharsets.UTF_8));
-                        try (var jailerStream = NpcPresentationRuntime.class.getClassLoader().getResourceAsStream(
-                                "data/straja/npc/straja.jailer.custody.json")) {
+                            NpcContentProfile armorer = loader.load(
+                                    new InputStreamReader(armorerStream, StandardCharsets.UTF_8));
+                            try (var jailerStream = NpcPresentationRuntime.class.getClassLoader().getResourceAsStream(
+                                    "data/straja/npc/straja.jailer.custody.json")) {
                             if (jailerStream == null) {
                                 throw new IllegalStateException("jailer NPC profile resource is missing");
                             }
-                            NpcContentProfile jailer = loader.load(
-                                    new InputStreamReader(jailerStream, StandardCharsets.UTF_8));
-                            return new NpcContentCatalog(
-                                    List.of(reception, instructor, secretary, jailer, armorer));
+                                NpcContentProfile jailer = loader.load(
+                                        new InputStreamReader(jailerStream, StandardCharsets.UTF_8));
+                            try (var archivistStream = NpcPresentationRuntime.class.getClassLoader().getResourceAsStream(
+                                    "data/straja/npc/straja.archivist.archive.json")) {
+                                if (archivistStream == null) {
+                                    throw new IllegalStateException("archivist NPC profile resource is missing");
+                                }
+                                NpcContentProfile archivist = loader.load(
+                                        new InputStreamReader(archivistStream, StandardCharsets.UTF_8));
+                                return new NpcContentCatalog(
+                                        List.of(reception, instructor, secretary, jailer, armorer, archivist));
+                            }
                         }
                     }
                 }
@@ -247,6 +260,12 @@ public final class NpcPresentationRuntime {
         if (runtime == null) return published;
         PlayerGateway player = new com.dwurdy.straja.adapter.out.minecraft.MinecraftPlayerGateway(
                 runtime.server(), playerId);
+        if ("archivist".equals(binding.roleId())) {
+            return ARCHIVE_SURFACE.resolve(
+                    published,
+                    runtime.archiveRoleplay().availableActions(player),
+                    runtime.archiveRoleplay().limits());
+        }
         GuardState state = runtime.playerQueries().readState(player);
         if (state == null) return published;
         if ("armorer".equals(binding.roleId())) {
@@ -341,6 +360,9 @@ public final class NpcPresentationRuntime {
                 : binding != null && "jailer".equals(binding.roleId())
                 && dispatchJailerForm(player, request)
                 ? true
+                : binding != null && "archivist".equals(binding.roleId())
+                && dispatchArchivistAction(player, request)
+                ? true
                 : binding != null && admissionAction(binding.roleId(), request.actionId().value())
                 ? dispatchAdmissionAction(player, request)
                 : com.dwurdy.straja.adapter.in.npc.NpcRoles.performAction(
@@ -425,6 +447,54 @@ public final class NpcPresentationRuntime {
         runtime.submitNpcForm(player, new com.dwurdy.straja.application.port.in.FormSessionUseCase.Submission(
                 com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.ARREST_HANDOFF,
                 "", request.input()));
+        return true;
+    }
+
+    private static boolean dispatchArchivistAction(ServerPlayer player, NpcActionRequest request) {
+        String raw = request.actionId().value();
+        int separator = raw.indexOf(':');
+        String operation = separator < 0 ? raw : raw.substring(0, separator);
+        String recordId = separator < 0 ? "" : raw.substring(separator + 1);
+        StrajaRuntime runtime = StrajaRuntime.get();
+        if (runtime == null) return false;
+        PlayerGateway gateway = new com.dwurdy.straja.adapter.out.minecraft.MinecraftPlayerGateway(
+                runtime.server(), player.getUUID());
+        switch (operation) {
+            case "archive-list" -> {
+                runtime.archiveRoleplay().listFolders(gateway);
+                return true;
+            }
+            case "archive-folder-read" -> {
+                runtime.archiveRoleplay().readFolder(gateway, recordId);
+                return true;
+            }
+            case "archive-sheet-read" -> {
+                runtime.archiveRoleplay().readSheet(gateway, recordId);
+                return true;
+            }
+            case "archive-sheet-submit" -> {
+                return runtime.archiveRoleplay().submitSheet(gateway, recordId);
+            }
+            case "archive-sheet-revoke" -> {
+                return runtime.archiveRoleplay().revokeSheet(gateway, recordId);
+            }
+            default -> { }
+        }
+        com.dwurdy.straja.application.port.in.FormSessionUseCase.Action action = switch (operation) {
+            case "archive-folder-create" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.ARCHIVE_FOLDER_CREATE;
+            case "archive-folder-issue" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.ARCHIVE_FOLDER_ISSUE;
+            case "archive-sheet-new" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.ARCHIVE_SHEET_NEW;
+            case "archive-sheet-edit" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.ARCHIVE_SHEET_EDIT;
+            case "archive-recipients" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.ARCHIVE_RECIPIENTS;
+            case "archive-sheet-sign" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.ARCHIVE_SIGN;
+            case "archive-sheet-copy" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.ARCHIVE_COPY;
+            case "archive-sheet-envelope" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.ARCHIVE_ENVELOPE;
+            case "archive-sheet-issue" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.ARCHIVE_DOCUMENT_ISSUE;
+            default -> null;
+        };
+        if (action == null) return false;
+        runtime.submitNpcForm(player, new com.dwurdy.straja.application.port.in.FormSessionUseCase.Submission(
+                action, recordId, request.input()));
         return true;
     }
 
