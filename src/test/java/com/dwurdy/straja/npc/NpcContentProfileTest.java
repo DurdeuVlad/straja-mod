@@ -224,7 +224,8 @@ class NpcContentProfileTest {
         var profile = new NpcContentProfileJsonLoader().load(
                 new InputStreamReader(resource, StandardCharsets.UTF_8));
 
-        assertEquals(NpcContentId.of("straja.archivist.archive"), profile.profileId());
+        assertEquals(NpcContentId.of("straja.archivist.archive"), profile.contentId());
+        assertEquals(NpcProfileId.of("straja:archivist"), profile.profileId());
         assertTrue(profile.actions().stream().anyMatch(action ->
                 action.actionId().equals(NpcContentId.of("archive-folder-create"))));
         assertTrue(profile.requiredCapabilities().contains(

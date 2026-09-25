@@ -27,7 +27,7 @@ class NpcArchiveSurfaceTest {
                 new InputStreamReader(resource, StandardCharsets.UTF_8));
         var binding = new NpcBinding(
                 "straja.test.archivist", NpcProviderId.CUSTOM_NPCS,
-                UUID.randomUUID().toString(), "", "archivist", "hq", profile.profileId(), 1);
+                UUID.randomUUID().toString(), "", "archivist", "hq", profile.contentId(), 1);
 
         var surface = new NpcArchiveSurfaceService().resolve(
                 profile.bind(binding),
@@ -71,7 +71,7 @@ class NpcArchiveSurfaceTest {
                 new InputStreamReader(resource, StandardCharsets.UTF_8));
         var binding = new NpcBinding(
                 "straja.test.archivist", NpcProviderId.CUSTOM_NPCS,
-                UUID.randomUUID().toString(), "", "archivist", "hq", profile.profileId(), 1);
+                UUID.randomUUID().toString(), "", "archivist", "hq", profile.contentId(), 1);
 
         var surface = new NpcArchiveSurfaceService().resolve(
                 profile.bind(binding),
@@ -91,7 +91,7 @@ class NpcArchiveSurfaceTest {
                 new InputStreamReader(resource, StandardCharsets.UTF_8));
         var binding = new NpcBinding(
                 "straja.test.archivist", NpcProviderId.CUSTOM_NPCS,
-                UUID.randomUUID().toString(), "", "archivist", "hq", profile.profileId(), 1);
+                UUID.randomUUID().toString(), "", "archivist", "hq", profile.contentId(), 1);
 
         var surface = new NpcArchiveSurfaceService().resolve(
                 profile.bind(binding),
