@@ -33,6 +33,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.core.registries.BuiltInRegistries;
 
 /**
  * Optional CustomNPCs player-facing adapter.
@@ -64,6 +65,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
     private final ReflectionBridge bridge;
     private final Map<String, NpcBinding> bindings = new ConcurrentHashMap<>();
     private final Map<String, NpcSurfaceSnapshot> surfaces = new ConcurrentHashMap<>();
+    private final CustomNpcAdminAttackGate adminAttackGate = new CustomNpcAdminAttackGate();
 
     public CustomNpcsNpcSurfaceProvider(
             NpcSurfaceActionUseCase actions,
@@ -127,18 +129,27 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
      * should cancel the vanilla attack
      */
     public boolean handleAdminAttack(ServerPlayer player, Entity target) {
-        if (!bridge.available()
-                || player == null
-                || target == null
-                || !isCustomNpcsEntity(target)
-                || adminTool == null
-                || !adminTool.test(player)) {
+        if (player == null || target == null || adminTool == null) {
             return false;
+        }
+        boolean authorized = adminTool.test(player);
+        boolean liveTarget = !target.isRemoved()
+                && target.level() == player.serverLevel()
+                && player.serverLevel().getEntity(target.getUUID()) == target;
+        var decision = adminAttackGate.decide(player.getUUID(), target.getUUID(),
+                String.valueOf(BuiltInRegistries.ENTITY_TYPE.getKey(target.getType())),
+                liveTarget, authorized, bridge.available(), player.level().getGameTime());
+        if (decision.action() == CustomNpcAdminAttackGate.Action.PASS) return false;
+        if (decision.action() == CustomNpcAdminAttackGate.Action.CANCEL) {
+            if (authorized && !bridge.available()) {
+                diagnostics.accept("CustomNPCs admin selector is unavailable; NPC attack cancelled");
+            }
+            return true;
         }
         try {
             Object playerApi = playerApi(player);
             if (playerApi != null) {
-                openAdminSelector(playerApi, player, target.getStringUUID());
+                openAdminSelector(playerApi, player, decision.hostId().toString());
             } else {
                 diagnostics.accept("CustomNPCs admin attack had no player API wrapper");
             }
@@ -149,6 +160,10 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
         // Once the operator/tool predicate matched, never let a bridge
         // failure turn the authoring gesture into a real NPC attack.
         return true;
+    }
+
+    public void forgetAdminAttack(UUID playerId) {
+        adminAttackGate.forget(playerId);
     }
 
     /** Checks whether a persisted CustomNPC instance can currently be resolved. */
@@ -282,18 +297,6 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                 return;
             }
 
-            if (provisioning != null && adminTool != null && adminTool.test(player)) {
-                openAdminSelector(playerApi, player, hostUuid);
-                cancel(event);
-                return;
-            }
-
-            // DamagedEvent is registered only to make the NPC wand's
-            // left-click gesture possible. Ordinary players keep the native
-            // CustomNPCs attack behavior; player-facing Straja surfaces open
-            // from InteractEvent instead.
-            if (isDamagedEvent(event)) return;
-
             NpcBinding binding = bindings.values().stream()
                     .filter(candidate -> candidate.hostEntityUuid().equals(hostUuid))
                     .findFirst()
@@ -331,22 +334,16 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
     }
 
     private static boolean isSupportedInteractionEvent(Object event) {
-        String name = event.getClass().getName();
-        return name.equals("noppes.npcs.api.event.NpcEvent$InteractEvent")
-                || name.equals("noppes.npcs.api.event.NpcEvent$DamagedEvent");
+        return event.getClass().getName().equals("noppes.npcs.api.event.NpcEvent$InteractEvent");
     }
 
-    private static boolean isDamagedEvent(Object event) {
-        return event.getClass().getName().endsWith("NpcEvent$DamagedEvent");
-    }
-
-    private static boolean isCustomNpcsEntity(Entity entity) {
-        return entity != null && entity.getClass().getName().startsWith("noppes.npcs.");
+    public static boolean isCustomNpcsEntity(Entity entity) {
+        return entity != null && CustomNpcAdminAttackGate.CUSTOM_NPC_TYPE.equals(
+                String.valueOf(BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType())));
     }
 
     private static Object playerApi(Object event) {
-        String name = event.getClass().getName();
-        Object actor = field(event, name.endsWith("DamagedEvent") ? "source" : "player");
+        Object actor = field(event, "player");
         if (actor == null) return null;
         try {
             return invoke(actor, "getMCEntity") == null ? null : actor;
@@ -1371,13 +1368,6 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                 Class<?> interactEventType = Class.forName(
                         "noppes.npcs.api.event.NpcEvent$InteractEvent");
                 registerInteractionListener(eventBus, interactEventType, listener);
-                try {
-                    Class<?> damagedEventType = Class.forName(
-                            "noppes.npcs.api.event.NpcEvent$DamagedEvent");
-                    registerInteractionListener(eventBus, damagedEventType, listener);
-                } catch (ClassNotFoundException ignored) {
-                    diagnostics.accept("CustomNPCs damaged event is unavailable; admin left-click is disabled");
-                }
                 return new ReflectionBridge(api, true);
             } catch (ReflectiveOperationException | RuntimeException exception) {
                 diagnostics.accept("CustomNPCs API unavailable: "

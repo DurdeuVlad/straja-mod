@@ -137,6 +137,15 @@ public final class NpcPresentationRuntime {
                 && state.customNpcs().handleAdminAttack(player, target);
     }
 
+    public static boolean isCustomNpcTarget(Entity target) {
+        return CustomNpcsNpcSurfaceProvider.isCustomNpcsEntity(target);
+    }
+
+    public static void forgetCustomNpcAdminAttack(UUID playerId) {
+        RuntimeState state = STATE.get();
+        if (state != null) state.customNpcs().forgetAdminAttack(playerId);
+    }
+
     public static RuntimeState require() {
         RuntimeState state = STATE.get();
         if (state == null) throw new IllegalStateException("NPC presentation runtime is not started");

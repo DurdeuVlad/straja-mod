@@ -26,7 +26,7 @@ The target jar contains and exposes:
 | Capability | Verified API evidence | Straja use |
 |---|---|---|
 | NPC interaction | `noppes.npcs.api.event.NpcEvent$InteractEvent`, public `npc` and `player` fields, cancellable event | Resolve the host UUID, open the owned surface, cancel only owned interactions |
-| NPC left-click | NeoForge `AttackEntityEvent` before damage, with `noppes.npcs.api.event.NpcEvent$DamagedEvent` retained as the provider fallback; the target jar exposes public `npc`/`source` fields and a cancellable event | Resolve the operator holding the NPC Wand at the Minecraft input boundary, open the admin selector, and cancel the attack; ordinary player left-clicks retain native behavior |
+| NPC left-click | NeoForge `AttackEntityEvent` before damage; the CustomNPCs post-damage event is too late to protect the target | Resolve the operator holding the NPC Wand and the exact loaded `customnpcs:customnpc` target on the server, open the native admin selector, and cancel the attack; ordinary player left-clicks retain native behavior |
 | GUI | `NpcAPI.createCustomGui(...)`, `IPlayer.showCustomGui(...)`, `ICustomGui` component methods | Render title, body, dialogue choices, quest journal, and action buttons |
 | Action input | `IButton.setOnPress(GuiComponentClicked)` and `IPlayer.getMCEntity()` | Mint a Straja token and submit an `NpcActionRequest`; no command forwarding |
 | Dialogue | `NpcAPI.getDialogs()`, `IDialogHandler`, `IDialog`, `IDialogOption`, `ICustomNpc.setDialog(...)` | API capability recorded; Straja renders canonical dialogue choices in `ICustomGui` and keeps dialogue state authoritative |

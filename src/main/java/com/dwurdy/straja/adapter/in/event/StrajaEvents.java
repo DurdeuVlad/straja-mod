@@ -252,6 +252,7 @@ public final class StrajaEvents {
         // Pending admin-tool state (routes, corners, templates) never survives logout.
         runtime.adminTools().clearState(gateway);
         toolClickHandledAt.remove(player.getUUID());
+        NpcPresentationRuntime.forgetCustomNpcAdminAttack(player.getUUID());
         CustodyVisualSync.sync(runtime.custodyRoleplay().visualStates());
     }
 
@@ -403,7 +404,7 @@ public final class StrajaEvents {
             // adapter receive the target so the NPC wand opens the real
             // CustomNPCs provisioning GUI instead of the legacy chat menu.
             if (heldTool == AdminToolSurface.Tool.NPC_WAND
-                    && isCustomNpcsEntity(event.getTarget())) {
+                    && NpcPresentationRuntime.isCustomNpcTarget(event.getTarget())) {
                 return;
             }
             event.setCanceled(true);
@@ -508,12 +509,9 @@ public final class StrajaEvents {
         if (event.getEntity().level().isClientSide()
                 || !(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) return;
         if (NpcPresentationRuntime.handleCustomNpcAdminAttack(player, event.getTarget())) {
+            toolClickHandledAt.put(player.getUUID(), player.level().getGameTime());
             event.setCanceled(true);
         }
-    }
-
-    private static boolean isCustomNpcsEntity(net.minecraft.world.entity.Entity entity) {
-        return entity != null && entity.getClass().getName().startsWith("noppes.npcs.");
     }
 
     /** Restrained players cannot use items, blocks or entities. */
