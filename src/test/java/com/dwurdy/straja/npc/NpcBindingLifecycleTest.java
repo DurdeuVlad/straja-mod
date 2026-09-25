@@ -68,8 +68,19 @@ class NpcBindingLifecycleTest {
         RecordingProvider provider = new RecordingProvider(NpcProviderId.DEBUG_TEXT);
         NpcSurfaceProviderRegistry providers = new NpcSurfaceProviderRegistry();
         providers.register(provider);
+        NpcContentId actionId = NpcContentId.of("shared-intake");
+        NpcContentProfile sharedProfile = new NpcContentProfile(
+                CONTENT.contentId(), CONTENT.profileId(), 1, "Shared reception", "Canonical welcome",
+                List.of(NpcSurfaceAction.enabled(actionId, "Request admission")),
+                List.of(new NpcSurfaceSnapshot.DialogueNode(
+                        NpcContentId.of("shared-greeting"), "Welcome to Straja.",
+                        List.of(new NpcSurfaceSnapshot.Choice(actionId, "Continue", true)))),
+                List.of(new NpcSurfaceSnapshot.QuestEntry(
+                        NpcContentId.of("shared-intake-quest"), "Register your arrival",
+                        NpcSurfaceSnapshot.QuestState.AVAILABLE)),
+                CONTENT.requiredCapabilities(), CONTENT.optionalCapabilities());
         NpcBindingLifecycleService lifecycle = new NpcBindingLifecycleService(
-                providers, repository, new NpcContentCatalog(List.of(CONTENT)));
+                providers, repository, new NpcContentCatalog(List.of(sharedProfile)));
         NpcBinding first = binding("straja.test.shared-first", UUID.randomUUID().toString());
         NpcBinding second = binding("straja.test.shared-second", UUID.randomUUID().toString());
 
@@ -80,12 +91,15 @@ class NpcBindingLifecycleTest {
         NpcSurfaceSnapshot secondSurface = provider.surfaces.get(second.bindingId());
         assertEquals(first, firstSurface.binding());
         assertEquals(second, secondSurface.binding());
-        assertEquals(CONTENT.contentId(), firstSurface.profileId());
-        assertEquals(firstSurface.title(), secondSurface.title());
-        assertEquals(firstSurface.body(), secondSurface.body());
-        assertEquals(firstSurface.actions(), secondSurface.actions());
-        assertEquals(firstSurface.dialogue(), secondSurface.dialogue());
-        assertEquals(firstSurface.quests(), secondSurface.quests());
+        assertEquals(sharedProfile.contentId(), firstSurface.profileId());
+        assertEquals(sharedProfile.title(), firstSurface.title());
+        assertEquals(sharedProfile.body(), firstSurface.body());
+        assertEquals(sharedProfile.actions(), firstSurface.actions());
+        assertEquals(sharedProfile.actions(), secondSurface.actions());
+        assertEquals(sharedProfile.dialogue(), firstSurface.dialogue());
+        assertEquals(sharedProfile.dialogue(), secondSurface.dialogue());
+        assertEquals(sharedProfile.quests(), firstSurface.quests());
+        assertEquals(sharedProfile.quests(), secondSurface.quests());
         assertEquals(2, repository.store.bindings.size());
     }
 
@@ -115,14 +129,27 @@ class NpcBindingLifecycleTest {
                 providers, repository, new NpcContentCatalog(List.of(revised)));
         NpcBinding currentAssignment = lifecycle.bindings().get(previous.bindingId());
         providers.bind(currentAssignment);
+        NpcContentId staleActionId = NpcContentId.of("stale-action");
+        NpcSurfaceSnapshot staleSurface = new NpcSurfaceSnapshot(
+                currentAssignment, revised.contentId(), "Stale catalog title", "Stale catalog body",
+                List.of(NpcSurfaceAction.enabled(staleActionId, "Old action")),
+                List.of(new NpcSurfaceSnapshot.DialogueNode(
+                        NpcContentId.of("stale-node"), "Old dialogue",
+                        List.of(new NpcSurfaceSnapshot.Choice(staleActionId, "Old choice", true)))),
+                List.of(new NpcSurfaceSnapshot.QuestEntry(
+                        NpcContentId.of("stale-quest"), "Old quest", NpcSurfaceSnapshot.QuestState.LOCKED)),
+                revised.requiredCapabilities(), revised.optionalCapabilities());
+        assertEquals(NpcProviderResult.Status.ACCEPTED, provider.publish(staleSurface).status());
+        assertEquals(staleSurface, provider.surfaces.get(previous.bindingId()));
 
         NpcProviderResult result = lifecycle.reproject(previous.bindingId());
 
         assertEquals(NpcProviderResult.Status.ACCEPTED, result.status());
         assertEquals(currentAssignment, lifecycle.bindings().get(previous.bindingId()));
         assertEquals(currentAssignment, repository.store.bindings.get(previous.bindingId()));
-        assertEquals(1, provider.publishCount);
+        assertEquals(2, provider.publishCount);
         NpcSurfaceSnapshot published = provider.surfaces.get(previous.bindingId());
+        assertFalse(staleSurface.equals(published));
         assertEquals(revised.contentId(), published.profileId());
         assertEquals("Current catalog title", published.title());
         assertEquals("Current catalog dialogue body", published.body());
