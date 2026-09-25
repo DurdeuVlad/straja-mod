@@ -55,6 +55,8 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             NpcCapability.ACTION_INPUT,
             NpcCapability.PORTRAITS,
             NpcCapability.RICH_TEXT));
+    private static final int FALLBACK_PROFILE_PAGE_SIZE = 5;
+    private static final int ADMIN_GUI_HEIGHT = 240;
 
     private final NpcSurfaceActionUseCase actions;
     private final NpcSurfaceActionTokenIssuer tokenIssuer;
@@ -417,15 +419,19 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
 
     /** Admin-only provisioning surface: select or replace the profile bound to this host NPC. */
     private void openAdminSelector(Object playerApi, ServerPlayer player, String hostUuid) {
+        openAdminSelector(playerApi, player, hostUuid, 0);
+    }
+
+    private void openAdminSelector(Object playerApi, ServerPlayer player, String hostUuid, int requestedPage) {
         Object gui = invoke(
                 bridge.api(),
                 "createCustomGui",
                 Math.floorMod(("provision:" + hostUuid).hashCode(), 20_000) + 20_000,
                 421,
-                320,
+                ADMIN_GUI_HEIGHT,
                 false,
                 playerApi);
-        invoke(gui, "addLabel", 1, "Straja NPC provisioning", 12, 8, 396, 20);
+        invoke(gui, "addLabel", 1, "Target NPC: " + hostUuid, 12, 8, 396, 20);
 
         String displayedRevision = provisioning.assignmentRevision(hostUuid);
         var assignments = provisioning.assignments(providerId(), hostUuid);
@@ -450,7 +456,8 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
         Object profileHost = gui;
         int profileX = 12;
         int profileWidth = 396;
-        int y = 58;
+        int y = duplicateAssignments ? 76 : 58;
+        boolean scrolling = false;
         try {
             Object scrollingPanel = invoke(gui, "getScrollingPanel");
             invoke(scrollingPanel, "init", 12, duplicateAssignments ? 76 : 58, 396,
@@ -459,12 +466,17 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             profileX = 0;
             profileWidth = 396;
             y = 0;
+            scrolling = true;
         } catch (RuntimeException exception) {
             diagnostics.accept("CustomNPCs provisioning scroll unavailable; using bounded fallback layout");
         }
 
+        var options = provisioning.profiles(providerId());
+        int pageSize = duplicateAssignments ? FALLBACK_PROFILE_PAGE_SIZE - 1 : FALLBACK_PROFILE_PAGE_SIZE;
+        int page = boundedPage(requestedPage, options.size(), pageSize);
+        var visibleOptions = scrolling ? options : page(options, page, pageSize);
         int buttonId = 2_000;
-        for (NpcProvisioningUseCase.ProfileOption option : provisioning.profiles(providerId())) {
+        for (NpcProvisioningUseCase.ProfileOption option : visibleOptions) {
             boolean selected = current.map(assignment -> assignment.profileId().equals(option.profileId()))
                     .orElse(false);
             String label = profileOptionLabel(option, selected, recoveryPending);
@@ -484,11 +496,19 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             }
             y += 25;
         }
+        if (!scrolling && options.size() > pageSize) {
+            Object previous = invoke(gui, "addButton", 9_010, "Previous", 12, 185, 120, 22);
+            Object next = invoke(gui, "addButton", 9_011, "Next", 276, 185, 132, 22);
+            invoke(gui, "addLabel", 9_012, "Page " + (page + 1) + " / "
+                    + (1 + (options.size() - 1) / pageSize), 138, 185, 132, 22);
+            invoke(previous, "setEnabled", page > 0);
+            invoke(next, "setEnabled", (page + 1) * pageSize < options.size());
+            setAdminSelectorPageHandler(previous, gui, playerApi, player, hostUuid, page - 1);
+            setAdminSelectorPageHandler(next, gui, playerApi, player, hostUuid, page + 1);
+        }
 
         if (current.isPresent()) {
-            // Keep this below the compact profile panel; the lower rows of the
-            // logical 320px GUI are outside a normal 240px client viewport
-            // after CustomNPCs applies its negative top offset.
+            // Keep these actions below the profile panel and inside the 240px GUI.
             Object status = invoke(gui, "addButton", 9_000, "Status", 12, 214, 120, 22);
             setAdminStatusHandler(status, gui, playerApi, player, hostUuid);
             if (!recoveryPending && !duplicateAssignments) {
@@ -509,35 +529,73 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
         invoke(playerApi, "showCustomGui", gui);
     }
 
+    private void setAdminSelectorPageHandler(Object button, Object gui, Object fallbackPlayerApi,
+            ServerPlayer fallbackPlayer, String hostUuid, int page) {
+        setGuiCallback(button, args -> {
+            Object clickedGui = callbackGui(args, gui);
+            Object playerApi = guiPlayer(clickedGui, fallbackPlayerApi);
+            ServerPlayer player = serverPlayer(playerApi, fallbackPlayer);
+            if (!isAdminCallbackAuthorized(clickedGui, playerApi, player)) {
+                showAuthorizationResult(clickedGui, player);
+                return;
+            }
+            openAdminSelector(playerApi, player, hostUuid, page);
+        });
+    }
+
+    private static int boundedPage(int requested, int itemCount, int pageSize) {
+        return Math.max(0, Math.min(requested, Math.max(0, itemCount - 1) / pageSize));
+    }
+
+    static <T> java.util.List<T> page(java.util.List<T> items, int requested, int pageSize) {
+        if (pageSize < 1) throw new IllegalArgumentException("pageSize");
+        int index = boundedPage(requested, items.size(), pageSize) * pageSize;
+        return items.subList(index, Math.min(items.size(), index + pageSize));
+    }
+
     private void openAdminDuplicateCleanup(
             Object playerApi,
             ServerPlayer player,
             String hostUuid,
             String expectedRevision) {
+        openAdminDuplicateCleanup(playerApi, player, hostUuid, expectedRevision, 0);
+    }
+
+    private void openAdminDuplicateCleanup(
+            Object playerApi,
+            ServerPlayer player,
+            String hostUuid,
+            String expectedRevision,
+            int requestedPage) {
         var assignments = provisioning.assignments(providerId(), hostUuid);
         Object gui = invoke(
                 bridge.api(), "createCustomGui",
                 Math.floorMod(("duplicates:" + hostUuid).hashCode(), 20_000) + 120_000,
                 421,
-                320,
+                ADMIN_GUI_HEIGHT,
                 false,
                 playerApi);
-        invoke(gui, "addLabel", 1, "Resolve duplicate NPC bindings", 12, 8, 396, 20);
+        invoke(gui, "addLabel", 1, "Duplicate bindings for NPC " + hostUuid, 12, 8, 396, 20);
         invoke(gui, "addLabel", 2,
                 "Select the exact durable binding to unassign. Other bindings remain untouched.",
                 12, 32, 396, 32);
         Object host = gui;
         int y = 70;
+        boolean scrolling = false;
         try {
             Object scrollingPanel = invoke(gui, "getScrollingPanel");
             invoke(scrollingPanel, "init", 12, 70, 396, 150);
             host = scrollingPanel;
             y = 0;
+            scrolling = true;
         } catch (RuntimeException exception) {
             diagnostics.accept("CustomNPCs duplicate-binding scroll unavailable; using bounded fallback layout");
         }
+        int pageSize = FALLBACK_PROFILE_PAGE_SIZE - 1;
+        int page = boundedPage(requestedPage, assignments.size(), pageSize);
+        var visibleAssignments = scrolling ? assignments : page(assignments, page, pageSize);
         int buttonId = 12_000;
-        for (NpcProvisioningUseCase.AssignmentView assignment : assignments) {
+        for (NpcProvisioningUseCase.AssignmentView assignment : visibleAssignments) {
             Object button = invoke(host, "addButton", buttonId++,
                     assignment.profileId() + " · " + assignment.bindingId(),
                     host == gui ? 12 : 0, y, 396, 22);
@@ -547,9 +605,33 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                     assignment.bindingId(), expectedRevision);
             y += 25;
         }
-        Object back = invoke(gui, "addButton", 12_900, "Back", 218, 240, 190, 22);
+        if (!scrolling && assignments.size() > pageSize) {
+            Object previous = invoke(gui, "addButton", 12_901, "Previous", 12, 185, 120, 22);
+            Object next = invoke(gui, "addButton", 12_902, "Next", 276, 185, 132, 22);
+            invoke(gui, "addLabel", 12_903, "Page " + (page + 1) + " / "
+                    + (1 + (assignments.size() - 1) / pageSize), 138, 185, 132, 22);
+            invoke(previous, "setEnabled", page > 0);
+            invoke(next, "setEnabled", (page + 1) * pageSize < assignments.size());
+            setAdminDuplicatePageHandler(previous, gui, playerApi, player, hostUuid, expectedRevision, page - 1);
+            setAdminDuplicatePageHandler(next, gui, playerApi, player, hostUuid, expectedRevision, page + 1);
+        }
+        Object back = invoke(gui, "addButton", 12_900, "Back", 218, 214, 190, 22);
         setAdminCancelHandler(back, gui, playerApi, player, hostUuid);
         invoke(playerApi, "showCustomGui", gui);
+    }
+
+    private void setAdminDuplicatePageHandler(Object button, Object gui, Object fallbackPlayerApi,
+            ServerPlayer fallbackPlayer, String hostUuid, String expectedRevision, int page) {
+        setGuiCallback(button, args -> {
+            Object clickedGui = callbackGui(args, gui);
+            Object playerApi = guiPlayer(clickedGui, fallbackPlayerApi);
+            ServerPlayer player = serverPlayer(playerApi, fallbackPlayer);
+            if (!isAdminCallbackAuthorized(clickedGui, playerApi, player)) {
+                showAuthorizationResult(clickedGui, player);
+                return;
+            }
+            openAdminDuplicateCleanup(playerApi, player, hostUuid, expectedRevision, page);
+        });
     }
 
     private void openAdminConfirmation(
@@ -563,31 +645,31 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                 "createCustomGui",
                 Math.floorMod(("confirm:" + hostUuid + option.profileId()).hashCode(), 20_000) + 40_000,
                 421,
-                320,
+                ADMIN_GUI_HEIGHT,
                 false,
                 playerApi);
-        invoke(gui, "addLabel", 1, "Confirm NPC profile", 12, 8, 396, 20);
+        invoke(gui, "addLabel", 1, "Confirm profile for NPC " + hostUuid, 12, 8, 396, 20);
         Object profileLabel = invoke(
                 gui, "addLabel", 2,
                 option.title() + " · " + option.profileId() + " · " + option.roleId(),
                 12, 32, 396, 20);
         invoke(profileLabel, "setHoverText", option.summary());
-        // Keep the action row inside the 240px client viewport. CustomNPCs
-        // reports the logical GUI as 421x320, but a normal client viewport
-        // opens it with a negative top offset; a y=220 button is therefore
-        // not reliably reachable by a player-facing authoring tool.
+        String previousProfile = provisioning.current(providerId(), hostUuid)
+                .map(NpcProvisioningUseCase.AssignmentView::profileId).orElse("unassigned");
+        invoke(gui, "addLabel", 4, "Replacing: " + previousProfile, 12, 54, 396, 20);
+        // Keep the action row inside the 240px GUI while the references scroll.
         Object referenceHost = gui;
         int referenceX = 12;
-        int referenceY = 58;
+        int referenceY = 76;
         try {
             Object scrollingPanel = invoke(gui, "getScrollingPanel");
-            invoke(scrollingPanel, "init", 12, 58, 396, 78);
+            invoke(scrollingPanel, "init", 12, 76, 396, 60);
             referenceHost = scrollingPanel;
             referenceX = 0;
             referenceY = 0;
         } catch (RuntimeException exception) {
             diagnostics.accept("CustomNPCs confirmation scroll unavailable; using bounded reference summary");
-            Object summary = invoke(gui, "addTextArea", 3, 12, 58, 396, 76);
+            Object summary = invoke(gui, "addTextArea", 3, 12, 76, 396, 60);
             invoke(summary, "setText", String.join("\n", profileReferenceRows(option)));
             invoke(summary, "setHoverText", (Object) profileReferenceRows(option).toArray(String[]::new));
             invoke(summary, "setEnabled", false);
@@ -671,16 +753,21 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                 "createCustomGui",
                 Math.floorMod(("unassign:" + hostUuid).hashCode(), 20_000) + 60_000,
                 421,
-                320,
+                ADMIN_GUI_HEIGHT,
                 false,
                 playerApi);
         invoke(gui, "addLabel", 1,
-                recoveryPending ? "Cancel pending NPC assignment" : "Remove Straja profile",
+                (recoveryPending ? "Cancel pending for NPC " : "Unassign NPC ") + hostUuid,
                 12, 8, 396, 20);
-        invoke(gui, "addLabel", 2, recoveryPending
+        String profileId = provisioning.assignments(providerId(), hostUuid).stream()
+                .filter(assignment -> assignment.bindingId().equals(bindingId))
+                .map(NpcProvisioningUseCase.AssignmentView::profileId)
+                .findFirst().orElse("no longer assigned");
+        invoke(gui, "addLabel", 2, "Profile: " + profileId, 12, 36, 396, 20);
+        invoke(gui, "addLabel", 3, recoveryPending
                 ? "Straja will remove this assignment only after the provider confirms it is unbound."
                 : "This NPC will return to native CustomNPCs behavior.",
-                12, 38, 396, 38);
+                12, 62, 396, 38);
         Object confirm = invoke(gui, "addButton", 9_200,
                 recoveryPending ? "Confirm cancellation" : "Unassign", 12, 150, 190, 22);
         Object cancel = invoke(gui, "addButton", 9_201, "Cancel", 218, 150, 190, 22);
@@ -701,9 +788,9 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
         Object gui = invoke(
                 bridge.api(), "createCustomGui",
                 Math.floorMod(("status:" + hostUuid).hashCode(), 20_000) + 80_000,
-                421, 320, false, playerApi);
+                421, ADMIN_GUI_HEIGHT, false, playerApi);
         invoke(gui, "addLabel", 1, "NPC assignment status", 12, 8, 396, 20);
-        Object details = invoke(gui, "addTextArea", 2, 12, 34, 396, 190);
+        Object details = invoke(gui, "addTextArea", 2, 12, 34, 396, 172);
         String projectionError = status.lastProjectionError().isBlank()
                 ? "none" : status.lastProjectionError();
         String pending = status.pendingOperation().isBlank() ? "none" : status.pendingOperation();
@@ -721,8 +808,8 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                 + "\nLast projection error: " + projectionError;
         invoke(details, "setText", text);
         invoke(details, "setEnabled", false);
-        Object audit = invoke(gui, "addButton", 9_100, "Audit history", 12, 240, 190, 22);
-        Object back = invoke(gui, "addButton", 9_101, "Back", 218, 240, 190, 22);
+        Object audit = invoke(gui, "addButton", 9_100, "Audit history", 12, 214, 190, 22);
+        Object back = invoke(gui, "addButton", 9_101, "Back", 218, 214, 190, 22);
         setAdminAuditHandler(audit, gui, playerApi, player, hostUuid);
         setAdminCancelHandler(back, gui, playerApi, player, hostUuid);
         invoke(playerApi, "showCustomGui", gui);
@@ -736,9 +823,9 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
         Object gui = invoke(
                 bridge.api(), "createCustomGui",
                 Math.floorMod(("audit:" + hostUuid).hashCode(), 20_000) + 100_000,
-                421, 320, false, playerApi);
+                421, ADMIN_GUI_HEIGHT, false, playerApi);
         invoke(gui, "addLabel", 1, "Provisioning audit", 12, 8, 396, 20);
-        Object details = invoke(gui, "addTextArea", 2, 12, 34, 396, 190);
+        Object details = invoke(gui, "addTextArea", 2, 12, 34, 396, 172);
         String history = events.isEmpty() ? "No provisioning events recorded."
                 : events.stream().skip(Math.max(0, events.size() - 10L))
                         .map(event -> formatTimestamp(event.occurredAtEpochMillis())
@@ -750,12 +837,12 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                         .collect(java.util.stream.Collectors.joining("\n"));
         invoke(details, "setText", history);
         invoke(details, "setEnabled", false);
-        Object back = invoke(gui, "addButton", 9_102, "Back to status", 12, 240, 190, 22);
+        Object back = invoke(gui, "addButton", 9_102, "Back to status", 12, 214, 190, 22);
         setGuiCallback(back, args -> {
             Object clickedGui = callbackGui(args, gui);
             Object currentPlayerApi = guiPlayer(clickedGui, playerApi);
             ServerPlayer currentPlayer = serverPlayer(currentPlayerApi, player);
-            if (!isAdminToolAuthorized(currentPlayer)) {
+            if (!isAdminCallbackAuthorized(clickedGui, currentPlayerApi, currentPlayer)) {
                 showAuthorizationResult(clickedGui, currentPlayer);
                 return;
             }
@@ -774,7 +861,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             Object clickedGui = callbackGui(args, parentGui);
             Object playerApi = guiPlayer(clickedGui, fallbackPlayerApi);
             ServerPlayer player = serverPlayer(playerApi, fallbackPlayer);
-            if (!isAdminToolAuthorized(player)) {
+            if (!isAdminCallbackAuthorized(clickedGui, playerApi, player)) {
                 showAuthorizationResult(clickedGui, player);
                 return;
             }
@@ -792,7 +879,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             Object clickedGui = callbackGui(args, parentGui);
             Object playerApi = guiPlayer(clickedGui, fallbackPlayerApi);
             ServerPlayer player = serverPlayer(playerApi, fallbackPlayer);
-            if (!isAdminToolAuthorized(player)) {
+            if (!isAdminCallbackAuthorized(clickedGui, playerApi, player)) {
                 showAuthorizationResult(clickedGui, player);
                 return;
             }
@@ -810,7 +897,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             Object clickedGui = callbackGui(args, parentGui);
             Object playerApi = guiPlayer(clickedGui, fallbackPlayerApi);
             ServerPlayer player = serverPlayer(playerApi, fallbackPlayer);
-            if (!isAdminToolAuthorized(player)) {
+            if (!isAdminCallbackAuthorized(clickedGui, playerApi, player)) {
                 showAuthorizationResult(clickedGui, player);
                 return;
             }
@@ -841,7 +928,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             Object clickedGui = callbackGui(args, parentGui);
             Object playerApi = guiPlayer(clickedGui, fallbackPlayerApi);
             ServerPlayer player = serverPlayer(playerApi, fallbackPlayer);
-            if (!isAdminToolAuthorized(player)) {
+            if (!isAdminCallbackAuthorized(clickedGui, playerApi, player)) {
                 showAuthorizationResult(clickedGui, player);
                 return;
             }
@@ -860,7 +947,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             Object clickedGui = callbackGui(args, parentGui);
             Object playerApi = guiPlayer(clickedGui, fallbackPlayerApi);
             ServerPlayer player = serverPlayer(playerApi, fallbackPlayer);
-            if (!isAdminToolAuthorized(player)) {
+            if (!isAdminCallbackAuthorized(clickedGui, playerApi, player)) {
                 showAuthorizationResult(clickedGui, player);
                 return;
             }
@@ -884,7 +971,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             Object clickedGui = callbackGui(args, parentGui);
             Object playerApi = guiPlayer(clickedGui, fallbackPlayerApi);
             ServerPlayer player = serverPlayer(playerApi, fallbackPlayer);
-            if (!isAdminToolAuthorized(player)) {
+            if (!isAdminCallbackAuthorized(clickedGui, playerApi, player)) {
                 showAuthorizationResult(clickedGui, player);
                 return;
             }
@@ -904,7 +991,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             Object clickedGui = callbackGui(args, parentGui);
             Object playerApi = guiPlayer(clickedGui, fallbackPlayerApi);
             ServerPlayer player = serverPlayer(playerApi, fallbackPlayer);
-            if (!isAdminToolAuthorized(player)) {
+            if (!isAdminCallbackAuthorized(clickedGui, playerApi, player)) {
                 showAuthorizationResult(clickedGui, player);
                 return;
             }
@@ -925,7 +1012,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             Object clickedGui = callbackGui(args, parentGui);
             Object playerApi = guiPlayer(clickedGui, fallbackPlayerApi);
             ServerPlayer player = serverPlayer(playerApi, fallbackPlayer);
-            if (!isAdminToolAuthorized(player)) {
+            if (!isAdminCallbackAuthorized(clickedGui, playerApi, player)) {
                 showAuthorizationResult(clickedGui, player);
                 return;
             }
@@ -957,7 +1044,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             Object clickedGui = callbackGui(args, parentGui);
             Object playerApi = guiPlayer(clickedGui, fallbackPlayerApi);
             ServerPlayer player = serverPlayer(playerApi, fallbackPlayer);
-            if (!isAdminToolAuthorized(player)) {
+            if (!isAdminCallbackAuthorized(clickedGui, playerApi, player)) {
                 showAuthorizationResult(clickedGui, player);
                 return;
             }
@@ -981,7 +1068,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             Object clickedGui = callbackGui(args, parentGui);
             Object playerApi = guiPlayer(clickedGui, fallbackPlayerApi);
             ServerPlayer player = serverPlayer(playerApi, fallbackPlayer);
-            if (!isAdminToolAuthorized(player)) {
+            if (!isAdminCallbackAuthorized(clickedGui, playerApi, player)) {
                 showAuthorizationResult(clickedGui, player);
                 return;
             }
@@ -1023,14 +1110,28 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
     private static ServerPlayer serverPlayer(Object playerApi, ServerPlayer fallback) {
         try {
             Object raw = invoke(playerApi, "getMCEntity");
-            return raw instanceof ServerPlayer player ? player : fallback;
+            return raw instanceof ServerPlayer player && player == fallback ? player : null;
         } catch (RuntimeException ignored) {
-            return fallback;
+            return null;
         }
     }
 
-    private boolean isAdminToolAuthorized(ServerPlayer player) {
-        return player != null && adminTool != null && adminTool.test(player);
+    private boolean isAdminCallbackAuthorized(Object gui, Object playerApi, ServerPlayer player) {
+        return player != null
+                && player.getServer() != null
+                && player.getServer().getPlayerList().getPlayer(player.getUUID()) == player
+                && adminTool != null
+                && adminTool.test(player)
+                && isCurrentAdminGui(playerApi, gui);
+    }
+
+    static boolean isCurrentAdminGui(Object playerApi, Object gui) {
+        if (playerApi == null || gui == null) return false;
+        try {
+            return invoke(playerApi, "getCustomGui") == gui;
+        } catch (RuntimeException ignored) {
+            return false;
+        }
     }
 
     private static NpcProvisioningUseCase.ProvisioningResult provisioningResult(NpcProviderResult result) {
@@ -1050,6 +1151,13 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
     }
 
     private void showAuthorizationResult(Object gui, ServerPlayer player) {
+        if (player == null || player.getServer() == null
+                || player.getServer().getPlayerList().getPlayer(player.getUUID()) != player) return;
+        try {
+            if (!isCurrentAdminGui(playerApi(player), gui)) return;
+        } catch (RuntimeException ignored) {
+            return;
+        }
         showProvisioningResult(gui, player, NpcProvisioningUseCase.ProvisioningResult.rejected(
                 "admin-authorization-required",
                 "NPC Tool permission and held wand are required for this action."));

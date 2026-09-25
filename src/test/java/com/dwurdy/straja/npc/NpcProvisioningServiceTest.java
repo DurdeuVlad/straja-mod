@@ -174,6 +174,21 @@ class NpcProvisioningServiceTest {
     }
 
     @Test
+    void catalogRejectsPublicIdThatMatchesAnotherProfilesInternalId() {
+        NpcContentProfile collidingContent = new NpcContentProfile(
+                NpcContentId.of(FIRST_PUBLIC.value()), SECOND_PUBLIC, 1,
+                "Different NPC", "Different content", List.of(), List.of(), List.of(),
+                Set.of(), Set.of());
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> new NpcContentCatalog(List.of(
+                        profile(FIRST, FIRST_PUBLIC, "Reception desk", "receptionist",
+                                Set.of(NpcCapability.TEXT_MIRROR)),
+                        collidingContent)));
+        assertTrue(error.getMessage().contains(FIRST_PUBLIC.value()));
+    }
+
+    @Test
     void assignmentReplacementAndUnassignmentAreDurableAndAudited() {
         Fixture fixture = fixture(false);
 
@@ -293,6 +308,12 @@ class NpcProvisioningServiceTest {
         assertEquals(assignedRevision, restartedService.assignmentRevision("npc-one"));
         assertEquals(FIRST_PUBLIC.value(), restartedService.current(PROVIDER, "npc-one")
                 .orElseThrow().profileId());
+        NpcProvisioningUseCase.ProvisioningResult staleUnassign = restartedService
+                .unassignIfRevisionMatches(PROVIDER, "npc-one", "stale-admin", originalRevision);
+        assertEquals(NpcProvisioningUseCase.Status.REJECTED, staleUnassign.status());
+        assertEquals("stale-assignment", staleUnassign.code());
+        assertEquals(1, fixture.repository.store.bindings.size());
+        assertEquals(FIRST_PUBLIC, fixture.repository.store.bindings.values().iterator().next().profileId());
     }
 
     @Test
@@ -414,8 +435,15 @@ class NpcProvisioningServiceTest {
                         PROVIDER, "npc-one", "admin-one", SECOND.value(), Optional.empty(), oldProviderRevision);
         assertEquals(NpcProvisioningUseCase.Status.REJECTED, staleOldProviderConfirmation.status());
         assertEquals("stale-assignment", staleOldProviderConfirmation.code());
+        NpcProvisioningUseCase.ProvisioningResult staleOldProviderUnassign = fixture.provisioning
+                .unassignIfRevisionMatches(PROVIDER, "npc-one", "admin-one", oldProviderRevision);
+        assertEquals(NpcProvisioningUseCase.Status.REJECTED, staleOldProviderUnassign.status());
+        assertEquals("stale-assignment", staleOldProviderUnassign.code());
         assertEquals(FIRST_PUBLIC.value(), fixture.provisioning.current(secondProviderId, "npc-one")
                 .orElseThrow().profileId());
+        assertEquals(secondProviderId, fixture.repository.store.bindings.get(bindingId).providerId());
+        assertTrue(fixture.provider.bindings.isEmpty());
+        assertEquals(1, secondProvider.bindings.size());
     }
 
     @Test
