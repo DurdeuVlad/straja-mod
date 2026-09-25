@@ -5,6 +5,12 @@ on:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+'
   workflow_dispatch:
+    inputs:
+      final_mc_acceptance:
+        description: Run the real CustomNPCs server/client acceptance only after issues #128-#134 and #149-#153 are complete.
+        required: true
+        type: boolean
+        default: false
 
 concurrency:
   group: rc-${{ github.ref }}
@@ -36,6 +42,9 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
 
+      - name: Make Gradle wrapper executable
+        run: chmod +x gradlew
+
       - name: Validate release tag contract
         if: startsWith(github.ref, 'refs/tags/')
         run: python3 tools/ci/release_contract.py version --properties gradle.properties --tag "$GITHUB_REF_NAME"
@@ -64,15 +73,22 @@ jobs:
           --version "$(grep -Po '(?<=^mod_version=).*' gradle.properties)"
           --out build/release/sbom.json
 
+      - name: Prepare staged artifact layout
+        run: |
+          set -euo pipefail
+          mkdir -p staged
+          cp build/libs/straja-*.jar staged/
+          cp build/release/straja-*.sha256 staged/
+          cp build/release/straja-*.sha512 staged/
+          if [ -f build/release/sbom.json ]; then
+            cp build/release/sbom.json staged/
+          fi
+
       - name: Upload staged artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: straja-jar
-          path: |
-            build/libs/straja-*.jar
-            build/release/straja-*.jar.sha256
-            build/release/straja-*.jar.sha512
-            build/release/sbom.json
+          path: staged/
           if-no-files-found: error
           overwrite: true
           retention-days: 14
@@ -95,6 +111,9 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x gradlew
 
       - name: Run NeoForge GameTests
         run: |
@@ -138,7 +157,7 @@ jobs:
           java-version: '21'
 
       - name: Download staged artifact
-        uses: actions/download-artifact@fdfa46a5c1cdeed02ba81aa0a28576771a4ba60f # v7.0.0
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: straja-jar
           path: staged/
@@ -168,7 +187,14 @@ jobs:
   foreign-npc-advisory:
     name: Advisory — foreign-npc
     # Advisory profile: reports pass/fail/blocked but never blocks release.
-    needs: package
+    # It starts a disposable Minecraft server with the foreign-NPC provider,
+    # so defer it with the other live acceptance scenarios until preflight.
+    needs: [package, npc-final-acceptance-preflight]
+    if: >-
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
+      || (github.event_name == 'workflow_dispatch'
+          && inputs.final_mc_acceptance
+          && github.ref == 'refs/heads/main')
     continue-on-error: true
     runs-on: ubuntu-24.04
     timeout-minutes: 25
@@ -185,7 +211,7 @@ jobs:
           java-version: '21'
 
       - name: Download staged artifact
-        uses: actions/download-artifact@fdfa46a5c1cdeed02ba81aa0a28576771a4ba60f # v7.0.0
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: straja-jar
           path: staged/
@@ -233,7 +259,7 @@ jobs:
           java-version: '21'
 
       - name: Download staged artifact
-        uses: actions/download-artifact@fdfa46a5c1cdeed02ba81aa0a28576771a4ba60f # v7.0.0
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: straja-jar
           path: staged/
@@ -282,7 +308,7 @@ jobs:
           java-version: '21'
 
       - name: Download staged artifact
-        uses: actions/download-artifact@fdfa46a5c1cdeed02ba81aa0a28576771a4ba60f # v7.0.0
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: straja-jar
           path: staged/
@@ -341,7 +367,7 @@ jobs:
           sudo apt-get install -y -qq xvfb x11-utils mesa-utils libgl1-mesa-dri libegl1 libgl1
 
       - name: Download staged artifact
-        uses: actions/download-artifact@fdfa46a5c1cdeed02ba81aa0a28576771a4ba60f # v7.0.0
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: straja-jar
           path: staged/
@@ -369,13 +395,126 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  npc-final-acceptance-preflight:
+    name: Verify NPC implementation issues are complete
+    if: >-
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
+      || (github.event_name == 'workflow_dispatch'
+          && inputs.final_mc_acceptance
+          && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      issues: read
+    steps:
+      - name: Require every non-deferred implementation issue to be closed
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+          import urllib.request
+
+          repo = os.environ["GITHUB_REPOSITORY"]
+          token = os.environ["GITHUB_TOKEN"]
+          required = [*range(128, 135), *range(149, 154)]
+          open_issues = []
+          for number in required:
+              request = urllib.request.Request(
+                  f"https://api.github.com/repos/{repo}/issues/{number}",
+                  headers={
+                      "Accept": "application/vnd.github+json",
+                      "Authorization": f"Bearer {token}",
+                      "X-GitHub-Api-Version": "2022-11-28",
+                  },
+              )
+              with urllib.request.urlopen(request, timeout=20) as response:
+                  issue = json.load(response)
+              print(f"#{number}: {issue['state']} — {issue['title']}")
+              if issue["state"] != "closed":
+                  open_issues.append(number)
+          if open_issues:
+              print("::error::Final live acceptance is deferred; implementation issues remain open: "
+                    + ", ".join(f"#{number}" for number in open_issues))
+              sys.exit(1)
+          PY
+
+  customnpcs-client-ui:
+    name: Advisory — CustomNPCs client UI
+    # CI-008b: the provider boundary needs a real CustomNPCs client and
+    # server, not the combined profile used by the provider-neutral UI suite.
+    # Keep this advisory so unavailable hosted graphics remain explicit rather
+    # than blocking publication, while profiles-gate still requires a report.
+    needs: [package, npc-final-acceptance-preflight]
+    continue-on-error: true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version: '20'
+
+      - name: Install virtual display packages
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb x11-utils mesa-utils libgl1-mesa-dri libegl1 libgl1
+
+      - name: Download staged artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: straja-jar
+          path: staged/
+
+      - name: Run CustomNPCs client UI scenario
+        run: |
+          JAR=$(ls staged/straja-*.jar | head -1)
+          EXPECTED=$(cut -d' ' -f1 staged/$(basename "$JAR").sha256)
+          python3 tools/ci/client_ui.py run \
+            --manifest tools/ci/client_manifest.json \
+            --server-manifest tools/ci/server_manifest.json \
+            --profile foreign-npc \
+            --jar "$JAR" --jar-sha256 "$EXPECTED" \
+            --scenarios-dir tools/ci/client_scenarios/customnpcs \
+            --work-root "$RUNNER_TEMP/straja-customnpcs-client" \
+            --artifacts-dir customnpcs-client-artifacts \
+            --dep-cache "$RUNNER_TEMP/straja-dep-cache"
+
+      - name: Upload CustomNPCs client UI evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: customnpcs-client-ui
+          path: customnpcs-client-artifacts/
+          if-no-files-found: error
+          retention-days: 14
+
   profiles-gate:
     name: Server profiles gate
     # Explicit aggregate: every blocking profile must have passed; the
     # advisory report must exist and carry an explicit status — a missing
     # or silent advisory report fails the gate.
-    needs: [package, game-tests, server-profiles, foreign-npc-advisory, rc-scenarios, rc-performance, client-ui-advisory]
-    if: always()
+    needs: [package, game-tests, server-profiles, foreign-npc-advisory, rc-scenarios, rc-performance, client-ui-advisory, npc-final-acceptance-preflight, customnpcs-client-ui]
+    if: >-
+      always()
+      && ((github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
+          || (github.event_name == 'workflow_dispatch'
+              && inputs.final_mc_acceptance
+              && github.ref == 'refs/heads/main'))
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -385,17 +524,24 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Download advisory report
-        uses: actions/download-artifact@fdfa46a5c1cdeed02ba81aa0a28576771a4ba60f # v7.0.0
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: server-profile-foreign-npc
           path: advisory/
         continue-on-error: true
 
       - name: Download client UI report
-        uses: actions/download-artifact@fdfa46a5c1cdeed02ba81aa0a28576771a4ba60f # v7.0.0
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: client-ui
           path: client-ui/
+        continue-on-error: true
+
+      - name: Download CustomNPCs client UI report
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: customnpcs-client-ui
+          path: customnpcs-client-ui/
         continue-on-error: true
 
       - name: Enforce blocking results
@@ -405,8 +551,9 @@ jobs:
           PROFILES: ${{ needs.server-profiles.result }}
           SCENARIOS: ${{ needs.rc-scenarios.result }}
           PERF: ${{ needs.rc-performance.result }}
+          FINAL_PREFLIGHT: ${{ needs.npc-final-acceptance-preflight.result }}
         run: |
-          for pair in "package=$PKG" "game-tests=$GT" "server-profiles=$PROFILES" "rc-scenarios=$SCENARIOS" "rc-performance=$PERF"; do
+          for pair in "package=$PKG" "game-tests=$GT" "server-profiles=$PROFILES" "rc-scenarios=$SCENARIOS" "rc-performance=$PERF" "npc-final-acceptance-preflight=$FINAL_PREFLIGHT"; do
             name="${pair%%=*}"; res="${pair#*=}"
             echo "$name: $res"
             if [ "$res" != "success" ]; then
@@ -425,6 +572,12 @@ jobs:
           VERDICT=$(python3 -c "import json;print(json.load(open('client-ui/client-report.json'))['verdict'])")
           echo "client-ui advisory verdict: $VERDICT"
           case "$VERDICT" in pass|fail|blocked) ;; *) exit 1;; esac
+          NPC_VERDICT=$(python3 -c "import json;print(json.load(open('customnpcs-client-ui/client-report.json'))['verdict'])")
+          echo "CustomNPCs client-ui advisory verdict: $NPC_VERDICT"
+          if [ "$NPC_VERDICT" != "pass" ]; then
+            echo "::error::final CustomNPCs acceptance must pass, got '$NPC_VERDICT'"
+            exit 1
+          fi
 
   publish-beta:
     name: Publish beta (RC evidence ledger)
@@ -449,20 +602,20 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Download staged artifact
-        uses: actions/download-artifact@fdfa46a5c1cdeed02ba81aa0a28576771a4ba60f1 # v7.0.0
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: straja-jar
           path: staged/
 
       - name: Download foreign-NPC advisory report
-        uses: actions/download-artifact@fdfa46a5c1cdeed02ba81aa0a28576771a4ba60f1 # v7.0.0
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: server-profile-foreign-npc
           path: advisory/
         continue-on-error: true
 
       - name: Download client UI advisory report
-        uses: actions/download-artifact@fdfa46a5c1cdeed02ba81aa0a28576771a4ba60f1 # v7.0.0
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: client-ui
           path: advisory/

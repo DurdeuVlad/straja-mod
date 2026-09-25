@@ -1,0 +1,133 @@
+{
+  "name": "customnpcs-jailer-custody",
+  "group": "client-customnpcs",
+  "timeoutSeconds": 300,
+  "observable": "a real CustomNPCs entity is bound to the Straja jailer surface, the native CustomNPCs GuiCustom screen opens, a real mouse click dispatches the custody-status action, and the same bound surface opens again after a client rejoin",
+  "failure": "CustomNPCs is absent, the entity cannot be bound or interacted with, the native GUI does not open, the click does not reach the canonical custody service, or the surface is unavailable after rejoin",
+  "prerequisites": [
+    "foreign-npc server profile running",
+    "client joined as ci_straja",
+    "CustomNPCs 1.21.1.20251230 present on server and client"
+  ],
+  "steps": [
+    {
+      "name": "spawn-custom-jailer",
+      "type": "rcon",
+      "setup": true,
+      "command": "execute as ci_straja at @s run noppes npc \"Jailer\" create"
+    },
+    {
+      "name": "customnpc-visible",
+      "type": "mct",
+      "args": ["entity", "list", "--radius", "12"],
+      "expect": [{"rawRegex": "customnpcs:customnpc"}],
+      "capture": {
+        "name": "jailer_uuid",
+        "regex": "\"uuid\"\\s*:\\s*\"([0-9a-f-]{36})\"[^}]*\"type\"\\s*:\\s*\"customnpcs:customnpc\""
+      }
+    },
+    {
+      "name": "bind-custom-jailer",
+      "type": "rcon",
+      "command": "straja npc bind-custom {jailer_uuid} jailer hq",
+      "expectContains": "bound"
+    },
+    {
+      "name": "interact-custom-jailer",
+      "type": "mct",
+      "args": [
+        "entity", "interact", "--type", "customnpcs:customnpc",
+        "--nearest", "--max-distance", "8"
+      ],
+      "expect": [{"rawRegex": "customnpcs:customnpc"}]
+    },
+    {
+      "name": "native-jailer-gui-opens",
+      "type": "mct",
+      "args": ["gui", "wait-open", "--timeout", "20"],
+      "expect": [{"rawRegex": "\"open\"\\s*:\\s*true"}]
+    },
+    {
+      "name": "native-jailer-gui-type",
+      "type": "mct",
+      "args": ["gui", "info"],
+      "expect": [{"rawRegex": "\"type\"\\s*:\\s*\"GuiCustom\""}]
+    },
+    {
+      "name": "native-jailer-gui-screenshot",
+      "type": "screenshot"
+    },
+    {
+      "name": "native-jailer-gui-layout",
+      "type": "mct",
+      "args": ["gui", "layout"],
+      "expect": [{"rawRegex": "\"scaledWidth\"\\s*:\\s*427"}]
+    },
+    {
+      "name": "click-custody-status",
+      "type": "mct",
+      "args": ["input", "click", "108", "91"],
+      "expect": [{"rawRegex": "\"clicked\"\\s*:\\s*true"}]
+    },
+    {
+      "name": "custody-status-dispatched",
+      "type": "mct",
+      "args": [
+        "chat", "history", "--last", "20",
+        "--match", "Nu ești încătușat.", "--wait", "10"
+      ],
+      "timeout": 60,
+      "expect": [{"rawRegex": "Nu ești încătușat"}]
+    },
+    {
+      "name": "close-jailer-gui",
+      "type": "mct",
+      "args": ["gui", "close"],
+      "expect": [{"rawRegex": "\"success\"\\s*:\\s*true"}]
+    },
+    {
+      "name": "client-rejoin",
+      "type": "client",
+      "action": "reconnect"
+    },
+    {
+      "name": "interact-custom-jailer-after-rejoin",
+      "type": "mct",
+      "args": [
+        "entity", "interact", "--type", "customnpcs:customnpc",
+        "--nearest", "--max-distance", "8"
+      ],
+      "expect": [{"rawRegex": "customnpcs:customnpc"}]
+    },
+    {
+      "name": "native-jailer-gui-reopens",
+      "type": "mct",
+      "args": ["gui", "wait-open", "--timeout", "20"],
+      "expect": [{"rawRegex": "\"open\"\\s*:\\s*true"}]
+    },
+    {
+      "name": "native-jailer-gui-rejoin-type",
+      "type": "mct",
+      "args": ["gui", "info"],
+      "expect": [{"rawRegex": "\"type\"\\s*:\\s*\"GuiCustom\""}]
+    },
+    {
+      "name": "native-jailer-gui-rejoin-screenshot",
+      "type": "screenshot"
+    }
+  ],
+  "cleanup": [
+    {
+      "name": "close-jailer-gui-cleanup",
+      "type": "mct",
+      "args": ["gui", "close"],
+      "setup": true
+    },
+    {
+      "name": "remove-custom-jailer",
+      "type": "rcon",
+      "command": "noppes npc \"Jailer\" delete",
+      "setup": true
+    }
+  ]
+}

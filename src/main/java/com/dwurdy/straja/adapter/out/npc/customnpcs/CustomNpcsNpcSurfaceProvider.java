@@ -207,12 +207,13 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             ServerPlayer player,
             NpcBinding binding,
             NpcSurfaceSnapshot surface) {
+        // CustomNPCs orders this factory as id, width, height, pause, player.
         Object gui = invoke(
                 bridge.api(),
                 "createCustomGui",
+                Math.floorMod(binding.bindingId().hashCode(), 20_000) + 1_000,
                 421,
                 320,
-                Math.floorMod(binding.bindingId().hashCode(), 20_000) + 1_000,
                 false,
                 playerApi);
         invoke(gui, "addLabel", 1, surface.title(), 12, 8, 396, 20);
@@ -295,12 +296,13 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             NpcSurfaceSnapshot surface,
             NpcSurfaceAction action) {
         Object playerApi = invoke(parentGui, "getPlayer");
+        // Keep the provider-specific factory order explicit at this boundary.
         Object gui = invoke(
                 bridge.api(),
                 "createCustomGui",
+                Math.floorMod((binding.bindingId() + action.actionId().value()).hashCode(), 20_000) + 1_000,
                 422,
                 320,
-                Math.floorMod((binding.bindingId() + action.actionId().value()).hashCode(), 20_000) + 1_000,
                 false,
                 playerApi);
         invoke(gui, "addLabel", 1, action.label(), 12, 8, 396, 20);

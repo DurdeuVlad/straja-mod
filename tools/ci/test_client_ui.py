@@ -3,6 +3,7 @@
 import json
 import os
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -17,6 +18,19 @@ def _scenario(steps, **extra):
 
 
 class ValidateScenarioTests(unittest.TestCase):
+    def test_repository_scenarios_validate(self):
+        root = os.path.join(os.path.dirname(__file__), "client_scenarios")
+        paths = []
+        for directory, _, names in os.walk(root):
+            paths.extend(os.path.join(directory, name)
+                         for name in names if name.endswith(".json"))
+        self.assertTrue(paths)
+        for path in sorted(paths):
+            with self.subTest(path=os.path.relpath(path, root)):
+                with open(path, encoding="utf-8") as fh:
+                    raw = json.load(fh)
+                self.assertEqual(cu.validate_scenario(raw, path), [])
+
     def test_valid_minimal(self):
         raw = _scenario([{"type": "mct", "args": ["status", "health"],
                           "expect": [{"path": "health", "gte": 1}]}])
@@ -29,6 +43,7 @@ class ValidateScenarioTests(unittest.TestCase):
         raw = _scenario([{"type": "rcon", "command": "x", "setup": True},
                          {"type": "sleep", "seconds": 1}])
         self.assertTrue(cu.validate_scenario(raw, "p"))
+
 
     def test_rcon_needs_expect_or_setup(self):
         raw = _scenario([{"type": "rcon", "command": "x"},
@@ -56,6 +71,59 @@ class ValidateScenarioTests(unittest.TestCase):
         self.assertTrue(cu.validate_scenario(raw, "p"))
 
 
+class PreflightTests(unittest.TestCase):
+    def test_preflight_installs_mct_in_isolated_home_with_overrides(self):
+        manifest = {
+            "mct": {"package": "@scope/mct", "version": "1.2.3",
+                    "integrity": "sha512-pinned",
+                    "overrides": {"broken-package": "1.0.0"}},
+            "client": {"java": "java"},
+        }
+        with tempfile.TemporaryDirectory() as home:
+            env = {"MCT_HOME": home}
+            calls = []
+
+            def fake_run(command, **kwargs):
+                calls.append((command, kwargs))
+                if command[1] == "--version":
+                    return type("Result", (), {"returncode": 0,
+                                                "stdout": "v20.12.0\n",
+                                                "stderr": ""})()
+                if command[1] == "view":
+                    return type("Result", (), {"returncode": 0,
+                                                "stdout": "sha512-pinned\n",
+                                                "stderr": ""})()
+                if command[1] == "install":
+                    binary = os.path.join(kwargs["cwd"], "node_modules",
+                                          ".bin", "mct")
+                    os.makedirs(os.path.dirname(binary), exist_ok=True)
+                    open(binary, "w", encoding="utf-8").close()
+                    return type("Result", (), {"returncode": 0,
+                                                "stdout": "",
+                                                "stderr": ""})()
+                raise AssertionError(command)
+
+            import unittest.mock as mock
+            with mock.patch.object(cu, "_which",
+                                   side_effect=lambda name: name), \
+                 mock.patch.object(cu.subprocess, "run", side_effect=fake_run):
+                mct = cu.preflight(manifest, env, lambda _: None)
+
+            install_root = os.path.join(home, "npm")
+            self.assertEqual(mct, os.path.join(install_root, "node_modules",
+                                                ".bin", "mct"))
+            with open(os.path.join(install_root, "package.json"),
+                      encoding="utf-8") as fh:
+                package = json.load(fh)
+            self.assertEqual(package["dependencies"],
+                             {"@scope/mct": "1.2.3"})
+            self.assertEqual(package["overrides"],
+                             {"broken-package": "1.0.0"})
+            install_call = next(item for item in calls
+                                if item[0][1] == "install")
+            self.assertEqual(install_call[1]["cwd"], install_root)
+
+
 class _FakeMct:
     binary = "mct"
     env = {}
@@ -73,6 +141,62 @@ class _FakeMct:
         return self.replies.get(tuple(args), {})
 
 
+class ClientModTests(unittest.TestCase):
+    def test_seed_client_mod_uses_server_dependency_contract(self):
+        manifest = {"clientMod": {"file": "mct-bridge.jar",
+                                   "url": "https://example.invalid/bridge",
+                                   "sha256": "abc", "sha512": "def",
+                                   "size": 123, "expectedModId": "mct"}}
+        with tempfile.TemporaryDirectory() as home:
+            env = {"MCT_CACHE_DIR": os.path.join(home, "cache")}
+            import unittest.mock as mock
+            with mock.patch.object(cu.sh, "download_dependency",
+                                   return_value="cached.jar") as download:
+                result = cu.seed_client_mod(manifest, env, lambda _: None)
+            self.assertEqual(result, "cached.jar")
+            download.assert_called_once_with(
+                {"fileName": "mct-bridge.jar",
+                 "url": "https://example.invalid/bridge", "sha256": "abc",
+                 "sha512": "def", "size": 123, "expectedModId": "mct"},
+                os.path.join(home, "cache", "mod"))
+
+    def test_create_client_unwraps_mct_success_envelope(self):
+        manifest = {
+            "client": {"name": "ci-straja", "loader": "neoforge",
+                       "minecraftVersion": "1.21.1", "account": "ci",
+                       "language": "en_us"},
+            "clientMod": {"file": "mct-client-mod.jar", "sha256": "abc"},
+        }
+        with tempfile.TemporaryDirectory() as home:
+            mods_dir = os.path.join(home, "mods")
+            minecraft_dir = os.path.join(home, "minecraft")
+            os.makedirs(mods_dir)
+            os.makedirs(minecraft_dir)
+            jar_path = os.path.join(home, "straja.jar")
+            bridge_path = os.path.join(mods_dir, "mct-client-mod.jar")
+            open(jar_path, "wb").close()
+            open(bridge_path, "wb").close()
+            reply = {"success": True,
+                     "data": {"modsDir": mods_dir,
+                              "minecraftDir": minecraft_dir}}
+            mct = _FakeMct({("client", "create", "ci-straja", "--loader",
+                              "neoforge", "--version", "1.21.1", "--account",
+                              "ci", "--java", "java"): reply})
+            import unittest.mock as mock
+            with mock.patch.object(cu.sh, "verify_artifact") as verify:
+                result = cu.create_client(mct, manifest, jar_path, [], {},
+                                          lambda _: None)
+
+            self.assertEqual(result, "ci-straja")
+            with open(os.path.join(minecraft_dir, "options.txt"),
+                      encoding="utf-8") as fh:
+                self.assertIn("lang:en_us", fh.read())
+            self.assertTrue(os.path.exists(os.path.join(mods_dir,
+                                                         "straja.jar")))
+            verify.assert_called_once_with(bridge_path, sha256="abc",
+                                           label="mct client-mod bridge")
+
+
 class _FakeRcon:
     def __init__(self, out="ok"):
         self.out = out
@@ -81,6 +205,37 @@ class _FakeRcon:
     def execute(self, command, timeout=None):
         self.commands.append(command)
         return self.out
+
+
+class RconStepTests(unittest.TestCase):
+    def test_rcon_step_uses_shared_adapter_contract(self):
+        class StrictRcon:
+            def __init__(self):
+                self.commands = []
+
+            def execute(self, command):
+                self.commands.append(command)
+                return "ok"
+
+        rcon = StrictRcon()
+        ctx = _ctx(rcon=rcon)
+        cu._exec_step({"type": "rcon", "command": "list",
+                       "expectContains": "ok"}, ctx, [])
+        self.assertEqual(rcon.commands, ["list"])
+
+
+class ClientActionTests(unittest.TestCase):
+    def test_reconnect_preserves_bridge_and_waits_for_world(self):
+        mct = _FakeMct()
+        waited = []
+        ctx = _ctx(mct=mct)
+        ctx.wait_ready = lambda: waited.append(True)
+        cu._exec_step({"type": "client", "action": "reconnect"}, ctx, [])
+        self.assertIn(
+            ["client", "reconnect", "--address", "127.0.0.1:25565"],
+            mct.calls,
+        )
+        self.assertEqual(waited, [True])
 
 
 def _ctx(mct=None, rcon=None):

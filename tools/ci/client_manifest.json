@@ -3,13 +3,21 @@
   "mct": {
     "package": "@kzheart_/mc-pilot",
     "version": "0.14.0",
-    "integrity": "sha512-AHYqNQnlATe/aXdhUBbdTaWLsidP3f8ZxnjO3ojReFMT0bmvBSJLISrM0ITvXR2v5VIsw3VItDbKJTXhtIjWUQ=="
+    "integrity": "sha512-AHYqNQnlATe/aXdhUBbdTaWLsidP3f8ZxnjO3ojReFMT0bmvBSJLISrM0ITvXR2v5VIsw3VItDbKJTXhtIjWUQ==",
+    "overrides": {
+      "@xmcl/core": "2.15.1",
+      "@xmcl/installer": "6.1.2",
+      "@xmcl/unzip": "2.1.2"
+    }
   },
   "clientMod": {
     "file": "mct-client-mod-neoforge-1.21.1.jar",
     "url": "https://github.com/kzheart/mc-pilot/releases/download/v0.14.0/mct-client-mod-neoforge-1.21.1.jar",
     "sha256": "d89bd309af94c0afe6b37dc03f8e9a689b4dabf95ff53f3f04fc7df9a7587788",
-    "note": "The 0.14.0 catalog maps the 1.21.1/neoforge variant to a v0.9.1 release that no longer exists; the runner pre-seeds the mct mod cache with this pinned asset and verifies sha256 before use."
+    "sha512": "7b0a5a0eaefac999bfb94c7031b08483251f59d19b401124ce91f5cb30468a84bfd02b34ae606fa0398900202f2157bc412cf835f054395c3ba9522f43428b5d",
+    "size": 285602,
+    "expectedModId": "mct",
+    "note": "The 0.14.0 catalog maps the 1.21.1/neoforge variant to a v0.9.1 release that no longer exists; the runner pre-seeds the mct mod cache with this pinned asset and verifies its URL, digests, size, and mod ID before use."
   },
   "client": {
     "name": "ci-straja",
