@@ -4,6 +4,7 @@ import com.dwurdy.straja.adapter.in.npc.StrajaNpcEntity;
 import com.dwurdy.straja.bootstrap.StrajaRuntime;
 import com.dwurdy.straja.bootstrap.NpcPresentationRuntime;
 import com.dwurdy.straja.domain.model.NpcRegistry;
+import com.dwurdy.straja.domain.model.NpcProviderId;
 import com.dwurdy.straja.domain.model.SetupData;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
@@ -29,6 +30,14 @@ final class NpcCommands {
 
     static LiteralArgumentBuilder<CommandSourceStack> build() {
         var npc = StrajaCommands.adminOnly(Commands.literal("npc"));
+
+        npc.then(Commands.literal("provider")
+                .then(Commands.literal("status").executes(ctx -> providerStatus(ctx)))
+                .then(Commands.literal("recover").executes(ctx -> providerRecover(ctx)))
+                .then(Commands.literal("migrate")
+                        .then(Commands.argument("provider", StringArgumentType.word())
+                                .executes(ctx -> providerMigrate(ctx,
+                                        StringArgumentType.getString(ctx, "provider"))))));
 
         npc.then(Commands.literal("list").executes(ctx -> {
             var runtime = StrajaRuntime.get();
@@ -131,6 +140,83 @@ final class NpcCommands {
                         })));
 
         return npc;
+    }
+
+    private static int providerStatus(CommandContext<CommandSourceStack> ctx) {
+        try {
+            var state = NpcPresentationRuntime.require();
+            var providers = state.providers();
+            ctx.getSource().sendSystemMessage(Component.literal(
+                    "NPC provider mode=" + state.activeProvider().value()
+                            + " debug-text-enabled=" + state.debugTextEnabled()
+                            + " customnpcs-available=" + providers.available(NpcProviderId.CUSTOM_NPCS)
+                            + " debug-text-available=" + providers.available(NpcProviderId.DEBUG_TEXT)));
+            for (var entry : state.lifecycle().bindings().values()) {
+                var inspection = state.lifecycle().inspect(entry.bindingId());
+                ctx.getSource().sendSystemMessage(Component.literal(
+                        "  " + entry.bindingId() + " | provider=" + entry.providerId().value()
+                                + " | profile=" + entry.surfaceProfileId().value()
+                                + " | host=" + entry.hostEntityUuid()
+                                + " | state=" + inspection.state()
+                                + (inspection.pendingOperation() == null
+                                        ? "" : " | pending=" + inspection.pendingOperation())));
+            }
+            return 1;
+        } catch (IllegalStateException error) {
+            ctx.getSource().sendFailure(Component.literal(error.getMessage()));
+            return 0;
+        }
+    }
+
+    private static int providerRecover(CommandContext<CommandSourceStack> ctx) {
+        try {
+            var report = NpcPresentationRuntime.require().migration().recover();
+            int failures = 0;
+            for (var item : report.items()) {
+                if (item.result().status() != com.dwurdy.straja.domain.model.NpcProviderResult.Status.ACCEPTED) {
+                    failures++;
+                }
+                ctx.getSource().sendSystemMessage(Component.literal(
+                        item.bindingId() + " -> " + item.result().status() + " " + item.result().message()));
+            }
+            return failures == 0 ? 1 : 0;
+        } catch (IllegalStateException error) {
+            ctx.getSource().sendFailure(Component.literal(error.getMessage()));
+            return 0;
+        }
+    }
+
+    private static int providerMigrate(
+            CommandContext<CommandSourceStack> ctx, String rawProvider) {
+        NpcProviderId target;
+        try {
+            target = NpcProviderId.of(rawProvider);
+        } catch (IllegalArgumentException error) {
+            ctx.getSource().sendFailure(Component.literal(
+                    "Unknown provider. Valid values: customnpcs, debug-text."));
+            return 0;
+        }
+        try {
+            var state = NpcPresentationRuntime.require();
+            if (target.equals(NpcProviderId.DEBUG_TEXT) && !state.debugTextEnabled()) {
+                ctx.getSource().sendFailure(Component.literal(
+                        "debug-text is disabled by the explicit NPC and debug security gates."));
+                return 0;
+            }
+            var result = state.migration().migrate(target, ctx.getSource().getTextName());
+            ctx.getSource().sendSystemMessage(Component.literal(
+                    "NPC provider migration: " + result.result().status()
+                            + " — " + result.result().message()));
+            if (!result.rollback().isEmpty()) {
+                ctx.getSource().sendFailure(Component.literal(
+                        "Migration required rollback; inspect provider status before retrying."));
+            }
+            return result.result().status() == com.dwurdy.straja.domain.model.NpcProviderResult.Status.ACCEPTED
+                    ? 1 : 0;
+        } catch (IllegalStateException | IllegalArgumentException error) {
+            ctx.getSource().sendFailure(Component.literal(error.getMessage()));
+            return 0;
+        }
     }
 
     private static int spawn(CommandContext<CommandSourceStack> ctx, Vec3 pos) {

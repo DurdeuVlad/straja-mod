@@ -7,6 +7,7 @@ import com.dwurdy.straja.adapter.out.persistence.StrajaDataProvider;
 import com.dwurdy.straja.adapter.out.persistence.StoreAccess;
 import com.dwurdy.straja.adapter.out.npc.content.NpcContentProfileJsonLoader;
 import com.dwurdy.straja.adapter.out.npc.customnpcs.CustomNpcsNpcSurfaceProvider;
+import com.dwurdy.straja.adapter.out.npc.debug.DebugTextNpcSurfaceProvider;
 import com.dwurdy.straja.application.port.in.NpcSurfaceActionTokenIssuer;
 import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.application.service.NpcBindingLifecycleService;
@@ -19,6 +20,7 @@ import com.dwurdy.straja.application.service.NpcCivicSurfaceService;
 import com.dwurdy.straja.application.service.NpcCustodySurfaceService;
 import com.dwurdy.straja.application.service.NpcContentCatalog;
 import com.dwurdy.straja.application.service.NpcProvisioningService;
+import com.dwurdy.straja.application.service.NpcProviderMigrationService;
 import com.dwurdy.straja.application.service.NpcSecretarySurfaceService;
 import com.dwurdy.straja.application.service.NpcSurfaceActionService;
 import com.dwurdy.straja.application.service.NpcSurfaceProviderRegistry;
@@ -64,6 +66,8 @@ public final class NpcPresentationRuntime {
     public static synchronized void start(MinecraftServer server) {
         if (STATE.get() != null) return;
         NpcSurfaceProviderRegistry providers = new NpcSurfaceProviderRegistry();
+        NpcProviderId configuredProvider = configuredProvider();
+        boolean debugTextEnabled = debugTextAllowed();
         NpcSurfaceActionService actions = new NpcSurfaceActionService(
                 providers,
                 (playerId, binding) -> playerAtBinding(server, playerId, binding),
@@ -85,21 +89,35 @@ public final class NpcPresentationRuntime {
                 player -> player.hasPermissions(2)
                         && player.getMainHandItem().is(StrajaItems.NPC_WAND.get()));
         providers.register(customNpcs);
+        if (debugTextEnabled) {
+            providers.register(new DebugTextNpcSurfaceProvider(
+                    message -> StrajaMod.LOGGER.info("{}", message)));
+        }
         NpcBindingLifecycleService.RecoveryReport recovery = lifecycle.recover();
         recovery.items().stream()
                 .filter(item -> item.result().status() != NpcProviderResult.Status.ACCEPTED)
                 .forEach(item -> StrajaMod.LOGGER.warn(
                         "NPC binding recovery pending: {} ({})",
                         item.bindingId(), item.result().code()));
+        NpcProviderMigrationService migration = new NpcProviderMigrationService(
+                lifecycle, providers, catalog);
+        if (configuredProvider.equals(NpcProviderId.DEBUG_TEXT) && !debugTextEnabled) {
+            StrajaMod.LOGGER.error(
+                    "NPC provider mode is debug-text but npc.debugTextEnabled and debug security gates do not permit it; provider remains unavailable");
+        }
         STATE.set(new RuntimeState(
                 server,
                 providers,
                 actions,
                 customNpcs,
                 lifecycle,
-                provisioning));
-        StrajaMod.LOGGER.info("NPC presentation runtime started; CustomNPCs available={}",
-                customNpcs.available());
+                provisioning,
+                migration,
+                configuredProvider,
+                debugTextEnabled));
+        StrajaMod.LOGGER.info(
+                "NPC presentation runtime started; mode={} CustomNPCs available={} debug-text enabled={}",
+                configuredProvider.value(), customNpcs.available(), debugTextEnabled);
     }
 
     public static synchronized void stop() {
@@ -114,7 +132,9 @@ public final class NpcPresentationRuntime {
      */
     public static boolean handleCustomNpcAdminAttack(ServerPlayer player, Entity target) {
         RuntimeState state = STATE.get();
-        return state != null && state.customNpcs().handleAdminAttack(player, target);
+        return state != null
+                && state.activeProvider().equals(NpcProviderId.CUSTOM_NPCS)
+                && state.customNpcs().handleAdminAttack(player, target);
     }
 
     public static RuntimeState require() {
@@ -135,6 +155,11 @@ public final class NpcPresentationRuntime {
      */
     public static NpcProviderResult bindCustomNpc(
             String hostEntityUuid, String roleId, String stationId, String actorId) {
+        RuntimeState active = STATE.get();
+        if (active == null || !active.activeProvider().equals(NpcProviderId.CUSTOM_NPCS)) {
+            return NpcProviderResult.unavailable(
+                    "CustomNPCs is not the configured active NPC provider");
+        }
         String role = "recruiter".equals(roleId) ? "trainer" : roleId;
         if (!"receptionist".equals(role) && !"trainer".equals(role)
                 && !"secretary".equals(role)
@@ -539,5 +564,28 @@ public final class NpcPresentationRuntime {
             NpcSurfaceActionTokenIssuer actions,
             CustomNpcsNpcSurfaceProvider customNpcs,
             NpcBindingLifecycleService lifecycle,
-            NpcProvisioningService provisioning) {}
+            NpcProvisioningService provisioning,
+            NpcProviderMigrationService migration,
+            NpcProviderId activeProvider,
+            boolean debugTextEnabled) {}
+
+    private static NpcProviderId configuredProvider() {
+        StrajaRuntime runtime = StrajaRuntime.get();
+        String configured = runtime == null ? "customnpcs" : runtime.policies().npcProviderMode;
+        try {
+            return NpcProviderId.of(configured);
+        } catch (IllegalArgumentException error) {
+            StrajaMod.LOGGER.error("Invalid NPC provider mode '{}'; falling back to customnpcs", configured);
+            return NpcProviderId.CUSTOM_NPCS;
+        }
+    }
+
+    private static boolean debugTextAllowed() {
+        StrajaRuntime runtime = StrajaRuntime.get();
+        if (runtime == null) return false;
+        var policies = runtime.policies();
+        if (!policies.npcDebugTextEnabled || !policies.debugEnabled) return false;
+        if (policies.requireDebugDisabledOutsideLocal && !policies.isLocalEnvironment()) return false;
+        return !policies.debugLocalOnly || policies.isLocalEnvironment();
+    }
 }

@@ -40,6 +40,14 @@ public final class DebugTextNpcSurfaceProvider implements NpcSurfaceProvider {
     }
 
     @Override
+    public boolean supports(Set<NpcCapability> requiredCapabilities) {
+        Objects.requireNonNull(requiredCapabilities, "requiredCapabilities");
+        // The diagnostic provider renders every canonical surface as text;
+        // it does not claim to implement the GUI, dialogue, or quest UI.
+        return true;
+    }
+
+    @Override
     public NpcProviderResult bind(NpcBinding binding) {
         Objects.requireNonNull(binding, "binding");
         if (!providerId().equals(binding.providerId())) {
@@ -67,7 +75,7 @@ public final class DebugTextNpcSurfaceProvider implements NpcSurfaceProvider {
         if (!binding.providerId().equals(providerId())) {
             return NpcProviderResult.rejected("wrong-provider", "surface belongs to another provider");
         }
-        if (!capabilities().containsAll(surface.requiredCapabilities())) {
+        if (!supports(surface.requiredCapabilities())) {
             return NpcProviderResult.rejected(
                     "unsupported-capability", "debug provider lacks a required surface capability");
         }

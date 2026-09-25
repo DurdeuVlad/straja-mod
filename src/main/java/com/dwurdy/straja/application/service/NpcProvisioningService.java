@@ -56,8 +56,10 @@ public final class NpcProvisioningService implements NpcProvisioningUseCase {
         return catalog.descriptors().stream()
                 .sorted(Comparator.comparing(descriptor -> descriptor.profileId().value()))
                 .map(descriptor -> {
-                    List<String> missing = catalog.validateCapabilities(
-                            descriptor.profileId(), capabilities);
+                    List<String> missing = providers.supports(
+                            providerId, catalog.require(descriptor.profileId()).requiredCapabilities())
+                            ? List.of()
+                            : catalog.validateCapabilities(descriptor.profileId(), capabilities);
                     String reason = !available
                             ? "NPC provider is unavailable"
                             : String.join("; ", missing);
@@ -194,8 +196,10 @@ public final class NpcProvisioningService implements NpcProvisioningUseCase {
                     ProvisioningResult.rejected("unknown-profile", error.getMessage()));
         }
 
-        List<String> missing = catalog.validateCapabilities(
-                descriptor.profileId(), providers.capabilities(providerId));
+        List<String> missing = providers.supports(
+                providerId, catalog.require(descriptor.profileId()).requiredCapabilities())
+                ? List.of()
+                : catalog.validateCapabilities(descriptor.profileId(), providers.capabilities(providerId));
         if (!missing.isEmpty()) {
             return audit(NpcProvisioningAuditEntry.Action.ASSIGN, providerId, hostEntityUuid,
                     actorId, current, descriptor.profileId().value(), bindingId,

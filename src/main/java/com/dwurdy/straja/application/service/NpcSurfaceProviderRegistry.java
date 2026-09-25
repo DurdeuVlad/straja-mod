@@ -48,6 +48,14 @@ public final class NpcSurfaceProviderRegistry {
         return find(providerId).map(NpcSurfaceProvider::available).orElse(false);
     }
 
+    /** Validates a profile against the provider's own capability semantics. */
+    public synchronized boolean supports(
+            NpcProviderId providerId, Set<NpcCapability> requiredCapabilities) {
+        return find(providerId)
+                .map(provider -> provider.supports(requiredCapabilities))
+                .orElse(false);
+    }
+
     /**
      * Atomically claims a logical binding for one provider. Provider adapters
      * must be reached through this method so two providers cannot claim the
@@ -121,7 +129,7 @@ public final class NpcSurfaceProviderRegistry {
         if (provider == null) {
             return NpcProviderResult.unavailable("bound NPC provider is unavailable");
         }
-        if (!provider.capabilities().containsAll(surface.requiredCapabilities())) {
+        if (!provider.supports(surface.requiredCapabilities())) {
             return NpcProviderResult.rejected(
                     "unsupported-capability", "provider lacks a required surface capability");
         }

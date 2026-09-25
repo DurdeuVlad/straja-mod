@@ -20,6 +20,8 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.BooleanValue REQUIRE_UUID;
     public static final ModConfigSpec.BooleanValue ALLOW_NAME_FALLBACK;
     public static final ModConfigSpec.ConfigValue<String> ENVIRONMENT;
+    public static final ModConfigSpec.ConfigValue<String> NPC_PROVIDER_MODE;
+    public static final ModConfigSpec.BooleanValue NPC_DEBUG_TEXT_ENABLED;
 
     public static final ModConfigSpec.IntValue CHECKPOINT_UNLOCK_MINUTES;
     public static final ModConfigSpec.IntValue CHECKPOINT_DEADLINE_MINUTES;
@@ -289,6 +291,16 @@ public final class StrajaServerConfig {
         REQUIRE_UUID = B.define("requireUuid", false);
         ALLOW_NAME_FALLBACK = B.define("allowNameFallback", true);
         ENVIRONMENT = B.comment("local | staging | production").define("environment", "local");
+        B.pop();
+
+        B.push("npc");
+        NPC_PROVIDER_MODE = B.comment(
+                        "customnpcs is the player-facing provider. debug-text is a diagnostic mirror only.")
+                .define("providerMode", defaults.npcProviderMode,
+                        StrajaServerConfig::isNpcProviderMode);
+        NPC_DEBUG_TEXT_ENABLED = B.comment(
+                        "Explicitly permits the debug-text provider; it never becomes a normal player surface.")
+                .define("debugTextEnabled", defaults.npcDebugTextEnabled);
         B.pop();
 
         B.push("identityCards");
@@ -858,6 +870,8 @@ public final class StrajaServerConfig {
         p.requireUuid = REQUIRE_UUID.get();
         p.allowNameFallback = ALLOW_NAME_FALLBACK.get();
         p.environment = ENVIRONMENT.get();
+        p.npcProviderMode = NPC_PROVIDER_MODE.get();
+        p.npcDebugTextEnabled = NPC_DEBUG_TEXT_ENABLED.get();
 
         p.checkpointUnlockMinutes = CHECKPOINT_UNLOCK_MINUTES.get();
         p.checkpointDeadlineMinutes = CHECKPOINT_DEADLINE_MINUTES.get();
@@ -1132,6 +1146,12 @@ public final class StrajaServerConfig {
 
     private static boolean isItemId(Object o) {
         return o instanceof String s && ResourceLocation.tryParse(s) != null;
+    }
+
+    private static boolean isNpcProviderMode(Object o) {
+        return o instanceof String s
+                && ("customnpcs".equalsIgnoreCase(s.trim())
+                        || "debug-text".equalsIgnoreCase(s.trim()));
     }
 
     private static boolean isDamageBehavior(Object o) {
