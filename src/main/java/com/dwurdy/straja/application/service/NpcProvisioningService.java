@@ -156,6 +156,10 @@ public final class NpcProvisioningService implements NpcProvisioningUseCase {
             return staleAssignment();
         }
         List<NpcBindingLifecycleService.Inspection> hostAssignments = inspectionsForHost(hostEntityUuid);
+        if (hostAssignments.isEmpty() && lifecycle.hasPendingProvisioningIntentForHost(hostEntityUuid)) {
+            return ProvisioningResult.unknown(
+                    "NPC assignment has an unresolved provisioning intent without a recoverable candidate");
+        }
         NpcBindingLifecycleService.Inspection currentInspection = hostAssignments.isEmpty()
                 ? null : hostAssignments.get(0);
         NpcBinding current = currentInspection == null ? null : currentInspection.binding();
@@ -254,6 +258,10 @@ public final class NpcProvisioningService implements NpcProvisioningUseCase {
         }
         List<NpcBindingLifecycleService.Inspection> hostAssignments = inspectionsForHost(hostEntityUuid);
         if (hostAssignments.isEmpty()) {
+            if (lifecycle.hasPendingProvisioningIntentForHost(hostEntityUuid)) {
+                return ProvisioningResult.unknown(
+                        "NPC assignment has an unresolved provisioning intent without a recoverable candidate");
+            }
             return audit(NpcProvisioningAuditEntry.Action.UNASSIGN, providerId, hostEntityUuid,
                     actorId, null, "", stableBindingId(providerId, hostEntityUuid),
                     ProvisioningResult.rejected("not-bound", "NPC has no Straja profile assignment"));
@@ -266,6 +274,45 @@ public final class NpcProvisioningService implements NpcProvisioningUseCase {
                             "multiple durable assignments target this host; remove the unintended mapping first"));
         }
         NpcBinding current = hostAssignments.getFirst().binding();
+        return auditedMutation(
+                NpcProvisioningAuditEntry.Action.UNASSIGN,
+                current.providerId(), hostEntityUuid, actorId, current, "", current.bindingId(), expectedRevision,
+                current,
+                () -> map(lifecycle.unbind(current.bindingId())));
+    }
+
+    @Override
+    public synchronized ProvisioningResult unassignBindingIfRevisionMatches(
+            NpcProviderId providerId,
+            String hostEntityUuid,
+            String bindingId,
+            String actorId,
+            String expectedRevision) {
+        Objects.requireNonNull(providerId, "providerId");
+        requireHost(hostEntityUuid);
+        requireBindingId(bindingId);
+        requireActor(actorId);
+        Objects.requireNonNull(expectedRevision, "expectedRevision");
+        if (!lifecycle.assignmentRevision(hostEntityUuid).equals(expectedRevision)) {
+            return staleAssignment();
+        }
+        NpcBindingLifecycleService.Inspection inspection = lifecycle.inspect(bindingId);
+        NpcBinding current = inspection.binding();
+        if (current == null || !hostEntityUuid.equals(current.hostEntityUuid())) {
+            return audit(NpcProvisioningAuditEntry.Action.UNASSIGN, providerId, hostEntityUuid,
+                    actorId, null, "", bindingId,
+                    ProvisioningResult.rejected("not-bound", "the requested binding is not assigned to this NPC"));
+        }
+        if (!providerId.value().equals(current.providerId().value())) {
+            return audit(NpcProvisioningAuditEntry.Action.UNASSIGN, providerId, hostEntityUuid,
+                    actorId, current, "", bindingId,
+                    ProvisioningResult.rejected("provider-mismatch", "the requested binding belongs to another provider"));
+        }
+        if (inspection.state() == NpcBindingLifecycleService.State.UNKNOWN) {
+            return audit(NpcProvisioningAuditEntry.Action.UNASSIGN, providerId, hostEntityUuid,
+                    actorId, current, "", bindingId,
+                    ProvisioningResult.unknown("the requested binding has an unresolved provider operation"));
+        }
         return auditedMutation(
                 NpcProvisioningAuditEntry.Action.UNASSIGN,
                 current.providerId(), hostEntityUuid, actorId, current, "", current.bindingId(), expectedRevision,
@@ -333,6 +380,15 @@ public final class NpcProvisioningService implements NpcProvisioningUseCase {
                 view(binding), inspection.state().name(),
                 inspection.pendingOperation() == null ? "" : inspection.pendingOperation().name(),
                 lastProjectionError));
+    }
+
+    @Override
+    public List<AssignmentView> assignments(NpcProviderId providerId, String hostEntityUuid) {
+        Objects.requireNonNull(providerId, "providerId");
+        requireHost(hostEntityUuid);
+        return inspectionsForHost(hostEntityUuid).stream()
+                .map(inspection -> view(inspection.binding()))
+                .toList();
     }
 
     @Override
@@ -483,6 +539,13 @@ public final class NpcProvisioningService implements NpcProvisioningUseCase {
     private static void requireActor(String value) {
         if (value == null || value.isBlank() || value.length() > 128) {
             throw new IllegalArgumentException("actorId must be a non-blank identifier");
+        }
+    }
+
+    private static void requireBindingId(String value) {
+        if (value == null || value.isBlank() || value.length() > 128
+                || !value.matches("[A-Za-z0-9._:-]+")) {
+            throw new IllegalArgumentException("bindingId must be a non-blank safe identifier");
         }
     }
 

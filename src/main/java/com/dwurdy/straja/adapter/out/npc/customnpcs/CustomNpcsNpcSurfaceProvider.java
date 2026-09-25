@@ -431,6 +431,8 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
         invoke(gui, "addLabel", 1, "Straja NPC provisioning", 12, 8, 396, 20);
 
         String displayedRevision = provisioning.assignmentRevision(hostUuid);
+        var assignments = provisioning.assignments(providerId(), hostUuid);
+        boolean duplicateAssignments = assignments.size() > 1;
         var current = provisioning.current(providerId(), hostUuid);
         var assignmentStatus = provisioning.status(providerId(), hostUuid);
         boolean recoveryPending = assignmentStatus
@@ -442,6 +444,11 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                         + (recoveryPending ? " · provider recovery pending" : ""))
                 .orElse("Current: unassigned");
         invoke(gui, "addLabel", 2, currentText, 12, 31, 396, 20);
+        if (duplicateAssignments) {
+            invoke(gui, "addLabel", 3,
+                    "Multiple durable bindings found. Resolve one exact binding before editing the profile.",
+                    12, 50, 396, 20);
+        }
 
         Object profileHost = gui;
         int profileX = 12;
@@ -449,7 +456,8 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
         int y = 58;
         try {
             Object scrollingPanel = invoke(gui, "getScrollingPanel");
-            invoke(scrollingPanel, "init", 12, 58, 396, 150);
+            invoke(scrollingPanel, "init", 12, duplicateAssignments ? 76 : 58, 396,
+                    duplicateAssignments ? 132 : 150);
             profileHost = scrollingPanel;
             profileX = 0;
             profileWidth = 396;
@@ -473,8 +481,8 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                     profileWidth,
                     22);
             invoke(button, "setHoverText", (Object) profileOptionHoverText(option, recoveryPending));
-            invoke(button, "setEnabled", option.enabled() && !recoveryPending);
-            if (option.enabled() && !recoveryPending) {
+            invoke(button, "setEnabled", option.enabled() && !recoveryPending && !duplicateAssignments);
+            if (option.enabled() && !recoveryPending && !duplicateAssignments) {
                 setAdminProfileHandler(button, gui, playerApi, player, hostUuid, option, displayedRevision);
             }
             y += 25;
@@ -486,16 +494,64 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             // after CustomNPCs applies its negative top offset.
             Object status = invoke(gui, "addButton", 9_000, "Status", 12, 214, 120, 22);
             setAdminStatusHandler(status, gui, playerApi, player, hostUuid);
-            if (!recoveryPending) {
+            if (!recoveryPending && !duplicateAssignments) {
                 Object reproject = invoke(gui, "addButton", 9_001, "Re-sync profile", 138, 214, 132, 22);
                 setAdminReprojectHandler(reproject, gui, playerApi, player, hostUuid);
             }
             String pendingOperation = assignmentStatus
                     .map(NpcProvisioningUseCase.AssignmentStatus::pendingOperation).orElse("");
-            String unassignLabel = unassignButtonLabel(recoveryPending, pendingOperation);
+            String unassignLabel = duplicateAssignments
+                    ? "Resolve duplicates" : unassignButtonLabel(recoveryPending, pendingOperation);
             Object unassign = invoke(gui, "addButton", 9_002, unassignLabel, 276, 214, 132, 22);
-            setAdminUnassignHandler(unassign, gui, playerApi, player, hostUuid, displayedRevision);
+            if (duplicateAssignments) {
+                setAdminDuplicateCleanupHandler(unassign, gui, playerApi, player, hostUuid, displayedRevision);
+            } else {
+                setAdminUnassignHandler(unassign, gui, playerApi, player, hostUuid, displayedRevision);
+            }
         }
+        invoke(playerApi, "showCustomGui", gui);
+    }
+
+    private void openAdminDuplicateCleanup(
+            Object playerApi,
+            ServerPlayer player,
+            String hostUuid,
+            String expectedRevision) {
+        var assignments = provisioning.assignments(providerId(), hostUuid);
+        Object gui = invoke(
+                bridge.api(), "createCustomGui",
+                Math.floorMod(("duplicates:" + hostUuid).hashCode(), 20_000) + 120_000,
+                421,
+                320,
+                false,
+                playerApi);
+        invoke(gui, "addLabel", 1, "Resolve duplicate NPC bindings", 12, 8, 396, 20);
+        invoke(gui, "addLabel", 2,
+                "Select the exact durable binding to unassign. Other bindings remain untouched.",
+                12, 32, 396, 32);
+        Object host = gui;
+        int y = 70;
+        try {
+            Object scrollingPanel = invoke(gui, "getScrollingPanel");
+            invoke(scrollingPanel, "init", 12, 70, 396, 150);
+            host = scrollingPanel;
+            y = 0;
+        } catch (RuntimeException exception) {
+            diagnostics.accept("CustomNPCs duplicate-binding scroll unavailable; using bounded fallback layout");
+        }
+        int buttonId = 12_000;
+        for (NpcProvisioningUseCase.AssignmentView assignment : assignments) {
+            Object button = invoke(host, "addButton", buttonId++,
+                    assignment.profileId() + " · " + assignment.bindingId(),
+                    host == gui ? 12 : 0, y, 396, 22);
+            invoke(button, "setHoverText", "Provider: " + assignment.providerId()
+                    + "\nRole/station: " + assignment.roleId() + " / " + assignment.stationId());
+            setAdminDuplicateBindingHandler(button, gui, playerApi, player, hostUuid,
+                    assignment.bindingId(), expectedRevision);
+            y += 25;
+        }
+        Object back = invoke(gui, "addButton", 12_900, "Back", 218, 240, 190, 22);
+        setAdminCancelHandler(back, gui, playerApi, player, hostUuid);
         invoke(playerApi, "showCustomGui", gui);
     }
 
@@ -610,6 +666,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             Object playerApi,
             ServerPlayer player,
             String hostUuid,
+            String bindingId,
             String expectedRevision,
             boolean recoveryPending) {
         Object gui = invoke(
@@ -630,7 +687,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
         Object confirm = invoke(gui, "addButton", 9_200,
                 recoveryPending ? "Confirm cancellation" : "Unassign", 12, 150, 190, 22);
         Object cancel = invoke(gui, "addButton", 9_201, "Cancel", 218, 150, 190, 22);
-        setAdminUnassignConfirmHandler(confirm, gui, playerApi, player, hostUuid, expectedRevision);
+        setAdminUnassignConfirmHandler(confirm, gui, playerApi, player, hostUuid, bindingId, expectedRevision);
         setAdminCancelHandler(cancel, gui, playerApi, player, hostUuid);
         invoke(playerApi, "showCustomGui", gui);
     }
@@ -812,7 +869,50 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             }
             boolean recoveryPending = provisioning.status(providerId(), hostUuid)
                     .map(status -> "UNKNOWN".equals(status.lifecycleState())).orElse(false);
-            openAdminUnassignConfirmation(playerApi, player, hostUuid, expectedRevision, recoveryPending);
+            String bindingId = provisioning.current(providerId(), hostUuid)
+                    .map(NpcProvisioningUseCase.AssignmentView::bindingId).orElse("");
+            openAdminUnassignConfirmation(playerApi, player, hostUuid, bindingId,
+                    expectedRevision, recoveryPending);
+        });
+    }
+
+    private void setAdminDuplicateCleanupHandler(
+            Object button,
+            Object parentGui,
+            Object fallbackPlayerApi,
+            ServerPlayer fallbackPlayer,
+            String hostUuid,
+            String expectedRevision) {
+        setGuiCallback(button, (args) -> {
+            Object clickedGui = callbackGui(args, parentGui);
+            Object playerApi = guiPlayer(clickedGui, fallbackPlayerApi);
+            ServerPlayer player = serverPlayer(playerApi, fallbackPlayer);
+            if (!isAdminToolAuthorized(player)) {
+                showAuthorizationResult(clickedGui, player);
+                return;
+            }
+            openAdminDuplicateCleanup(playerApi, player, hostUuid, expectedRevision);
+        });
+    }
+
+    private void setAdminDuplicateBindingHandler(
+            Object button,
+            Object parentGui,
+            Object fallbackPlayerApi,
+            ServerPlayer fallbackPlayer,
+            String hostUuid,
+            String bindingId,
+            String expectedRevision) {
+        setGuiCallback(button, (args) -> {
+            Object clickedGui = callbackGui(args, parentGui);
+            Object playerApi = guiPlayer(clickedGui, fallbackPlayerApi);
+            ServerPlayer player = serverPlayer(playerApi, fallbackPlayer);
+            if (!isAdminToolAuthorized(player)) {
+                showAuthorizationResult(clickedGui, player);
+                return;
+            }
+            openAdminUnassignConfirmation(playerApi, player, hostUuid, bindingId,
+                    expectedRevision, false);
         });
     }
 
@@ -854,6 +954,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             Object fallbackPlayerApi,
             ServerPlayer fallbackPlayer,
             String hostUuid,
+            String bindingId,
             String expectedRevision) {
         setGuiCallback(button, (args) -> {
             Object clickedGui = callbackGui(args, parentGui);
@@ -863,8 +964,8 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                 showAuthorizationResult(clickedGui, player);
                 return;
             }
-            NpcProvisioningUseCase.ProvisioningResult result = provisioning.unassignIfRevisionMatches(
-                    providerId(), hostUuid, player.getUUID().toString(), expectedRevision);
+            NpcProvisioningUseCase.ProvisioningResult result = provisioning.unassignBindingIfRevisionMatches(
+                    providerId(), hostUuid, bindingId, player.getUUID().toString(), expectedRevision);
             if (result.status() == NpcProvisioningUseCase.Status.ACCEPTED) {
                 openAdminSelector(playerApi, player, hostUuid);
             } else {

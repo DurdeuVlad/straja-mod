@@ -132,6 +132,36 @@ class NpcProvisioningServiceTest {
     }
 
     @Test
+    void pendingIntentCandidateLocksHostWhenLifecycleMarkerWriteFailsAndRecoversExactProfile() {
+        Fixture fixture = fixture(false);
+        fixture.repository.failWriteAfter = 2;
+
+        NpcProvisioningUseCase.ProvisioningResult first = fixture.provisioning.assign(
+                PROVIDER, "npc-one", "admin-one", FIRST_PUBLIC.value());
+        NpcBindingLifecycleService.Inspection pending = fixture.lifecycle.inspections().values()
+                .stream().filter(value -> value.binding() != null).findFirst().orElseThrow();
+        NpcProvisioningUseCase.ProvisioningResult competing = fixture.provisioning.assign(
+                PROVIDER, "npc-one", "admin-two", SECOND_PUBLIC.value());
+
+        assertEquals(NpcProvisioningUseCase.Status.UNKNOWN, first.status());
+        assertEquals(NpcBindingLifecycleService.State.UNKNOWN, pending.state());
+        assertEquals(FIRST_PUBLIC.value(), pending.binding().profileId().value());
+        assertEquals(NpcProvisioningUseCase.Status.UNKNOWN, competing.status());
+        assertTrue(fixture.provider.bindings.isEmpty(), "neither intent may reach the provider");
+
+        NpcBindingLifecycleService restarted = new NpcBindingLifecycleService(
+                fixture.providers, fixture.repository, fixture.catalog);
+        NpcProvisioningService recovered = new NpcProvisioningService(
+                restarted, fixture.catalog, fixture.providers, () -> 42L);
+        assertEquals(NpcProviderResult.Status.ACCEPTED,
+                restarted.recover().forBinding(pending.binding().bindingId()).orElseThrow().result().status());
+        assertEquals(FIRST_PUBLIC.value(), recovered.current(PROVIDER, "npc-one")
+                .orElseThrow().profileId());
+        assertTrue(fixture.provider.bindings.values().stream()
+                .allMatch(binding -> FIRST_PUBLIC.value().equals(binding.profileId().value())));
+    }
+
+    @Test
     void catalogRejectsDuplicatePublicProfileIds() {
         NpcContentProfile duplicate = profile(
                 NpcContentId.of("straja.other.profile"), FIRST_PUBLIC, "Duplicate", "other",
@@ -444,6 +474,34 @@ class NpcProvisioningServiceTest {
     }
 
     @Test
+    void cancelDuringUnknownPreviousUnbindReconcilesTheActualOwnerFirst() {
+        Fixture fixture = fixture(false);
+        NpcProviderId targetProviderId = NpcProviderId.of("target-provider");
+        fixture.providers.register(new FakeProvider(targetProviderId, false));
+        assertEquals(NpcProvisioningUseCase.Status.ACCEPTED,
+                fixture.provisioning.assign(PROVIDER, "npc-one", "admin-one", FIRST.value()).status());
+        fixture.provider.unknownNextUnbind = true;
+        String beforeSwitch = fixture.provisioning.assignmentRevision("npc-one");
+
+        NpcProvisioningUseCase.ProvisioningResult switched = fixture.provisioning.assignIfRevisionMatches(
+                targetProviderId, "npc-one", "admin-two", FIRST.value(), Optional.empty(), beforeSwitch);
+        assertEquals(NpcRebindPhase.UNBIND,
+                fixture.repository.store.pendingRebinds.values().iterator().next().phase);
+
+        fixture.provider.unknownReconciliation = false;
+        NpcProvisioningUseCase.ProvisioningResult canceled = fixture.provisioning.unassignIfRevisionMatches(
+                targetProviderId, "npc-one", "admin-two",
+                fixture.provisioning.assignmentRevision("npc-one"));
+
+        assertEquals(NpcProvisioningUseCase.Status.UNKNOWN, switched.status());
+        assertEquals(NpcProvisioningUseCase.Status.ACCEPTED, canceled.status());
+        assertTrue(fixture.lifecycle.inspections().isEmpty());
+        assertTrue(fixture.provider.bindings.isEmpty());
+        assertTrue(fixture.providers.unknownBinding(
+                fixture.provisioning.auditTrail(PROVIDER, "npc-one").getFirst().bindingId()).isEmpty());
+    }
+
+    @Test
     void unresolvedInitialBindBlocksAssignmentToAnotherProvider() {
         Fixture fixture = fixture(false);
         NpcProviderId secondProviderId = NpcProviderId.of("customnpcs-test");
@@ -683,6 +741,29 @@ class NpcProvisioningServiceTest {
     }
 
     @Test
+    void exactDuplicateBindingCanBeUnassignedThroughTheAdminRecoveryPath() {
+        Fixture fixture = fixture(false);
+        NpcBinding first = new NpcBinding(
+                "straja.customnpcs.first", PROVIDER, "npc-one", "",
+                "secretary", "hq", FIRST, 1);
+        NpcBinding second = new NpcBinding(
+                "straja.customnpcs.second", PROVIDER, "npc-one", "",
+                "secretary", "hq", SECOND, 1);
+        assertEquals(NpcProviderResult.Status.ACCEPTED, fixture.lifecycle.bindAndPublish(first).status());
+        assertEquals(NpcProviderResult.Status.ACCEPTED, fixture.lifecycle.bindAndPublish(second).status());
+
+        assertEquals(2, fixture.provisioning.assignments(PROVIDER, "npc-one").size());
+        String revision = fixture.provisioning.assignmentRevision("npc-one");
+        NpcProvisioningUseCase.ProvisioningResult result = fixture.provisioning
+                .unassignBindingIfRevisionMatches(PROVIDER, "npc-one", second.bindingId(), "admin", revision);
+
+        assertEquals(NpcProvisioningUseCase.Status.ACCEPTED, result.status());
+        assertTrue(fixture.lifecycle.bindings().containsKey(first.bindingId()));
+        assertFalse(fixture.lifecycle.bindings().containsKey(second.bindingId()));
+        assertEquals(1, fixture.provisioning.assignments(PROVIDER, "npc-one").size());
+    }
+
+    @Test
     void concurrentFirstAssignmentsCannotCreateTwoProviderBindings() throws Exception {
         Fixture fixture = fixture(false);
         NpcProviderId secondProviderId = NpcProviderId.of("customnpcs-test");
@@ -783,6 +864,7 @@ class NpcProvisioningServiceTest {
         private boolean rejectNextPublish;
         private boolean unknownNextPublish;
         private boolean unknownNextBind;
+        private boolean unknownNextUnbind;
         private boolean unknownReconciliation;
         private Runnable beforePublish = () -> {};
         private CountDownLatch bindEntered;
@@ -827,6 +909,11 @@ class NpcProvisioningServiceTest {
                     : NpcProviderResult.rejected("binding-owned", "different binding");
         }
         @Override public NpcProviderResult unbind(NpcBinding binding) {
+            if (unknownNextUnbind) {
+                unknownNextUnbind = false;
+                unknownReconciliation = true;
+                return NpcProviderResult.unknown("test provider lost unbind response before removal");
+            }
             return bindings.remove(binding.bindingId(), binding)
                     ? NpcProviderResult.accepted("unbound")
                     : NpcProviderResult.rejected("not-bound", "not bound");
@@ -863,11 +950,15 @@ class NpcProvisioningServiceTest {
     private static final class MemoryRepository implements NpcBindingRepository {
         private NpcBindingStore store = new NpcBindingStore();
         private boolean failNextWrite;
+        private int failWriteAfter;
         @Override public NpcBindingStore read() { return copy(store); }
         @Override public void write(NpcBindingStore value) {
             if (failNextWrite) {
                 failNextWrite = false;
                 throw new IllegalStateException("test persistence failure");
+            }
+            if (failWriteAfter > 0 && --failWriteAfter == 0) {
+                throw new IllegalStateException("test delayed persistence failure");
             }
             store = copy(value);
         }

@@ -17,6 +17,11 @@ public interface NpcProvisioningUseCase {
 
     Optional<AssignmentView> current(NpcProviderId providerId, String hostEntityUuid);
 
+    /** All durable assignments targeting the host, including legacy duplicates requiring cleanup. */
+    default List<AssignmentView> assignments(NpcProviderId providerId, String hostEntityUuid) {
+        return current(providerId, hostEntityUuid).stream().toList();
+    }
+
     /** Opaque durable revision for optimistic-concurrency checks on an admin confirmation. */
     String assignmentRevision(String hostEntityUuid);
 
@@ -52,6 +57,14 @@ public interface NpcProvisioningUseCase {
     ProvisioningResult unassignIfRevisionMatches(
             NpcProviderId providerId,
             String hostEntityUuid,
+            String actorId,
+            String expectedRevision);
+
+    /** Unassigns one exact durable binding while preserving the host revision guard. */
+    ProvisioningResult unassignBindingIfRevisionMatches(
+            NpcProviderId providerId,
+            String hostEntityUuid,
+            String bindingId,
             String actorId,
             String expectedRevision);
 

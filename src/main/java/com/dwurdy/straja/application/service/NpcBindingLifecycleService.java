@@ -45,6 +45,10 @@ public final class NpcBindingLifecycleService {
 
     public synchronized NpcProviderResult bind(NpcBinding binding) {
         binding = canonicalProfileIdentity(Objects.requireNonNull(binding, "binding"));
+        if (hasPendingAuditIntent(binding.bindingId())
+                && !hasMatchingPendingAssignment(binding)) {
+            return NpcProviderResult.unknown("binding has an unresolved provisioning intent");
+        }
         if (store.pendingRebinds.containsKey(binding.bindingId())) {
             return NpcProviderResult.unknown("binding has an unresolved rebind transaction");
         }
@@ -111,6 +115,10 @@ public final class NpcBindingLifecycleService {
 
     public synchronized NpcProviderResult rebind(NpcBinding replacement) {
         replacement = canonicalProfileIdentity(Objects.requireNonNull(replacement, "replacement"));
+        if (hasPendingAuditIntent(replacement.bindingId())
+                && !hasMatchingPendingAssignment(replacement)) {
+            return NpcProviderResult.unknown("binding has an unresolved provisioning intent");
+        }
         NpcBindingStore.PendingRebind inProgress = store.pendingRebinds.get(replacement.bindingId());
         if (inProgress != null) {
             if (!inProgress.replacement.equals(replacement)) {
@@ -187,6 +195,26 @@ public final class NpcBindingLifecycleService {
                         "rebind-rejected", "replacement failed; previous NPC assignment restored");
             }
             case UNASSIGN -> {
+                Optional<NpcBinding> unknownOwner = providers.unknownBinding(pending.previous.bindingId());
+                if (unknownOwner.isPresent()) {
+                    NpcBinding actualOwner = unknownOwner.get();
+                    if (!actualOwner.equals(pending.previous)
+                            && !actualOwner.equals(pending.replacement)) {
+                        return NpcProviderResult.unknown(
+                                "provider has an uncertain mapping outside this unassign transaction");
+                    }
+                    result = providers.reconcile(actualOwner.bindingId());
+                    if (requiresRecovery(result)) return result;
+                    Optional<NpcBinding> reconciledOwner = providers.binding(actualOwner.bindingId());
+                    if (reconciledOwner.isPresent()) {
+                        if (!reconciledOwner.get().equals(actualOwner)) {
+                            return NpcProviderResult.unknown(
+                                    "provider reconciliation found a different mapping during unassign");
+                        }
+                        result = ensureUnbound(actualOwner);
+                        if (!isSuccessful(result)) return result;
+                    }
+                }
                 result = ensureUnbound(pending.replacement);
                 if (!isSuccessful(result)) return result;
                 result = ensureUnbound(pending.previous);
@@ -278,8 +306,17 @@ public final class NpcBindingLifecycleService {
             NpcBindingStore.PendingOperation pending = store.pendingOperations.get(id);
             if (pending != null) current = pending.binding;
         }
+        if (current == null) current = pendingAuditCandidate(id);
         if (current == null) {
+            if (hasPendingAuditIntent(id)) {
+                return NpcProviderResult.unknown(
+                        "binding has an unresolved provisioning intent without a recoverable candidate");
+            }
             return NpcProviderResult.rejected("not-bound", "logical binding is not registered");
+        }
+        NpcProvisioningAuditEntry intent = pendingAuditIntent(id);
+        if (intent != null && intent.action() != NpcProvisioningAuditEntry.Action.UNASSIGN) {
+            return NpcProviderResult.unknown("binding has a pending operation that must be explicitly unassigned");
         }
         // Persist cancellation before probing or mutating provider state. This
         // replaces a pending first-bind/publish operation without discarding
@@ -502,6 +539,44 @@ public final class NpcBindingLifecycleService {
                         && event.bindingId().equals(bindingId));
     }
 
+    private NpcProvisioningAuditEntry pendingAuditIntent(String bindingId) {
+        for (int index = store.provisioningAudit.size() - 1; index >= 0; index--) {
+            NpcProvisioningAuditEntry event = store.provisioningAudit.get(index);
+            if (event.outcome() == NpcProvisioningAuditEntry.Outcome.PENDING
+                    && event.bindingId().equals(bindingId)) return event;
+        }
+        return null;
+    }
+
+    private NpcBinding pendingAuditCandidate(String bindingId) {
+        for (int index = store.provisioningAudit.size() - 1; index >= 0; index--) {
+            NpcProvisioningAuditEntry event = store.provisioningAudit.get(index);
+            if (event.outcome() == NpcProvisioningAuditEntry.Outcome.PENDING
+                    && event.bindingId().equals(bindingId)) {
+                NpcBinding candidate = store.pendingProvisioningCandidates.get(event.eventId());
+                if (candidate != null) return candidate;
+            }
+        }
+        return store.pendingProvisioningCandidates.values().stream()
+                .filter(candidate -> candidate.bindingId().equals(bindingId))
+                .findFirst().orElse(null);
+    }
+
+    private boolean hasMatchingPendingAssignment(NpcBinding binding) {
+        NpcProvisioningAuditEntry intent = pendingAuditIntent(binding.bindingId());
+        return intent != null
+                && intent.action() == NpcProvisioningAuditEntry.Action.ASSIGN
+                && binding.equals(store.pendingProvisioningCandidates.get(intent.eventId()));
+    }
+
+    /** True while any durable operation for the host has not reached a terminal audit result. */
+    public synchronized boolean hasPendingProvisioningIntentForHost(String hostEntityUuid) {
+        Objects.requireNonNull(hostEntityUuid, "hostEntityUuid");
+        return store.provisioningAudit.stream()
+                .anyMatch(event -> event.outcome() == NpcProvisioningAuditEntry.Outcome.PENDING
+                        && event.providerInstanceId().equals(hostEntityUuid));
+    }
+
     private boolean hasActiveRecovery(String bindingId) {
         return store.pendingOperations.containsKey(bindingId)
                 || store.pendingRebinds.containsKey(bindingId)
@@ -532,13 +607,23 @@ public final class NpcBindingLifecycleService {
         if (rebind != null) {
             return new Inspection(id, State.UNKNOWN, rebind.previous, phaseOperation(rebind.phase));
         }
-        if (binding == null && pending == null) return new Inspection(id, State.UNBOUND, null, null);
         if (pending != null) {
             // A first bind can be pending before it has ever entered bindings.
             // Surface the durable candidate so provisioning/status can block
             // cross-provider duplicates and show the unresolved assignment.
             if (binding == null) binding = pending.binding;
             return new Inspection(id, State.UNKNOWN, binding, pending.operation);
+        }
+        NpcProvisioningAuditEntry intent = pendingAuditIntent(id);
+        if (intent != null) {
+            if (binding == null) binding = store.pendingProvisioningCandidates.get(intent.eventId());
+            if (binding == null) binding = store.bindings.get(id);
+            return new Inspection(id, State.UNKNOWN, binding, auditOperation(intent.action()));
+        }
+        if (binding == null) {
+            NpcBinding candidate = pendingAuditCandidate(id);
+            if (candidate != null) return new Inspection(id, State.UNKNOWN, candidate, null);
+            return new Inspection(id, State.UNBOUND, null, null);
         }
         if (findProfile(binding) == null) return new Inspection(id, State.UNKNOWN, binding, null);
         return new Inspection(id, State.BOUND, binding, null);
@@ -548,6 +633,14 @@ public final class NpcBindingLifecycleService {
         java.util.LinkedHashSet<String> ids = new java.util.LinkedHashSet<>(store.bindings.keySet());
         ids.addAll(store.pendingOperations.keySet());
         ids.addAll(store.pendingRebinds.keySet());
+        store.pendingProvisioningCandidates.values().stream()
+                .map(NpcBinding::bindingId)
+                .forEach(ids::add);
+        store.provisioningAudit.stream()
+                .filter(event -> event.outcome() == NpcProvisioningAuditEntry.Outcome.PENDING)
+                .map(NpcProvisioningAuditEntry::bindingId)
+                .filter(id -> !id.isBlank())
+                .forEach(ids::add);
         java.util.LinkedHashMap<String, Inspection> result = new java.util.LinkedHashMap<>();
         for (String id : ids) result.put(id, inspect(id));
         return Map.copyOf(result);
@@ -998,6 +1091,14 @@ public final class NpcBindingLifecycleService {
             case UNBIND, RESTORE, UNASSIGN -> NpcProviderOperation.UNBIND;
             case BIND -> NpcProviderOperation.BIND;
             case PUBLISH -> NpcProviderOperation.PUBLISH;
+        };
+    }
+
+    private static NpcProviderOperation auditOperation(NpcProvisioningAuditEntry.Action action) {
+        return switch (action) {
+            case ASSIGN -> NpcProviderOperation.BIND;
+            case REPROJECT -> NpcProviderOperation.PUBLISH;
+            case UNASSIGN -> NpcProviderOperation.UNBIND;
         };
     }
 

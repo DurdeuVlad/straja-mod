@@ -154,7 +154,11 @@ final class NpcCommands {
     private static int bindCustom(CommandContext<CommandSourceStack> ctx, String station) {
         String host = StringArgumentType.getString(ctx, "host");
         String role = StringArgumentType.getString(ctx, "role");
-        var result = NpcPresentationRuntime.bindCustomNpc(host, role, station);
+        CommandSourceStack source = ctx.getSource();
+        String playerUuid = source.getEntity() instanceof net.minecraft.server.level.ServerPlayer player
+                ? player.getUUID().toString() : "";
+        String actorId = NpcProvisioningActorIdentity.fromSource(source.getTextName(), playerUuid);
+        var result = NpcPresentationRuntime.bindCustomNpc(host, role, station, actorId);
         if (result.status() != com.dwurdy.straja.domain.model.NpcProviderResult.Status.ACCEPTED) {
             ctx.getSource().sendFailure(Component.literal(
                     "CustomNPCs binding failed: " + result.code() + " — " + result.message()));

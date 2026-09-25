@@ -10,6 +10,7 @@ import com.dwurdy.straja.adapter.out.npc.customnpcs.CustomNpcsNpcSurfaceProvider
 import com.dwurdy.straja.application.port.in.NpcSurfaceActionTokenIssuer;
 import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.application.service.NpcBindingLifecycleService;
+import com.dwurdy.straja.application.service.NpcBindingRoleResolver;
 import com.dwurdy.straja.application.service.NpcAdmissionSurfaceService;
 import com.dwurdy.straja.application.service.NpcArmorySurfaceService;
 import com.dwurdy.straja.application.service.NpcCareerSurfaceService;
@@ -33,6 +34,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
@@ -130,7 +132,7 @@ public final class NpcPresentationRuntime {
      * host interaction only after this mapping is accepted and published.
      */
     public static NpcProviderResult bindCustomNpc(
-            String hostEntityUuid, String roleId, String stationId) {
+            String hostEntityUuid, String roleId, String stationId, String actorId) {
         String role = "recruiter".equals(roleId) ? "trainer" : roleId;
         if (!"receptionist".equals(role) && !"trainer".equals(role)
                 && !"secretary".equals(role)
@@ -158,13 +160,27 @@ public final class NpcPresentationRuntime {
             com.dwurdy.straja.application.port.in.NpcProvisioningUseCase.ProvisioningResult result = require().provisioning().assign(
                     NpcProviderId.CUSTOM_NPCS,
                     normalizedUuid,
-                    "console",
+                    actorId,
                     profile.value(),
                     stationId);
             return toProviderResult(result);
         } catch (IllegalStateException exception) {
             return NpcProviderResult.unavailable("NPC presentation runtime is not started");
         }
+    }
+
+    /** Whether a provider-owned or unresolved canonical Straja binding claims this host. */
+    public static boolean hasBindingForHost(String hostEntityUuid) {
+        RuntimeState state = STATE.get();
+        return state != null && NpcBindingRoleResolver.hasBindingForHost(state.lifecycle(), hostEntityUuid);
+    }
+
+    /** Canonical provider-neutral role lookup; jailer wins if corrupt duplicate roles exist. */
+    public static Optional<String> assignedRoleForHost(String hostEntityUuid) {
+        RuntimeState state = STATE.get();
+        return state == null
+                ? Optional.empty()
+                : NpcBindingRoleResolver.assignedRoleForHost(state.lifecycle(), hostEntityUuid);
     }
 
     private static NpcProviderResult toProviderResult(

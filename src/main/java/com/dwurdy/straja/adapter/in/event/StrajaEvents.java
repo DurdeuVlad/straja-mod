@@ -417,6 +417,10 @@ public final class StrajaEvents {
         // foreign NPC keeps its native dialog and an unregistered
         // StrajaNpcEntity still reaches mobInteract.
         if (!(event.getTarget() instanceof net.minecraft.server.level.ServerPlayer target)) {
+            // Canonical provider bindings own their interaction ahead of
+            // legacy role records. Unassigning preserves any older legacy
+            // record, which resumes without destructive migration.
+            if (NpcPresentationRuntime.hasBindingForHost(event.getTarget().getStringUUID())) return;
             var registration = runtime.npcRegistry().registration(event.getTarget().getStringUUID());
             if (registration != null && registration.role() != null
                     && NpcRoles.isKnown(registration.role())
@@ -767,8 +771,7 @@ public final class StrajaEvents {
         StrajaRuntime runtime = StrajaRuntime.get();
         if (runtime == null || event.getEntity().level().isClientSide()
                 || event.getEntity() instanceof StrajaNpcEntity) return;
-        var registration = runtime.npcRegistry().registration(event.getEntity().getStringUUID());
-        if (registration == null || !"jailer".equals(registration.role())) return;
+        if (!"jailer".equals(npcRoleOf(runtime, event.getEntity()))) return;
         if (!(event.getSource().getEntity() instanceof net.minecraft.server.level.ServerPlayer attacker)) return;
         var gateway = new MinecraftPlayerGateway(attacker.getServer(), attacker.getUUID());
         if (!runtime.policies().jailerDamageAllowed(
@@ -847,6 +850,8 @@ public final class StrajaEvents {
      * {@link StrajaNpcEntity} falls back to its persisted entity field.
      */
     private static String npcRoleOf(StrajaRuntime runtime, net.minecraft.world.entity.Entity entity) {
+        var assignedRole = NpcPresentationRuntime.assignedRoleForHost(entity.getStringUUID());
+        if (assignedRole.isPresent()) return assignedRole.get();
         var registration = runtime.npcRegistry().registration(entity.getStringUUID());
         if (registration != null && registration.role() != null
                 && !registration.role().isEmpty()) {

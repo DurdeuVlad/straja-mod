@@ -87,6 +87,32 @@ class EventSurfaceTest {
     }
 
     @Test
+    void activeProvisionedBindingPrecedesLegacyNpcRegistration() throws IOException {
+        String src = source();
+        int provisionedRoute = src.indexOf(
+                "if (NpcPresentationRuntime.hasBindingForHost(event.getTarget().getStringUUID())) return;");
+        int legacyRoute = src.indexOf(
+                "var registration = runtime.npcRegistry().registration(event.getTarget().getStringUUID());");
+
+        assertTrue(provisionedRoute >= 0, "provider-owned CustomNPCs must reach its native GUI handler");
+        assertTrue(legacyRoute > provisionedRoute,
+                "legacy role chat must not cancel an active provider-owned interaction");
+    }
+
+    @Test
+    void eventRoleLookupUsesCanonicalProvisionedRoleBeforeLegacyRole() throws IOException {
+        String src = source();
+        int resolver = src.indexOf("NpcPresentationRuntime.assignedRoleForHost(entity.getStringUUID())");
+        int legacyLookup = src.indexOf(
+                "runtime.npcRegistry().registration(entity.getStringUUID())", resolver);
+
+        assertTrue(resolver >= 0, "jailer events must resolve assignments from the provider-neutral binding store");
+        assertTrue(legacyLookup > resolver, "legacy roles are fallback only when no provider binding exists");
+        assertTrue(src.contains("npcRoleOf(runtime, event.getEntity())"),
+                "the jailer immunity boundary must use canonical role lookup");
+    }
+
+    @Test
     void staysOffConcreteServicesAndPersistence() throws IOException {
         String src = source();
         assertFalse(src.contains("com.dwurdy.straja.application.service."),
