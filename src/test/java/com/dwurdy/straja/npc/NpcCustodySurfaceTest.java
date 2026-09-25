@@ -48,8 +48,10 @@ class NpcCustodySurfaceTest {
                                 CustodyRoleplayUseCase.Action.RELEASE_TARGET, "bad:key"),
                         new CustodyRoleplayUseCase.AvailableAction(
                                 CustodyRoleplayUseCase.Action.GIVE_CUFFS, "")),
+                true,
                 true, false, false, sentence);
 
+        assertTrue(action(surface, "arrest-handoff").enabled());
         assertTrue(action(surface, "custody-accept:Q-1").enabled());
         assertTrue(action(surface, "custody-release:target-1").enabled());
         assertFalse(surface.actions().stream()
@@ -60,6 +62,10 @@ class NpcCustodySurfaceTest {
         assertTrue(surface.body().contains("ACTIVE"));
         assertEquals(NpcSurfaceSnapshot.QuestState.ACTIVE, surface.quests().getFirst().state());
         assertEquals(surface.actions().size(), surface.dialogue().getFirst().choices().size());
+
+        NpcSurfaceSnapshot unauthorized = new NpcCustodySurfaceService().resolve(
+                profile.bind(binding), List.of(), false, false, false, false, null);
+        assertFalse(action(unauthorized, "arrest-handoff").enabled());
     }
 
     private static NpcSurfaceAction action(NpcSurfaceSnapshot surface, String id) {

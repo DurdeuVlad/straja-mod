@@ -214,6 +214,8 @@ public final class NpcPresentationRuntime {
             return CUSTODY_SURFACE.resolve(
                     published,
                     runtime.custodyRoleplay().availableActions(player),
+                    runtime.playerQueries().isCommissioner(player)
+                            || runtime.playerQueries().isOnDutyGuard(player),
                     runtime.custodyRoleplay().isCuffed(player),
                     runtime.custodyRoleplay().isBound(player),
                     runtime.custodyRoleplay().isDowned(player),

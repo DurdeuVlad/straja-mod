@@ -19,6 +19,7 @@ public final class NpcCustodySurfaceService {
     public NpcSurfaceSnapshot resolve(
             NpcSurfaceSnapshot published,
             List<CustodyRoleplayUseCase.AvailableAction> available,
+            boolean authorizedHandoff,
             boolean cuffed,
             boolean bound,
             boolean downed,
@@ -27,7 +28,7 @@ public final class NpcCustodySurfaceService {
         available = List.copyOf(Objects.requireNonNull(available, "available"));
         Map<NpcContentId, NpcSurfaceAction> actions = new LinkedHashMap<>();
         for (NpcSurfaceAction action : published.actions()) {
-            actions.put(action.actionId(), authored(action, available));
+            actions.put(action.actionId(), authored(action, available, authorizedHandoff));
         }
         for (CustodyRoleplayUseCase.AvailableAction entry : available) {
             if (entry == null || entry.action() == null) continue;
@@ -58,8 +59,10 @@ public final class NpcCustodySurfaceService {
 
     private static NpcSurfaceAction authored(
             NpcSurfaceAction action,
-            List<CustodyRoleplayUseCase.AvailableAction> available) {
+            List<CustodyRoleplayUseCase.AvailableAction> available,
+            boolean authorizedHandoff) {
         return switch (action.actionId().value()) {
+            case "arrest-handoff" -> stateful(action, authorizedHandoff);
             case "cuffs-item" -> stateful(action, has(available, CustodyRoleplayUseCase.Action.GIVE_CUFFS));
             case "custody-remove-head-sack" ->
                     stateful(action, has(available, CustodyRoleplayUseCase.Action.REMOVE_HEAD_SACK));
