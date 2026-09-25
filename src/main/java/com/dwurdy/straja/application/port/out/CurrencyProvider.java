@@ -36,6 +36,15 @@ public interface CurrencyProvider {
     /** True when a stack carries the receipt for the given payout id. */
     boolean hasReceipt(PlayerGateway player, String payoutId);
 
+    /**
+     * True only when the receipt proves the complete expected payout. Older
+     * providers may conservatively fall back to their receipt check; native
+     * providers should sum the tagged denominations exactly.
+     */
+    default boolean hasReceipt(PlayerGateway player, String payoutId, int expectedAmount) {
+        return hasReceipt(player, payoutId);
+    }
+
     record Withdrawal(boolean ok, int removed, String error) {
         public static Withdrawal ok(int removed) { return new Withdrawal(true, removed, null); }
         public static Withdrawal failed(String error) { return new Withdrawal(false, 0, error); }

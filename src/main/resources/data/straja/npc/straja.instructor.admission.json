@@ -19,7 +19,9 @@
     },
     {"id": "training-progress", "label": "View training progress", "enabled": true},
     {"id": "training-promote", "label": "Request promotion", "enabled": false},
-    {"id": "training-manual", "label": "Request training manual", "enabled": true}
+    {"id": "training-manual", "label": "Request training manual", "enabled": true},
+    {"id": "v2-promotion-status", "label": "View V2 promotion", "enabled": true},
+    {"id": "v2-personnel-status", "label": "View V2 personnel file", "enabled": true}
   ],
   "dialogue": [
     {
@@ -30,12 +32,15 @@
         {"actionId": "quiz-answer", "label": "Answer the current question", "enabled": true},
         {"actionId": "training-progress", "label": "Show my progress", "enabled": true},
         {"actionId": "training-promote", "label": "Request promotion", "enabled": false},
-        {"actionId": "training-manual", "label": "Request the manual", "enabled": true}
+        {"actionId": "training-manual", "label": "Request the manual", "enabled": true},
+        {"actionId": "v2-promotion-status", "label": "View my V2 promotion", "enabled": true},
+        {"actionId": "v2-personnel-status", "label": "View my V2 personnel file", "enabled": true}
       ]
     }
   ],
   "quests": [
     {"id": "training-basic", "title": "Admission and first training", "state": "LOCKED"},
-    {"id": "career-progression", "title": "Career progression", "state": "LOCKED"}
+    {"id": "career-progression", "title": "Career progression", "state": "LOCKED"},
+    {"id": "v2-career-review", "title": "V2 career review", "state": "AVAILABLE"}
   ]
 }

@@ -220,6 +220,7 @@ public final class Fakes {
         public final List<String> receipts = new ArrayList<>();
         public int depositCalls;
         public int lastAmount;
+        public boolean returnPartialDeposit;
 
         @Override public String name() { return "TestCoins"; }
         @Override public boolean available() { return available; }
@@ -235,6 +236,7 @@ public final class Fakes {
         @Override public Deposit deposit(PlayerGateway player, int amount, String payoutId) {
             depositCalls++;
             lastAmount = amount;
+            if (returnPartialDeposit) return new Deposit(false, 1, "delivery_failed_at_denomination");
             if (payoutId != null) {
                 if (receipts.contains(payoutId)) return Deposit.ok(0);
                 receipts.add(payoutId);

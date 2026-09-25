@@ -10,6 +10,7 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.LongArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
@@ -47,6 +48,16 @@ public final class StrajaCommands {
         root.then(Commands.literal("rules").executes(c -> player(c, StrajaRuntime.get().guards()::showRules)));
         root.then(Commands.literal("regulament").executes(c -> player(c, StrajaRuntime.get().guards()::showRules)));
         root.then(adminOnly(Commands.literal("backup").executes(StrajaCommands::backup)));
+        root.then(v2PersonnelCommands());
+        root.then(v2StationCommands());
+        root.then(v2DoctorCommands());
+        root.then(v2OutboxCommands());
+        root.then(v2PromotionCommands());
+        root.then(v2DocumentCommands());
+        root.then(v2EquipmentCommands());
+        root.then(v2MobilizationCommands());
+        root.then(v2CampaignCommands());
+        root.then(v2SettlementCommands());
 
         // recruitment
         root.then(adminOnly(Commands.literal("invite")
@@ -440,6 +451,7 @@ public final class StrajaCommands {
             }
             node.then(builder);
         }
+        addV2MissionCommands(node);
         return node;
     }
 
@@ -1012,6 +1024,635 @@ public final class StrajaCommands {
             ctx.getSource().sendFailure(Component.literal("Backup Straja eșuat: " + error.getMessage()));
             return 0;
         }
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> v2PersonnelCommands() {
+        var node = adminOnly(Commands.literal("personnel"));
+        node.then(Commands.literal("list").executes(c -> {
+            var source = c.getSource();
+            for (var person : StrajaRuntime.get().v2Personnel().all())
+                source.sendSystemMessage(Component.literal(person.serviceNumber + " " + person.playerUuid
+                        + " " + person.membershipStatus + " " + person.careerGrade));
+            return 1;
+        }));
+        node.then(Commands.literal("show").then(Commands.argument("player", EntityArgument.player())
+                .executes(c -> {
+                    var target = target(c, "player"); var person = target == null ? null
+                            : StrajaRuntime.get().v2Personnel().find(target.uuid().toString());
+                    if (person == null) { c.getSource().sendFailure(Component.literal("Personnel V2 nu există.")); return 0; }
+                    c.getSource().sendSystemMessage(Component.literal(person.playerUuid + " " + person.membershipStatus
+                            + " " + person.careerGrade + " v" + person.version)); return 1;
+                })));
+        node.then(Commands.literal("authorize").then(Commands.argument("player", EntityArgument.player())
+                .then(Commands.argument("grade", StringArgumentType.word()).executes(c -> {
+                    var target = target(c, "player");
+                    var grade = parseGrade(c, "grade");
+                    StrajaRuntime.get().v2Personnel().authorize(actor(c).uuid().toString(), target.uuid().toString(), grade,
+                            grade.fullTimeRequired() ? com.dwurdy.straja.domain.model.EmploymentMode.FULL_TIME
+                                    : com.dwurdy.straja.domain.model.EmploymentMode.PART_TIME,
+                            "COMMAND", "hq", "command:authorize:" + target.uuid());
+                    return 1;
+                }))));
+        node.then(Commands.literal("profession").then(Commands.argument("player", EntityArgument.player())
+                .then(Commands.argument("name", StringArgumentType.word()).executes(c -> {
+                    StrajaRuntime.get().v2Personnel().assignProfession(actor(c).uuid().toString(),
+                            target(c, "player").uuid().toString(), StringArgumentType.getString(c, "name"));
+                    return 1;
+                }))));
+        node.then(Commands.literal("appoint").then(Commands.argument("player", EntityArgument.player())
+                .then(Commands.argument("type", StringArgumentType.word())
+                        .then(Commands.argument("station", StringArgumentType.word())
+                                .then(Commands.argument("jurisdiction", StringArgumentType.word())
+                                        .executes(c -> {
+                                            StrajaRuntime.get().v2Personnel().appoint(actor(c).uuid().toString(),
+                                                    target(c, "player").uuid().toString(),
+                                                    parseAppointmentType(c, "type"),
+                                                    StringArgumentType.getString(c, "station"),
+                                                    StringArgumentType.getString(c, "jurisdiction"), null);
+                                            return 1;
+                                        }))))));
+        node.then(Commands.literal("suspend").then(Commands.argument("player", EntityArgument.player())
+                .executes(c -> { StrajaRuntime.get().v2Personnel().suspend(actor(c).uuid().toString(), target(c, "player").uuid().toString(), "COMMAND"); return 1; })));
+        node.then(Commands.literal("reinstate").then(Commands.argument("player", EntityArgument.player())
+                .executes(c -> { StrajaRuntime.get().v2Personnel().reinstate(actor(c).uuid().toString(), target(c, "player").uuid().toString()); return 1; })));
+        node.then(Commands.literal("terminate").then(Commands.argument("player", EntityArgument.player())
+                .executes(c -> { StrajaRuntime.get().v2Personnel().terminate(actor(c).uuid().toString(), target(c, "player").uuid().toString(), "COMMAND"); return 1; })));
+        return node;
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> v2PromotionCommands() {
+        var node = adminOnly(Commands.literal("promotion"));
+        node.then(Commands.literal("list").executes(c -> {
+            for (var application : StrajaRuntime.get().v2Promotions().all())
+                c.getSource().sendSystemMessage(Component.literal(application.applicationId + " "
+                        + application.subjectUuid + " " + application.status + " -> " + application.targetGrade));
+            return 1;
+        }));
+        node.then(Commands.literal("show").then(Commands.argument("id", StringArgumentType.word())
+                .executes(c -> showPromotion(c, StringArgumentType.getString(c, "id")))));
+        node.then(Commands.literal("submit").then(Commands.argument("player", EntityArgument.player())
+                .then(Commands.argument("grade", StringArgumentType.word()).executes(c -> {
+                    var result = StrajaRuntime.get().v2Promotions().submit(
+                            target(c, "player").uuid().toString(), parseGrade(c, "grade"));
+                    c.getSource().sendSuccess(() -> Component.literal("Promotion " + result.applicationId + " creată."), false);
+                    return 1;
+                }))));
+        node.then(Commands.literal("evidence").then(Commands.argument("id", StringArgumentType.word())
+                .then(Commands.argument("kind", StringArgumentType.word())
+                        .then(Commands.argument("result", StringArgumentType.word()).executes(c -> {
+                            var evidence = StrajaRuntime.get().v2Promotions().recordCommissionerEvidence(
+                                    StringArgumentType.getString(c, "id"), actor(c).uuid().toString(),
+                                    StringArgumentType.getString(c, "kind"),
+                                    StringArgumentType.getString(c, "result"), null,
+                                    "command:" + actor(c).uuid() + ":" + StringArgumentType.getString(c, "id")
+                                            + ":" + StringArgumentType.getString(c, "kind"));
+                            c.getSource().sendSuccess(() -> Component.literal("Dovadă " + evidence.evidenceId + " atașată."), false);
+                            return 1;
+                        })))));
+        node.then(Commands.literal("mark-ready").then(Commands.argument("id", StringArgumentType.word())
+                .executes(c -> { StrajaRuntime.get().v2Promotions().markReady(StringArgumentType.getString(c, "id")); return 1; })));
+        node.then(Commands.literal("approve").then(Commands.argument("id", StringArgumentType.word())
+                .then(Commands.argument("version", IntegerArgumentType.integer(0)).executes(c -> {
+                    StrajaRuntime.get().v2Promotions().approve(actor(c).uuid().toString(),
+                            StringArgumentType.getString(c, "id"), IntegerArgumentType.getInteger(c, "version")); return 1;
+                }))));
+        node.then(Commands.literal("reject").then(Commands.argument("id", StringArgumentType.word())
+                .then(Commands.argument("reason", StringArgumentType.greedyString()).executes(c -> {
+                    StrajaRuntime.get().v2Promotions().reject(actor(c).uuid().toString(),
+                            StringArgumentType.getString(c, "id"), StringArgumentType.getString(c, "reason")); return 1;
+                }))));
+        node.then(Commands.literal("withdraw").then(Commands.argument("id", StringArgumentType.word())
+                .executes(c -> { StrajaRuntime.get().v2Promotions().withdraw(actor(c).uuid().toString(),
+                        StringArgumentType.getString(c, "id")); return 1; })));
+        return node;
+    }
+
+    private static int showPromotion(CommandContext<CommandSourceStack> c, String id) {
+        var application = StrajaRuntime.get().v2Promotions().find(id);
+        if (application == null) { c.getSource().sendFailure(Component.literal("Promotion necunoscută.")); return 0; }
+        c.getSource().sendSystemMessage(Component.literal(application.applicationId + " " + application.subjectUuid
+                + " " + application.status + " v" + application.version + " -> " + application.targetGrade));
+        return 1;
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> v2DocumentCommands() {
+        var node = adminOnly(Commands.literal("document"));
+        node.then(Commands.literal("list").executes(c -> {
+            var service = StrajaRuntime.get().v2Documents();
+            for (var document : service.documents())
+                c.getSource().sendSystemMessage(Component.literal(document.documentId + " " + document.type + " " + document.status));
+            for (var instrument : service.instruments())
+                c.getSource().sendSystemMessage(Component.literal(instrument.instrumentId + " " + instrument.instrumentType
+                        + " " + instrument.remainingQuantity + "/" + instrument.initialQuantity));
+            return 1;
+        }));
+        node.then(Commands.literal("inspect").then(Commands.argument("id", StringArgumentType.word())
+                .executes(c -> {
+                    var document = StrajaRuntime.get().v2Documents().inspect(StringArgumentType.getString(c, "id"));
+                    if (document == null) { c.getSource().sendFailure(Component.literal("Document necunoscut.")); return 0; }
+                    c.getSource().sendSystemMessage(Component.literal(document.documentId + " " + document.type + " "
+                            + document.status + " subject=" + document.subject + " station=" + document.stationId)); return 1;
+                })));
+        node.then(Commands.literal("void").then(Commands.argument("id", StringArgumentType.word())
+                .executes(c -> { StrajaRuntime.get().v2Documents().revoke(actor(c).uuid().toString(),
+                        StringArgumentType.getString(c, "id")); return 1; })));
+        node.then(Commands.literal("expire").then(Commands.argument("id", StringArgumentType.word())
+                .executes(c -> { StrajaRuntime.get().v2Documents().expire(actor(c).uuid().toString(),
+                        StringArgumentType.getString(c, "id")); return 1; })));
+        node.then(Commands.literal("reprint").then(Commands.argument("id", StringArgumentType.word())
+                .executes(c -> { StrajaRuntime.get().v2Documents().reprint(actor(c).uuid().toString(),
+                        StringArgumentType.getString(c, "id"), "command:reprint:" + StringArgumentType.getString(c, "id")); return 1; })));
+        node.then(Commands.literal("instrument").then(Commands.literal("issue")
+                .then(Commands.argument("holder", EntityArgument.player())
+                        .then(Commands.argument("type", StringArgumentType.word())
+                                .then(Commands.argument("quantity", IntegerArgumentType.integer(1)).executes(c -> {
+                                    var instrument = StrajaRuntime.get().v2Documents().issueInstrument(
+                                            actor(c).uuid().toString(), target(c, "holder").uuid().toString(),
+                                            parseDocumentType(c, "type"), IntegerArgumentType.getInteger(c, "quantity"),
+                                            "equipment", "hq", null, "command:" + actor(c).uuid() + ":" + target(c, "holder").uuid()
+                                                    + ":" + StringArgumentType.getString(c, "type"));
+                                    c.getSource().sendSuccess(() -> Component.literal("Instrument " + instrument.instrumentId + " emis."), false);
+                                    return 1;
+                                }))))));
+        node.then(Commands.literal("redemption").then(Commands.argument("instrument", StringArgumentType.word())
+                .then(Commands.argument("quantity", IntegerArgumentType.integer(1)).executes(c -> {
+                    var result = StrajaRuntime.get().v2Documents().redeem(actor(c).uuid().toString(),
+                            StringArgumentType.getString(c, "instrument"), IntegerArgumentType.getInteger(c, "quantity"),
+                            "hq", "command:" + actor(c).uuid() + ":" + StringArgumentType.getString(c, "instrument"));
+                    if (!result.accepted()) { c.getSource().sendFailure(Component.literal(result.reason())); return 0; }
+                    return 1;
+                }))));
+        return node;
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> v2EquipmentCommands() {
+        var node = adminOnly(Commands.literal("equipment"));
+        node.then(Commands.literal("ledger").then(Commands.argument("player", EntityArgument.player())
+                .executes(c -> {
+                    for (var obligation : StrajaRuntime.get().v2EquipmentLedger()
+                            .obligationsFor(target(c, "player").uuid().toString()))
+                        c.getSource().sendSystemMessage(Component.literal(obligation.obligationId + " " + obligation.itemId
+                                + " " + obligation.outstandingQuantity + "/" + obligation.issuedQuantity + " " + obligation.status));
+                    return 1;
+                })));
+        node.then(Commands.literal("issue").then(Commands.argument("player", EntityArgument.player())
+                .then(Commands.argument("instrument", StringArgumentType.word())
+                        .then(Commands.argument("item", StringArgumentType.word())
+                                .then(Commands.argument("quantity", IntegerArgumentType.integer(1))
+                                        .then(Commands.argument("operation", StringArgumentType.word())
+                                                .executes(c -> {
+                                                    String instrument = StringArgumentType.getString(c, "instrument");
+                                                    var issue = StrajaRuntime.get().v2EquipmentLedger().createIssue(
+                                                            actor(c).uuid().toString(), target(c, "player").uuid().toString(),
+                                                            "hq", "none".equalsIgnoreCase(instrument) ? "" : instrument, "",
+                                                            java.util.List.of(new com.dwurdy.straja.application.service.EquipmentLedgerService.RequestedLine(
+                                                                    StringArgumentType.getString(c, "item"), IntegerArgumentType.getInteger(c, "quantity"))),
+                                                            StringArgumentType.getString(c, "operation"));
+                                                    c.getSource().sendSuccess(() -> Component.literal("Echipament " + issue.issueId + " rezervat."), false);
+                                                    return 1;
+                                                })))))));
+        node.then(Commands.literal("fulfill").then(Commands.argument("issue", StringArgumentType.word())
+                .then(Commands.argument("line", StringArgumentType.word())
+                        .then(Commands.argument("quantity", IntegerArgumentType.integer(1))
+                                .then(Commands.argument("asset", StringArgumentType.word())
+                                        .then(Commands.argument("operation", StringArgumentType.word())
+                                                .executes(c -> {
+                                                    StrajaRuntime.get().v2EquipmentLedger().fulfillLine(
+                                                            StringArgumentType.getString(c, "issue"), StringArgumentType.getString(c, "line"),
+                                                            IntegerArgumentType.getInteger(c, "quantity"), StringArgumentType.getString(c, "asset"),
+                                                            StringArgumentType.getString(c, "operation"));
+                                                    return 1;
+                                                })))))));
+        node.then(Commands.literal("return").then(Commands.argument("player", EntityArgument.player())
+                .then(Commands.argument("item", StringArgumentType.word())
+                        .then(Commands.argument("quantity", IntegerArgumentType.integer(1))
+                                .then(Commands.argument("operation", StringArgumentType.word())
+                                        .executes(c -> {
+                                            var result = StrajaRuntime.get().v2EquipmentLedger().returnQuantity(
+                                                    actor(c).uuid().toString(), target(c, "player").uuid().toString(),
+                                                    StringArgumentType.getString(c, "item"), IntegerArgumentType.getInteger(c, "quantity"),
+                                                    StringArgumentType.getString(c, "operation"));
+                                            return result.accepted() ? 1 : 0;
+                                        }))))));
+        node.then(Commands.literal("lost").then(Commands.argument("id", StringArgumentType.word())
+                .then(Commands.argument("debt", IntegerArgumentType.integer(0))
+                        .executes(c -> { StrajaRuntime.get().v2EquipmentLedger().markLost(actor(c).uuid().toString(),
+                                StringArgumentType.getString(c, "id"), IntegerArgumentType.getInteger(c, "debt")); return 1; }))));
+        node.then(Commands.literal("destroyed").then(Commands.argument("id", StringArgumentType.word())
+                .then(Commands.argument("debt", IntegerArgumentType.integer(0))
+                        .executes(c -> { StrajaRuntime.get().v2EquipmentLedger().markDestroyed(actor(c).uuid().toString(),
+                                StringArgumentType.getString(c, "id"), IntegerArgumentType.getInteger(c, "debt")); return 1; }))));
+        node.then(Commands.literal("waive").then(Commands.argument("id", StringArgumentType.word())
+                .then(Commands.argument("waiver", StringArgumentType.word())
+                        .executes(c -> { StrajaRuntime.get().v2EquipmentLedger().waive(actor(c).uuid().toString(),
+                                 StringArgumentType.getString(c, "id"), StringArgumentType.getString(c, "waiver")); return 1; }))));
+        node.then(Commands.literal("debt").then(Commands.argument("id", StringArgumentType.word())
+                .executes(c -> {
+                    var obligation = StrajaRuntime.get().v2EquipmentLedger().obligationsFor(actor(c).uuid().toString()).stream()
+                            .filter(value -> value.obligationId.equals(StringArgumentType.getString(c, "id"))).findFirst().orElse(null);
+                    if (obligation == null) { c.getSource().sendFailure(Component.literal("Obligație necunoscută.")); return 0; }
+                    c.getSource().sendSystemMessage(Component.literal("Datorie " + obligation.debtAmount + " status=" + obligation.status)); return 1;
+                })));
+        node.then(Commands.literal("reconcile").executes(c -> {
+            int changed = StrajaRuntime.get().v2EquipmentLedger().reconcile();
+            c.getSource().sendSystemMessage(Component.literal("Obligații reconciliate: " + changed)); return 1;
+        }));
+        return node;
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> v2MobilizationCommands() {
+        var node = adminOnly(Commands.literal("mobilization"));
+        node.then(Commands.literal("list").executes(c -> {
+            for (var order : StrajaRuntime.get().v2Mobilizations().all())
+                c.getSource().sendSystemMessage(Component.literal(order.mobilizationId + " " + order.specialistUuid
+                        + " " + order.status + " until " + order.expiresAt));
+            return 1;
+        }));
+        node.then(Commands.literal("show").then(Commands.argument("id", StringArgumentType.word()).executes(c -> {
+            var order = StrajaRuntime.get().v2Mobilizations().find(StringArgumentType.getString(c, "id"));
+            if (order == null) { c.getSource().sendFailure(Component.literal("Mobilizare necunoscută.")); return 0; }
+            c.getSource().sendSystemMessage(Component.literal(order.mobilizationId + " " + order.status + " " + order.stationId)); return 1;
+        })));
+        node.then(Commands.literal("authorize").then(Commands.argument("specialist", EntityArgument.player())
+                .then(Commands.argument("station", StringArgumentType.word())
+                        .then(Commands.argument("jurisdiction", StringArgumentType.word())
+                                .then(Commands.argument("hours", IntegerArgumentType.integer(1))
+                                        .executes(c -> {
+                                            var order = StrajaRuntime.get().v2Mobilizations().authorize(
+                                                    actor(c).uuid().toString(), target(c, "specialist").uuid().toString(),
+                                                    StringArgumentType.getString(c, "station"),
+                                                    StringArgumentType.getString(c, "jurisdiction"),
+                                                    IntegerArgumentType.getInteger(c, "hours") * 3_600_000L,
+                                                    "", "", "COMMAND");
+                                            c.getSource().sendSuccess(() -> Component.literal(
+                                                    "Mobilizare " + order.mobilizationId + " autorizată."), false);
+                                            return 1;
+                                        }))))));
+        node.then(Commands.literal("muster").then(Commands.argument("id", StringArgumentType.word())
+                .executes(c -> { StrajaRuntime.get().v2Mobilizations().muster(actor(c).uuid().toString(), StringArgumentType.getString(c, "id")); return 1; })));
+        node.then(Commands.literal("activate").then(Commands.argument("id", StringArgumentType.word())
+                .executes(c -> { StrajaRuntime.get().v2Mobilizations().activate(actor(c).uuid().toString(), StringArgumentType.getString(c, "id")); return 1; })));
+        node.then(Commands.literal("end").then(Commands.argument("id", StringArgumentType.word())
+                .executes(c -> { StrajaRuntime.get().v2Mobilizations().demobilize(actor(c).uuid().toString(), StringArgumentType.getString(c, "id")); return 1; })));
+        node.then(Commands.literal("cancel").then(Commands.argument("id", StringArgumentType.word())
+                .then(Commands.argument("reason", StringArgumentType.greedyString())
+                        .executes(c -> { StrajaRuntime.get().v2Mobilizations().cancel(actor(c).uuid().toString(),
+                                StringArgumentType.getString(c, "id"), StringArgumentType.getString(c, "reason")); return 1; }))));
+        return node;
+    }
+
+    private static void addV2MissionCommands(LiteralArgumentBuilder<CommandSourceStack> node) {
+        node.then(Commands.literal("publish")
+                .then(Commands.argument("beneficiary", EntityArgument.player())
+                        .then(Commands.argument("type", StringArgumentType.word())
+                                .then(Commands.argument("deadline", LongArgumentType.longArg())
+                                        .then(Commands.argument("max", IntegerArgumentType.integer(1))
+                                                .executes(c -> {
+                                                    var mission = StrajaRuntime.get().v2Missions().publish(
+                                                            actor(c).uuid().toString(), target(c, "beneficiary").uuid().toString(),
+                                                            "hq", "", StringArgumentType.getString(c, "type"),
+                                                            LongArgumentType.getLong(c, "deadline"),
+                                                            IntegerArgumentType.getInteger(c, "max"));
+                                                    c.getSource().sendSuccess(() -> Component.literal("Misiune V2 " + mission.id + " publicată."), false);
+                                                    return 1;
+                                                }))))));
+        node.then(Commands.literal("claim").then(Commands.argument("id", StringArgumentType.word())
+                .executes(c -> { StrajaRuntime.get().v2Missions().claim(actor(c).uuid().toString(), StringArgumentType.getString(c, "id")); return 1; })));
+        node.then(Commands.literal("begin").then(Commands.argument("id", StringArgumentType.word())
+                .executes(c -> { StrajaRuntime.get().v2Missions().begin(actor(c).uuid().toString(), StringArgumentType.getString(c, "id")); return 1; })));
+        node.then(Commands.literal("submit").then(Commands.argument("id", StringArgumentType.word())
+                .then(Commands.argument("evidence", StringArgumentType.greedyString())
+                        .executes(c -> { StrajaRuntime.get().v2Missions().submit(actor(c).uuid().toString(),
+                                StringArgumentType.getString(c, "id"), StringArgumentType.getString(c, "evidence")); return 1; }))));
+        node.then(Commands.literal("verify").then(Commands.argument("id", StringArgumentType.word())
+                .executes(c -> { StrajaRuntime.get().v2Missions().verify(actor(c).uuid().toString(), StringArgumentType.getString(c, "id")); return 1; })));
+        node.then(Commands.literal("reject-report").then(Commands.argument("id", StringArgumentType.word())
+                .then(Commands.argument("reason", StringArgumentType.greedyString())
+                        .executes(c -> { StrajaRuntime.get().v2Missions().rejectReport(actor(c).uuid().toString(),
+                                StringArgumentType.getString(c, "id"), StringArgumentType.getString(c, "reason")); return 1; }))));
+        node.then(Commands.literal("reassign").then(Commands.argument("id", StringArgumentType.word())
+                .then(Commands.argument("beneficiary", EntityArgument.player())
+                        .then(Commands.argument("reason", StringArgumentType.greedyString())
+                                .executes(c -> { StrajaRuntime.get().v2Missions().reassign(actor(c).uuid().toString(),
+                                        StringArgumentType.getString(c, "id"), target(c, "beneficiary").uuid().toString(),
+                                        StringArgumentType.getString(c, "reason")); return 1; })))));
+        node.then(Commands.literal("extend").then(Commands.argument("id", StringArgumentType.word())
+                .then(Commands.argument("hours", IntegerArgumentType.integer(1))
+                        .executes(c -> { StrajaRuntime.get().v2Missions().extendDeadline(actor(c).uuid().toString(),
+                                StringArgumentType.getString(c, "id"), IntegerArgumentType.getInteger(c, "hours") * 3_600_000L); return 1; }))));
+        node.then(Commands.literal("cancel").then(Commands.argument("id", StringArgumentType.word())
+                .then(Commands.argument("reason", StringArgumentType.greedyString())
+                        .executes(c -> { StrajaRuntime.get().v2Missions().cancel(actor(c).uuid().toString(),
+                                StringArgumentType.getString(c, "id"), StringArgumentType.getString(c, "reason")); return 1; }))));
+        node.then(Commands.literal("evidence").then(Commands.argument("id", StringArgumentType.word())
+                .then(Commands.argument("type", StringArgumentType.word())
+                        .then(Commands.argument("reference", StringArgumentType.greedyString())
+                                .executes(c -> { StrajaRuntime.get().v2Missions().addEvidence(
+                                        actor(c).uuid().toString(), StringArgumentType.getString(c, "id"),
+                                        StringArgumentType.getString(c, "type"), StringArgumentType.getString(c, "reference")); return 1; })))));
+        node.then(Commands.literal("generator").executes(c -> {
+            c.getSource().sendSystemMessage(Component.literal(String.join(", ", StrajaRuntime.get().v2Generators().professions()))); return 1;
+        }).then(Commands.literal("publish").then(Commands.argument("profession", StringArgumentType.word())
+                .then(Commands.argument("beneficiary", EntityArgument.player())
+                        .then(Commands.argument("offer", StringArgumentType.word())
+                                .executes(c -> {
+                                    var mission = StrajaRuntime.get().v2Generators().publishFor(
+                                            StringArgumentType.getString(c, "profession"), target(c, "beneficiary").uuid().toString(),
+                                            "hq", "", StrajaRuntime.get().nowMillis(), StringArgumentType.getString(c, "offer"),
+                                            StrajaRuntime.get().v2Missions());
+                                    c.getSource().sendSuccess(() -> Component.literal("Ofertă " + mission.id + " publicată."), false); return 1;
+                                }))))));
+        node.then(Commands.literal("pool").executes(c -> {
+            c.getSource().sendSystemMessage(Component.literal("Generator pool: "
+                    + String.join(", ", StrajaRuntime.get().v2Generators().professions()))); return 1;
+        }));
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> v2CampaignCommands() {
+        var node = adminOnly(Commands.literal("campaign"));
+        node.then(Commands.literal("create").then(Commands.argument("type", StringArgumentType.word())
+                .then(Commands.argument("station", StringArgumentType.word())
+                        .then(Commands.argument("jurisdiction", StringArgumentType.word())
+                                .then(Commands.argument("hours", IntegerArgumentType.integer(1))
+                                        .then(Commands.argument("quota", LongArgumentType.longArg(1))
+                                                .executes(c -> {
+                                                    long now = StrajaRuntime.get().nowMillis();
+                                                    var campaign = StrajaRuntime.get().v2Campaigns().create(
+                                                            actor(c).uuid().toString(), StringArgumentType.getString(c, "type"),
+                                                            StringArgumentType.getString(c, "station"),
+                                                            StringArgumentType.getString(c, "jurisdiction"), now,
+                                                            now + IntegerArgumentType.getInteger(c, "hours") * 3_600_000L,
+                                                            LongArgumentType.getLong(c, "quota"));
+                                                    c.getSource().sendSuccess(() -> Component.literal(
+                                                            "Campanie " + campaign.campaignId + " creată."), false);
+                                                    return 1;
+                                                })))))));
+        node.then(Commands.literal("list").executes(c -> {
+            for (var campaign : StrajaRuntime.get().v2Campaigns().all())
+                c.getSource().sendSystemMessage(Component.literal(campaign.campaignId + " " + campaign.status + " "
+                        + campaign.quantityAccepted + "/" + campaign.globalQuota));
+            return 1;
+        }));
+        node.then(Commands.literal("show").then(Commands.argument("id", StringArgumentType.word()).executes(c -> {
+            var campaign = StrajaRuntime.get().v2Campaigns().find(StringArgumentType.getString(c, "id"));
+            if (campaign == null) { c.getSource().sendFailure(Component.literal("Campanie necunoscută.")); return 0; }
+            c.getSource().sendSystemMessage(Component.literal(campaign.campaignId + " " + campaign.status + " quota=" + campaign.globalQuota)); return 1;
+        })));
+        node.then(Commands.literal("start").then(Commands.argument("id", StringArgumentType.word())
+                .executes(c -> { StrajaRuntime.get().v2Campaigns().start(actor(c).uuid().toString(),
+                        StringArgumentType.getString(c, "id")); return 1; })));
+        node.then(Commands.literal("end").then(Commands.argument("id", StringArgumentType.word())
+                .executes(c -> { StrajaRuntime.get().v2Campaigns().end(actor(c).uuid().toString(),
+                        StringArgumentType.getString(c, "id")); return 1; })));
+        node.then(Commands.literal("close").then(Commands.argument("id", StringArgumentType.word())
+                .executes(c -> { StrajaRuntime.get().v2Campaigns().end(actor(c).uuid().toString(),
+                        StringArgumentType.getString(c, "id")); return 1; })));
+        node.then(Commands.literal("cancel").then(Commands.argument("id", StringArgumentType.word())
+                .then(Commands.argument("reason", StringArgumentType.greedyString())
+                        .executes(c -> { StrajaRuntime.get().v2Campaigns().cancel(actor(c).uuid().toString(),
+                                StringArgumentType.getString(c, "id"), StringArgumentType.getString(c, "reason")); return 1; }))));
+        node.then(Commands.literal("extend").then(Commands.argument("id", StringArgumentType.word())
+                .then(Commands.argument("hours", IntegerArgumentType.integer(1))
+                        .executes(c -> { StrajaRuntime.get().v2Campaigns().extend(actor(c).uuid().toString(),
+                        StringArgumentType.getString(c, "id"), IntegerArgumentType.getInteger(c, "hours") * 3_600_000L); return 1; }))));
+        node.then(Commands.literal("quota").then(Commands.argument("campaign", StringArgumentType.word())
+                .then(Commands.argument("mission", StringArgumentType.word())
+                        .then(Commands.argument("player", EntityArgument.player())
+                                .then(Commands.argument("quantity", LongArgumentType.longArg(1))
+                                        .then(Commands.argument("operation", StringArgumentType.word())
+                                                .executes(c -> {
+                                                    var reservation = StrajaRuntime.get().v2Campaigns().reserve(
+                                                            StringArgumentType.getString(c, "campaign"),
+                                                            StringArgumentType.getString(c, "mission"),
+                                                            target(c, "player").uuid().toString(),
+                                                            LongArgumentType.getLong(c, "quantity"),
+                                                            StringArgumentType.getString(c, "operation"));
+                                                    try {
+                                                        StrajaRuntime.get().v2Missions().attachQuotaReservation(
+                                                                actor(c).uuid().toString(),
+                                                                StringArgumentType.getString(c, "mission"),
+                                                                reservation.reservationId);
+                                                    } catch (RuntimeException error) {
+                                                        StrajaRuntime.get().v2Campaigns().release(reservation.reservationId);
+                                                        throw error;
+                                                    }
+                                                    c.getSource().sendSuccess(() -> Component.literal(
+                                                            "Rezervare " + reservation.reservationId + " creată."), false);
+                                                    return 1;
+                                                })))))));
+        node.then(Commands.literal("fulfill").then(Commands.argument("reservation", StringArgumentType.word())
+                .then(Commands.argument("quantity", LongArgumentType.longArg(1))
+                        .then(Commands.argument("operation", StringArgumentType.word())
+                                .executes(c -> {
+                                    var reservation = StrajaRuntime.get().v2Campaigns().fulfill(
+                                            StringArgumentType.getString(c, "reservation"),
+                                            LongArgumentType.getLong(c, "quantity"),
+                                            StringArgumentType.getString(c, "operation"));
+                                    c.getSource().sendSuccess(() -> Component.literal(
+                                            "Livrare quota " + reservation.reservationId + " "
+                                                    + reservation.fulfilledQuantity + "/" + reservation.reservedQuantity), false);
+                                    return 1;
+                                })))));
+        node.then(Commands.literal("release").then(Commands.argument("reservation", StringArgumentType.word())
+                .executes(c -> {
+                    var reservation = StrajaRuntime.get().v2Campaigns().release(
+                            StringArgumentType.getString(c, "reservation"));
+                    c.getSource().sendSuccess(() -> Component.literal(
+                            "Rezervare " + reservation.reservationId + " eliberată."), false);
+                    return 1;
+                })));
+        node.then(Commands.literal("reservations").then(Commands.argument("id", StringArgumentType.word())
+                .executes(c -> {
+                    for (var reservation : StrajaRuntime.get().v2Campaigns().reservations(StringArgumentType.getString(c, "id")))
+                        c.getSource().sendSystemMessage(Component.literal(reservation.reservationId + " "
+                                + reservation.status + " " + reservation.fulfilledQuantity + "/" + reservation.reservedQuantity));
+                    return 1;
+                })));
+        return node;
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> v2SettlementCommands() {
+        var node = adminOnly(Commands.literal("settlement"));
+        node.then(Commands.literal("list").executes(c -> {
+            for (var settlement : StrajaRuntime.get().v2Settlements().all())
+                c.getSource().sendSystemMessage(Component.literal(settlement.settlementId + " " + settlement.playerUuid
+                        + " " + settlement.status + " amount=" + settlement.amount));
+            return 1;
+        }));
+        node.then(Commands.literal("show").then(Commands.argument("id", StringArgumentType.word()).executes(c -> {
+            var settlement = StrajaRuntime.get().v2Settlements().find(StringArgumentType.getString(c, "id"));
+            if (settlement == null) { c.getSource().sendFailure(Component.literal("Decontare necunoscută.")); return 0; }
+            c.getSource().sendSystemMessage(Component.literal(settlement.settlementId + " " + settlement.status
+                    + " " + settlement.amount + " " + settlement.settlementKey)); return 1;
+        })));
+        node.then(Commands.literal("review").then(Commands.argument("id", StringArgumentType.word())
+                .then(Commands.argument("reason", StringArgumentType.greedyString()).executes(c -> {
+                    StrajaRuntime.get().v2Settlements().markReview(StringArgumentType.getString(c, "id"),
+                            StringArgumentType.getString(c, "reason")); return 1;
+                }))));
+        node.then(Commands.literal("retry").then(Commands.argument("id", StringArgumentType.word())
+                .executes(c -> {
+                    String id = StringArgumentType.getString(c, "id");
+                    var settlement = StrajaRuntime.get().v2Settlements().retry(id);
+                    var player = StrajaRuntime.get().playerQueries().findPlayer(settlement.playerUuid);
+                    if (player != null) StrajaRuntime.get().v2Settlements().payout(settlement, player);
+                    return 1;
+                })));
+        node.then(Commands.literal("void").then(Commands.argument("id", StringArgumentType.word())
+                .then(Commands.argument("reason", StringArgumentType.greedyString()).executes(c -> {
+                    StrajaRuntime.get().v2Settlements().voidSettlement(StringArgumentType.getString(c, "id"),
+                            StringArgumentType.getString(c, "reason")); return 1;
+                }))));
+        node.then(Commands.literal("reconcile").executes(c -> {
+            int changed = StrajaRuntime.get().v2Settlements().reconcile();
+            c.getSource().sendSystemMessage(Component.literal("Decontări reconciliate: " + changed));
+            return 1;
+        }));
+        return node;
+    }
+
+    private static com.dwurdy.straja.domain.model.CareerGrade parseGrade(CommandContext<CommandSourceStack> c, String name) {
+        try { return com.dwurdy.straja.domain.model.CareerGrade.valueOf(StringArgumentType.getString(c, name).toUpperCase(java.util.Locale.ROOT)); }
+        catch (IllegalArgumentException error) { throw new IllegalArgumentException("career grade invalid"); }
+    }
+
+    private static com.dwurdy.straja.domain.model.DocumentType parseDocumentType(CommandContext<CommandSourceStack> c, String name) {
+        try { return com.dwurdy.straja.domain.model.DocumentType.valueOf(StringArgumentType.getString(c, name).toUpperCase(java.util.Locale.ROOT)); }
+        catch (IllegalArgumentException error) { throw new IllegalArgumentException("document type invalid"); }
+    }
+
+    private static com.dwurdy.straja.domain.model.AppointmentType parseAppointmentType(
+            CommandContext<CommandSourceStack> c, String name) {
+        try {
+            return com.dwurdy.straja.domain.model.AppointmentType.valueOf(
+                    StringArgumentType.getString(c, name).toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException error) {
+            throw new IllegalArgumentException("appointment type invalid");
+        }
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> v2StationCommands() {
+        var node = adminOnly(Commands.literal("station"));
+        node.then(Commands.literal("status").executes(c -> {
+            var resolution = StrajaRuntime.get().v2Stations().resolve("hq", "", "");
+            c.getSource().sendSystemMessage(Component.literal(resolution.available()
+                    ? "Stație activă: " + resolution.station().stationId
+                    : "Stațiile nu au putut fi rezolvate: " + resolution.reason())); return resolution.available() ? 1 : 0;
+        }));
+        node.then(Commands.literal("inventory").executes(c -> {
+            var station = StrajaRuntime.get().v2Stations().get("hq");
+            if (station == null) return 0;
+            c.getSource().sendSystemMessage(Component.literal("Inventar stație " + station.stationId + ": "
+                    + (station.inventoryAccounts.isEmpty() ? "gol" : station.inventoryAccounts.toString())));
+            return 1;
+        }));
+        node.then(Commands.literal("budget").executes(c -> {
+            var station = StrajaRuntime.get().v2Stations().get("hq");
+            if (station == null) return 0;
+            c.getSource().sendSystemMessage(Component.literal("Buget stație " + station.stationId + ": "
+                    + (station.budgetAccounts.isEmpty() ? "gol" : station.budgetAccounts.toString())));
+            return 1;
+        }));
+        node.then(Commands.literal("validate").requires(source -> source.hasPermission(CommandPermissions.SETUP))
+                .executes(c -> {
+                    var errors = StrajaRuntime.get().v2Stations().validateFallbacks();
+                    c.getSource().sendSystemMessage(Component.literal(errors.isEmpty() ? "Stațiile sunt valide." : String.join(", ", errors)));
+                    return errors.isEmpty() ? 1 : 0;
+                }));
+        node.then(Commands.literal("create").requires(source -> source.hasPermission(CommandPermissions.SETUP))
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("name", StringArgumentType.greedyString())
+                                .executes(c -> { StrajaRuntime.get().v2Stations().create(
+                                        StringArgumentType.getString(c, "id"), StringArgumentType.getString(c, "name")); return 1; }))));
+        node.then(Commands.literal("remove").requires(source -> source.hasPermission(CommandPermissions.SETUP))
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(c -> { StrajaRuntime.get().v2Stations().remove(StringArgumentType.getString(c, "id")); return 1; })));
+        node.then(Commands.literal("set-fallback").requires(source -> source.hasPermission(CommandPermissions.SETUP))
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("fallback", StringArgumentType.word())
+                                .executes(c -> { StrajaRuntime.get().v2Stations().setFallback(
+                                        StringArgumentType.getString(c, "id"), StringArgumentType.getString(c, "fallback")); return 1; }))));
+        node.then(Commands.literal("set-jurisdiction").requires(source -> source.hasPermission(CommandPermissions.SETUP))
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("jurisdiction", StringArgumentType.greedyString())
+                                .executes(c -> { StrajaRuntime.get().v2Stations().setJurisdictions(
+                                 StringArgumentType.getString(c, "id"), java.util.List.of(StringArgumentType.getString(c, "jurisdiction"))); return 1; }))));
+        node.then(Commands.literal("set-location").requires(source -> source.hasPermission(CommandPermissions.SETUP))
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("role", StringArgumentType.word())
+                                .executes(c -> {
+                                    PlayerGateway player = actor(c);
+                                    var location = new com.dwurdy.straja.domain.model.SetupData.Location();
+                                    location.dimension = player.dimension(); location.x = player.x();
+                                    location.y = player.y(); location.z = player.z();
+                                    StrajaRuntime.get().v2Stations().setLocation(
+                                            StringArgumentType.getString(c, "id"),
+                                            StringArgumentType.getString(c, "role"), location);
+                                    return 1;
+                                }))));
+        node.then(Commands.literal("set-message-template").requires(source -> source.hasPermission(CommandPermissions.SETUP))
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("key", StringArgumentType.word())
+                                .then(Commands.argument("template", StringArgumentType.greedyString())
+                                        .executes(c -> { StrajaRuntime.get().v2Stations().setMessageTemplate(
+                                                StringArgumentType.getString(c, "id"), StringArgumentType.getString(c, "key"),
+                                                StringArgumentType.getString(c, "template")); return 1; })))));
+        node.then(Commands.literal("bind-npc").requires(source -> source.hasPermission(CommandPermissions.SETUP))
+                .then(Commands.argument("npc", StringArgumentType.word())
+                        .then(Commands.argument("station", StringArgumentType.word())
+                                .executes(c -> { StrajaRuntime.get().npcs().bindStation(
+                                        StringArgumentType.getString(c, "npc"), StringArgumentType.getString(c, "station")); return 1; }))));
+        return node;
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> v2DoctorCommands() {
+        var node = adminOnly(Commands.literal("doctor"));
+        node.then(Commands.literal("consistency").executes(c -> {
+            return doctorReport(c);
+        }));
+        for (String check : new String[]{"operations", "equipment", "settlements", "stations", "outbox"})
+            node.then(Commands.literal(check).executes(c -> doctorReport(c, check)));
+        return node;
+    }
+
+    private static int doctorReport(CommandContext<CommandSourceStack> c) {
+        return doctorReport(c, "consistency");
+    }
+
+    private static int doctorReport(CommandContext<CommandSourceStack> c, String section) {
+        var issues = StrajaRuntime.get().v2Consistency().check(section);
+        c.getSource().sendSystemMessage(Component.literal(issues.isEmpty()
+                ? "Doctor: OK" : "Doctor: " + String.join(", ", issues)));
+        return issues.isEmpty() ? 1 : 0;
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> v2OutboxCommands() {
+        var node = adminOnly(Commands.literal("outbox"));
+        node.then(Commands.literal("status").executes(c -> {
+            c.getSource().sendSystemMessage(Component.literal("Outbox pending: " + StrajaRuntime.get().v2Outbox().pending().size()));
+            return 1;
+        }));
+        node.then(Commands.literal("pending").executes(c -> {
+            for (var event : StrajaRuntime.get().v2Outbox().pending())
+                c.getSource().sendSystemMessage(Component.literal(event.eventId + " " + event.eventType + " " + event.status));
+            return 1;
+        }));
+        node.then(Commands.literal("retry").then(Commands.argument("id", StringArgumentType.word())
+                .executes(c -> StrajaRuntime.get().v2Outbox().retry(StringArgumentType.getString(c, "id")) ? 1 : 0)));
+        node.then(Commands.literal("dead-letter").executes(c -> {
+            for (var event : StrajaRuntime.get().v2Outbox().deadLetters())
+                c.getSource().sendSystemMessage(Component.literal(event.eventId + " " + event.eventType + " attempts=" + event.attempts));
+            return 1;
+        }));
+        node.then(Commands.literal("test").requires(source -> source.hasPermission(CommandPermissions.SETUP)).executes(c -> {
+            String key = "outbox-test:" + StrajaRuntime.get().nowMillis();
+            var event = StrajaRuntime.get().v2Outbox().enqueue("MAJOR_INCIDENT", key,
+                    new com.dwurdy.straja.application.service.OutboxService.SafePayload(
+                            "{\"eventType\":\"MAJOR_INCIDENT\",\"aggregateId\":\"OUTBOX_TEST\",\"title\":\"outbox test\",\"severity\":\"TEST\"}"));
+            c.getSource().sendSystemMessage(Component.literal("Outbox test enqueued: " + event.eventId));
+            return 1;
+        }));
+        return node;
     }
 
     private static int adminActor(CommandContext<CommandSourceStack> ctx,

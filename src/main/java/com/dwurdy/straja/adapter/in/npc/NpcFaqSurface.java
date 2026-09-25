@@ -5,6 +5,7 @@ import com.dwurdy.straja.domain.model.Rank;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -18,13 +19,33 @@ final class NpcFaqSurface {
 
     record Context(boolean commissioner, int rank, String rankName, String applicationState,
                    boolean invited, boolean duty, boolean suspended, boolean resigned,
-                   boolean fired) {
+                   boolean fired, Map<String, String> stationMessages) {
         static Context from(GuardState state, boolean commissioner, String rankName) {
+            return from(state, commissioner, rankName, Map.of(
+                    "{station}", "sediul Străjii", "{fallbackStation}", "stația de rezervă",
+                    "{receptionist}", "Recepția", "{secretariat}", "Secretariatul",
+                    "{armorer}", "Armuriera", "{trainer}", "Instructorul",
+                    "{commissionerOffice}", "biroul Comisarului", "{prison}", "închisoarea"));
+        }
+
+        static Context from(GuardState state, boolean commissioner, String rankName,
+                            Map<String, String> stationMessages) {
             GuardState safe = state == null ? new GuardState() : state;
             return new Context(commissioner, safe.rank,
                     rankName == null || rankName.isBlank() ? Rank.of(safe.rank).displayName() : rankName,
                     safe.applicationState == null ? "NONE" : safe.applicationState,
-                    safe.invited, safe.duty, safe.suspended, safe.resigned, safe.fired);
+                    safe.invited, safe.duty, safe.suspended, safe.resigned, safe.fired,
+                    stationMessages == null ? Map.of() : Map.copyOf(stationMessages));
+        }
+
+        String stationMessage(String key, String fallback) {
+            String template = stationMessages.getOrDefault(key, fallback);
+            if (template == null) return "";
+            String rendered = template;
+            for (Map.Entry<String, String> entry : stationMessages.entrySet()) {
+                if (entry.getKey().startsWith("{")) rendered = rendered.replace(entry.getKey(), entry.getValue());
+            }
+            return rendered;
         }
 
         boolean candidate() {
@@ -241,7 +262,8 @@ final class NpcFaqSurface {
             case "economy:coins" ->
                     "Monedele și soldul salarial se verifică și se ridică la Secretariat, după ce plata devine disponibilă.";
             case "economy:equipment" ->
-                    "Kitul de serviciu se ridică prin Secretariat, iar schimbarea echipamentului se face la Armurieră, la etajul 2.";
+                    context.stationMessage("faq.economy.equipment",
+                            "Kitul de serviciu se ridică prin {secretariat}, iar schimbul se face la {armorer}, în stația {station}.");
             case "economy:armory" ->
                     "Armuriera afișează doar articolele permise gradului și soldului tău. Unele folosesc monede, altele puncte de rechiziție.";
             case "rules:complaint" ->
@@ -251,13 +273,17 @@ final class NpcFaqSurface {
             case "rules:discipline" ->
                     "Încălcările pot produce amendă, suspendare sau alte măsuri. Fiecare modificare relevantă este înregistrată în audit.";
             case "locations:ground" ->
-                    "Recepția și Instructorul sunt la parter, în camera comună.";
+                    context.stationMessage("faq.locations.ground",
+                            "{receptionist} și {trainer} sunt puncte distincte ale stației {station}; cere direcția curentă personalului local.");
             case "locations:first" ->
-                    "Secretariatul este la etajul 1, în stânga după urcare. Biroul Comisarului este la același etaj.";
+                    context.stationMessage("faq.locations.first",
+                            "{secretariat} și {commissionerOffice} sunt în stația {station}; locația exactă este cea configurată pentru această stație.");
             case "locations:second" ->
-                    "Camerele Străjerilor și camera de schimb cu Armuriera sunt la etajul 2.";
+                    context.stationMessage("faq.locations.second",
+                            "Camerele Străjerilor și {armorer} sunt în stația {station}; întreabă personalul local pentru traseul curent.");
             case "locations:basement" ->
-                    "Închisoarea este la subsol. Accesul și operațiunile de custodie depind de statut și autorizație.";
+                    context.stationMessage("faq.locations.basement",
+                            "{prison} este în stația {station}; accesul și operațiunile de custodie depind de statut și autorizație.");
             case "status:current" -> "Statutul tău este: " + context.status() + ".";
             case "status:blocked" -> blockedAnswer(context);
             case "status:return" ->

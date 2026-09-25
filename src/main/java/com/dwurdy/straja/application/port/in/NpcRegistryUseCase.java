@@ -17,5 +17,5 @@ public interface NpcRegistryUseCase {
      */
     void adopt(String entityUuid, String roleId);
 
-    record Registration(String role, String skin, String displayName) {}
+    record Registration(String role, String skin, String displayName, String stationId) {}
 }

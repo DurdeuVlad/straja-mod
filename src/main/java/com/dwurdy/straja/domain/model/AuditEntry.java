@@ -11,6 +11,19 @@ public class AuditEntry {
     public String result = "";
     public String reason = "";
     public String details = "";
+    public String eventId = "";
+    public String eventType = "";
+    public String actorType = "";
+    public String aggregateType = "";
+    public String aggregateId = "";
+    public long aggregateVersion;
+    public String stationId = "";
+    public String capability = "";
+    public String decision = "";
+    public String reasonCode = "";
+    public String correlationId = "";
+    public String causationId = "";
+    public String operationId = "";
 
     public AuditEntry() {}
 }

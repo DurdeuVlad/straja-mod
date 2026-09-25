@@ -65,6 +65,27 @@ public final class StrajaRuntime {
     private final com.dwurdy.straja.application.service.ArrestRecordService arrestRecords;
     private final com.dwurdy.straja.application.service.ReputationService reputation;
     private final com.dwurdy.straja.application.service.RpExpansionService expansion;
+    private final com.dwurdy.straja.application.service.OperationRecoveryService v2Operations;
+    private final com.dwurdy.straja.application.service.PersonnelService v2Personnel;
+    private final com.dwurdy.straja.application.service.AuthorizationService v2Authorization;
+    private final com.dwurdy.straja.application.service.PromotionService v2Promotions;
+    private final com.dwurdy.straja.application.service.StationService v2Stations;
+    private final com.dwurdy.straja.application.service.DocumentService v2Documents;
+    private final com.dwurdy.straja.application.service.EquipmentLedgerService v2EquipmentLedger;
+    private final com.dwurdy.straja.application.service.MobilizationService v2Mobilizations;
+    private final com.dwurdy.straja.application.service.CampaignService v2Campaigns;
+    private final com.dwurdy.straja.application.service.SettlementService v2Settlements;
+    private final com.dwurdy.straja.application.service.MissionV2Service v2Missions;
+    private final com.dwurdy.straja.application.service.MissionGeneratorService v2Generators;
+    private final com.dwurdy.straja.application.service.OutboxService v2Outbox;
+    private final com.dwurdy.straja.application.service.OutboxDispatcher v2OutboxDispatcher;
+    private final com.dwurdy.straja.application.port.out.DiscordWebhookGateway v2DiscordGateway;
+    private final com.dwurdy.straja.application.port.out.PersonnelRepository v2PersonnelRepository;
+    private final com.dwurdy.straja.application.port.out.PromotionRepository v2PromotionRepository;
+    private final com.dwurdy.straja.application.port.out.CampaignRepository v2CampaignRepository;
+    private final com.dwurdy.straja.application.port.out.MissionRepository v2MissionRepository;
+    private final com.dwurdy.straja.application.service.ComplaintEscalationService v2ComplaintEscalation;
+    private final com.dwurdy.straja.application.service.ConsistencyService v2Consistency;
     private final com.dwurdy.straja.application.port.out.MutableClock clock;
     private final com.dwurdy.straja.adapter.in.test.TestPlayerRegistry testPlayers =
             new com.dwurdy.straja.adapter.in.test.TestPlayerRegistry();
@@ -151,10 +172,125 @@ public final class StrajaRuntime {
                 new SavedStores.ArrestRecords(stores),
                 new SavedStores.Reputation(stores));
 
+        this.v2PersonnelRepository = new SavedStores.Personnel(stores);
+        this.v2PromotionRepository = new SavedStores.Promotions(stores);
+        var personnelRepository = v2PersonnelRepository;
+        var promotionRepository = v2PromotionRepository;
+        var stationRepository = new SavedStores.Stations(stores);
+        var documentRepository = new SavedStores.Documents(stores);
+        var equipmentRepository = new SavedStores.EquipmentLedger(stores);
+        var mobilizationRepository = new SavedStores.Mobilizations(stores);
+        this.v2CampaignRepository = new SavedStores.Campaigns(stores);
+        var campaignRepository = v2CampaignRepository;
+        var settlementRepository = new SavedStores.Settlements(stores);
+        var operationRepository = new SavedStores.Operations(stores);
+        var outboxRepository = new SavedStores.Outbox(stores);
+        this.v2Operations = new com.dwurdy.straja.application.service.OperationRecoveryService(
+                operationRepository, clock, ids);
+        this.v2Personnel = new com.dwurdy.straja.application.service.PersonnelService(
+                personnelRepository, clock, ids);
+        this.v2Authorization = new com.dwurdy.straja.application.service.AuthorizationService(
+                personnelRepository, stationRepository, mobilizationRepository, clock);
+        this.v2Personnel.useAuthorization(this.v2Authorization);
+        this.v2Promotions = new com.dwurdy.straja.application.service.PromotionService(
+                promotionRepository, personnelRepository, v2Authorization, clock, ids);
+        this.v2Stations = new com.dwurdy.straja.application.service.StationService(
+                stationRepository, clock, ids);
+        this.v2Personnel.useStationService(v2Stations);
+        this.v2Documents = new com.dwurdy.straja.application.service.DocumentService(
+                documentRepository, clock, ids, v2Authorization, v2Operations);
+        this.v2Personnel.useDocumentService(v2Documents);
+        this.v2EquipmentLedger = new com.dwurdy.straja.application.service.EquipmentLedgerService(
+                equipmentRepository, clock, ids, v2Authorization);
+        this.v2EquipmentLedger.useDocumentService(v2Documents);
+        this.v2EquipmentLedger.useStationService(v2Stations);
+        this.v2Mobilizations = new com.dwurdy.straja.application.service.MobilizationService(
+                mobilizationRepository, personnelRepository, v2Authorization, clock, ids);
+        this.v2Campaigns = new com.dwurdy.straja.application.service.CampaignService(
+                campaignRepository, clock, ids, v2Authorization);
+        this.v2Settlements = new com.dwurdy.straja.application.service.SettlementService(
+                settlementRepository, clock, ids, this.ctx.currency());
+        this.v2Settlements.reconcile();
+        this.v2Mobilizations.useSettlementService(v2Settlements, policies.mobilizationPay);
+        this.v2MissionRepository = this.ctx.missions();
+        this.v2Missions = new com.dwurdy.straja.application.service.MissionV2Service(
+                v2MissionRepository, v2Authorization, v2Settlements, clock, ids);
+        this.v2Missions.useCampaignService(v2Campaigns);
+        this.v2Generators = new com.dwurdy.straja.application.service.MissionGeneratorService();
+        this.v2Generators.registerDefaults();
+        this.v2Outbox = new com.dwurdy.straja.application.service.OutboxService(
+                outboxRepository, clock, ids);
+        this.v2OutboxDispatcher = new com.dwurdy.straja.application.service.OutboxDispatcher();
+        this.v2DiscordGateway = new com.dwurdy.straja.adapter.out.discord.DiscordWebhookGateway(
+                policies.discordWebhookUrl);
+        this.v2Outbox.recoverInFlight();
+        this.v2Personnel.onAuthorized(record -> v2Outbox.enqueue(
+                "PERSONNEL_AUTHORIZED", "personnel:" + record.playerUuid + ":v" + record.version,
+                com.dwurdy.straja.application.service.OutboxService.SafePayload.projection(
+                        "PERSONNEL_AUTHORIZED", record.serviceNumber, record.playerUuid)));
+        this.v2Promotions.onApproved(application -> v2Outbox.enqueue(
+                "PROMOTION_COMPLETED", "promotion:" + application.applicationId + ":v" + application.version,
+                com.dwurdy.straja.application.service.OutboxService.SafePayload.projection(
+                        "PROMOTION_COMPLETED", application.applicationId, application.subjectUuid)));
+        // An approval intent is persisted before its personnel projection.
+        // Reconcile it after the outbox listener is installed so a recovered
+        // approval can emit the same idempotent notification as a live one.
+        this.v2Promotions.reconcileApprovals();
+        reconcileV2OutboxIntents();
+        this.v2Campaigns.onLifecycle(campaign -> {
+            String type = campaign.status == com.dwurdy.straja.domain.model.MissionCampaign.CampaignStatus.ACTIVE
+                    ? "CAMPAIGN_STARTED" : "CAMPAIGN_ENDED";
+            v2Outbox.enqueue(type, type + ":" + campaign.campaignId + ":v" + campaign.version,
+                    com.dwurdy.straja.application.service.OutboxService.SafePayload.projection(
+                            type, campaign.campaignId, campaign.stationId));
+        });
+        this.v2Missions.onPublished(mission -> v2Outbox.enqueue(
+                "IMPORTANT_MISSION_CREATED", "mission:" + mission.id,
+                com.dwurdy.straja.application.service.OutboxService.SafePayload.projection(
+                        "IMPORTANT_MISSION_CREATED", mission.id, mission.beneficiaryUuid)));
+        this.v2Consistency = new com.dwurdy.straja.application.service.ConsistencyService(
+                personnelRepository, stationRepository, equipmentRepository, operationRepository,
+                settlementRepository, campaignRepository, outboxRepository);
+        this.v2ComplaintEscalation = new com.dwurdy.straja.application.service.ComplaintEscalationService(
+                this.ctx.complaints(), clock, ids, v2Authorization,
+                jurisdiction -> v2Personnel.findFirstByGrade(com.dwurdy.straja.domain.model.CareerGrade.INSPECTOR,
+                        jurisdiction, clock.nowMillis()), policies.complaintSlaMillis);
+        this.v2Stations.ensureDefault(this.ctx.setup().read());
+
         this.players = new PlayerService(ctx);
+        this.players.useV2Authority(v2Personnel, v2Authorization);
         this.audit = new AuditService(ctx);
+        this.v2ComplaintEscalation.useAuditService(this.audit);
         this.equipment = new EquipmentService(ctx);
         this.guards = new GuardService(ctx, players, audit, equipment, this::bootId);
+        this.guards.useV2Promotions(v2Promotions);
+        this.guards.useV2Settlements(v2Settlements);
+        this.guards.useV2PersonnelProjection(player -> {
+            try {
+                v2Personnel.projectLegacy(player.uuid(), ctx.players().read(player.uuid()),
+                        player.uuid().toString());
+            } catch (RuntimeException ignored) {
+                // Legacy projection is best-effort; V2 decisions still fail closed.
+            }
+        });
+        this.guards.useV2PersonnelAuthorization((actor, target, rank) -> {
+            try {
+                var grade = switch (com.dwurdy.straja.domain.model.Rank.of(rank)) {
+                    case STAGIAR -> com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STAGIAR;
+                    case GUARD -> com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STRAJER;
+                    case SERGENT -> com.dwurdy.straja.domain.model.CareerGrade.MILITARY_SERGENT;
+                    case INSPECTOR -> com.dwurdy.straja.domain.model.CareerGrade.INSPECTOR;
+                    default -> com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STAGIAR;
+                };
+                v2Personnel.authorize(actor.uuid().toString(), target.uuid().toString(), grade,
+                        grade.fullTimeRequired() ? com.dwurdy.straja.domain.model.EmploymentMode.FULL_TIME
+                                : com.dwurdy.straja.domain.model.EmploymentMode.PART_TIME,
+                        "COMMISSIONER_DIRECT", "hq", "authorize:" + target.uuid());
+                return true;
+            } catch (RuntimeException error) {
+                return false;
+            }
+        });
         this.armory = new com.dwurdy.straja.application.service.ArmoryService(ctx, players, audit);
         this.npcs = new com.dwurdy.straja.application.service.NpcAdminService(ctx);
         this.missions = new com.dwurdy.straja.application.service.MissionService(ctx, players, audit);
@@ -162,6 +298,7 @@ public final class StrajaRuntime {
         this.prison = new com.dwurdy.straja.application.service.PrisonService(ctx, players, audit, custody);
         this.fines = new com.dwurdy.straja.application.service.FineService(ctx, players, audit, prison);
         this.complaints = new com.dwurdy.straja.application.service.ComplaintService(ctx, players, audit);
+        this.complaints.useV2Escalation(v2ComplaintEscalation);
         this.reports = new com.dwurdy.straja.application.service.ReportService(ctx, players, audit);
         this.audiences = new com.dwurdy.straja.application.service.AudienceService(ctx, players, audit);
         this.emergency = new com.dwurdy.straja.application.service.EmergencyService(ctx, players, audit);
@@ -170,7 +307,7 @@ public final class StrajaRuntime {
         this.identityCards = new com.dwurdy.straja.application.service.IdentityCardService(ctx, players, audit);
         this.secretary = new com.dwurdy.straja.application.service.SecretaryService();
         this.migration = new com.dwurdy.straja.application.service.MigrationService(ctx, audit);
-        this.formSessions = new com.dwurdy.straja.application.service.FormSessionService(clock, ids);
+        this.formSessions = new com.dwurdy.straja.application.service.FormSessionService(clock, ids, v2Documents);
         // Runtime policy overrides: TOML-resolved baseline + persisted YAML
         // layer applied to the live policies object before services run.
         StrajaPolicies baseline = StrajaServerConfig.toPolicies();
@@ -308,6 +445,7 @@ public final class StrajaRuntime {
     }
 
     public static synchronized void stop() {
+        if (instance != null) instance.v2OutboxDispatcher.close();
         com.dwurdy.straja.adapter.out.network.CustodyVisualSync.reset();
         com.dwurdy.straja.adapter.in.form.FormSessionBridge.clear();
         com.dwurdy.straja.adapter.in.form.FormPayloads.setSubmissionConsumer(null);
@@ -352,6 +490,97 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.service.EvidenceService evidence() { return evidence; }
     public com.dwurdy.straja.application.service.ArrestRecordService arrestRecords() { return arrestRecords; }
     public com.dwurdy.straja.application.service.ReputationService reputation() { return reputation; }
+    public com.dwurdy.straja.application.service.OperationRecoveryService v2Operations() { return v2Operations; }
+    public com.dwurdy.straja.application.service.PersonnelService v2Personnel() { return v2Personnel; }
+    public com.dwurdy.straja.application.service.AuthorizationService v2Authorization() { return v2Authorization; }
+    public com.dwurdy.straja.application.service.PromotionService v2Promotions() { return v2Promotions; }
+    public com.dwurdy.straja.application.service.StationService v2Stations() { return v2Stations; }
+    public com.dwurdy.straja.application.service.DocumentService v2Documents() { return v2Documents; }
+    public com.dwurdy.straja.application.service.EquipmentLedgerService v2EquipmentLedger() { return v2EquipmentLedger; }
+    public com.dwurdy.straja.application.service.MobilizationService v2Mobilizations() { return v2Mobilizations; }
+    public com.dwurdy.straja.application.service.CampaignService v2Campaigns() { return v2Campaigns; }
+    public com.dwurdy.straja.application.service.SettlementService v2Settlements() { return v2Settlements; }
+    public com.dwurdy.straja.application.service.MissionV2Service v2Missions() { return v2Missions; }
+    public com.dwurdy.straja.application.service.MissionGeneratorService v2Generators() { return v2Generators; }
+    public com.dwurdy.straja.application.service.OutboxService v2Outbox() { return v2Outbox; }
+    public void dispatchOutbox() {
+        reconcileV2OutboxIntents();
+        if (!policies.discordWebhookUrl.isBlank())
+            v2OutboxDispatcher.dispatch(v2Outbox, v2DiscordGateway, 8, server::execute);
+    }
+
+    /** Runs on the server thread before the asynchronous HTTP sender. */
+    private void reconcileV2OutboxIntents() {
+        var intents = new java.util.ArrayList<com.dwurdy.straja.domain.model.OutboxIntent>();
+        var personnelStore = v2PersonnelRepository.read();
+        if (personnelStore.records != null) for (var record : personnelStore.records.values()) {
+            if (record != null && record.outboundIntents != null) intents.addAll(record.outboundIntents);
+        }
+        var promotionStore = v2PromotionRepository.read();
+        if (promotionStore.applications != null) for (var application : promotionStore.applications.values()) {
+            if (application != null && application.outboundIntents != null) intents.addAll(application.outboundIntents);
+        }
+        var campaignStore = v2CampaignRepository.read();
+        if (campaignStore.campaigns != null) for (var campaign : campaignStore.campaigns.values()) {
+            if (campaign != null && campaign.outboundIntents != null) intents.addAll(campaign.outboundIntents);
+        }
+        var missionStore = v2MissionRepository.read();
+        if (missionStore.missions == null) return;
+        for (var mission : missionStore.missions) {
+            if (mission != null && mission.outboundIntents != null) intents.addAll(mission.outboundIntents);
+        }
+        v2Outbox.reconcile(intents);
+    }
+    public com.dwurdy.straja.application.service.ComplaintEscalationService v2ComplaintEscalation() { return v2ComplaintEscalation; }
+    public com.dwurdy.straja.application.service.ConsistencyService v2Consistency() { return v2Consistency; }
+    public long nowMillis() { return clock.nowMillis(); }
+    /** Calendar-week stipend hook; entitlement is persisted before payout. */
+    public void settleWeeklyStipend(PlayerGateway player) {
+        if (player == null || !policies.weeklyStipendEnabled || policies.weeklyStipendAmount <= 0) return;
+        var state = players.state(player);
+        long required = Math.max(0, policies.weeklyStipendRequiredServiceBlocks);
+        boolean eligible = state != null && !state.suspended && !state.fired && !state.resigned
+                && state.rank > 0 && state.serviceBlocks >= required;
+        String weekId = java.time.ZonedDateTime.ofInstant(java.time.Instant.ofEpochMilli(clock.nowMillis()),
+                java.time.ZoneOffset.UTC).get(java.time.temporal.IsoFields.WEEK_BASED_YEAR)
+                + "-W" + String.format(java.util.Locale.ROOT, "%02d",
+                java.time.ZonedDateTime.ofInstant(java.time.Instant.ofEpochMilli(clock.nowMillis()),
+                        java.time.ZoneOffset.UTC).get(java.time.temporal.IsoFields.WEEK_OF_WEEK_BASED_YEAR));
+        var settlement = v2Settlements.createWeeklyStipend(player.uuid().toString(), weekId,
+                eligible ? "ELIGIBLE" : "INELIGIBLE", policies.weeklyStipendAmount, eligible);
+        if (settlement != null && settlement.status != com.dwurdy.straja.domain.model.Settlement.SettlementStatus.PAID)
+            v2Settlements.payout(settlement, player);
+    }
+    public void recoverV2(PlayerGateway player) {
+        if (player == null) return;
+        try {
+            boolean configuredCommissioner = players.isConfiguredCommissioner(player);
+            var legacy = ctx.players().read(player.uuid());
+            var record = v2Personnel.projectLegacy(player.uuid(), legacy, player.uuid().toString());
+            if (configuredCommissioner) {
+                record = v2Personnel.ensureCommissioner(player.uuid().toString());
+                if (!record.hasAppointment(com.dwurdy.straja.domain.model.AppointmentType.COMMISSIONER, clock.nowMillis())) {
+                    v2Personnel.appointInternal(player.uuid().toString(),
+                            com.dwurdy.straja.domain.model.AppointmentType.COMMISSIONER, "hq", "", null);
+                }
+            }
+            for (var settlement : v2Settlements.pendingFor(player.uuid().toString())) {
+                if (settlement.status == com.dwurdy.straja.domain.model.Settlement.SettlementStatus.PENDING
+                        || settlement.status == com.dwurdy.straja.domain.model.Settlement.SettlementStatus.FAILED_RETRYABLE
+                        || settlement.status == com.dwurdy.straja.domain.model.Settlement.SettlementStatus.IN_PROGRESS) {
+                    v2Settlements.payout(settlement, player);
+                }
+            }
+            int pendingOperations = v2Operations.pendingFor(player.uuid().toString()).size();
+            if (pendingOperations > 0) {
+                com.dwurdy.straja.StrajaMod.LOGGER.info(
+                        "[Straja] V2 recovery found {} pending operation(s) for {}", pendingOperations, player.uuid());
+            }
+        } catch (RuntimeException error) {
+            com.dwurdy.straja.StrajaMod.LOGGER.warn(
+                    "[Straja] V2 login projection failed closed for {}: {}", player.uuid(), error.getMessage());
+        }
+    }
     public com.dwurdy.straja.application.port.in.PlayerQueryUseCase playerQueries() { return players; }
     public com.dwurdy.straja.application.port.in.NpcRegistryUseCase npcRegistry() { return npcs; }
     public com.dwurdy.straja.application.service.NpcAdminService npcs() { return npcs; }

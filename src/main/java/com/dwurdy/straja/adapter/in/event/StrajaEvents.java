@@ -62,10 +62,19 @@ public final class StrajaEvents {
         runtime.fineRoleplay().tick();
         runtime.expansionRoleplay().tick();
         if (runtime.serverGateway().tickCount() % 20 != 0) return;
+        runtime.v2Mobilizations().expireDue();
+        runtime.v2Campaigns().expireDue();
+        runtime.v2Missions().expireDue();
+        String commissioner = runtime.policies().commissionerUuid == null
+                || runtime.policies().commissionerUuid.isBlank()
+                ? "commissioner" : runtime.policies().commissionerUuid;
+        runtime.v2ComplaintEscalation().escalateDue(commissioner, "");
+        runtime.dispatchOutbox();
         runtime.formSessions().purgeExpired();
         com.dwurdy.straja.adapter.in.npc.NpcInteractionService.purgeExpiredTokens();
         for (var player : runtime.serverGateway().onlinePlayers()) {
             runtime.guardDuty().tickPlayerDuty(player);
+            runtime.settleWeeklyStipend(player);
         }
         for (var sp : event.getServer().getPlayerList().getPlayers()) {
             refreshRankNameplate(runtime, sp);
@@ -149,7 +158,11 @@ public final class StrajaEvents {
         var gateway = new MinecraftPlayerGateway(event.getEntity().getServer(), event.getEntity().getUUID());
         String prefix = runtime.playerQueries().rankPrefixFor(gateway);
         if (prefix != null) {
-            event.setDisplayName(Component.literal(prefix + " ").append(event.getDisplayName()));
+            Component base = event.getDisplayName();
+            if (base == null) {
+                base = Component.literal(event.getEntity().getGameProfile().getName());
+            }
+            event.setDisplayName(Component.literal(prefix + " ").append(base));
         }
     }
 
@@ -208,6 +221,7 @@ public final class StrajaEvents {
         StrajaRuntime runtime = StrajaRuntime.get();
         if (runtime == null || !(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) return;
         var gateway = new MinecraftPlayerGateway(event.getEntity().getServer(), player.getUUID());
+        runtime.recoverV2(gateway);
         runtime.guardDuty().recoverOnLogin(gateway);
         runtime.custodyRoleplay().recoverOnLogin(gateway);
         CustodyVisualSync.syncToPlayer(player, runtime.custodyRoleplay().visualStates());
@@ -699,6 +713,28 @@ public final class StrajaEvents {
                 } else {
                     runtime.identityCards().read(player, cardId,
                             item.data("IdentityCardHolder"), item.data("IdentityCardAuthenticity"));
+                }
+                return true;
+            }
+            case OFFICIAL_DOCUMENT -> {
+                String documentId = PhysicalItemSurface.validRecordId(item.data("DocumentId"));
+                var document = documentId == null ? null : runtime.v2Documents().inspect(documentId);
+                if (document == null) player.tell("Documentul oficial nu are o referință validă.");
+                else player.tell("Document oficial " + document.documentId + " | " + document.type
+                        + " | " + document.status);
+                return true;
+            }
+            case OFFICIAL_INSTRUMENT -> {
+                String instrumentId = PhysicalItemSurface.validRecordId(item.data("InstrumentId"));
+                var instrument = runtime.v2Documents().instruments().stream()
+                        .filter(value -> value != null && value.instrumentId.equals(instrumentId))
+                        .findFirst().orElse(null);
+                if (instrument == null || (!player.uuid().toString().equals(instrument.holder)
+                        && !runtime.playerQueries().isCommissioner(player))) {
+                    player.tell("Instrumentul nu are o referință validă sau nu îți aparține.");
+                } else {
+                    player.tell("Instrument " + instrument.instrumentId + " | " + instrument.instrumentType
+                            + " | cantitate " + instrument.remainingQuantity + "/" + instrument.initialQuantity);
                 }
                 return true;
             }

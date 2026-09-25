@@ -12,6 +12,7 @@ public class NpcRegistry {
         public String role = "receptionist";
         public String displayName = "";
         public String skin = "";
+        public String stationId = "hq";
         public long createdAt;
     }
 

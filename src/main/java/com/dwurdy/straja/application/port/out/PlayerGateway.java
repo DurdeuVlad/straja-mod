@@ -77,6 +77,9 @@ public interface PlayerGateway {
 
     void closeMenu();
 
+    /** True when the player's native Straja action form is currently open. */
+    default boolean isActionFormOpen() { return false; }
+
     void teleport(String dimension, double x, double y, double z);
 
     /** Server-authorized vanilla-style passenger operations for custody carry. */

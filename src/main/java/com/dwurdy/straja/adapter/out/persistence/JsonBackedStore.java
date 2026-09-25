@@ -50,6 +50,28 @@ public abstract class JsonBackedStore {
         }
     }
 
+    /** Reads a V2 aggregate and fails closed on an unknown future schema. */
+    protected <T> T readJsonVersioned(Class<T> type, Supplier<T> fallback, int currentSchemaVersion) {
+        T value = readJson(type, fallback);
+        try {
+            java.lang.reflect.Field field = type.getField("schemaVersion");
+            int version = field.getInt(value);
+            if (version > currentSchemaVersion) {
+                LOGGER.error("[Straja] unsupported future schema {} for '{}' — backing up and resetting", version, storeName);
+                putChunked("future_schema_backup", GSON.toJson(value));
+                removeChunked("json");
+                return fallback.get();
+            }
+            field.setInt(value, currentSchemaVersion);
+        } catch (NoSuchFieldException ignored) {
+            // V1/list stores do not carry schema metadata.
+        } catch (ReflectiveOperationException error) {
+            LOGGER.error("[Straja] unreadable schema metadata for '{}' — failing closed", storeName);
+            return fallback.get();
+        }
+        return value;
+    }
+
     protected void writeJson(Object value) {
         putChunked("json", GSON.toJson(value));
     }

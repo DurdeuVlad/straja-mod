@@ -32,6 +32,16 @@ final class AdminCommandHelp {
 
             new RootEntry("/straja help", "Afișează acest index și instrucțiunile pentru o comandă.", ADMIN_PERMISSION, "ADMIN — OP 3"),
             new RootEntry("/straja backup", "Creează un snapshot persistent și bounded al datelor Straja.", ADMIN_PERMISSION, "ADMIN — OP 3"),
+            new RootEntry("/straja personnel ...", "Inspectează personalul V2 server-authoritative.", ADMIN_PERMISSION, "V2 — OP 3"),
+            new RootEntry("/straja promotion ...", "Gestionează cereri și dovezi de promovare V2.", ADMIN_PERMISSION, "V2 — OP 3"),
+            new RootEntry("/straja document ...", "Inspectează documente și instrumente V2.", ADMIN_PERMISSION, "V2 — OP 3"),
+            new RootEntry("/straja equipment ledger <player>", "Inspectează obligațiile de echipament V2.", ADMIN_PERMISSION, "V2 — OP 3"),
+            new RootEntry("/straja mobilization ...", "Inspectează și încheie mobilizări V2.", ADMIN_PERMISSION, "V2 — OP 3"),
+            new RootEntry("/straja campaign ...", "Inspectează, pornește și încheie campanii V2.", ADMIN_PERMISSION, "V2 — OP 3"),
+            new RootEntry("/straja settlement list|show|review|retry|void|reconcile ...", "Inspectează și recuperează decontări V2.", ADMIN_PERMISSION, "V2 — OP 3"),
+            new RootEntry("/straja station status|validate", "Verifică stațiile și fallback-ul jurisdicțional.", ADMIN_PERMISSION, "V2 — OP 3/4"),
+            new RootEntry("/straja doctor consistency", "Rulează diagnosticele de consistență fără reparații implicite.", ADMIN_PERMISSION, "V2 — OP 3"),
+            new RootEntry("/straja outbox status|pending|retry|dead-letter", "Inspectează și recuperează evenimente outbound fără a expune secrete.", ADMIN_PERMISSION, "V2 — OP 3"),
             new RootEntry("/straja invite <jucător>", "Invită un jucător în procesul de recrutare.", ADMIN_PERMISSION, "RECRUTARE ȘI PERSONAL — OP 3"),
             new RootEntry("/straja recruit | recrute", "Pornește recrutarea pentru jucătorul executor.", ADMIN_PERMISSION, "RECRUTARE ȘI PERSONAL — OP 3"),
             new RootEntry("/straja quiz [răspuns]", "Afișează sau validează chestionarul de admitere.", ADMIN_PERMISSION, "RECRUTARE ȘI PERSONAL — OP 3"),
@@ -72,6 +82,30 @@ final class AdminCommandHelp {
     );
 
     private static final Map<String, String> DESCRIPTIONS = Map.ofEntries(
+            Map.entry("personnel", "Inspectează registrul persistent de personal V2."),
+            Map.entry("personnel list", "Listează înregistrările de personal V2."),
+            Map.entry("personnel show", "Arată starea persistentă V2 a unui jucător."),
+            Map.entry("personnel profession", "Atribuie o profesie V2 prin fluxul de personal autorizat."),
+            Map.entry("personnel appoint", "Creează o numire V2 cu stație și jurisdicție explicită."),
+            Map.entry("promotion", "Gestionează cereri persistente de promovare V2."),
+            Map.entry("document", "Gestionează documente și instrumente server-authoritative."),
+            Map.entry("equipment", "Inspectează obligațiile de echipament V2."),
+            Map.entry("mobilization", "Gestionează mobilizările profesionale V2."),
+            Map.entry("campaign", "Gestionează campanii și cote V2."),
+            Map.entry("settlement", "Inspectează decontările V2 și starea plăților."),
+            Map.entry("settlement retry", "Reintroduce și încearcă plata unei decontări."),
+            Map.entry("settlement void", "Anulează o decontare neplătită."),
+            Map.entry("settlement reconcile", "Mută plățile întrerupte în starea retryable."),
+            Map.entry("station", "Gestionează stațiile și fallback-ul lor."),
+            Map.entry("station status", "Arată stația HQ rezolvată."),
+            Map.entry("station validate", "Verifică referințele și ciclurile de fallback."),
+            Map.entry("doctor", "Rulează verificări read-only ale registrelor V2."),
+            Map.entry("doctor consistency", "Detectează referințe rupte, cantități invalide și operații duplicate."),
+            Map.entry("outbox", "Inspectează coada persistentă de notificări outbound."),
+            Map.entry("outbox status", "Arată notificările outbound încă nesent."),
+            Map.entry("outbox pending", "Listează evenimentele outbound care așteaptă livrarea."),
+            Map.entry("outbox retry", "Reintroduce un eveniment outbound în coada de retry."),
+            Map.entry("outbox dead-letter", "Listează evenimentele outbound epuizate."),
             Map.entry("invite", "Invită jucătorul țintă în fluxul de recrutare."),
             Map.entry("recruit", "Aplică recrutarea pentru jucătorul executor."),
             Map.entry("recrute", "Alias românesc pentru recruit."),
@@ -213,6 +247,51 @@ final class AdminCommandHelp {
             Map.entry("test", "Rulează scenarii cu jucători virtuali în mediul local.")
     );
 
+    private static final Map<String, HelpSpec> STRUCTURED_SPECS = Map.ofEntries(
+            Map.entry("personnel", new HelpSpec("/straja personnel ...", CommandPermissions.ADMIN,
+                    "AUTHORIZE_PERSONNEL / management de personal; numirea Comisarului este separată",
+                    "Registrul V2 de personal", "Scrie personnel și auditul aferent",
+                    List.of("personnel", "audit"), List.of("DENIED_APPOINTMENT", "DENIED_STALE_STATE"),
+                    List.of("/straja personnel list", "/straja personnel show <player>"),
+                    "/straja doctor personnel", true, "V2 — OP 3")),
+            Map.entry("promotion", new HelpSpec("/straja promotion ...", CommandPermissions.ADMIN,
+                    "APPROVE_PROMOTION; aprobare independentă obligatorie",
+                    "Cereri și dovezi de promovare", "Scrie promotion și schimbarea de carieră",
+                    List.of("promotions", "personnel", "audit"), List.of("DENIED_SELF_APPROVAL", "INSUFFICIENT_EVIDENCE"),
+                    List.of("/straja promotion list", "/straja promotion approve <id>"),
+                    "/straja promotion show <id>", true, "V2 — OP 3")),
+            Map.entry("document", new HelpSpec("/straja document ...", CommandPermissions.ADMIN,
+                    "ISSUE_DOCUMENT; emitentul și stația sunt validate server-side",
+                    "Documente, instrumente și reprinturi", "Consumă doar o singură dată un instrument; persistă dovada",
+                    List.of("documents", "operations", "audit"), List.of("DENIED_AUTHORIZATION", "OPERATION_PAYLOAD_MISMATCH"),
+                    List.of("/straja document list", "/straja document reprint <id> <key>"),
+                    "/straja doctor operations", true, "V2 — OP 3")),
+            Map.entry("equipment", new HelpSpec("/straja equipment ...", CommandPermissions.ADMIN,
+                    "ISSUE_DOCUMENT pentru emitere; WAIVE_EQUIPMENT_DEBT pentru derogări",
+                    "Registru line-level de echipament și datorii", "Scrie issue, delivery, return și dovada de predare",
+                    List.of("equipment", "documents", "operations"), List.of("DELIVERY_EXCEEDS_REQUEST", "DENIED_AUTHORIZATION"),
+                    List.of("/straja equipment ledger <player>", "/straja equipment return <player> <item> <qty>"),
+                    "/straja doctor equipment", true, "V2 — OP 3")),
+            Map.entry("mobilization", new HelpSpec("/straja mobilization ...", CommandPermissions.ADMIN,
+                    "MOBILIZE_SPECIALISTS și scope activ pentru operațiuni profesionale",
+                    "Ordinele de mobilizare ale specialiștilor", "Muster/end/cancel și decontarea sunt idempotente",
+                    List.of("mobilizations", "settlements", "audit"), List.of("DENIED_MOBILIZATION_REQUIRED", "INVALID_STATE"),
+                    List.of("/straja mobilization list", "/straja mobilization end <id>"),
+                    "/straja settlement show <id>", true, "V2 — OP 3")),
+            Map.entry("settlement", new HelpSpec("/straja settlement ...", CommandPermissions.ADMIN,
+                    "Acces administrativ; payout-ul folosește doar CurrencyProvider",
+                    "Entitlements și plăți exactly-once", "Payout-ul este precedat de persistarea stării IN_PROGRESS",
+                    List.of("settlements", "audit"), List.of("FAILED_RETRYABLE", "REVIEW", "VOID"),
+                    List.of("/straja settlement retry <id>", "/straja settlement reconcile"),
+                    "/straja settlement show <id>", true, "V2 — OP 3")),
+            Map.entry("outbox", new HelpSpec("/straja outbox ...", CommandPermissions.ADMIN,
+                    "Allowlist de evenimente și payload redacted",
+                    "Coada persistentă de notificări outbound", "Trimite asincron; retry și dead-letter fără secret",
+                    List.of("outbox"), List.of("RETRY", "DEAD_LETTER"),
+                    List.of("/straja outbox status", "/straja outbox test"),
+                    "/straja outbox retry <id>", true, "V2 — OP 3/4"))
+    );
+
     private AdminCommandHelp() {}
 
     static void attach(CommandDispatcher<CommandSourceStack> dispatcher) {
@@ -270,11 +349,27 @@ final class AdminCommandHelp {
             source.sendFailure(Component.literal("Comanda cere OP " + permission + "."));
             return 0;
         }
-        send(source, List.of(
-                "§lAjutor Straja: " + displayPath,
-                "Descriere: " + description(commandKey),
-                "Acces: " + accessLabel(permission)
-        ));
+        HelpSpec spec = STRUCTURED_SPECS.get(commandKey);
+        if (spec == null) {
+            send(source, List.of(
+                    "§lAjutor Straja: " + displayPath,
+                    "Descriere: " + description(commandKey),
+                    "Acces: " + accessLabel(permission)
+            ));
+        } else {
+            List<String> metadata = new ArrayList<>(List.of(
+                    "§lAjutor Straja: " + displayPath,
+                    "Scop: " + spec.purpose(),
+                    "Acces: " + accessLabel(spec.permissionLevel()),
+                    "Autoritate: " + spec.domainAuthorization(),
+                    "Efecte: " + spec.sideEffects(),
+                    "Persistă: " + String.join(", ", spec.persistentRecords()),
+                    "Erori: " + String.join(", ", spec.errorCodes())
+            ));
+            if (!spec.recoveryCommand().isBlank()) metadata.add("Recuperare: " + spec.recoveryCommand());
+            metadata.add("Sensibil: " + (spec.sensitive() ? "da" : "nu"));
+            send(source, metadata);
+        }
 
         List<String> children = new ArrayList<>();
         for (CommandNode<CommandSourceStack> child : node.getChildren()) {

@@ -7,7 +7,7 @@ legacy KubeJS runtime (`Politie Rustic Craft`). Romanian in-game text, English
 canonical commands with Romanian aliases.
 
 - **Minecraft** 1.21.1 · **NeoForge** 21.1.248 · **Java** 21
-- **Mod ID** `straja` · **Package** `com.dwurdy.straja` · **License** LGPL-3.0
+- **Mod version** `0.1.0` · **Mod ID** `straja` · **Package** `com.dwurdy.straja` · **License** LGPL-3.0
 - **Required:** NeoForge, [Envelope](https://modrinth.com/mod/envelope) 0.6.2+
 - **Optional:** any coin items for the physical economy — defaults are
   Ady's Decorations coins; configure other item IDs under `[economy]` in
@@ -404,6 +404,12 @@ The full test matrix, GameTest batch and live-client/restart UAT checklist are
 in [docs/testing.md](docs/testing.md).
 
 ## Persistence & migration
+
+The unreleased persistence and domain foundation is documented in
+[docs/straja-v2-implementation.md](docs/straja-v2-implementation.md). New
+personnel, document, equipment, mission, campaign, settlement, operation, and
+outbox state is server-authoritative and idempotency-keyed; physical artifacts
+remain projections.
 
 State lives in SavedData (`data/straja_*.dat`) via `JsonBackedStore` — corrupt
 payloads are preserved as `_corrupt_backup` and reset, matching the reference.

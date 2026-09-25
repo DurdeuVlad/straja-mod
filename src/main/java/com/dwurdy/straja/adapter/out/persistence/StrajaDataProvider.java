@@ -24,7 +24,11 @@ public final class StrajaDataProvider {
         static final int RETENTION = 10;
         static final List<String> SOURCE_STORES = List.of(
                 "setup", "audit", "inbox", "missions", "fines", "prisons", "rooms",
-                "complaints", "custody", "archive", "identity_cards", "npcs", "test", "players");
+                "complaints", "custody", "archive", "identity_cards", "npcs", "test", "players",
+                "mission_templates", "emergency", "audiences", "reports",
+                "admin_tools", "incidents", "bolos", "evidence", "arrest_records", "reputation",
+                "personnel", "promotions", "stations", "documents", "equipment_ledger",
+                "mobilizations", "campaigns", "settlements", "operations", "outbox");
 
         private BackupPolicy() {}
     }
