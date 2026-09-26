@@ -2,8 +2,8 @@
   "name": "customnpcs-admin-provisioning",
   "group": "client-customnpcs",
   "timeoutSeconds": 420,
-  "observable": "an operator uses the Straja NPC Wand on a real CustomNPCs entity, the native CustomNPCs GUI lists preconfigured Straja profiles, a profile selection publishes its player-facing dialog surface, the profile can be replaced in-game, and the assignment survives reconnect",
-  "failure": "the admin-only left-click selector does not open, a disabled/non-admin path exposes the selector, profile selection does not publish a native GuiCustom surface, replacement does not take effect, or the assignment is lost after reconnect",
+  "observable": "an operator uses the Straja NPC Wand on a real CustomNPCs entity, the native CustomNPCs GUI lists preconfigured Straja profiles, a profile selection publishes its player-facing dialog surface, the profile can be replaced in-game, the assignment survives reconnect, explicit unassignment removes the Straja surface, and the host retains only native CustomNPCs behavior across a client rejoin",
+  "failure": "the admin-only left-click selector does not open, a disabled/non-admin path exposes the selector, profile selection does not publish a native GuiCustom surface, replacement does not take effect, the assignment is lost after reconnect, unassignment leaves a Straja surface bound, or the host does not return to native CustomNPCs behavior after unassign",
   "prerequisites": [
     "foreign-npc server profile running",
     "client joined as ci_straja",
@@ -203,6 +203,124 @@
     {
       "name": "persisted-surface-screenshot",
       "type": "screenshot"
+    },
+    {
+      "name": "regrant-admin-for-unassign",
+      "type": "rcon",
+      "setup": true,
+      "command": "op ci_straja"
+    },
+    {
+      "name": "regive-npc-wand",
+      "type": "rcon",
+      "setup": true,
+      "command": "give ci_straja straja:npc_wand 1"
+    },
+    {
+      "name": "reselect-npc-wand",
+      "type": "mct",
+      "setup": true,
+      "args": ["inventory", "hotbar", "0"]
+    },
+    {
+      "name": "npc-wand-held-for-unassign",
+      "type": "mct",
+      "args": ["inventory", "held", "--type", "straja:npc_wand", "--wait", "20"],
+      "timeout": 40,
+      "expect": [{"rawRegex": "npc_wand"}]
+    },
+    {
+      "name": "reopen-selector-for-unassign",
+      "type": "mct",
+      "args": ["entity", "attack", "--type", "customnpcs:customnpc", "--nearest", "--max-distance", "8"],
+      "expect": [{"rawRegex": "customnpcs:customnpc"}]
+    },
+    {
+      "name": "selector-open-for-unassign",
+      "type": "mct",
+      "args": ["gui", "wait-open", "--timeout", "20"],
+      "expect": [{"rawRegex": "\\\"open\\\"\\s*:\\s*true"}]
+    },
+    {
+      "name": "click-unassign",
+      "type": "mct",
+      "args": ["input", "click", "342", "185"],
+      "expect": [{"rawRegex": "\\\"clicked\\\"\\s*:\\s*true"}]
+    },
+    {
+      "name": "unassign-confirmation-opens",
+      "type": "mct",
+      "args": ["gui", "wait-open", "--timeout", "20"],
+      "expect": [{"rawRegex": "\\\"open\\\"\\s*:\\s*true"}]
+    },
+    {
+      "name": "confirm-unassign",
+      "type": "mct",
+      "args": ["input", "click", "108", "121"],
+      "expect": [{"rawRegex": "\\\"clicked\\\"\\s*:\\s*true"}]
+    },
+    {
+      "name": "unassign-confirmation-screenshot",
+      "type": "screenshot"
+    },
+    {
+      "name": "close-post-unassign-gui",
+      "type": "mct",
+      "setup": true,
+      "args": ["gui", "close"]
+    },
+    {
+      "name": "deop-after-unassign",
+      "type": "rcon",
+      "setup": true,
+      "command": "deop ci_straja"
+    },
+    {
+      "name": "clear-wand-after-unassign",
+      "type": "rcon",
+      "setup": true,
+      "command": "clear ci_straja straja:npc_wand"
+    },
+    {
+      "name": "interact-after-unassign",
+      "type": "mct",
+      "args": ["entity", "interact", "--type", "customnpcs:customnpc", "--nearest", "--max-distance", "8"],
+      "expect": [{"rawRegex": "customnpcs:customnpc"}]
+    },
+    {
+      "name": "native-host-behavior-after-unassign",
+      "type": "mct",
+      "args": ["gui", "info"],
+      "timeout": 30,
+      "expectAbsentRegex": "\\\"type\\\"\\s*:\\s*\\\"GuiCustom\\\""
+    },
+    {
+      "name": "provider-status-after-unassign",
+      "type": "rcon",
+      "command": "straja npc provider status",
+      "expectAbsentRegex": "host="
+    },
+    {
+      "name": "unassigned-state-screenshot",
+      "type": "screenshot"
+    },
+    {
+      "name": "rejoin-after-unassign",
+      "type": "client",
+      "action": "rejoin"
+    },
+    {
+      "name": "interact-after-rejoin-unassigned",
+      "type": "mct",
+      "args": ["entity", "interact", "--type", "customnpcs:customnpc", "--nearest", "--max-distance", "8"],
+      "expect": [{"rawRegex": "customnpcs:customnpc"}]
+    },
+    {
+      "name": "native-behavior-persists-after-rejoin",
+      "type": "mct",
+      "args": ["gui", "info"],
+      "timeout": 30,
+      "expectAbsentRegex": "\\\"type\\\"\\s*:\\s*\\\"GuiCustom\\\""
     }
   ],
   "cleanup": [
