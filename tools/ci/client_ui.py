@@ -587,16 +587,14 @@ def _exec_step(step: dict, ctx: ClientContext, report_steps: list):
             if action == "stop":
                 ctx.mct(["client", "stop", ctx.client_name], timeout=timeout)
             elif action == "start":
-                ctx.launch_client()
-                ctx.wait_ready()
+                _launch_and_wait(ctx, timeout)
             elif action == "reconnect":
                 ctx.mct(["client", "reconnect", "--address",
                          f"127.0.0.1:{ctx.game_port}"], timeout=timeout)
                 ctx.wait_ready()
             elif action == "rejoin":
                 ctx.mct(["client", "stop", ctx.client_name], timeout=timeout)
-                ctx.launch_client()
-                ctx.wait_ready()
+                _launch_and_wait(ctx, timeout)
             else:
                 raise ClientUiError("assertion",
                                     f"unknown client action {action!r}")
@@ -809,6 +807,59 @@ def create_client(mct: Mct, manifest: dict, jar_path: str,
     return name
 
 
+def _copy_tree_redacted(src: str, dst: str, secrets_: list) -> None:
+    """Copy a directory tree into artifacts with secret redaction, like
+    `server_harness._retain` but for an arbitrary source dir."""
+    if not os.path.isdir(src):
+        return
+    os.makedirs(dst, exist_ok=True)
+    for root, _, files in os.walk(src):
+        for fname in files:
+            fpath = os.path.join(root, fname)
+            try:
+                with open(fpath, "rb") as fh:
+                    content = fh.read()
+            except OSError:
+                continue
+            redacted = sh.redact(content.decode("utf-8", "replace"),
+                                 secrets_).encode("utf-8")
+            target = os.path.join(dst, os.path.relpath(fpath, src))
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            with open(target, "wb") as fh:
+                fh.write(redacted)
+
+
+def _ws_port_open(manifest: dict) -> bool:
+    port = int((manifest.get("client") or {}).get("wsPort", 25580))
+    try:
+        socket.create_connection(("127.0.0.1", port), timeout=1).close()
+        return True
+    except OSError:
+        return False
+
+
+def _launch_and_wait(ctx, timeout: int) -> None:
+    """Launch the client and wait for it to join, retrying once when the
+    fresh process never binds its control ws (port refuses connections after
+    wait-ready times out). That signature means the launcher spawned but the
+    client's bridge mod never came up — a launcher-level flake, not a held
+    port, so a clean stop+launch cycle is the correct recovery. A bound
+    port with a failed world join is a different failure and is not retried."""
+    for attempt in (1, 2):
+        ctx.launch_client()
+        try:
+            ctx.wait_ready()
+            return
+        except ClientUiError as exc:
+            if (attempt == 2 or exc.kind not in ("process", "timeout")
+                    or _ws_port_open(ctx.manifest)):
+                raise
+            ctx.transcript.record(
+                "relaunch-retry",
+                "ws never bound after launch; stopping and retrying once")
+            ctx.mct(["client", "stop", ctx.client_name], timeout=timeout)
+
+
 def _await_ws_port_release(manifest: dict, transcript: "Transcript",
                            timeout_s: float = 60.0) -> None:
     """Wait for the client bridge's control port to become free.
@@ -819,7 +870,7 @@ def _await_ws_port_release(manifest: dict, transcript: "Transcript",
     channel (`processAlive=true, portListening=false` until wait-ready
     times out). Poll until the port refuses connections before launching.
     """
-    port = int(manifest["client"].get("wsPort", 25580))
+    port = int((manifest.get("client") or {}).get("wsPort", 25580))
     deadline = time.time() + timeout_s
     refusals = 0
     while time.time() < deadline:
@@ -974,6 +1025,23 @@ def run_client_ui(args, log=print) -> dict:
         if os.path.isdir(server_dir):
             sh._retain(server_dir, args.artifacts_dir,
                        [rcon_password] if rcon_password else [])
+        # mct writes the client launcher's stdout/stderr to
+        # mct-home/logs/client-<name>.log and the game writes its own logs
+        # under clients/<name>/minecraft — collect both; they carry the only
+        # evidence when a relaunched client never binds its control ws.
+        secrets_ = [rcon_password] if rcon_password else []
+        mct_home = os.path.join(args.work_root, "mct-home")
+        client_name = manifest["client"]["name"]
+        for src, dst in (
+                (os.path.join(mct_home, "logs"),
+                 os.path.join(args.artifacts_dir, "client-logs")),
+                (os.path.join(mct_home, "clients", client_name,
+                              "minecraft", "logs"),
+                 os.path.join(args.artifacts_dir, "client-game-logs")),
+                (os.path.join(mct_home, "clients", client_name,
+                              "minecraft", "crash-reports"),
+                 os.path.join(args.artifacts_dir, "client-crash-reports"))):
+            _copy_tree_redacted(src, dst, secrets_)
     return report
 
 
