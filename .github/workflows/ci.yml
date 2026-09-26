@@ -1,8 +1,9 @@
 name: CI
 
 # Fast, secretless contract for every push, PR, and merge-queue entry.
-# No Minecraft server or client is launched here; runtime jobs live in the
-# release-candidate pipeline.
+# A headless GameTest server runs here so test-only code can never merge
+# unexecuted; the full server-profile matrix and real client jobs still live
+# in the release-candidate pipeline.
 
 on:
   push:
@@ -57,6 +58,11 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew test jar --no-daemon --stacktrace
+
+      - name: GameTests (headless server)
+        run: >-
+          ./gradlew runGameTestServer runRpExpansionGameTestServer
+          --no-daemon --stacktrace
 
       - name: CI tooling unit tests
         run: python3 -m unittest discover -s tools/ci -p 'test_*.py' -v

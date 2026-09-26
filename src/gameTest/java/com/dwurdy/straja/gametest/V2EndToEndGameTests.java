@@ -49,11 +49,10 @@ public final class V2EndToEndGameTests {
 
     private static String commissioner(StrajaRuntime runtime) {
         String actor = id("commissioner");
-        PersonnelRecord record = runtime.v2Personnel().find(actor);
-        if (record == null) {
-            record = runtime.v2Personnel().authorize("bootstrap", actor, CareerGrade.INSPECTOR,
-                    EmploymentMode.FULL_TIME, "COMMISSIONER_BOOTSTRAP", "hq", operation("commissioner"));
-        }
+        // Mirror the production bootstrap path (StrajaRuntime.recoverV2):
+        // the public authorize() endpoint requires an already-authorized
+        // commissioner actor, so "bootstrap" must go through ensureCommissioner.
+        PersonnelRecord record = runtime.v2Personnel().ensureCommissioner(actor);
         if (!record.hasAppointment(AppointmentType.COMMISSIONER, runtime.nowMillis())) {
             runtime.v2Personnel().appointInternal(actor, AppointmentType.COMMISSIONER,
                     "hq", "", null);
@@ -95,8 +94,8 @@ public final class V2EndToEndGameTests {
             runtime.v2Personnel().assignProfession(actor, specialist, "MINING");
             var application = runtime.v2Promotions().submit(specialist,
                     CareerGrade.PROFESSIONAL_SPECIALIST);
-            runtime.v2Promotions().addEvidence(application.applicationId, actor, "EXAM",
-                    "E2E", "PASS", 100d, "e2e:specialist-exam");
+            runtime.v2Promotions().recordCommissionerEvidence(application.applicationId, actor, "EXAM",
+                    "PASS", 100d, "e2e:specialist-exam");
             var ready = runtime.v2Promotions().markReady(application.applicationId);
             runtime.v2Promotions().approve(actor, application.applicationId, ready.version);
         }
@@ -139,8 +138,8 @@ public final class V2EndToEndGameTests {
         authorize(runtime, actor, candidate, CareerGrade.MILITARY_STAGIAR,
                 EmploymentMode.PART_TIME, operation("promotion-candidate"));
         var application = runtime.v2Promotions().submit(candidate, CareerGrade.MILITARY_STRAJER);
-        runtime.v2Promotions().addEvidence(application.applicationId, actor, "EXAM",
-                "E2E", "PASS", 100d, "e2e:promotion-exam");
+        runtime.v2Promotions().recordCommissionerEvidence(application.applicationId, actor, "EXAM",
+                "PASS", 100d, "e2e:promotion-exam");
         var ready = runtime.v2Promotions().markReady(application.applicationId);
         runtime.v2Promotions().approve(actor, application.applicationId, ready.version);
         helper.assertTrue(runtime.v2Personnel().find(candidate).careerGrade
