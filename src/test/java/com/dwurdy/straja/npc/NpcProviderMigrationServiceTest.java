@@ -19,6 +19,7 @@ import com.dwurdy.straja.domain.model.NpcHostLocation;
 import com.dwurdy.straja.domain.model.NpcProfileId;
 import com.dwurdy.straja.domain.model.NpcProviderId;
 import com.dwurdy.straja.domain.model.NpcProviderResult;
+import com.dwurdy.straja.domain.model.NpcProvisioningAuditEntry;
 import com.dwurdy.straja.domain.model.NpcSurfaceAction;
 import com.dwurdy.straja.domain.model.NpcSurfaceSnapshot;
 import java.util.HashMap;
@@ -86,6 +87,66 @@ class NpcProviderMigrationServiceTest {
         assertEquals(SOURCE, lifecycle.inspect(second.bindingId()).binding().providerId());
         assertEquals(PUBLIC_PROFILE, lifecycle.inspect(original.bindingId()).binding().profileId());
         assertEquals(original.hostLocation(), lifecycle.inspect(original.bindingId()).binding().hostLocation());
+    }
+
+    @Test
+    void migrationRecordsDurableAuditForEveryRewrite() {
+        MemoryRepository repository = new MemoryRepository();
+        NpcSurfaceProviderRegistry providers = new NpcSurfaceProviderRegistry();
+        providers.register(new FakeProvider(SOURCE, false));
+        providers.register(new DebugTextNpcSurfaceProvider(ignored -> {}));
+        NpcContentCatalog catalog = new NpcContentCatalog(List.of(profile()));
+        NpcBindingLifecycleService lifecycle = new NpcBindingLifecycleService(
+                providers, repository, catalog);
+        NpcBinding original = binding(SOURCE);
+        assertEquals(NpcProviderResult.Status.ACCEPTED, lifecycle.bindAndPublish(original).status());
+
+        var result = new NpcProviderMigrationService(
+                lifecycle, providers, catalog, () -> 42L).migrate(NpcProviderId.DEBUG_TEXT, "operator");
+
+        assertEquals(NpcProviderResult.Status.ACCEPTED, result.result().status());
+        List<NpcProvisioningAuditEntry> audit = lifecycle.provisioningAudit().stream()
+                .filter(entry -> entry.action() == NpcProvisioningAuditEntry.Action.MIGRATE)
+                .toList();
+        assertEquals(1, audit.size());
+        NpcProvisioningAuditEntry entry = audit.get(0);
+        assertEquals(original.bindingId(), entry.bindingId());
+        assertEquals(NpcProviderId.DEBUG_TEXT.value(), entry.providerId());
+        assertEquals(original.hostEntityUuid(), entry.providerInstanceId());
+        assertEquals("operator", entry.actorId());
+        assertEquals(NpcProvisioningAuditEntry.Outcome.ACCEPTED, entry.outcome());
+        assertEquals(42L, entry.occurredAtEpochMillis());
+    }
+
+    @Test
+    void migrationRollbackRecordsDurableAuditForEveryRewrite() {
+        MemoryRepository repository = new MemoryRepository();
+        NpcSurfaceProviderRegistry providers = new NpcSurfaceProviderRegistry();
+        providers.register(new FakeProvider(SOURCE, false));
+        providers.register(new FakeProvider(TARGET, 2));
+        NpcContentCatalog catalog = new NpcContentCatalog(List.of(profile()));
+        NpcBindingLifecycleService lifecycle = new NpcBindingLifecycleService(
+                providers, repository, catalog);
+        NpcBinding original = binding(SOURCE, "straja.migration.binding.one");
+        NpcBinding second = binding(SOURCE, "straja.migration.binding.two");
+        assertEquals(NpcProviderResult.Status.ACCEPTED, lifecycle.bindAndPublish(original).status());
+        assertEquals(NpcProviderResult.Status.ACCEPTED, lifecycle.bindAndPublish(second).status());
+
+        var result = new NpcProviderMigrationService(
+                lifecycle, providers, catalog, () -> 43L).migrate(TARGET, "operator");
+
+        assertEquals(NpcProviderResult.Status.REJECTED, result.result().status());
+        List<NpcProvisioningAuditEntry> audit = lifecycle.provisioningAudit().stream()
+                .filter(entry -> entry.action() == NpcProvisioningAuditEntry.Action.MIGRATE)
+                .toList();
+        assertEquals(3, audit.size());
+        assertTrue(audit.stream().allMatch(entry -> "operator".equals(entry.actorId())));
+        assertEquals(1, audit.stream()
+                .filter(entry -> entry.providerId().equals(SOURCE.value()))
+                .count());
+        assertEquals(2, audit.stream()
+                .filter(entry -> entry.providerId().equals(TARGET.value()))
+                .count());
     }
 
     private static NpcContentProfile profile() {

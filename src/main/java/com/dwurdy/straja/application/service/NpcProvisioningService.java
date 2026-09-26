@@ -366,7 +366,8 @@ public final class NpcProvisioningService implements NpcProvisioningUseCase {
         for (int index = events.size() - 1; index >= 0; index--) {
             NpcProvisioningAuditEntry event = events.get(index);
             if (event.action() == NpcProvisioningAuditEntry.Action.ASSIGN
-                    || event.action() == NpcProvisioningAuditEntry.Action.REPROJECT) {
+                    || event.action() == NpcProvisioningAuditEntry.Action.REPROJECT
+                    || event.action() == NpcProvisioningAuditEntry.Action.MIGRATE) {
                 lastProjectionError = event.outcome() == NpcProvisioningAuditEntry.Outcome.ACCEPTED
                         ? "" : event.failureReason();
                 break;

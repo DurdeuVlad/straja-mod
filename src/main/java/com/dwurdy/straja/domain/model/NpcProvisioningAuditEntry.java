@@ -55,7 +55,8 @@ public record NpcProvisioningAuditEntry(
     public enum Action {
         ASSIGN,
         REPROJECT,
-        UNASSIGN
+        UNASSIGN,
+        MIGRATE
     }
 
     public enum Outcome {
