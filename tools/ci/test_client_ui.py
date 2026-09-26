@@ -2,8 +2,11 @@
 """Pure unit tests for the advisory client-UI runner — no client, no server."""
 import json
 import os
+import socket
 import sys
 import tempfile
+import threading
+import time
 import unittest
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -279,6 +282,46 @@ class ClientActionTests(unittest.TestCase):
             mct.calls,
         )
         self.assertEqual(waited, [True])
+
+
+class WsPortReleaseTests(unittest.TestCase):
+    def test_returns_immediately_when_port_is_free(self):
+        # Find a port the OS reports as free, then wait on it.
+        probe = socket.socket()
+        probe.bind(("127.0.0.1", 0))
+        free_port = probe.getsockname()[1]
+        probe.close()
+        manifest = {"client": {"wsPort": free_port}}
+        transcript = cu.Transcript()
+        start = time.monotonic()
+        cu._await_ws_port_release(manifest, transcript, timeout_s=30)
+        self.assertLess(time.monotonic() - start, 5)
+        self.assertEqual([], transcript.entries)
+
+    def test_records_and_proceeds_when_port_stays_held(self):
+        listener = socket.socket()
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(5)
+        held_port = listener.getsockname()[1]
+        manifest = {"client": {"wsPort": held_port}}
+        transcript = cu.Transcript()
+        try:
+            cu._await_ws_port_release(manifest, transcript, timeout_s=2)
+        finally:
+            listener.close()
+        self.assertEqual("ws-port-release",
+                         transcript.entries[0]["label"])
+
+    def test_proceeds_once_listener_releases(self):
+        listener = socket.socket()
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(5)
+        held_port = listener.getsockname()[1]
+        manifest = {"client": {"wsPort": held_port}}
+        transcript = cu.Transcript()
+        threading.Timer(0.5, listener.close).start()
+        cu._await_ws_port_release(manifest, transcript, timeout_s=30)
+        self.assertEqual([], transcript.entries)
 
 
 def _ctx(mct=None, rcon=None):
