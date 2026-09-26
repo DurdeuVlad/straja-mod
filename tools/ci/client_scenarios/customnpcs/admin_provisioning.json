@@ -83,14 +83,31 @@
     {
       "name": "choose-jailer-profile",
       "type": "mct",
-      "args": ["input", "click", "108", "79"],
+      "args": ["input", "click", "108", "119"],
       "expect": [{"rawRegex": "\\\"clicked\\\"\\s*:\\s*true"}]
+    },
+    {
+      "name": "wait-for-jailer-confirm",
+      "type": "sleep",
+      "seconds": 1
     },
     {
       "name": "confirm-jailer-profile",
       "type": "mct",
-      "args": ["input", "click", "108", "121"],
+      "args": ["input", "click", "107", "161"],
       "expect": [{"rawRegex": "\\\"clicked\\\"\\s*:\\s*true"}]
+    },
+    {
+      "name": "wait-for-selector-return",
+      "type": "sleep",
+      "seconds": 1
+    },
+    {
+      "name": "jailer-binding-persisted",
+      "type": "rcon",
+      "command": "straja npc provider status",
+      "expectContains": "mode=",
+      "expectRegex": "profile=straja:jailer \\| host="
     },
     {
       "name": "close-admin-selector",
@@ -148,16 +165,39 @@
       "expect": [{"rawRegex": "customnpcs:customnpc"}]
     },
     {
+      "name": "selector-reopens-for-replacement",
+      "type": "mct",
+      "args": ["gui", "wait-open", "--timeout", "20"],
+      "expect": [{"rawRegex": "\\\"open\\\"\\s*:\\s*true"}]
+    },
+    {
       "name": "choose-secretary-profile",
       "type": "mct",
-      "args": ["input", "click", "108", "129"],
+      "args": ["input", "click", "108", "169"],
       "expect": [{"rawRegex": "\\\"clicked\\\"\\s*:\\s*true"}]
+    },
+    {
+      "name": "wait-for-secretary-confirm",
+      "type": "sleep",
+      "seconds": 1
     },
     {
       "name": "confirm-secretary-profile",
       "type": "mct",
-      "args": ["input", "click", "108", "121"],
+      "args": ["input", "click", "107", "161"],
       "expect": [{"rawRegex": "\\\"clicked\\\"\\s*:\\s*true"}]
+    },
+    {
+      "name": "wait-for-selector-return-secretary",
+      "type": "sleep",
+      "seconds": 1
+    },
+    {
+      "name": "secretary-binding-persisted",
+      "type": "rcon",
+      "command": "straja npc provider status",
+      "expectContains": "mode=",
+      "expectRegex": "profile=straja:secretary \\| host="
     },
     {
       "name": "replacement-surface-visible",
@@ -250,7 +290,7 @@
     {
       "name": "click-unassign",
       "type": "mct",
-      "args": ["input", "click", "342", "185"],
+      "args": ["input", "click", "342", "225"],
       "expect": [{"rawRegex": "\\\"clicked\\\"\\s*:\\s*true"}]
     },
     {
@@ -267,8 +307,13 @@
     {
       "name": "confirm-unassign",
       "type": "mct",
-      "args": ["input", "click", "108", "121"],
+      "args": ["input", "click", "107", "161"],
       "expect": [{"rawRegex": "\\\"clicked\\\"\\s*:\\s*true"}]
+    },
+    {
+      "name": "wait-for-selector-after-unassign",
+      "type": "sleep",
+      "seconds": 1
     },
     {
       "name": "post-unassign-selector",
