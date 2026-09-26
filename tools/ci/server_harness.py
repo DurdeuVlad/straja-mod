@@ -292,8 +292,11 @@ def provision_neoforge(server_dir: str, manifest: dict, cache_dir: str,
     os.makedirs(tmp_dir, exist_ok=True)
     # Bound every JVM the installer spawns (ART, splitter, …) and keep its
     # temp extraction inside the work dir so a full/small OS temp cannot
-    # truncate downloads.
-    env["JAVA_TOOL_OPTIONS"] = f"-Xmx1g -Djava.io.tmpdir={tmp_dir}"
+    # truncate downloads. JAVA_TOOL_OPTIONS splits on whitespace, so a
+    # tmpdir containing spaces must be redirected through TMP/TEMP instead.
+    env["JAVA_TOOL_OPTIONS"] = "-Xmx1g"
+    env["TMP"] = tmp_dir
+    env["TEMP"] = tmp_dir
     with open(install_log, "wb") as out:
         proc = subprocess.run(
             ["java", "-jar", installer, "--installServer", server_dir],
@@ -718,6 +721,70 @@ def check_native_ownership(ctx):
 
 
 @_check
+def check_incapacitated_downed_disabled(ctx):
+    if not _log_grep(ctx, "Incapacitated detected: Straja downed/death ownership is disabled"):
+        raise HarnessError(FAIL, "log lacks the 'Incapacitated detected' fail-safe warning")
+    return "incapacitated owns generic downed/death; Straja downed disabled"
+
+
+@_check
+def check_piggyback_carry_disabled(ctx):
+    if not _log_grep(ctx, "Piggyback detected: Straja's crouch carry trigger is disabled"):
+        raise HarnessError(FAIL, "log lacks the 'Piggyback detected' fail-safe warning")
+    return "piggyback owns carrying; Straja crouch carry disabled"
+
+
+@_check
+def check_custody_restraints(ctx):
+    """DC-014 RCON leg: rope binds, head sack applies/removes, baton strike
+    stays nonlethal, and custody state is consistent — on every profile where
+    the test surface is enabled."""
+    _rcon(ctx, "straja test create-player guard1")
+    _rcon(ctx, "straja test set-rank guard1 4")
+    _rcon(ctx, "straja test create-player civ1")
+    state = _rcon(ctx, "straja test dump-state civ1")
+    match = re.search(r"uuid=([0-9a-f-]{36})", state)
+    if not match:
+        raise HarnessError(FAIL, f"dump-state did not report civ1 uuid: {state[-200:]}")
+    civ_uuid = match.group(1)
+
+    def bound_membership(needle_uuid):
+        dump = _rcon(ctx, "straja test custody-dump")
+        return dump, re.search(
+            rf"bound=\[[^\]]*{re.escape(needle_uuid)}", dump)
+
+    # Baton while the target is still free — striking a restrained target is
+    # correctly refused.
+    _rcon(ctx, "straja test give guard1 straja:baton 1")
+    _rcon(ctx, "straja test select-slot guard1 0")
+    strike = _rcon(ctx, "straja test baton-strike guard1 civ1 4")
+    if "ALLOW_NONLETHAL" not in strike:
+        raise HarnessError(FAIL, f"baton strike not capped nonlethal: {strike[-200:]}")
+
+    # The baton is kept after a strike; the rope lands in the next free slot.
+    _rcon(ctx, "straja test give guard1 straja:rope 1")
+    _rcon(ctx, "straja test select-slot guard1 1")
+    _rcon(ctx, "straja test rope guard1 civ1")
+    dump, hit = bound_membership(civ_uuid)
+    if not hit:
+        tells = _rcon(ctx, "straja test tell-log guard1")
+        raise HarnessError(FAIL,
+                           f"rope did not bind civ1: {dump[-200:]}; tells: {tells[-200:]}")
+
+    _rcon(ctx, "straja test give guard1 straja:head_sack 1")
+    _rcon(ctx, "straja test select-slot guard1 1")
+    _rcon(ctx, "straja test head-sack guard1 civ1")
+    dump = _rcon(ctx, "straja test custody-dump")
+    if not re.search(rf"sacks=\[[^\]]*{re.escape(civ_uuid)}", dump):
+        raise HarnessError(FAIL, f"head sack not applied: {dump[-200:]}")
+    _rcon(ctx, "straja test sack-remove civ1")
+    dump = _rcon(ctx, "straja test custody-dump")
+    if re.search(rf"sacks=\[[^\]]*{re.escape(civ_uuid)}", dump):
+        raise HarnessError(FAIL, f"head sack not removed: {dump[-200:]}")
+    return "nonlethal baton, rope bind, head sack apply/remove verified"
+
+
+@_check
 def check_debug_refused(ctx):
     resp = _rcon(ctx, "straja debug readiness")
     _assert_refused(resp, "debug surface")
@@ -739,21 +806,46 @@ def check_clean_shutdown(ctx):
 _PROFILE_CHECKS = {
     "required-only": [check_server_boot, check_expected_mods,
                       check_native_ownership, check_no_deployment_gate_failures,
-                      check_test_surface, check_salary_fail_closed],
+                      check_test_surface, check_salary_fail_closed,
+                      check_custody_restraints],
     "coin-provider": [check_server_boot, check_expected_mods,
                       check_native_ownership, check_no_deployment_gate_failures,
-                      check_test_surface, check_salary_physical_coins],
+                      check_test_surface, check_salary_physical_coins,
+                      check_custody_restraints],
     "vampirism": [check_server_boot, check_expected_mods,
                   check_vampirism_provider, check_no_deployment_gate_failures,
-                  check_test_surface, check_salary_fail_closed],
+                  check_test_surface, check_salary_fail_closed,
+                  check_custody_restraints],
     "combined": [check_server_boot, check_expected_mods,
                  check_vampirism_provider, check_no_deployment_gate_failures,
-                 check_test_surface, check_salary_physical_coins],
+                 check_test_surface, check_salary_physical_coins,
+                 check_custody_restraints],
     "production-config": [check_server_boot, check_expected_mods,
                           check_no_deployment_gate_failures,
                           check_test_surface_refused, check_debug_refused],
     "foreign-npc": [check_server_boot, check_expected_mods,
                     check_customnpcs_loaded],
+    "incapacitated": [check_server_boot, check_expected_mods,
+                      check_incapacitated_downed_disabled,
+                      check_no_deployment_gate_failures,
+                      check_test_surface, check_custody_restraints],
+    "piggyback": [check_server_boot, check_expected_mods,
+                  check_piggyback_carry_disabled,
+                  check_no_deployment_gate_failures,
+                  check_test_surface, check_custody_restraints],
+    "incapacitated-piggyback": [check_server_boot, check_expected_mods,
+                              check_incapacitated_downed_disabled,
+                              check_piggyback_carry_disabled,
+                              check_no_deployment_gate_failures,
+                              check_test_surface, check_custody_restraints],
+    "full-modpack": [check_server_boot, check_expected_mods,
+                     check_vampirism_provider,
+                     check_incapacitated_downed_disabled,
+                     check_piggyback_carry_disabled,
+                     check_customnpcs_loaded,
+                     check_no_deployment_gate_failures,
+                     check_test_surface, check_salary_physical_coins,
+                     check_custody_restraints],
 }
 
 
@@ -794,9 +886,15 @@ def run_profile(args) -> ProfileResult:
     result = ProfileResult(profile=args.profile,
                            blocking=bool(prof["blocking"]),
                            advisory=not prof["blocking"])
+    # Server and installer subprocesses chdir into server_dir, so every path
+    # we hand them must survive that working-directory change.
+    args.jar = os.path.abspath(args.jar)
+    args.work_root = os.path.abspath(args.work_root)
+    args.artifacts_dir = os.path.abspath(args.artifacts_dir)
     out_dir = os.path.join(args.artifacts_dir, args.profile)
     server_dir = os.path.join(args.work_root, args.profile, "server")
-    dep_cache = args.dep_cache or os.path.join(args.work_root, "_dep_cache")
+    dep_cache = os.path.abspath(
+        args.dep_cache or os.path.join(args.work_root, "_dep_cache"))
     result.artifact_dir = out_dir
 
     proc, log_fh = None, None
