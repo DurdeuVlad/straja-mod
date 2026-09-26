@@ -62,6 +62,42 @@
       "expectedModId": "customnpcs",
       "sha256": "6c28d87b215fc1191488194188ec8a39dd908ae7d2d887b7c9d7d463be0a162c",
       "sha512": "22fd03cc2525fc74f03112348e0a6c2deb127e55f1737b6afe02c482308182e925f37466610c659835b35d9e8a228e0a7dc9bc785b9c630b63dc26c9fcec053d"
+    },
+    "incapacitated": {
+      "name": "Incapacitated",
+      "source": "modrinth",
+      "sourceId": "modrinth:CmDgNtOI:cx5B4Q0k",
+      "url": "https://cdn.modrinth.com/data/CmDgNtOI/versions/cx5B4Q0k/incapacitated-neoforge-1.21.1-2.0.1.jar",
+      "fileName": "incapacitated-neoforge-1.21.1-2.0.1.jar",
+      "size": 108643,
+      "side": "server",
+      "expectedModId": "incapacitated",
+      "sha256": "475fe8bb3a29ef14a0ccc70e9089d72f1f92326446d229bc3799ccd52a5e9378",
+      "sha512": "bbe913de3769ae6ef6cfc3b6c391cfd9213cd3ea5754505b07c27c1129ff41d64f9304d61840fff1a9244bbead0bbb0b4b8b1cbb744d9275c189f0be93d2b16e"
+    },
+    "faewulf_lib": {
+      "name": "Faewulf's Lib",
+      "source": "modrinth",
+      "sourceId": "modrinth:q4N9H96q:GMRYipxG",
+      "url": "https://cdn.modrinth.com/data/q4N9H96q/versions/GMRYipxG/faewulf_lib-neoforge-1.21.1-1.4.0.jar",
+      "fileName": "faewulf_lib-neoforge-1.21.1-1.4.0.jar",
+      "size": 329492,
+      "side": "server",
+      "expectedModId": "faewulf_lib",
+      "sha256": "c333a8f91acc5b4db6658e1de40b5039689f0dd5a46588ebae32b638705637eb",
+      "sha512": "3f2c5adbd926719e6dd0e11e5dbfaff5fb87cf21e2af9e8963b354431c673742dee5eb3cd68858d640e2bc91f84e87ea93f02df00199a23d1ea3c9a7422549da"
+    },
+    "piggyback": {
+      "name": "Piggyback",
+      "source": "modrinth",
+      "sourceId": "modrinth:yP77bAiA:zBNKQZnP",
+      "url": "https://cdn.modrinth.com/data/yP77bAiA/versions/zBNKQZnP/piggyback-neoforge-1.21.1-1.1.1.jar",
+      "fileName": "piggyback-neoforge-1.21.1-1.1.1.jar",
+      "size": 342949,
+      "side": "server",
+      "expectedModId": "piggyback",
+      "sha256": "a9712c6d333302297db876beb973e105097e2660a22157c083c94954222c14eb",
+      "sha512": "5ba29acc66d5782af44d9d4e3807ad249e1c16a33e0be870e194b59f7d9b5d09ca88081585a91be306866ef3e1004adb83fcbe7a062b3fb842c09de6192d8991"
     }
   },
   "profiles": {
@@ -138,6 +174,66 @@
       "blocking": false,
       "deps": [
         "envelope",
+        "customnpcs"
+      ],
+      "config": {
+        "identity.environment": "local",
+        "testing.enableTestCommands": true
+      },
+      "timeoutSeconds": 300
+    },
+    "incapacitated": {
+      "description": "DC-014 matrix leg: Incapacitated owns generic downed/death; Straja downed must be disabled.",
+      "blocking": true,
+      "deps": [
+        "envelope",
+        "incapacitated"
+      ],
+      "config": {
+        "identity.environment": "local",
+        "testing.enableTestCommands": true
+      },
+      "timeoutSeconds": 300
+    },
+    "piggyback": {
+      "description": "DC-014 matrix leg: Piggyback owns the carry interaction; Straja's crouch carry must be disabled.",
+      "blocking": true,
+      "deps": [
+        "envelope",
+        "faewulf_lib",
+        "piggyback"
+      ],
+      "config": {
+        "identity.environment": "local",
+        "testing.enableTestCommands": true
+      },
+      "timeoutSeconds": 300
+    },
+    "incapacitated-piggyback": {
+      "description": "DC-014 matrix leg: both custody providers co-installed; Straja downed and crouch carry must both be disabled.",
+      "blocking": true,
+      "deps": [
+        "envelope",
+        "faewulf_lib",
+        "incapacitated",
+        "piggyback"
+      ],
+      "config": {
+        "identity.environment": "local",
+        "testing.enableTestCommands": true
+      },
+      "timeoutSeconds": 300
+    },
+    "full-modpack": {
+      "description": "DC-014 matrix leg: full intended pack (Envelope, Ady's Decorations, Vampirism, Incapacitated, Piggyback, CustomNPCs) together.",
+      "blocking": true,
+      "deps": [
+        "envelope",
+        "adys_decorations",
+        "vampirism",
+        "faewulf_lib",
+        "incapacitated",
+        "piggyback",
         "customnpcs"
       ],
       "config": {
