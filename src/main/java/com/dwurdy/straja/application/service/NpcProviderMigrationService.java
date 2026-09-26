@@ -4,10 +4,12 @@ import com.dwurdy.straja.domain.model.NpcBinding;
 import com.dwurdy.straja.domain.model.NpcContentProfile;
 import com.dwurdy.straja.domain.model.NpcProviderId;
 import com.dwurdy.straja.domain.model.NpcProviderResult;
+import com.dwurdy.straja.domain.model.NpcProvisioningAuditEntry;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.function.LongSupplier;
 
 /**
@@ -94,15 +96,18 @@ public final class NpcProviderMigrationService {
                     Math.max(0L, clock.getAsLong()),
                     original.hostLocation());
             NpcProviderResult result = lifecycle.rebind(replacement);
-            items.add(new MigrationItem(original.bindingId(), original, replacement, result));
-            if (result.status() != NpcProviderResult.Status.ACCEPTED) {
+            if (result.status() == NpcProviderResult.Status.ACCEPTED) {
+                migrated.add(original);
+            }
+            NpcProviderResult reported = auditMigration(original, replacement, actorId, result);
+            items.add(new MigrationItem(original.bindingId(), original, replacement, reported));
+            if (reported.status() != NpcProviderResult.Status.ACCEPTED) {
                 List<MigrationItem> rollback = rollback(migrated, actorId);
                 return MigrationResult.of(
-                        result,
+                        reported,
                         List.copyOf(items),
                         rollback);
             }
-            migrated.add(original);
         }
         return MigrationResult.of(
                 NpcProviderResult.accepted("migrated " + migrated.size() + " NPC binding(s) to " + target.value()),
@@ -135,9 +140,34 @@ public final class NpcProviderMigrationService {
             NpcProviderResult result = active == null
                     ? NpcProviderResult.rejected("rollback-missing", "migrated binding is no longer durable")
                     : lifecycle.rebind(current);
-            rollback.add(new MigrationItem(original.bindingId(), active, current, result));
+            NpcProviderResult reported = auditMigration(
+                    active == null ? original : active, current, actorId, result);
+            rollback.add(new MigrationItem(original.bindingId(), active, current, reported));
         }
         return List.copyOf(rollback);
+    }
+
+    private NpcProviderResult auditMigration(
+            NpcBinding before, NpcBinding after, String actorId, NpcProviderResult result) {
+        NpcProvisioningAuditEntry.Outcome outcome =
+                result.status() == NpcProviderResult.Status.RECONCILED
+                        ? NpcProvisioningAuditEntry.Outcome.ACCEPTED
+                        : NpcProvisioningAuditEntry.Outcome.valueOf(result.status().name());
+        try {
+            lifecycle.recordProvisioningAudit(new NpcProvisioningAuditEntry(
+                    UUID.randomUUID().toString(), before.bindingId(),
+                    NpcProvisioningAuditEntry.Action.MIGRATE,
+                    after.providerId().value(), after.hostEntityUuid(), actorId,
+                    before.profileId().value(), after.profileId().value(),
+                    outcome, result.code(),
+                    outcome == NpcProvisioningAuditEntry.Outcome.ACCEPTED
+                            ? "" : result.message(),
+                    Math.max(0L, clock.getAsLong())));
+            return result;
+        } catch (RuntimeException error) {
+            return NpcProviderResult.unknown(
+                    "migration result could not be durably audited; inspect NPC status before retrying");
+        }
     }
 
     private static void requireActor(String actorId) {

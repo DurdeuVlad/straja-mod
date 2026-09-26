@@ -107,7 +107,7 @@
       "type": "rcon",
       "command": "straja npc provider status",
       "expectContains": "mode=",
-      "expectRegex": "profile=straja:jailer \\| host="
+      "expectRegex": "profile=straja\\.jailer\\.custody \\| host="
     },
     {
       "name": "close-admin-selector",
@@ -197,7 +197,7 @@
       "type": "rcon",
       "command": "straja npc provider status",
       "expectContains": "mode=",
-      "expectRegex": "profile=straja:secretary \\| host="
+      "expectRegex": "profile=straja\\.secretary\\.workflows \\| host="
     },
     {
       "name": "replacement-surface-visible",

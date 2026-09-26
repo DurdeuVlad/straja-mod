@@ -195,6 +195,10 @@ public final class NpcPresentationRuntime {
         } catch (IllegalArgumentException exception) {
             return NpcProviderResult.rejected("invalid-host-identity", "hostEntityUuid must be a UUID");
         }
+        NpcProviderResult hostCheck = active.customNpcs().inspectHost(active.server(), normalizedUuid);
+        if (hostCheck.status() != NpcProviderResult.Status.ACCEPTED) {
+            return hostCheck;
+        }
         try {
             com.dwurdy.straja.application.port.in.NpcProvisioningUseCase.ProvisioningResult result = require().provisioning().assign(
                     NpcProviderId.CUSTOM_NPCS,

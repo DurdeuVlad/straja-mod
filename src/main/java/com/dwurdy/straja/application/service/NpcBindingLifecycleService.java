@@ -1096,7 +1096,7 @@ public final class NpcBindingLifecycleService {
 
     private static NpcProviderOperation auditOperation(NpcProvisioningAuditEntry.Action action) {
         return switch (action) {
-            case ASSIGN -> NpcProviderOperation.BIND;
+            case ASSIGN, MIGRATE -> NpcProviderOperation.BIND;
             case REPROJECT -> NpcProviderOperation.PUBLISH;
             case UNASSIGN -> NpcProviderOperation.UNBIND;
         };
