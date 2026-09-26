@@ -59,6 +59,7 @@ import json
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -777,6 +778,10 @@ def create_client(mct: Mct, manifest: dict, jar_path: str,
     if not mods_dir or not os.path.isdir(mods_dir):
         raise ClientUiError("client_boot",
                             f"mct client create returned no modsDir: {out}")
+    # Record the bridge's control port so a later relaunch can wait for the
+    # previous client process to release it before binding again.
+    if out.get("wsPort"):
+        client["wsPort"] = int(out["wsPort"])
     # mct has no locale flag — pin the language via options.txt so
     # assertions never depend on the host OS locale.
     minecraft_dir = out.get("minecraftDir")
@@ -802,6 +807,35 @@ def create_client(mct: Mct, manifest: dict, jar_path: str,
         shutil.copy2(path, os.path.join(mods_dir, os.path.basename(path)))
     log(f"client mods staged: {sorted(os.listdir(mods_dir))}")
     return name
+
+
+def _await_ws_port_release(manifest: dict, transcript: "Transcript",
+                           timeout_s: float = 60.0) -> None:
+    """Wait for the client bridge's control port to become free.
+
+    `mct client stop` returns once the stop is requested, but the client
+    process may still hold its ws listener briefly. A relaunch attempted
+    while the port is bound leaves the new client running with no control
+    channel (`processAlive=true, portListening=false` until wait-ready
+    times out). Poll until the port refuses connections before launching.
+    """
+    port = int(manifest["client"].get("wsPort", 25580))
+    deadline = time.time() + timeout_s
+    refusals = 0
+    while time.time() < deadline:
+        try:
+            socket.create_connection(("127.0.0.1", port), timeout=1).close()
+            refusals = 0
+        except OSError:
+            refusals += 1
+            # A full accept queue can refuse a probe while a listener still
+            # holds the port; require consecutive refusals before launching.
+            if refusals >= 2:
+                return
+        time.sleep(0.75)
+    transcript.record(
+        "ws-port-release",
+        f"port {port} still held after {timeout_s:.0f}s; launching anyway")
 
 
 def run_client_ui(args, log=print) -> dict:
@@ -852,6 +886,7 @@ def run_client_ui(args, log=print) -> dict:
                                     env, log)
 
         def launch():
+            _await_ws_port_release(manifest, transcript)
             mct(["client", "launch", client_name,
                  "--server", f"127.0.0.1:{game_port}",
                  "--account", manifest["client"]["account"],
