@@ -31,6 +31,49 @@ class ValidateScenarioTests(unittest.TestCase):
                     raw = json.load(fh)
                 self.assertEqual(cu.validate_scenario(raw, path), [])
 
+    def test_admin_provisioning_covers_unassign_and_native_host(self):
+        # NPC-024 keeps the provisioning scenario aligned with the release-gate
+        # runbook: wand selection, replacement, reconnect, unassignment, and a
+        # post-unassign check that only native CustomNPCs behavior remains.
+        path = os.path.join(os.path.dirname(__file__), "client_scenarios",
+                            "customnpcs", "admin_provisioning.json")
+        with open(path, encoding="utf-8") as fh:
+            raw = json.load(fh)
+        names = [step.get("name", "") for step in raw["steps"]]
+        for marker in ("capture-customnpc", "left-click-with-admin-wand",
+                       "choose-jailer-profile", "confirm-jailer-profile",
+                       "player-surface-action-dispatches",
+                       "choose-secretary-profile", "confirm-secretary-profile",
+                       "reconnect-for-persistence-check",
+                       "click-unassign", "confirm-unassign",
+                       "interact-after-unassign",
+                       "native-host-behavior-after-unassign",
+                       "rejoin-after-unassign",
+                       "native-behavior-persists-after-rejoin"):
+            self.assertIn(marker, names)
+        for marker in ("provider-status-after-unassign",
+                       "unassigned-state-screenshot"):
+            self.assertIn(marker, names)
+        click_at = names.index("click-unassign")
+        confirm_at = names.index("confirm-unassign")
+        native_at = names.index("native-host-behavior-after-unassign")
+        self.assertLess(click_at, confirm_at)
+        self.assertLess(confirm_at, native_at)
+        native_step = raw["steps"][native_at]
+        self.assertIn("expectAbsentRegex", native_step)
+        self.assertIn("GuiCustom", native_step["expectAbsentRegex"])
+        status_step = raw["steps"][names.index("provider-status-after-unassign")]
+        self.assertIn("expectAbsentRegex", status_step)
+
+    def test_mct_text_expectations_rejected_when_expect_present(self):
+        raw = _scenario([{"type": "mct", "args": ["gui", "info"],
+                          "expect": [{"rawRegex": "open"}],
+                          "expectAbsentRegex": "GuiCustom"}])
+        self.assertTrue(any("ignored" in e for e in cu.validate_scenario(raw, "p")))
+        raw = _scenario([{"type": "mct", "args": ["gui", "info"],
+                          "expectAbsentRegex": "GuiCustom"}])
+        self.assertEqual(cu.validate_scenario(raw, "p"), [])
+
     def test_valid_minimal(self):
         raw = _scenario([{"type": "mct", "args": ["status", "health"],
                           "expect": [{"path": "health", "gte": 1}]}])
