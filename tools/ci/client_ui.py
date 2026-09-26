@@ -291,6 +291,15 @@ def validate_scenario(raw: dict, path: str) -> list:
                           f"{stype} steps need an expectation or setup:true")
         if stype == "mct" and not step.get("args"):
             errors.append(f"{path} step {i}: mct step needs args")
+        if stype == "mct" and (step.get("expect") or step.get("capture")
+                               or step.get("captures")):
+            ignored = [k for k in ("expectContains", "expectRegex",
+                                   "expectNotContains", "expectAbsentRegex")
+                       if k in step]
+            if ignored:
+                errors.append(f"{path} step {i} ({step.get('name', stype)}): "
+                              f"{ignored} are ignored when 'expect' or "
+                              "'capture' is present on an mct step")
         if stype == "rcon" and not step.get("command"):
             errors.append(f"{path} step {i}: rcon step needs command")
         if stype == "form" and not isinstance(step.get("fill", []), list):

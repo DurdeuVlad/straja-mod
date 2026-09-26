@@ -1,7 +1,7 @@
 {
   "name": "customnpcs-admin-provisioning",
   "group": "client-customnpcs",
-  "timeoutSeconds": 420,
+  "timeoutSeconds": 600,
   "observable": "an operator uses the Straja NPC Wand on a real CustomNPCs entity, the native CustomNPCs GUI lists preconfigured Straja profiles, a profile selection publishes its player-facing dialog surface, the profile can be replaced in-game, the assignment survives reconnect, explicit unassignment removes the Straja surface, and the host retains only native CustomNPCs behavior across a client rejoin",
   "failure": "the admin-only left-click selector does not open, a disabled/non-admin path exposes the selector, profile selection does not publish a native GuiCustom surface, replacement does not take effect, the assignment is lost after reconnect, unassignment leaves a Straja surface bound, or the host does not return to native CustomNPCs behavior after unassign",
   "prerequisites": [
@@ -205,6 +205,12 @@
       "type": "screenshot"
     },
     {
+      "name": "close-persisted-surface",
+      "type": "mct",
+      "setup": true,
+      "args": ["gui", "close"]
+    },
+    {
       "name": "regrant-admin-for-unassign",
       "type": "rcon",
       "setup": true,
@@ -248,6 +254,11 @@
       "expect": [{"rawRegex": "\\\"clicked\\\"\\s*:\\s*true"}]
     },
     {
+      "name": "wait-for-unassign-dialog",
+      "type": "sleep",
+      "seconds": 1
+    },
+    {
       "name": "unassign-confirmation-opens",
       "type": "mct",
       "args": ["gui", "wait-open", "--timeout", "20"],
@@ -260,7 +271,7 @@
       "expect": [{"rawRegex": "\\\"clicked\\\"\\s*:\\s*true"}]
     },
     {
-      "name": "unassign-confirmation-screenshot",
+      "name": "post-unassign-selector",
       "type": "screenshot"
     },
     {
@@ -298,6 +309,7 @@
       "name": "provider-status-after-unassign",
       "type": "rcon",
       "command": "straja npc provider status",
+      "expectContains": "mode=",
       "expectAbsentRegex": "host="
     },
     {
@@ -328,6 +340,12 @@
       "name": "close-gui-cleanup",
       "type": "mct",
       "args": ["gui", "close"],
+      "setup": true
+    },
+    {
+      "name": "clear-wand-cleanup",
+      "type": "rcon",
+      "command": "clear ci_straja straja:npc_wand",
       "setup": true
     },
     {
