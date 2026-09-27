@@ -64,6 +64,11 @@ jobs:
           ./gradlew runGameTestServer runRpExpansionGameTestServer
           --no-daemon --stacktrace
 
+      - name: GUI icon asset contract
+        run: |
+          python3 -m pip install --quiet pillow
+          python3 tools/icons/normalize.py --check src/main/resources/assets/straja/textures/gui
+
       - name: CI tooling unit tests
         run: python3 -m unittest discover -s tools/ci -p 'test_*.py' -v
 

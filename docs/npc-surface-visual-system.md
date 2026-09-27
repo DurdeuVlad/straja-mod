@@ -72,7 +72,7 @@ Common grid (all surfaces):
   disabled `addTextArea`, not stacked labels.
 - **Component ids are Z-depth.** `CustomGuiItemRenderer` (and other rendered
   components) translate by `id` on the Z axis — ids ≥ ~1000 render beyond the
-  clip range and never draw. Header components use low free ids (96/97);
+  clip range and never draw. Header components use low free ids (96–98);
   always verify a new component's id is inside the visible range.
 - GUI backgrounds are transparent: entity nameplates render through open
   surfaces (observed as ghost text mid-panel). The M2 panel texture makes
@@ -84,38 +84,52 @@ Common grid (all surfaces):
 
 Two delivery tiers; both resolve through `GuiTheme`/`GuiItemIcons`:
 
-- **Tier 1 (zero-asset, ships first):** `addItemRenderer` + existing Straja
-  items — no new files.
-- **Tier 2 (generated pack):** `assets/straja/textures/gui/<id>.png` used via
-  `addTexturedRect`/`addTexturedButton`, swapped in by constant when present.
+- **Tier 1 (zero-asset, always present):** `addItemRenderer` + existing Straja
+  items — no new files. Renders under the Tier-2 PNG at the same position.
+- **Tier 2 (generated pack):** `assets/straja/textures/gui/icons/<id>.png`
+  wired via `addTexturedRect` on top of the item icon.
+
+> **Build limitation (verified 2026-09-27, CustomNPCs 1.21.1.20251230):**
+> `addTexturedRect` and `addTexturedButton` register server-side, serialize,
+> and deserialize correctly — but draw zero pixels client-side in this build
+> (three render attempts verified live; `setBackgroundTexture`,
+> `addItemRenderer`, and `addColoredLine` all render). Tier-2 icons are wired
+> as overlays so they appear automatically on builds that fix this; the item
+> icon is the guaranteed base layer everywhere.
+>
+> Corollary for M3: textured icon *buttons* and textured decoration rects are
+> not available on this build — use item renderers, labels, and colored lines
+> for glyph/icon needs.
 
 | Icon id | Meaning | Tier-1 item fallback | Planned PNG |
 |---|---|---|---|
-| `role.receptionist` | front-desk clerk | `mission_carnet` | `gui/icons/role_receptionist.png` |
-| `role.secretary` | records secretary | `archive_stamp` | `gui/icons/role_secretary.png` |
-| `role.instructor` | trainer/instructor | `fine_book` (verify `training_manual` texture — registered but no PNG today) | `gui/icons/role_instructor.png` |
-| `role.armorer` | armory/quartermaster | `baton` | `gui/icons/role_armorer.png` |
-| `role.jailer` | custody officer | `cuffs` | `gui/icons/role_jailer.png` |
-| `role.archivist` | archive keeper | `archive_folder` | `gui/icons/role_archivist.png` |
-| `action.assign` | confirm/assign | `archive_stamp` | `gui/icons/act_assign.png` |
-| `action.unassign` | unbind/remove | `bolt_cutters` | `gui/icons/act_unassign.png` |
-| `action.status` | status/info | `official_envelope` | `gui/icons/act_status.png` |
-| `action.audit` | audit ledger | `order_book` | `gui/icons/act_audit.png` |
-| `action.cleanup` | duplicate cleanup | `npc_cloner` | `gui/icons/act_cleanup.png` |
-| `action.input` | written answer | `carbon_paper` | `gui/icons/act_input.png` |
-| `quest.active` | quest in progress | `mission_carnet` | `gui/icons/quest_active.png` |
-| `quest.new` | new quest | `official_envelope` | `gui/icons/quest_new.png` |
-| `quest.done` | completed | `archive_stamp` | `gui/icons/quest_done.png` |
-| `state.ok` | success | — (glyph) | `gui/icons/state_ok.png` |
-| `state.denied` | denied/error | `fine_notice` | `gui/icons/state_denied.png` |
-| `state.warn` | warning | `alarm_whistle` | `gui/icons/state_warn.png` |
+| `role_receptionist` | front-desk clerk | `mission_carnet` | `gui/icons/role_receptionist.png` |
+| `role_secretary` | records secretary | `archive_stamp` | `gui/icons/role_secretary.png` |
+| `role_instructor` | trainer/instructor | `fine_book` | `gui/icons/role_instructor.png` |
+| `role_armorer` | armory/quartermaster | `baton` | `gui/icons/role_armorer.png` |
+| `role_jailer` | custody officer | `cuffs` | `gui/icons/role_jailer.png` |
+| `role_archivist` | archive keeper | `archive_folder` | `gui/icons/role_archivist.png` |
+| `act_assign` | confirm/assign | `archive_stamp` | `gui/icons/act_assign.png` |
+| `act_unassign` | unbind/remove | `bolt_cutters` | `gui/icons/act_unassign.png` |
+| `act_status` | status/info | `official_envelope` | `gui/icons/act_status.png` |
+| `act_audit` | audit ledger | `order_book` | `gui/icons/act_audit.png` |
+| `act_cleanup` | duplicate cleanup | `npc_cloner` | `gui/icons/act_cleanup.png` |
+| `act_input` | written answer | `carbon_paper` | `gui/icons/act_input.png` |
+| `quest_active` | quest in progress | `mission_carnet` | `gui/icons/quest_active.png` |
+| `quest_new` | new quest | `official_envelope` | `gui/icons/quest_new.png` |
+| `quest_done` | completed | `archive_stamp` | `gui/icons/quest_done.png` |
+| `admin_selector` | admin surface entry | `npc_wand` | — (item only, no PNG yet) |
+| `state_ok` | success | `archive_stamp` | `gui/icons/state_ok.png` |
+| `state_denied` | denied/error | `fine_notice` | `gui/icons/state_denied.png` |
+| `state_warn` | warning | `alarm_whistle` | `gui/icons/state_warn.png` |
 
 Icon render size: **16×16** in headers and inline (GUI scale already zooms);
 32×32 source PNGs downscaled only if 16 proves muddy at review.
 
-Panel background: `gui/surface_panel.png` — 9-slice-friendly dark parchment
-tile wired through `ICustomGui.setBackgroundTexture` behind a constant;
-absence → current default look (degrade, never break).
+Panel background: `gui/panel_bg.png` — 32×32 dark-parchment tile wired through
+`ICustomGui.setBackgroundTexture` behind `GuiTheme.USE_PANEL_BACKGROUND`
+(verified rendering on the live client); absence → default look (degrade,
+never break).
 
 ## 4. Component states
 
@@ -125,8 +139,8 @@ absence → current default look (degrade, never break).
 | Primary action | icon `brass`; label `paper-bright` |
 | Destructive/authority | icon `seal-red`; label `paper`; confirm screen only |
 | Disabled | `setEnabled(false)`; label `steel-dark` |
-| Denied result | `state.denied` icon + `seal-bright` title text |
-| Success result | `state.ok` icon + `brass` title text |
+| Denied result | `state_denied` icon + `seal-bright` title text |
+| Success result | `state_ok` icon + `brass` title text |
 | Header | 16×16 icon + `paper-bright` title + `leather` rule |
 
 Hover tooltips (`setHoverText`) on GUI-level buttons only; informational hover
@@ -152,7 +166,7 @@ rather than decorating around it.
 ## 7. Accessibility
 
 - `paper`-on-`night` primary text ≥7:1 — passes at GUI scale.
-- Denied/destructive never signaled by color alone — `state.denied` icon +
+- Denied/destructive never signaled by color alone — `state_denied` icon +
   explicit text.
 - All actions remain button-activatable (keyboard focus = vanilla CNPC
   behavior); icon is additive, never the sole carrier of meaning.

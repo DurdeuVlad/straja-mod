@@ -138,6 +138,73 @@ class CustomNpcsNpcSurfaceProviderTest {
     }
 
     @Test
+    void roleIconKeyReturnsTaxonomyNamesAndFailsClosed() {
+        assertEquals("role_jailer", GuiTheme.roleIconKey("straja.jailer.custody"));
+        assertEquals("role_receptionist", GuiTheme.roleIconKey("straja.reception.admission"));
+        assertNull(GuiTheme.roleIconKey("straja.unknown.profile"));
+        assertNull(GuiTheme.roleIconKey(null));
+    }
+
+    @Test
+    void everyShippedIconKeyHasAnItemFallback() {
+        String[] keys = {
+            "role_receptionist", "role_secretary", "role_instructor", "role_armorer",
+            "role_jailer", "role_archivist", "admin_selector", "act_assign",
+            "act_unassign", "act_status", "act_audit", "act_cleanup", "act_input",
+            "quest_active", "quest_new", "quest_done", "state_ok", "state_denied",
+            "state_warn",
+        };
+        for (String key : keys) {
+            String item = GuiTheme.iconItemFallback(key);
+            assertTrue(item != null && item.startsWith("straja:"),
+                    "missing item fallback for " + key);
+        }
+        assertNull(GuiTheme.iconItemFallback("no_such_icon"));
+        assertNull(GuiTheme.iconItemFallback(null));
+    }
+
+    @Test
+    void textureIconSetMatchesTheShippedTaxonomy() {
+        for (String key : new String[] {
+            "role_receptionist", "role_secretary", "role_instructor", "role_armorer",
+            "role_jailer", "role_archivist", "act_assign", "act_unassign",
+            "act_status", "act_audit", "act_cleanup", "act_input", "quest_active",
+            "quest_new", "quest_done", "state_ok", "state_denied", "state_warn",
+        }) {
+            assertTrue(GuiTheme.hasTextureIcon(key), "missing PNG entry for " + key);
+        }
+        // Keys without a shipped PNG must fall back to the item renderer —
+        // a missing texture renders nothing and throws no exception.
+        assertFalse(GuiTheme.hasTextureIcon("admin_selector"));
+        assertFalse(GuiTheme.hasTextureIcon(null));
+        assertEquals("straja:npc_wand", GuiTheme.iconItemFallback("admin_selector"));
+    }
+
+    @Test
+    void textureIconSetMatchesFilesCommittedUnderGuiIcons() throws Exception {
+        java.util.Set<String> onDisk = new java.util.TreeSet<>();
+        try (java.util.stream.Stream<java.nio.file.Path> stream = java.nio.file.Files.list(
+                java.nio.file.Path.of("src/main/resources/assets/straja/textures/gui/icons"))) {
+            stream.map(p -> p.getFileName().toString())
+                    .map(n -> n.replace(".png", ""))
+                    .forEach(onDisk::add);
+        }
+        for (String key : onDisk) {
+            assertTrue(GuiTheme.hasTextureIcon(key),
+                    "shipped PNG " + key + " has no TEXTURED_ICONS entry");
+        }
+        for (String key : new String[] {
+            "role_receptionist", "role_secretary", "role_instructor", "role_armorer",
+            "role_jailer", "role_archivist", "act_assign", "act_unassign",
+            "act_status", "act_audit", "act_cleanup", "act_input", "quest_active",
+            "quest_new", "quest_done", "state_ok", "state_denied", "state_warn",
+        }) {
+            assertTrue(onDisk.contains(key), "TEXTURED_ICONS key " + key + " ships no PNG");
+        }
+        assertEquals(18, onDisk.size(), "unexpected files under textures/gui/icons");
+    }
+
+    @Test
     void reflectiveCompatUnboxesWiderPrimitives() {
         assertTrue(CustomNpcsNpcSurfaceProvider.compatible(
                 new Class<?>[] {float.class}, new Object[] {1.0f}));
