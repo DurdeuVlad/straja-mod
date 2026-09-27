@@ -58,6 +58,7 @@ public class CustodyStore {
         public int hiddenItemCount;
         public Map<String, String> hiddenItemData = new LinkedHashMap<>();
         public String hiddenItemName = "";
+        public long lastBlockedNoticeAt;
     }
 
     /** A hidden cuffed-hand stack that could not be returned at release time. */

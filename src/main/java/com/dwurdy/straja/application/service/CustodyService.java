@@ -2343,9 +2343,16 @@ public class CustodyService implements CustodyRoleplayUseCase {
         if ((store.cuffed.containsKey(playerKey) && ctx.policies().cuffActionLock)
                 || (store.bound.containsKey(playerKey) && ctx.policies().restraintActionLock)) {
             var bound = store.bound.get(playerKey);
-            if (bound != null && now() - bound.lastBlockedNoticeAt >= 5000) {
-                bound.lastBlockedNoticeAt = now();
+            var cuffed = store.cuffed.get(playerKey);
+            long last = bound != null ? bound.lastBlockedNoticeAt
+                    : cuffed != null ? cuffed.lastBlockedNoticeAt : 0;
+            if (now() - last >= 5000) {
+                if (bound != null) bound.lastBlockedNoticeAt = now();
+                if (cuffed != null) cuffed.lastBlockedNoticeAt = now();
                 ctx.custody().write(store);
+                player.tell(bound != null
+                        ? "Ești legat. Nu poți interacționa până nu ești eliberat."
+                        : "Ești încătușat. Nu poți interacționa până nu ești eliberat.");
             }
             player.closeMenu();
             return true;

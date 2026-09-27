@@ -583,6 +583,25 @@ class CustodyServiceTest {
     }
 
     @Test
+    void boundAndCuffedPlayersGetThrottledBlockedNotices() {
+        hold(boss, CustodyService.ROPE);
+        assertTrue(custody.applyRope(boss, civilian));
+
+        assertTrue(custody.actionBlocked(civilian, "interact"));
+        assertTrue(civilian.told("Ești legat"),
+                "the bound action lock must tell the player why nothing happened");
+        long told = civilian.messages.stream().filter(m -> m.contains("Ești legat")).count();
+        assertTrue(custody.actionBlocked(civilian, "interact"));
+        assertEquals(told, civilian.messages.stream()
+                .filter(m -> m.contains("Ești legat")).count(),
+                "repeat blocks inside the throttle window must not spam");
+        clock.advance(6_000);
+        assertTrue(custody.actionBlocked(civilian, "interact"));
+        assertEquals(told + 1, civilian.messages.stream()
+                .filter(m -> m.contains("Ești legat")).count());
+    }
+
+    @Test
     void carriedDownedPlayerCannotStartResuscitation() {
         assertNotNull(custody.startDowned(civilian, guard, "test"));
         assertTrue(custody.startCarry(guard, civilian));

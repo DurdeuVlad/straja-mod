@@ -22,6 +22,8 @@
        {"name": "pz", "regex": "\"z\"\\s*:\\s*(-?[0-9.]+)"}]},
     {"name": "com-near-player", "type": "rcon", "setup": true,
      "command": "straja test move cui_com {px} {py} {pz}"},
+    {"name": "complainant-near-player", "type": "rcon", "setup": true,
+     "command": "straja test move cui_s1 {px} {py} {pz}"},
     {"name": "loc-complainant", "type": "rcon", "setup": true,
      "command": "straja test set-location cui_s1 receptionist"},
     {"name": "loc-commissioner", "type": "rcon", "setup": true,
