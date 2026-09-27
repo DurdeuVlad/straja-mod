@@ -543,7 +543,8 @@ def _client2(step: dict, ctx: ClientContext):
     if action == "join":
         create_client(mct2, ctx.manifest, ctx.jar_path, ctx.dep_paths,
                       ctx.mct.env,
-                      lambda msg: ctx.transcript.record("client2", msg))
+                      lambda msg: ctx.transcript.record("client2", msg),
+                      account=account2)
         mct2(["client", "launch", name2,
               "--server", f"127.0.0.1:{ctx.game_port}",
               "--account", account2, "--force"], timeout=120)
@@ -759,13 +760,16 @@ def _mct_env(args, manifest: dict) -> dict:
 
 
 def create_client(mct: Mct, manifest: dict, jar_path: str,
-                  dep_paths: list, env: dict, log) -> str:
+                  dep_paths: list, env: dict, log, account: str = None) -> str:
     client = manifest["client"]
-    name = client["name"]
+    # The instance name belongs to the caller's Mct target, not the manifest:
+    # a second client (client2) wraps the same manifest but needs its own
+    # instance and account or `client launch` reports INSTANCE_NOT_FOUND.
+    name = mct.client
     raw = mct.json(["client", "create", name,
                     "--loader", client["loader"],
                     "--version", client["minecraftVersion"],
-                    "--account", client["account"],
+                    "--account", account or client["account"],
                     "--java", client.get("java", "java")], timeout=900)
     # MC Pilot's JSON command returns a success envelope, while older/local
     # adapters may return the payload directly. Keep this boundary tolerant
@@ -776,10 +780,12 @@ def create_client(mct: Mct, manifest: dict, jar_path: str,
     if not mods_dir or not os.path.isdir(mods_dir):
         raise ClientUiError("client_boot",
                             f"mct client create returned no modsDir: {out}")
-    # Record the bridge's control port so a later relaunch can wait for the
-    # previous client process to release it before binding again.
+    # Record the bridge's control port per instance so a later relaunch can
+    # wait for that specific client process to release it before binding
+    # again. (client2 records its own port instead of clobbering the
+    # primary's.)
     if out.get("wsPort"):
-        client["wsPort"] = int(out["wsPort"])
+        client.setdefault("wsPorts", {})[name] = int(out["wsPort"])
     # mct has no locale flag — pin the language via options.txt so
     # assertions never depend on the host OS locale.
     minecraft_dir = out.get("minecraftDir")
@@ -829,8 +835,14 @@ def _copy_tree_redacted(src: str, dst: str, secrets_: list) -> None:
                 fh.write(redacted)
 
 
-def _ws_port_open(manifest: dict) -> bool:
-    port = int((manifest.get("client") or {}).get("wsPort", 25580))
+def _ws_port(manifest: dict, name: str) -> int:
+    client = manifest.get("client") or {}
+    ports = client.get("wsPorts") or {}
+    return int(ports.get(name, client.get("wsPort", 25580)))
+
+
+def _ws_port_open(manifest: dict, name: str) -> bool:
+    port = _ws_port(manifest, name)
     try:
         socket.create_connection(("127.0.0.1", port), timeout=1).close()
         return True
@@ -852,7 +864,7 @@ def _launch_and_wait(ctx, timeout: int) -> None:
             return
         except ClientUiError as exc:
             if (attempt == 2 or exc.kind not in ("process", "timeout")
-                    or _ws_port_open(ctx.manifest)):
+                    or _ws_port_open(ctx.manifest, ctx.client_name)):
                 raise
             ctx.transcript.record(
                 "relaunch-retry",
@@ -860,7 +872,8 @@ def _launch_and_wait(ctx, timeout: int) -> None:
             ctx.mct(["client", "stop", ctx.client_name], timeout=timeout)
 
 
-def _await_ws_port_release(manifest: dict, transcript: "Transcript",
+def _await_ws_port_release(manifest: dict, name: str,
+                           transcript: "Transcript",
                            timeout_s: float = 60.0) -> None:
     """Wait for the client bridge's control port to become free.
 
@@ -870,7 +883,7 @@ def _await_ws_port_release(manifest: dict, transcript: "Transcript",
     channel (`processAlive=true, portListening=false` until wait-ready
     times out). Poll until the port refuses connections before launching.
     """
-    port = int((manifest.get("client") or {}).get("wsPort", 25580))
+    port = _ws_port(manifest, name)
     deadline = time.time() + timeout_s
     refusals = 0
     while time.time() < deadline:
@@ -937,7 +950,7 @@ def run_client_ui(args, log=print) -> dict:
                                     env, log)
 
         def launch():
-            _await_ws_port_release(manifest, transcript)
+            _await_ws_port_release(manifest, client_name, transcript)
             mct(["client", "launch", client_name,
                  "--server", f"127.0.0.1:{game_port}",
                  "--account", manifest["client"]["account"],
