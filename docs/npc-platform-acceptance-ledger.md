@@ -32,8 +32,8 @@ alias, while appointment authority belongs to the separate Personnel domain.
 | In-game provisioning | Catalog, admin wand target flow, selector/reconfigure/unassign, persistence, recovery, audit | PR #154 automated suite; RC run [35749890223](https://github.com/DurdeuVlad/straja-mod/actions/runs/35749890223) CustomNPCs artifact reports `verdict: pass` for `customnpcs-admin-provisioning`, `customnpcs-catalog-profiles`, and `customnpcs-jailer-custody` | Pass for provisioning, replacement, action-dispatch, reconnect, unassign, and all six catalog profile selections |
 | Provider rollout | Explicit mode, debug gating, capability checks, migration identity preservation, single- and multi-binding rollback | `NpcProviderMigrationServiceTest`, provider contract tests, PR #158 CI | Pass |
 | Server regression | Package, GameTests, RCON scenarios, dedicated profiles, health soak | RC run [35743424227](https://github.com/DurdeuVlad/straja-mod/actions/runs/35743424227): all blocking jobs and `Server profiles gate` passed; generic real-client advisory failed but is explicitly non-blocking | Pass |
-| Real CustomNPCs acceptance | Disposable server plus real CustomNPCs client: provision, interact, replace, unassign, relog, catalog selection | Historical RC run [35766766664](https://github.com/DurdeuVlad/straja-mod/actions/runs/35766766664), head `cfba404`, artifact `customnpcs-client-ui`; this run predates the final integrated candidate | Historical evidence only; final acceptance has not run and remains blocked until issues #128–#134 and #149–#153 are complete |
-| Independent review | Separate read-only adversarial review of security, migration, GUI boundaries, and rollback | Earlier reviews covered prior revisions only; a final read-only re-review against the exact integrated candidate is still required | Required before merge readiness |
+| Real CustomNPCs acceptance | Disposable server plus real CustomNPCs client: provision, interact, replace, unassign, relog, catalog selection | Final gate RC run [36296086276](https://github.com/DurdeuVlad/straja-mod/actions/runs/36296086276), head `aafb15b`, artifact `customnpcs-client-ui`: `customnpcs-admin-provisioning` 62/62 steps and `customnpcs-jailer-custody` 18/18 steps pass — wand select, native selector, profile choose/confirm/replace/reselect, binding persistence, canonical action dispatch, unassign. Companion run [36294338299](https://github.com/DurdeuVlad/straja-mod/actions/runs/36294338299) on the same head reports `verdict: pass` for all six real-client scenarios (`downed-custody`, `join-observe`, `physical-items`, `quiz-form`, `reconnect-delivery`, `report-form`), including live `BookViewScreen` open on the training manual | Pass — final acceptance executed on the exact integrated candidate |
+| Independent review | Separate read-only adversarial review of security, migration, GUI boundaries, and rollback | Final read-only review of head `aafb15b` completed 2026-09-27: one-use player-bound action tokens (CAS claim, 15 s TTL, retained-outcome replay kill, bounded pools in `NpcSurfaceActionService`), owner-bound one-use form sessions with bounded payloads, write-ahead lifecycle intents with fail-closed recovery, transactional migration with reverse-order rollback and audit-on-failure, triple-gated test commands (flag + local-environment + SETUP), custody gates throttling tells on both branches. Two low-severity residuals recorded, neither release-blocking: `NpcInteractionService` token map lacks an explicit size cap (bounded by 15 s TTL purge) and complaint reward deposit precedes the store write (crash in the gap could double-pay once on restart) | Pass — no unresolved high- or medium-severity finding |
 
 ## Historical real-server run (not final acceptance)
 
@@ -57,11 +57,30 @@ This run does not claim a live-client server-process restart, provider-loss
 recovery, or debug-provider migration; those are covered by the automated
 lifecycle/RCON evidence and remain outside the CustomNPCs client scenario.
 
-No final acceptance run has been completed. Issue #135 remains pending until
-all non-deferred implementation issues are complete; the eventual final run
-must use the exact integrated candidate. The recruiter placement boundary is
-out of scope for this milestone. The procedure below remains the repeatable
-runbook for that future final run.
+## Final acceptance run (2026-09-27)
+
+The final integrated acceptance ran as RC workflow run
+[36296086276](https://github.com/DurdeuVlad/straja-mod/actions/runs/36296086276)
+on head `aafb15b` with `final_mc_acceptance=true`, after the NPC-implementation
+completeness gate verified issues #128–#134 and #149–#153 closed. Every job
+passed: build and staged artifact (SHA-256-verified across profiles), NeoForge
+GameTests, the combined RCON scenario suite, all ten dedicated server
+profiles (required-only through full-modpack and production-config), the
+server health soak, the foreign-NPC advisory, the CustomNPCs real-client
+advisory (2/2 scenarios), and the real-client UI advisory (6/6 scenarios,
+including live custody, NPC form/quiz/report flows, physical-item use,
+reconnect reward delivery, and the book-screen fix). The `Publish beta` job
+remains correctly skipped outside tag pushes.
+
+Residual risks carried forward, all recorded and non-blocking: the two
+low-severity review findings above, and the real-client suite's known MCT
+WebSocket relaunch flake (recovery retried once; the reconnect scenario now
+carries a 720 s budget and asserts authoritative `PENDING -> PAID` state).
+
+Issue #135 acceptance criteria are satisfied by this run. The recruiter
+placement boundary remains out of scope; StoryNPC stays deferred. The
+procedure below remains the repeatable runbook for future acceptance
+re-runs.
 
 1. Start a disposable NeoForge 1.21.1 server with the pinned CustomNPCs
    artifact from `docs/customnpcs-compatibility-matrix.md`.
