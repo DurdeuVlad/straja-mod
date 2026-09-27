@@ -136,7 +136,7 @@
     {
       "name": "player-surface-action-dispatches",
       "type": "mct",
-      "args": ["input", "click", "108", "91"],
+      "args": ["input", "click", "108", "132"],
       "expect": [{"rawRegex": "\\\"clicked\\\"\\s*:\\s*true"}]
     },
     {
