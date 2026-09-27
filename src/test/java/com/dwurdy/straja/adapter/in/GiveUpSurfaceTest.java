@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 /** Source-level contracts for the DC-015 player-facing integration. */
 class GiveUpSurfaceTest {
     private static final Path SRC = Path.of("src/main/java/com/dwurdy/straja");
+    private static final Path LANG = Path.of("src/main/resources/assets/straja/lang");
 
     private static String source(String relative) throws IOException {
         return Files.readString(SRC.resolve(relative));
@@ -53,12 +54,41 @@ class GiveUpSurfaceTest {
         assertTrue(events.contains("giveUpSessionIds"));
         assertTrue(events.contains("giveUpEligibility(gateway).eligible()"));
         assertTrue(events.contains("giveUpOffered.add(playerId)"));
+        assertTrue(events.contains("FormSessionBridge.translationKey(\"straja.give_up.title\")"));
+        assertTrue(events.contains("FormSessionBridge.translationKey(\"straja.give_up.confirmation\")"));
+        assertTrue(events.indexOf("giveUpOffered.add(playerId)")
+                        > events.indexOf("FormSessionBridge.open"),
+                "the one-off marker is set only after the form bridge opens a view");
+        assertFalse(events.contains("\"Renunță\""),
+                "the give-up form must not hardcode Romanian text");
         assertTrue(events.contains("FormSessionUseCase.Action.GIVE_UP"));
         assertTrue(events.contains("FormSessionBridge.cancelSession(playerId, sessionId)"));
         assertTrue(events.contains("giveUpOffered.remove(playerId)"));
         assertTrue(events.contains("clearGiveUpOffer(player)"));
         assertFalse(events.contains("application.service."));
         assertFalse(events.contains("adapter.out.persistence"));
+    }
+
+    @Test
+    void giveUpPlayerFacingKeysExistInBothLocales() throws IOException {
+        for (String locale : new String[] {"en_us", "ro_ro"}) {
+            String language = Files.readString(LANG.resolve(locale + ".json"));
+            for (String key : new String[] {
+                    "straja.give_up.available",
+                    "straja.give_up.title",
+                    "straja.give_up.confirmation",
+                    "straja.give_up.stale",
+                    "straja.give_up.success"}) {
+                assertTrue(language.contains("\"" + key + "\":"),
+                        locale + " is missing " + key);
+            }
+        }
+
+        String bridge = source("adapter/in/form/FormSessionBridge.java");
+        String custody = source("application/service/CustodyService.java");
+        assertTrue(bridge.contains("Component.translatable"));
+        assertTrue(custody.contains("tellTranslationKey(\"straja.give_up.success\")"));
+        assertFalse(custody.contains("Ai renunțat și ai murit"));
     }
 
     @Test

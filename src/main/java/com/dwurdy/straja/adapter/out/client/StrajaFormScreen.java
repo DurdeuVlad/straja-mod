@@ -1,6 +1,7 @@
 package com.dwurdy.straja.adapter.out.client;
 
 import com.dwurdy.straja.adapter.in.form.FormPayloads;
+import com.dwurdy.straja.adapter.in.form.FormSessionBridge;
 import com.dwurdy.straja.adapter.in.form.StrajaFormMenu;
 import com.dwurdy.straja.application.port.in.FormSessionUseCase.Field;
 import java.util.ArrayList;
@@ -101,8 +102,9 @@ public class StrajaFormScreen extends AbstractContainerScreen<StrajaFormMenu> {
 
     @Override
     protected void renderLabels(GuiGraphics graphics, int mouseX, int mouseY) {
-        graphics.drawString(font, title, 12, 8, 0xFFFFFFFF, false);
-        graphics.drawWordWrap(font, FormattedText.of(getMenu().view().prompt()),
+        graphics.drawString(font, FormSessionBridge.component(getMenu().view().title()),
+                12, 8, 0xFFFFFFFF, false);
+        graphics.drawWordWrap(font, FormSessionBridge.component(getMenu().view().prompt()),
                 12, 22, imageWidth - 24, 0xFF9E9E9E);
     }
 }

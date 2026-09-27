@@ -1152,6 +1152,8 @@ class CustodyServiceTest {
         assertFalse(store.downed.containsKey(civilian.uuid().toString()));
         assertNull(store.states.get(civilian.uuid().toString()).downedDeadlineAt);
         assertEquals(0, civilian.health);
+        assertEquals("straja.give_up.success", civilian.lastMessage(),
+                "give-up success is emitted as a client-resolved translation key");
 
         assertTrue(custody.giveUp(civilian, true), "duplicate submit replays the accepted action");
     }

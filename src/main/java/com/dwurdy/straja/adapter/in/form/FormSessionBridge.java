@@ -14,6 +14,7 @@ import net.minecraft.world.SimpleMenuProvider;
  * form-session port. Configured once at bootstrap; depends only on the port.
  */
 public final class FormSessionBridge {
+    private static final String TRANSLATION_KEY_PREFIX = "\u001f";
     private static volatile FormSessionUseCase sessions;
 
     private FormSessionBridge() {}
@@ -26,6 +27,22 @@ public final class FormSessionBridge {
         sessions = null;
     }
 
+    /** Encodes a client-resolved translation key in the existing string form protocol. */
+    public static String translationKey(String key) {
+        if (key == null || key.isBlank() || key.contains(TRANSLATION_KEY_PREFIX)) {
+            throw new IllegalArgumentException("invalid form translation key");
+        }
+        return TRANSLATION_KEY_PREFIX + key;
+    }
+
+    /** Resolves encoded form text while retaining literal text for existing forms. */
+    public static Component component(String text) {
+        if (text != null && text.startsWith(TRANSLATION_KEY_PREFIX)) {
+            return Component.translatable(text.substring(TRANSLATION_KEY_PREFIX.length()));
+        }
+        return Component.literal(text == null ? "" : text);
+    }
+
     public static Optional<FormSessionUseCase.View> open(
             ServerPlayer player, FormSessionUseCase.Request request) {
         FormSessionUseCase port = sessions;
@@ -34,7 +51,7 @@ public final class FormSessionBridge {
         if (view.isEmpty()) return Optional.empty();
         OptionalInt opened = player.openMenu(new SimpleMenuProvider(
                         (id, inv, p) -> new StrajaFormMenu(id, inv, view.get()),
-                        Component.literal(view.get().title())),
+                        component(view.get().title())),
                 buf -> StrajaFormMenu.writeView(buf, view.get()));
         if (opened.isEmpty()) {
             port.cancel(player.getUUID(), view.get().sessionId());

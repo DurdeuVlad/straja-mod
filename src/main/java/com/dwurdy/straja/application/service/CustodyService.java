@@ -1612,7 +1612,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
         player.stopRiding();
         player.closeMenu();
         player.setHealth(0);
-        player.tell("Ai renunțat și ai murit. Nu mai poți fi resuscitat.");
+        player.tellTranslationKey("straja.give_up.success");
         audit.record("give_up", player.name(), uuidOf(player),
                 player.name(), uuidOf(player), "SUCCESS", "transition=" + transition.id());
         return true;

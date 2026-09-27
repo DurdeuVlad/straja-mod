@@ -82,14 +82,16 @@ public final class StrajaEvents {
             return;
         }
 
-        if (giveUpOffered.add(playerId)) {
+        if (!giveUpOffered.contains(playerId)) {
             player.displayClientMessage(Component.translatable("straja.give_up.available"), true);
-            var opened = FormSessionBridge.open(player, new FormSessionUseCase.Request(
+            FormSessionBridge.open(player, new FormSessionUseCase.Request(
                     FormSessionUseCase.Action.GIVE_UP, "",
-                    "Renunță",
-                    "Confirmi renunțarea? Starea de leșin se încheie și vei muri.",
-                    java.util.List.of()));
-            opened.ifPresent(view -> giveUpSessionIds.put(playerId, view.sessionId()));
+                    FormSessionBridge.translationKey("straja.give_up.title"),
+                    FormSessionBridge.translationKey("straja.give_up.confirmation"),
+                    java.util.List.of())).ifPresent(view -> {
+                giveUpOffered.add(playerId);
+                giveUpSessionIds.put(playerId, view.sessionId());
+            });
         } else {
             String sessionId = giveUpSessionIds.get(playerId);
             if (sessionId != null

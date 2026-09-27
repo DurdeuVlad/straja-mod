@@ -34,6 +34,9 @@ public interface PlayerGateway {
 
     void tell(String text);
 
+    /** Sends a client-resolved translation key without coupling the port to Minecraft text types. */
+    default void tellTranslationKey(String key) { tell(key); }
+
     /** Replaces the player's action-bar status without adding chat history. */
     default void actionbar(String text) {}
 
