@@ -102,17 +102,21 @@
       ]
     },
     {
+      "name": "guidance-settle",
+      "type": "sleep",
+      "seconds": 2,
+      "setup": true
+    },
+    {
       "name": "guidance-arrives",
       "type": "mct",
       "args": [
         "chat",
-        "wait",
-        "--match",
-        "[Straja]",
-        "--timeout",
-        "30"
+        "history",
+        "--last",
+        "20"
       ],
-      "timeout": 60,
+      "timeout": 30,
       "expect": [
         {
           "rawRegex": "Straja"

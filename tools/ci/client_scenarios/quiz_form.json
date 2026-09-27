@@ -62,17 +62,21 @@
       "label": "Depune cererea"
     },
     {
+      "name": "apply-settle",
+      "type": "sleep",
+      "seconds": 2,
+      "setup": true
+    },
+    {
       "name": "application-recorded",
       "type": "mct",
       "args": [
         "chat",
-        "wait",
-        "--match",
-        "Cerere înregistrată",
-        "--timeout",
-        "30"
+        "history",
+        "--last",
+        "20"
       ],
-      "timeout": 60,
+      "timeout": 30,
       "expect": [
         {
           "rawRegex": "registrat"
@@ -115,17 +119,21 @@
       "label": "Examen de admitere"
     },
     {
+      "name": "ask-settle",
+      "type": "sleep",
+      "seconds": 2,
+      "setup": true
+    },
+    {
       "name": "question-told",
       "type": "mct",
       "args": [
         "chat",
-        "wait",
-        "--match",
-        "scrie:",
-        "--timeout",
-        "30"
+        "history",
+        "--last",
+        "20"
       ],
-      "timeout": 60,
+      "timeout": 30,
       "capture": {
         "name": "answer",
         "regex": "scrie: ([^)\"\\\\]+)"
@@ -160,17 +168,21 @@
       "submit": true
     },
     {
+      "name": "answer-settle",
+      "type": "sleep",
+      "seconds": 2,
+      "setup": true
+    },
+    {
       "name": "answer-accepted",
       "type": "mct",
       "args": [
         "chat",
-        "wait",
-        "--match",
-        "Răspuns corect",
-        "--timeout",
-        "30"
+        "history",
+        "--last",
+        "20"
       ],
-      "timeout": 60,
+      "timeout": 30,
       "expect": [
         {
           "rawRegex": "corect"
