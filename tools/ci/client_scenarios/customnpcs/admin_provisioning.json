@@ -83,6 +83,7 @@
     {
       "name": "choose-jailer-profile",
       "type": "mct",
+      "note": "coordinate click — mct exposes no component ids/labels for GuiCustom (snapshot slots are empty). Targets profile row index 2 (straja:jailer): gui (12,102,396,22) -> screen center ~(213,113).",
       "args": ["input", "click", "213", "113"],
       "expect": [{"rawRegex": "\\\"clicked\\\"\\s*:\\s*true"}]
     },
@@ -94,6 +95,7 @@
     {
       "name": "confirm-jailer-profile",
       "type": "mct",
+      "note": "coordinate click — targets the Assign-profile button at gui (12,150,190,22) -> screen center ~(107,161).",
       "args": ["input", "click", "107", "161"],
       "expect": [{"rawRegex": "\\\"clicked\\\"\\s*:\\s*true"}]
     },
@@ -136,6 +138,7 @@
     {
       "name": "player-surface-action-dispatches",
       "type": "mct",
+      "note": "coordinate click — targets role choice slot 0 (View custody status) at gui (12,134,190,22) -> screen center ~(110,145).",
       "args": ["input", "click", "110", "145"],
       "expect": [{"rawRegex": "\\\"clicked\\\"\\s*:\\s*true"}]
     },
@@ -173,6 +176,7 @@
     {
       "name": "choose-secretary-profile",
       "type": "mct",
+      "note": "coordinate click — targets profile row index 4 (straja:secretary): gui (12,152,396,22) -> screen center ~(213,163).",
       "args": ["input", "click", "213", "163"],
       "expect": [{"rawRegex": "\\\"clicked\\\"\\s*:\\s*true"}]
     },
@@ -184,6 +188,7 @@
     {
       "name": "confirm-secretary-profile",
       "type": "mct",
+      "note": "coordinate click — targets the Assign-profile button at gui (12,150,190,22) -> screen center ~(107,161).",
       "args": ["input", "click", "107", "161"],
       "expect": [{"rawRegex": "\\\"clicked\\\"\\s*:\\s*true"}]
     },
@@ -290,6 +295,7 @@
     {
       "name": "click-unassign",
       "type": "mct",
+      "note": "coordinate click — targets the footer Unassign button at gui (276,214,132,22) -> screen center ~(342,225).",
       "args": ["input", "click", "342", "225"],
       "expect": [{"rawRegex": "\\\"clicked\\\"\\s*:\\s*true"}]
     },
@@ -307,6 +313,7 @@
     {
       "name": "confirm-unassign",
       "type": "mct",
+      "note": "coordinate click — targets the confirm button at gui (12,150,190,22) -> screen center ~(107,161).",
       "args": ["input", "click", "107", "161"],
       "expect": [{"rawRegex": "\\\"clicked\\\"\\s*:\\s*true"}]
     },
