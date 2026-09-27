@@ -3,6 +3,7 @@ package com.dwurdy.straja.adapter.out.npc.customnpcs;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.dwurdy.straja.application.port.in.NpcProvisioningUseCase;
@@ -38,6 +39,31 @@ class CustomNpcsNpcSurfaceProviderTest {
         assertEquals(List.of(10), CustomNpcsNpcSurfaceProvider.page(profiles, 2, 5));
         assertEquals(List.of(10), CustomNpcsNpcSurfaceProvider.page(profiles, 99, 5));
         assertEquals(List.of(0, 1, 2, 3), CustomNpcsNpcSurfaceProvider.page(profiles, -1, 4));
+        assertEquals(List.of(), CustomNpcsNpcSurfaceProvider.page(List.of(), 0, 5));
+        assertEquals(List.of(), CustomNpcsNpcSurfaceProvider.page(List.of(), 3, 5));
+        assertEquals(profiles, CustomNpcsNpcSurfaceProvider.page(profiles, 0, 99));
+        assertThrows(IllegalArgumentException.class,
+                () -> CustomNpcsNpcSurfaceProvider.page(profiles, 0, 0));
+    }
+
+    @Test
+    void wrapTextRejectsNonPositiveBudget() {
+        assertThrows(IllegalArgumentException.class,
+                () -> CustomNpcsNpcSurfaceProvider.wrapText("x", 0));
+        assertEquals(List.of("ab"), CustomNpcsNpcSurfaceProvider.wrapText("ab", 2));
+    }
+
+    @Test
+    void choiceLabelCarriesNonColorStateAndColumnBudget() {
+        assertEquals("◆ View custody status",
+                CustomNpcsNpcSurfaceProvider.choiceLabel(true, "View custody status"));
+        assertEquals("✕ Hand detainee to prison",
+                CustomNpcsNpcSurfaceProvider.choiceLabel(false, "Hand detainee to prison"));
+        String longLabel = CustomNpcsNpcSurfaceProvider.choiceLabel(
+                false, "Release target " + "x".repeat(80));
+        assertTrue(longLabel.startsWith("✕ "));
+        assertEquals(30, longLabel.length());
+        assertEquals("✕ ", CustomNpcsNpcSurfaceProvider.choiceLabel(false, null));
     }
 
     public static final class NativePlayerGui {
@@ -59,7 +85,7 @@ class CustomNpcsNpcSurfaceProviderTest {
         NpcProvisioningUseCase.ProfileOption unavailable = option(false, "missing GUI capability");
 
         String label = CustomNpcsNpcSurfaceProvider.profileOptionLabel(unavailable, false, false);
-        String[] hover = CustomNpcsNpcSurfaceProvider.profileOptionHoverText(unavailable, false);
+        String[] hover = CustomNpcsNpcSurfaceProvider.profileOptionInfoLines(unavailable, false);
 
         assertTrue(label.contains("Jailer"));
         assertTrue(label.contains("straja:jailer"));
@@ -76,7 +102,7 @@ class CustomNpcsNpcSurfaceProviderTest {
                 .contains("(current)"));
         assertTrue(CustomNpcsNpcSurfaceProvider.profileOptionLabel(available, false, true)
                 .contains("unavailable"));
-        assertTrue(List.of(CustomNpcsNpcSurfaceProvider.profileOptionHoverText(available, true))
+        assertTrue(List.of(CustomNpcsNpcSurfaceProvider.profileOptionInfoLines(available, true))
                 .contains("Availability: Unavailable: provider recovery is pending"));
     }
 
@@ -233,6 +259,13 @@ class CustomNpcsNpcSurfaceProviderTest {
                 GuiTheme.questLabelColor(NpcSurfaceSnapshot.QuestState.COMPLETED));
         assertEquals(GuiTheme.COLOR_SEAL_BRIGHT,
                 GuiTheme.questLabelColor(NpcSurfaceSnapshot.QuestState.FAILED));
+        assertEquals(GuiTheme.COLOR_PAPER,
+                GuiTheme.questLabelColor(NpcSurfaceSnapshot.QuestState.AVAILABLE));
+        assertEquals(GuiTheme.COLOR_PAPER_BRIGHT,
+                GuiTheme.questLabelColor(NpcSurfaceSnapshot.QuestState.ACTIVE));
+        assertEquals(GuiTheme.COLOR_STEEL,
+                GuiTheme.questLabelColor(NpcSurfaceSnapshot.QuestState.LOCKED));
+        assertEquals(GuiTheme.COLOR_PAPER, GuiTheme.questLabelColor(null));
     }
 
     @Test

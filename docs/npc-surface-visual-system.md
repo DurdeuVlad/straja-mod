@@ -75,10 +75,11 @@ Common grid (all surfaces):
   children use panel-local coordinates; `setHoverText` on panel children
   renders at panel-local origin; inline `addLabel` does not render inside
   panel regions (use a disabled `addTextArea` for multi-line text).
-- **Component ids are Z-depth.** `CustomGuiItemRenderer` (and other rendered
-  components) translate by `id` on the Z axis — ids ≥ ~1000 render beyond the
-  clip range and never draw. Header components use low free ids (96–98);
-  always verify a new component's id is inside the visible range.
+- **Component ids are Z-depth.** Rendered components translate by `id` on the
+  Z axis — an icon id *below* its row button's id is occluded by the button
+  (observed live), and ids ≥ ~95,000 render beyond the clip range and never
+  draw. Icon ids sit just above their button band (e.g., row icons at 2100
+  over buttons 2000+); header components use low free ids (96–98).
 - GUI backgrounds are transparent: entity nameplates render through open
   surfaces (observed as ghost text mid-panel). The M2 panel texture makes
   surfaces opaque and eliminates this.
@@ -202,4 +203,7 @@ Annotated wireframes in `docs/media/mockups/` (SVG, viewable in browser):
 | `screen-native-form.svg` | `StrajaFormScreen` | native |
 
 Each mockup marks pixel coordinates and the icon/component used; they are the
-reference the M1–M4 implementations are reviewed against.
+reference the M1–M4 implementations are reviewed against. Note: mockups
+predate the M3 finding that scroll panels are inert in this build — regions
+drawn as scroll panels in the SVGs are implemented as paged GUI-level rows
+(see §2).

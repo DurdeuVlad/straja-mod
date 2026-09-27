@@ -58,6 +58,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             NpcCapability.PORTRAITS,
             NpcCapability.RICH_TEXT));
     private static final int FALLBACK_PROFILE_PAGE_SIZE = 5;
+    private static final int GUI_WIDTH = 421;
     private static final int ADMIN_GUI_HEIGHT = GuiTheme.GUI_HEIGHT;
     // CustomNPCs translates rendered components on Z by their component id,
     // so glyphs must use low ids that stay inside the projection depth
@@ -410,7 +411,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                 bridge.api(),
                 "createCustomGui",
                 Math.floorMod(binding.bindingId().hashCode(), 20_000) + 1_000,
-                421,
+                GUI_WIDTH,
                 GuiTheme.GUI_HEIGHT,
                 false,
                 playerApi);
@@ -429,22 +430,29 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
         // would be unreachable. Same treatment as the admin selector.
         int y = GuiTheme.COLUMN_TOP;
         int nodeLines = 0;
-        List<NpcSurfaceSnapshot.Choice> choices = new ArrayList<>();
+        // Choices collect from every node (deduped by actionId — some services
+        // publish the same choice list on each node); the 3-line cap truncates
+        // label emission only, never action reachability.
+        Map<String, NpcSurfaceSnapshot.Choice> choicesByAction = new java.util.LinkedHashMap<>();
         for (NpcSurfaceSnapshot.DialogueNode node : surface.dialogue()) {
-            List<String> lines = wrapText(node.text(), NARROW_LABEL_CHARS);
-            for (int i = 0; i < lines.size() && nodeLines < 3; i++) {
-                String line = lines.get(i);
-                if (nodeLines == 2 && i + 1 < lines.size()) {
-                    line = ellipsize(line, NARROW_LABEL_CHARS - 1);
+            if (nodeLines < 3) {
+                List<String> lines = wrapText(node.text(), NARROW_LABEL_CHARS);
+                for (int i = 0; i < lines.size() && nodeLines < 3; i++) {
+                    String line = lines.get(i);
+                    if (nodeLines == 2 && i + 1 < lines.size()) {
+                        line = ellipsize(line, NARROW_LABEL_CHARS - 1);
+                    }
+                    invoke(gui, "addLabel", 100 + y, line, GuiTheme.MARGIN, y,
+                            GuiTheme.CHOICE_W - 5, 14);
+                    y += 14;
+                    nodeLines++;
                 }
-                invoke(gui, "addLabel", 100 + y, line, GuiTheme.MARGIN, y,
-                        GuiTheme.CHOICE_W - 5, 14);
-                y += 14;
-                nodeLines++;
             }
-            choices.addAll(node.choices());
-            if (nodeLines >= 3) break;
+            for (NpcSurfaceSnapshot.Choice choice : node.choices()) {
+                choicesByAction.putIfAbsent(choice.actionId().value(), choice);
+            }
         }
+        List<NpcSurfaceSnapshot.Choice> choices = new ArrayList<>(choicesByAction.values());
         int page = boundedPage(requestedPage, choices.size(), CHOICE_PAGE_SIZE);
         List<NpcSurfaceSnapshot.Choice> visible = page(choices, page, CHOICE_PAGE_SIZE);
         for (int slot = 0; slot < visible.size(); slot++) {
@@ -455,7 +463,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             // so the bullet glyph is part of the label; disabled choices get an
             // explicit ✕ because CustomNPCs does not dim disabled buttons.
             Object button = invoke(
-                    gui, "addButton", 1_000 + slot, (usable ? "◆ " : "✕ ") + choice.label(),
+                    gui, "addButton", 1_000 + slot, choiceLabel(usable, choice.label()),
                     GuiTheme.MARGIN, CHOICE_SLOT_Y[slot], GuiTheme.CHOICE_W - 5, 22);
             invoke(button, "setEnabled", usable);
             if (usable) {
@@ -472,6 +480,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             int questY = GuiTheme.COLUMN_TOP + 16;
             int questGlyphId = QUEST_GLYPH_BASE;
             for (NpcSurfaceSnapshot.QuestEntry quest : surface.quests()) {
+                if (questY >= GuiTheme.COLUMN_BOTTOM) break;
                 String iconKey = GuiTheme.questIconKey(quest.state());
                 if (iconKey != null && questY + 16 <= GuiTheme.COLUMN_BOTTOM) {
                     addItemIcon(gui, questGlyphId++, GuiTheme.QUEST_X, questY, iconKey);
@@ -545,7 +554,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                 bridge.api(),
                 "createCustomGui",
                 Math.floorMod(("provision:" + hostUuid).hashCode(), 20_000) + 20_000,
-                421,
+                GUI_WIDTH,
                 ADMIN_GUI_HEIGHT,
                 false,
                 playerApi);
@@ -589,6 +598,11 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             boolean selected = current.map(assignment -> assignment.profileId().equals(option.profileId()))
                     .orElse(false);
             String label = profileOptionLabel(option, selected, recoveryPending);
+            if (duplicateAssignments) {
+                // Rows disabled by the duplicate guard get the same non-color
+                // cue as disabled role choices (doc §4).
+                label = "✕ " + label;
+            }
             Object button = invoke(
                     gui,
                     "addButton",
@@ -667,6 +681,16 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
         return Math.max(0, Math.min(requested, Math.max(0, itemCount - 1) / pageSize));
     }
 
+    /**
+     * Choice-button label: enabled rows get a ◆ bullet, disabled rows an
+     * explicit ✕ so state isn't color-only (this build does not dim disabled
+     * buttons). Labels are ellipsized to the narrow column.
+     */
+    static String choiceLabel(boolean usable, String label) {
+        String safe = label == null ? "" : label;
+        return (usable ? "◆ " : "✕ ") + ellipsize(safe, NARROW_LABEL_CHARS - 2);
+    }
+
     static <T> java.util.List<T> page(java.util.List<T> items, int requested, int pageSize) {
         if (pageSize < 1) throw new IllegalArgumentException("pageSize");
         int index = boundedPage(requested, items.size(), pageSize) * pageSize;
@@ -678,6 +702,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
      * on word boundaries so each emitted line stays inside its column.
      */
     static java.util.List<String> wrapText(String text, int maxChars) {
+        if (maxChars < 1) throw new IllegalArgumentException("maxChars");
         java.util.List<String> lines = new java.util.ArrayList<>();
         for (String raw : text.split("\n", -1)) {
             String remaining = raw.strip();
@@ -710,7 +735,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
         Object gui = invoke(
                 bridge.api(), "createCustomGui",
                 Math.floorMod(("duplicates:" + hostUuid).hashCode(), 20_000) + 120_000,
-                421,
+                GUI_WIDTH,
                 ADMIN_GUI_HEIGHT,
                 false,
                 playerApi);
@@ -784,7 +809,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                 bridge.api(),
                 "createCustomGui",
                 Math.floorMod(("confirm:" + hostUuid + option.profileId()).hashCode(), 20_000) + 40_000,
-                421,
+                GUI_WIDTH,
                 ADMIN_GUI_HEIGHT,
                 false,
                 playerApi);
@@ -800,7 +825,11 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                 GuiTheme.MARGIN, 48, GuiTheme.CONTENT_WIDTH, 14);
         // Reference rows go through a disabled text area: labels placed
         // inside this scrolling panel render blank in CustomNPCs builds.
-        java.util.List<String> referenceRows = profileReferenceRows(option);
+        java.util.List<String> referenceRows = new ArrayList<>(profileReferenceRows(option));
+        // Hover text is unusable on this build, so the info lines that used to
+        // be a row tooltip render inline on the confirmation instead.
+        referenceRows.add("");
+        referenceRows.addAll(List.of(profileOptionInfoLines(option, false)));
         Object summary = invoke(gui, "addTextArea", 3, GuiTheme.MARGIN, 76,
                 GuiTheme.CONTENT_WIDTH, 60);
         invoke(summary, "setText", String.join("\n", referenceRows));
@@ -823,7 +852,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
         return label;
     }
 
-    static String[] profileOptionHoverText(
+    static String[] profileOptionInfoLines(
             NpcProvisioningUseCase.ProfileOption option,
             boolean recoveryPending) {
         String availability = recoveryPending
@@ -877,7 +906,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                 bridge.api(),
                 "createCustomGui",
                 Math.floorMod(("unassign:" + hostUuid).hashCode(), 20_000) + 60_000,
-                421,
+                GUI_WIDTH,
                 ADMIN_GUI_HEIGHT,
                 false,
                 playerApi);
@@ -893,7 +922,9 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                 GuiTheme.MARGIN, GuiTheme.BODY_Y, GuiTheme.CONTENT_WIDTH, 14);
         String unassignNote = recoveryPending
                 ? "Straja will remove this assignment only after the provider confirms it is unbound."
-                : "This NPC will return to native CustomNPCs behavior.";
+                : provisioning.assignments(providerId(), hostUuid).size() > 1
+                        ? "This releases one binding; other Straja bindings on this NPC stay active."
+                        : "This NPC will return to native CustomNPCs behavior.";
         int noteY = 48;
         for (String line : wrapText(unassignNote, WIDE_LABEL_CHARS)) {
             invoke(gui, "addLabel", 3 + noteY, line, GuiTheme.MARGIN, noteY,
@@ -921,7 +952,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
         Object gui = invoke(
                 bridge.api(), "createCustomGui",
                 Math.floorMod(("status:" + hostUuid).hashCode(), 20_000) + 80_000,
-                421, ADMIN_GUI_HEIGHT, false, playerApi);
+                GUI_WIDTH, ADMIN_GUI_HEIGHT, false, playerApi);
         addGuiHeader(gui, 1, "NPC assignment status",
                 GuiTheme.ICON_STATUS, GuiTheme.COLOR_PAPER_BRIGHT);
         Object details = invoke(gui, "addTextArea", 2, 12, 34, 396, 172);
@@ -960,7 +991,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
         Object gui = invoke(
                 bridge.api(), "createCustomGui",
                 Math.floorMod(("audit:" + hostUuid).hashCode(), 20_000) + 100_000,
-                421, ADMIN_GUI_HEIGHT, false, playerApi);
+                GUI_WIDTH, ADMIN_GUI_HEIGHT, false, playerApi);
         addGuiHeader(gui, 1, "Provisioning audit",
                 GuiTheme.ICON_AUDIT, GuiTheme.COLOR_PAPER_BRIGHT);
         Object details = invoke(gui, "addTextArea", 2, 12, 34, 396, 172);
@@ -1510,7 +1541,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                 bridge.api(),
                 "createCustomGui",
                 Math.floorMod(("result:" + hostUuid + result.message()).hashCode(), 20_000) + 140_000,
-                421,
+                GUI_WIDTH,
                 ADMIN_GUI_HEIGHT,
                 false,
                 playerApi);
@@ -1576,7 +1607,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                 bridge.api(),
                 "createCustomGui",
                 Math.floorMod((binding.bindingId() + action.actionId().value()).hashCode(), 20_000) + 1_000,
-                421,
+                GUI_WIDTH,
                 GuiTheme.GUI_HEIGHT,
                 false,
                 playerApi);
@@ -1601,8 +1632,10 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
         // CustomNPCs build never delivers clicks to scrolled panel children,
         // so any field below the fold would be unreachable (the arrest-handoff
         // form has three visible fields).
-        int nextId = 2;
-        int y = 80;
+        // Ids start at 20 so a full 16-field form can't collide with the
+        // prompt-area id 8 (which doubles as the showResult sink).
+        int nextId = 20;
+        int y = 72;
         boolean multiField = visibleFields.size() > 1;
         for (NpcSurfaceAction.InputField field : action.inputs()) {
             // Single-field surfaces restate the label in the prompt band; a
@@ -1610,9 +1643,9 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             if (field.visible() && multiField) {
                 invoke(gui, "addLabel", 10_000 + nextId, field.label(), GuiTheme.MARGIN, y,
                         GuiTheme.CONTENT_WIDTH, 12);
-                y += 14;
+                y += 12;
             } else if (field.visible()) {
-                y += 4;
+                y += 8;
             }
             Object textField = invoke(gui, "addTextField", nextId, GuiTheme.MARGIN, y,
                     GuiTheme.CONTENT_WIDTH, 20);
@@ -1623,7 +1656,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                 invoke(textField, "setVisible", false);
             }
             fieldIds.put(field.key(), nextId++);
-            y += field.visible() ? (multiField ? 40 : 28) : 2;
+            y += field.visible() ? (multiField ? 34 : 28) : 2;
         }
         Object fieldHost = gui;
         Object submit = invoke(gui, "addButton", 9_500, "Submit",
@@ -1701,7 +1734,8 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
         Map<String, String> input = new java.util.LinkedHashMap<>();
         for (NpcSurfaceAction.InputField field : action.inputs()) {
             Object component = invoke(fieldHost, "getComponent", fieldIds.get(field.key()));
-            String value = String.valueOf(invoke(component, "getText"));
+            Object raw = invoke(component, "getText");
+            String value = raw == null ? "" : String.valueOf(raw);
             if (value.length() > field.maxLength()) {
                 showResult(gui, 8, new NpcActionResult(
                         NpcActionResult.Status.REJECTED,
@@ -1787,7 +1821,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
         } catch (RuntimeException ignored) {
             // Removing a first result label is optional.
         }
-        invoke(gui, "addLabel", 9_000, result.message(), GuiTheme.MARGIN, 205,
+        invoke(gui, "addLabel", 9_000, result.message(), GuiTheme.MARGIN, 190,
                 GuiTheme.CONTENT_WIDTH, 14);
         invoke(gui, "update");
     }
