@@ -60,9 +60,12 @@ jobs:
           ./gradlew test jar --no-daemon --stacktrace
 
       - name: GameTests (headless server)
-        run: >-
-          ./gradlew runGameTestServer runRpExpansionGameTestServer
-          --no-daemon --stacktrace
+        # Two dedicated servers run sequentially — a single Gradle invocation
+        # launches both JVMs concurrently and starves the batch placement on
+        # small runners (matches the rc.yml split).
+        run: |
+          ./gradlew runGameTestServer --no-daemon --stacktrace
+          ./gradlew runRpExpansionGameTestServer --no-daemon --stacktrace
 
       - name: GUI icon asset contract
         run: |
