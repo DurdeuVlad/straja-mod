@@ -36,5 +36,13 @@
   "straja.give_up.title": "Renunță",
   "straja.give_up.confirmation": "Confirmi renunțarea? Starea de leșin se încheie și vei muri.",
   "straja.give_up.stale": "Acțiunea de renunțare nu mai este valabilă.",
-  "straja.give_up.result": "Ai renunțat. Salvarea și resuscitarea nu mai sunt posibile."
+  "straja.give_up.result": "Ai renunțat. Salvarea și resuscitarea nu mai sunt posibile.",
+  "straja.trades.list.header": "Meseriași — zileri cu normă parțială. Alege o profesie:",
+  "straja.trades.profession": "Profesia %s",
+  "straja.trades.enroll.button": "Înscrie-te",
+  "straja.trades.enrolled": "Înscriere reușită — ești ziler (meseriaș stagiar) cu profesia %s. Vezi Fișa mea V2 pentru detalii.",
+  "straja.trades.refused.sworn": "Ești deja străjer jurat — drumul meseriașilor este separat; cere transferul la Comisar.",
+  "straja.trades.refused.status": "Fișa ta de personal nu permite înscrierea acum.",
+  "straja.trades.refused.unknown": "Profesia nu este deschisă pentru înscrieri.",
+  "straja.trades.none": "Momentan nu sunt deschise înscrieri pentru meseriași."
 }

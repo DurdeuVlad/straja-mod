@@ -32,7 +32,8 @@ final class NpcPlayerSurface {
             "tool-npc-remove", "tool-npc-remove-confirm", "tool-npc-record",
             "tool-survey-stamp",
             "armory-buy", "armory-reserve",
-            "duty-checkpoint");
+            "duty-checkpoint",
+            "trades-enroll");
 
     enum RoleRoute { RECEPTIONIST, SECRETARY, JAILER, ARCHIVIST, TRAINER, RECRUITER, ARMORER, UNKNOWN }
 
@@ -82,6 +83,7 @@ final class NpcPlayerSurface {
                     "Depui aici cererea de admitere, alegi regulamentul Străjii, verifici situația, amenzile, camera sau facțiunea nativă; examenul și instruirea se fac la Instructor.",
                     List.of(
                             new ChatAction("Depune cererea", "application-submit"),
+                            new ChatAction("Meseriași — înscriere", "trades-list"),
                             new ChatAction("Regulament", "rules"),
                             new ChatAction("Stare Străjer", "guard-status"),
                             new ChatAction("Amenzile mele", "fine-list"),

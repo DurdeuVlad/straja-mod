@@ -36,5 +36,13 @@
   "straja.give_up.title": "Give up",
   "straja.give_up.confirmation": "Confirm give-up? This ends the downed state and kills you.",
   "straja.give_up.stale": "That give-up action is no longer valid.",
-  "straja.give_up.result": "You gave up. Rescue and resuscitation are no longer possible."
+  "straja.give_up.result": "You gave up. Rescue and resuscitation are no longer possible.",
+  "straja.trades.list.header": "Straja Tradesmen — part-time day hands. Choose a trade:",
+  "straja.trades.profession": "Trade: %s",
+  "straja.trades.enroll.button": "Enroll",
+  "straja.trades.enrolled": "Enrolled — you are now a day hand (tradesman trainee) in %s. See your V2 file for details.",
+  "straja.trades.refused.sworn": "You are a sworn Straja member — the trades path is separate; ask the Commissioner for a transfer.",
+  "straja.trades.refused.status": "Your personnel file does not allow enrollment right now.",
+  "straja.trades.refused.unknown": "That trade is not open for enrollment.",
+  "straja.trades.none": "No trades are open for enrollment right now."
 }

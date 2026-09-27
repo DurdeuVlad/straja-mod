@@ -180,6 +180,7 @@ public final class PolicyRegistry {
         k("merit.suspensionRequisitionCost", "suspensionRequisitionCost", Kind.INT);
         // rank display names (§2: Stagiar/Străjer/Sergent/Inspector)
         k("rank.names", "rankNames", Kind.INT_STR_MAP);
+        k("rank.meseriasNames", "meseriasRankNames", Kind.INT_STR_MAP);
         // §11 activity reports
         k("reports.intervalDays", "reportIntervalDays", Kind.INT);
         k("reports.blockDutyWhenOverdue", "reportBlockDutyWhenOverdue", Kind.BOOL);

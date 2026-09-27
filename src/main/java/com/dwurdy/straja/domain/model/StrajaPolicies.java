@@ -251,6 +251,11 @@ public class StrajaPolicies {
     public Map<Integer, String> rankNames = new LinkedHashMap<>(Map.of(
             1, "Stagiar", 2, "Străjer", 3, "Sergent", 4, "Inspector"));
 
+    // trades (Meseriași) path display names — the part-time specialist ladder:
+    // 1=Ziler (freelance day-hand) → 2=Meseriaș (contracted tradesman).
+    public Map<Integer, String> meseriasRankNames = new LinkedHashMap<>(Map.of(
+            1, "Ziler", 2, "Meseriaș"));
+
     // promotions
     public Map<Integer, Integer> promotionServiceBlocks = new LinkedHashMap<>(Map.of(2, 60, 3, 180));
     /** Rank-up bonus in hours of the new rank's hourly wage, credited to
@@ -454,6 +459,29 @@ public class StrajaPolicies {
     public String rankName(int rank) {
         String name = rankNames.get(rank);
         return name != null && !name.isBlank() ? name : Rank.of(rank).displayName();
+    }
+
+    /**
+     * Display name for a V2 career grade across both tracks: the sworn
+     * (Străjer) ladder uses {@link #rankNames}; the trades (Meseriași) ladder
+     * uses {@link #meseriasRankNames}.
+     */
+    public String rankName(CareerGrade grade) {
+        if (grade == null) return "";
+        return switch (grade) {
+            case MILITARY_STAGIAR -> rankName(1);
+            case MILITARY_STRAJER -> rankName(2);
+            case MILITARY_SERGENT -> rankName(3);
+            case INSPECTOR -> rankName(4);
+            case PROFESSIONAL_STAGIAR_SPECIALIST -> meseriasRankName(1);
+            case PROFESSIONAL_SPECIALIST -> meseriasRankName(2);
+        };
+    }
+
+    /** Configurable display name for a trades-path level. */
+    public String meseriasRankName(int level) {
+        String name = meseriasRankNames.get(level);
+        return name != null && !name.isBlank() ? name : "Meseriaș";
     }
 
     private static Map<Integer, List<ItemSpec>> defaultKits() {

@@ -188,7 +188,14 @@ public class PlayerService implements com.dwurdy.straja.application.port.in.Play
         GuardState state = state(player);
         if (state.fired || state.resigned) return null;
         if (isCommissioner(player)) return "[" + ctx.policies().comisarTitle + "]";
-        if (state.rank < Rank.STAGIAR.level()) return null;
+        if (state.rank < Rank.STAGIAR.level()) {
+            PersonnelRecord record = v2Record(player.uuid());
+            if (record != null && record.active() && record.careerGrade != null
+                    && record.careerGrade.isProfessional()) {
+                return "[" + ctx.policies().rankName(record.careerGrade) + "]";
+            }
+            return null;
+        }
         return "[" + ctx.policies().rankName(state.rank) + "]";
     }
 

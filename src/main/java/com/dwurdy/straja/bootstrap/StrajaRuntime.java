@@ -394,6 +394,7 @@ public final class StrajaRuntime {
         this.guards.onPromotedToGuard(p -> this.rooms.assignAutomatically(p));
         this.admin = new com.dwurdy.straja.application.service.AdminService(
                 ctx, players, guards, policyService, emergency);
+        this.admin.useV2Personnel(v2Personnel);
         this.adminTools = new com.dwurdy.straja.application.service.AdminToolService(
                 ctx, players, npcs, guards, prison);
     }

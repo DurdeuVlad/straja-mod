@@ -70,7 +70,7 @@ class AdminServiceTest {
         admin.personnel(member);
         admin.dossier(member, member.uuid().toString());
         admin.promote(member, member.uuid().toString());
-        admin.authorize(member, "guard1", 2);
+        admin.authorize(member, "guard1", "2");
         admin.policyList(member);
         admin.emergencyStatus(member);
 
@@ -138,7 +138,7 @@ class AdminServiceTest {
     void authorizeGrantsRankAndAuthorizedApplication() {
         TestPlayer recruit = server.add("recruit1");
 
-        admin.authorize(comisar, "recruit1", 3);
+        admin.authorize(comisar, "recruit1", "3");
 
         var st = ctx.players().read(recruit.uuid());
         assertEquals(3, st.rank);
@@ -150,7 +150,7 @@ class AdminServiceTest {
 
     @Test
     void authorizeRejectsExistingMemberRecords() {
-        admin.authorize(comisar, "guard1", 4);
+        admin.authorize(comisar, "guard1", "4");
 
         assertTrue(comisar.told("are deja o fișă"),
                 "existing members go through promote/reinstate, not authorize");
@@ -276,5 +276,36 @@ class AdminServiceTest {
 
         admin.emergencyEnd(comisar);
         assertFalse(ctx.emergency().read().active);
+    }
+    @Test
+    void authorizeAcceptsGradeAliasesAndForwardsToV2Personnel() {
+        var captured = new java.util.concurrent.atomic.AtomicReference<
+                com.dwurdy.straja.domain.model.CareerGrade>();
+        admin.useV2Personnel(new com.dwurdy.straja.application.port.in.PersonnelV2UseCase() {
+            @Override public com.dwurdy.straja.domain.model.PersonnelRecord authorize(
+                    String actor, String subject, com.dwurdy.straja.domain.model.CareerGrade grade,
+                    com.dwurdy.straja.domain.model.EmploymentMode mode,
+                    String source, String station, String key) {
+                captured.set(grade);
+                return new com.dwurdy.straja.domain.model.PersonnelRecord();
+            }
+            @Override public com.dwurdy.straja.domain.model.PersonnelRecord find(String uuid) {
+                return null;
+            }
+        });
+        server.add("worker1");
+
+        admin.authorize(comisar, "worker1", "meserias");
+
+        assertEquals(com.dwurdy.straja.domain.model.CareerGrade.PROFESSIONAL_SPECIALIST,
+                captured.get());
+        assertTrue(comisar.told("autorizat la gradul"));
+    }
+
+    @Test
+    void authorizeRejectsUnknownGradeTokens() {
+        admin.authorize(comisar, "guard1", "zeu");
+
+        assertTrue(comisar.told("Rang sau grad necunoscut"));
     }
 }

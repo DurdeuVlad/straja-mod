@@ -126,7 +126,7 @@ public final class NpcSecretarySurfaceService {
                     field("notes", "Notes", 500, false));
             case "admin-authorize" -> List.of(
                     field("name", "Player name", 64, true),
-                    field("rank", "Rank", 2, true));
+                    field("rank", "Rank or grade", 24, true));
             case "admin-policy-set" -> List.of(
                     field("key", "Policy key", 128, true),
                     field("value", "Policy value", 512, true));
