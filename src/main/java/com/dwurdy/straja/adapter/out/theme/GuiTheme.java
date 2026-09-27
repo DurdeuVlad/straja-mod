@@ -1,4 +1,4 @@
-package com.dwurdy.straja.adapter.out.npc.customnpcs;
+package com.dwurdy.straja.adapter.out.theme;
 
 import com.dwurdy.straja.domain.model.NpcSurfaceSnapshot;
 import java.util.Map;
@@ -6,7 +6,7 @@ import java.util.Set;
 
 /**
  * Visual tokens for the Straja institutional theme used by CustomNPCs
- * surfaces. Palette values are sampled from the shipped item art; grid and
+ * surfaces and the native form screen. Palette values are sampled from the shipped item art; grid and
  * icon rules are defined in {@code docs/npc-surface-visual-system.md}.
  *
  * <p>Icons resolve in two tiers: registered Straja items rendered through the
@@ -27,53 +27,53 @@ public final class GuiTheme {
     public static final int COLOR_PAPER_DIM = 0xB4AF96;
     public static final int COLOR_LEATHER = 0x78501E;
     public static final int COLOR_NIGHT = 0x141428;
-    static final int COLOR_SEAL_BRIGHT = 0xA02828;
-    static final int COLOR_BRASS = 0xD2B43C;
-    static final int COLOR_STEEL = 0x787882;
+    public static final int COLOR_SEAL_BRIGHT = 0xA02828;
+    public static final int COLOR_BRASS = 0xD2B43C;
+    public static final int COLOR_STEEL = 0x787882;
 
     public static final int MARGIN = 12;
-    static final int CONTENT_WIDTH = 396;
+    public static final int CONTENT_WIDTH = 396;
     public static final int HEADER_Y = 8;
     public static final int HEADER_ICON_SIZE = 16;
     public static final int TITLE_X = 34;
-    static final int TITLE_WIDTH = 374;
+    public static final int TITLE_WIDTH = 374;
     public static final int RULE_Y = 30;
     // Standard 421x240 surface grid (docs/npc-surface-visual-system.md §2/§6).
-    static final int GUI_HEIGHT = 240;
+    public static final int GUI_HEIGHT = 240;
     public static final int BODY_Y = 34;
-    static final int BODY_H = 52;
-    static final int COLUMN_TOP = 92;
-    static final int COLUMN_BOTTOM = 206;
-    static final int CHOICE_W = 195;
-    static final int QUEST_X = 218;
-    static final int QUEST_TEXT_X = 238;
-    static final int QUEST_TEXT_W = 170;
-    static final int FOOTER_Y = 214;
-    static final int FOOTER_H = 22;
+    public static final int BODY_H = 52;
+    public static final int COLUMN_TOP = 92;
+    public static final int COLUMN_BOTTOM = 206;
+    public static final int CHOICE_W = 195;
+    public static final int QUEST_X = 218;
+    public static final int QUEST_TEXT_X = 238;
+    public static final int QUEST_TEXT_W = 170;
+    public static final int FOOTER_Y = 214;
+    public static final int FOOTER_H = 22;
 
-    static final String TEXTURE_ROOT = "straja:textures/gui/";
-    static final String PANEL_TEXTURE = TEXTURE_ROOT + "panel_bg.png";
+    public static final String TEXTURE_ROOT = "straja:textures/gui/";
+    public static final String PANEL_TEXTURE = TEXTURE_ROOT + "panel_bg.png";
 
     /** Tier-2 PNG overlay via textured rect (inert on this CNPC build). */
-    static final boolean USE_TEXTURE_ICONS = true;
+    public static final boolean USE_TEXTURE_ICONS = true;
     /** Generated parchment panel via {@code setBackgroundTexture} when on. */
-    static final boolean USE_PANEL_BACKGROUND = true;
+    public static final boolean USE_PANEL_BACKGROUND = true;
 
     // Taxonomy keys (docs/icon-generation-prompt-pack.md); admin_selector has no
     // PNG yet and always exercises the item-renderer fallback.
-    static final String ICON_SELECTOR = "admin_selector";
-    static final String ICON_CLEANUP = "act_cleanup";
-    static final String ICON_CONFIRM = "act_assign";
-    static final String ICON_UNASSIGN = "act_unassign";
-    static final String ICON_STATUS = "act_status";
-    static final String ICON_AUDIT = "act_audit";
-    static final String ICON_OK = "state_ok";
-    static final String ICON_DENIED = "state_denied";
-    static final String ICON_WARN = "state_warn";
+    public static final String ICON_SELECTOR = "admin_selector";
+    public static final String ICON_CLEANUP = "act_cleanup";
+    public static final String ICON_CONFIRM = "act_assign";
+    public static final String ICON_UNASSIGN = "act_unassign";
+    public static final String ICON_STATUS = "act_status";
+    public static final String ICON_AUDIT = "act_audit";
+    public static final String ICON_OK = "state_ok";
+    public static final String ICON_DENIED = "state_denied";
+    public static final String ICON_WARN = "state_warn";
     public static final String ICON_INPUT = "act_input";
-    static final String ICON_QUEST_ACTIVE = "quest_active";
-    static final String ICON_QUEST_NEW = "quest_new";
-    static final String ICON_QUEST_DONE = "quest_done";
+    public static final String ICON_QUEST_ACTIVE = "quest_active";
+    public static final String ICON_QUEST_NEW = "quest_new";
+    public static final String ICON_QUEST_DONE = "quest_done";
 
     // Content-profile ids are dotted ("straja.jailer.custody") while the
     // provisioning selector exposes npcProfileId ("straja:jailer") — match both.
@@ -125,7 +125,7 @@ public final class GuiTheme {
      * profile family has no mapped icon. Kept as a pure string mapping so unit
      * tests need no registry bootstrap.
      */
-    static String roleIconKey(String profileId) {
+    public static String roleIconKey(String profileId) {
         if (profileId == null) {
             return null;
         }
@@ -150,17 +150,17 @@ public final class GuiTheme {
      * Returns the Straja item id rendered as the role header icon for the
      * given profile id, or null when the profile family has no mapped icon.
      */
-    static String roleIconItemId(String profileId) {
+    public static String roleIconItemId(String profileId) {
         return iconItemFallback(roleIconKey(profileId));
     }
 
     /** True when the key ships a generated PNG and may use a textured rect. */
-    static boolean hasTextureIcon(String iconKey) {
+    public static boolean hasTextureIcon(String iconKey) {
         return iconKey != null && TEXTURED_ICONS.contains(iconKey);
     }
 
     /** Quest-journal state glyph: taxonomy icon key for a quest state. */
-    static String questIconKey(NpcSurfaceSnapshot.QuestState state) {
+    public static String questIconKey(NpcSurfaceSnapshot.QuestState state) {
         if (state == null) {
             return null;
         }
@@ -174,7 +174,7 @@ public final class GuiTheme {
     }
 
     /** Quest-journal line color by state; dim for finished, steel for locked. */
-    static int questLabelColor(NpcSurfaceSnapshot.QuestState state) {
+    public static int questLabelColor(NpcSurfaceSnapshot.QuestState state) {
         if (state == null) {
             return COLOR_PAPER;
         }
@@ -188,7 +188,7 @@ public final class GuiTheme {
     }
 
     /** Resource-location string for a generated icon in the Tier-2 pack. */
-    static String iconTexture(String iconId) {
+    public static String iconTexture(String iconId) {
         return TEXTURE_ROOT + "icons/" + iconId + ".png";
     }
 }

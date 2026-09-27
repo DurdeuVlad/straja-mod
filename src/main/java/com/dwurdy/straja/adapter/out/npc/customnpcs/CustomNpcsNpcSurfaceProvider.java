@@ -1,5 +1,6 @@
 package com.dwurdy.straja.adapter.out.npc.customnpcs;
 
+import com.dwurdy.straja.adapter.out.theme.GuiTheme;
 import com.dwurdy.straja.application.port.in.NpcProvisioningUseCase;
 import com.dwurdy.straja.application.port.in.NpcSurfaceActionTokenIssuer;
 import com.dwurdy.straja.application.port.in.NpcSurfaceActionUseCase;

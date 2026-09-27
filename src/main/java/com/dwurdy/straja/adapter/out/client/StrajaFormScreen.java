@@ -2,7 +2,7 @@ package com.dwurdy.straja.adapter.out.client;
 
 import com.dwurdy.straja.adapter.in.form.FormPayloads;
 import com.dwurdy.straja.adapter.in.form.StrajaFormMenu;
-import com.dwurdy.straja.adapter.out.npc.customnpcs.GuiTheme;
+import com.dwurdy.straja.adapter.out.theme.GuiTheme;
 import com.dwurdy.straja.application.port.in.FormSessionUseCase.Field;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -31,9 +31,15 @@ public class StrajaFormScreen extends AbstractContainerScreen<StrajaFormMenu> {
     private static final int FIELD_GAP = 8;
     private static final int FOOTER_HEIGHT = 28;
 
+    // Multiline boxes carry their own scrollbar, so they can shrink hard.
+    private static final int MIN_MULTI_LINE_HEIGHT = 14;
+    private static final int SCREEN_MARGIN = 8;
+
     private final List<Input> inputs = new ArrayList<>();
     private final ItemStack headerIcon;
-    private final int promptHeight;
+    private int promptHeight;
+    private int multiLineHeight = MULTI_LINE_HEIGHT;
+    private int fieldGap = FIELD_GAP;
     private boolean submitted;
     private boolean cancelSent;
 
@@ -42,18 +48,7 @@ public class StrajaFormScreen extends AbstractContainerScreen<StrajaFormMenu> {
     public StrajaFormScreen(StrajaFormMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, StrajaFormMenu.textComponent(menu.view().title()));
         this.imageWidth = 240;
-        int contentWidth = imageWidth - GuiTheme.MARGIN * 2;
-        // The prompt sits in the header band's body (like the CustomNPCs input
-        // surface), so its wrapped height must be part of the window size.
-        this.promptHeight = Minecraft.getInstance().font
-                .split(StrajaFormMenu.textComponent(menu.view().prompt()), contentWidth)
-                .size() * Minecraft.getInstance().font.lineHeight;
-        int fieldsHeight = 0;
-        for (Field field : menu.view().fields()) {
-            fieldsHeight += LABEL_HEIGHT + (field.multiline() ? MULTI_LINE_HEIGHT : SINGLE_LINE_HEIGHT)
-                    + FIELD_GAP;
-        }
-        this.imageHeight = GuiTheme.BODY_Y + promptHeight + 8 + fieldsHeight + FOOTER_HEIGHT + 4;
+        this.imageHeight = GuiTheme.GUI_HEIGHT;
         this.headerIcon = iconStack();
     }
 
@@ -69,6 +64,37 @@ public class StrajaFormScreen extends AbstractContainerScreen<StrajaFormMenu> {
 
     @Override
     protected void init() {
+        // The prompt sits in the body band, so its wrapped height is part of
+        // the window size; the panel must still fit the actual screen — a
+        // 4-field multiline form (REPORT_SUBMIT) would otherwise push the
+        // footer buttons below the viewport on GUI scale ≥3.
+        int contentWidth = imageWidth - GuiTheme.MARGIN * 2;
+        this.promptHeight = font
+                .split(StrajaFormMenu.textComponent(getMenu().view().prompt()), contentWidth)
+                .size() * font.lineHeight;
+        int fieldCount = 0;
+        int multiCount = 0;
+        int singleCount = 0;
+        for (Field field : getMenu().view().fields()) {
+            fieldCount++;
+            if (field.multiline()) multiCount++; else singleCount++;
+        }
+        int budget = height - SCREEN_MARGIN * 2 - GuiTheme.BODY_Y - promptHeight - 8
+                - FOOTER_HEIGHT - 4;
+        this.fieldGap = FIELD_GAP;
+        this.multiLineHeight = fitMultiLine(budget, fieldCount, multiCount,
+                singleCount * SINGLE_LINE_HEIGHT);
+        // If minimum-height multiline boxes still overflow, tighten the field
+        // gap before accepting the overflow (footer stays clickable either way).
+        if (fieldsHeight(fieldCount, multiCount, singleCount) > budget) {
+            this.fieldGap = 4;
+            this.multiLineHeight = fitMultiLine(budget, fieldCount, multiCount,
+                    singleCount * SINGLE_LINE_HEIGHT);
+        }
+        this.imageHeight = Math.min(
+                GuiTheme.BODY_Y + promptHeight + 8
+                        + fieldsHeight(fieldCount, multiCount, singleCount) + FOOTER_HEIGHT + 4,
+                height - SCREEN_MARGIN * 2);
         super.init();
         inputs.clear();
         int x = leftPos + GuiTheme.MARGIN;
@@ -78,19 +104,19 @@ public class StrajaFormScreen extends AbstractContainerScreen<StrajaFormMenu> {
             int labelY = y - topPos;
             if (field.multiline()) {
                 MultiLineEditBox box = new MultiLineEditBox(font, x, y + LABEL_HEIGHT, width,
-                        MULTI_LINE_HEIGHT, Component.literal(field.label()),
+                        multiLineHeight, Component.empty(),
                         Component.literal(field.label()));
                 box.setCharacterLimit(field.maxLength());
                 addRenderableWidget(box);
                 inputs.add(new Input(field, box::getValue, labelY));
-                y += LABEL_HEIGHT + MULTI_LINE_HEIGHT + FIELD_GAP;
+                y += LABEL_HEIGHT + multiLineHeight + fieldGap;
             } else {
                 EditBox box = new EditBox(font, x, y + LABEL_HEIGHT, width, SINGLE_LINE_HEIGHT,
                         Component.literal(field.label()));
                 box.setMaxLength(field.maxLength());
                 addRenderableWidget(box);
                 inputs.add(new Input(field, box::getValue, labelY));
-                y += LABEL_HEIGHT + SINGLE_LINE_HEIGHT + FIELD_GAP;
+                y += LABEL_HEIGHT + SINGLE_LINE_HEIGHT + fieldGap;
             }
         }
         int footerY = topPos + imageHeight - FOOTER_HEIGHT;
@@ -98,6 +124,19 @@ public class StrajaFormScreen extends AbstractContainerScreen<StrajaFormMenu> {
                 .bounds(x, footerY, 80, 20).build());
         addRenderableWidget(Button.builder(Component.translatable("straja.form.cancel"), b -> onClose())
                 .bounds(x + 88, footerY, 80, 20).build());
+    }
+
+    /** Multiline box height that fits the field budget (boxes scroll internally). */
+    private int fitMultiLine(int budget, int fieldCount, int multiCount, int singleHeight) {
+        if (multiCount == 0) return MULTI_LINE_HEIGHT;
+        int fixed = fieldCount * (LABEL_HEIGHT + fieldGap) + singleHeight;
+        return Math.min(MULTI_LINE_HEIGHT,
+                Math.max(MIN_MULTI_LINE_HEIGHT, (budget - fixed) / multiCount));
+    }
+
+    private int fieldsHeight(int fieldCount, int multiCount, int singleCount) {
+        return fieldCount * (LABEL_HEIGHT + fieldGap)
+                + multiCount * multiLineHeight + singleCount * SINGLE_LINE_HEIGHT;
     }
 
     private void submit() {
@@ -125,7 +164,7 @@ public class StrajaFormScreen extends AbstractContainerScreen<StrajaFormMenu> {
     @Override
     protected void renderBg(GuiGraphics graphics, float partialTick, int mouseX, int mouseY) {
         graphics.fill(leftPos, topPos, leftPos + imageWidth, topPos + imageHeight,
-                0xF0_000000 | GuiTheme.COLOR_NIGHT);
+                0xFF_000000 | GuiTheme.COLOR_NIGHT);
         graphics.renderOutline(leftPos, topPos, imageWidth, imageHeight,
                 0xFF_000000 | GuiTheme.COLOR_LEATHER);
         graphics.fill(leftPos + GuiTheme.MARGIN, topPos + GuiTheme.RULE_Y,
@@ -136,15 +175,19 @@ public class StrajaFormScreen extends AbstractContainerScreen<StrajaFormMenu> {
     @Override
     protected void renderLabels(GuiGraphics graphics, int mouseX, int mouseY) {
         if (!headerIcon.isEmpty()) {
-            graphics.renderItem(headerIcon, GuiTheme.MARGIN, GuiTheme.HEADER_Y - 1);
+            graphics.renderItem(headerIcon, GuiTheme.MARGIN, GuiTheme.HEADER_Y);
         }
-        graphics.drawString(font, title, GuiTheme.TITLE_X, GuiTheme.HEADER_Y + 2,
+        String fittedTitle = font.plainSubstrByWidth(title.getString(),
+                imageWidth - GuiTheme.TITLE_X - GuiTheme.MARGIN);
+        graphics.drawString(font, fittedTitle, GuiTheme.TITLE_X, GuiTheme.HEADER_Y + 2,
                 0xFF_000000 | GuiTheme.COLOR_PAPER_BRIGHT, false);
         graphics.drawWordWrap(font, StrajaFormMenu.textComponent(getMenu().view().prompt()),
                 GuiTheme.MARGIN, GuiTheme.BODY_Y, imageWidth - GuiTheme.MARGIN * 2,
                 0xFF_000000 | GuiTheme.COLOR_PAPER_DIM);
         for (Input input : inputs) {
-            graphics.drawString(font, input.field().label(), GuiTheme.MARGIN, input.labelY(),
+            String label = font.plainSubstrByWidth(input.field().label(),
+                    imageWidth - GuiTheme.MARGIN * 2);
+            graphics.drawString(font, label, GuiTheme.MARGIN, input.labelY(),
                     0xFF_000000 | GuiTheme.COLOR_PAPER_DIM, false);
         }
     }
