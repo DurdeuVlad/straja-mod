@@ -57,6 +57,12 @@
       ]
     },
     {
+      "name": "surface-settle-quiz1",
+      "type": "sleep",
+      "seconds": 2,
+      "setup": true
+    },
+    {
       "name": "apply-via-menu",
       "type": "npc-action",
       "label": "Depune cererea"
@@ -114,6 +120,12 @@
       ]
     },
     {
+      "name": "surface-settle-quiz2",
+      "type": "sleep",
+      "seconds": 2,
+      "setup": true
+    },
+    {
       "name": "ask-exam",
       "type": "npc-action",
       "label": "Examen de admitere"
@@ -152,6 +164,12 @@
         "--max-distance",
         "8"
       ]
+    },
+    {
+      "name": "surface-settle-quiz3",
+      "type": "sleep",
+      "seconds": 2,
+      "setup": true
     },
     {
       "name": "open-quiz-form",
