@@ -61,6 +61,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
     // header pieces must use low ids that stay inside the projection depth
     // range; 96/97 are free in every surface's id map.
     private static final int HEADER_ICON_ID = 96;
+    private static final int HEADER_TEXTURE_ICON_ID = 98;
     private static final int HEADER_RULE_ID = 97;
     // CustomNPCs labels draw on a single line and overflow their width;
     // these budgets keep wrapped lines inside their columns.
@@ -382,7 +383,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                 false,
                 playerApi);
         addGuiHeader(gui, 1, surface.title(),
-                GuiTheme.roleIconItemId(surface.profileId().value()), GuiTheme.COLOR_PAPER_BRIGHT);
+                GuiTheme.roleIconKey(surface.profileId().value()), GuiTheme.COLOR_PAPER_BRIGHT);
         Object body = invoke(gui, "addTextArea", 2, 12, 32, 396, 58);
         invoke(body, "setText", surface.body());
         invoke(body, "setEnabled", false);
@@ -447,7 +448,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                 false,
                 playerApi);
         addGuiHeader(gui, 1, "Target NPC: " + hostUuid,
-                GuiTheme.ICON_ADMIN_WAND, GuiTheme.COLOR_PAPER_BRIGHT);
+                GuiTheme.ICON_SELECTOR, GuiTheme.COLOR_PAPER_BRIGHT);
 
         String displayedRevision = provisioning.assignmentRevision(hostUuid);
         var assignments = provisioning.assignments(providerId(), hostUuid);
@@ -1193,8 +1194,9 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
      * when the CustomNPCs component or the item is unavailable — a header
      * never blocks the surface.
      */
-    private void addGuiHeader(Object gui, int titleId, String title, String iconItemId, int titleColor) {
-        addHeaderIcon(gui, iconItemId);
+    private void addGuiHeader(Object gui, int titleId, String title, String iconKey, int titleColor) {
+        applyPanelBackground(gui);
+        addHeaderIcon(gui, iconKey);
         Object label = invoke(gui, "addLabel", titleId, title,
                 GuiTheme.TITLE_X, GuiTheme.HEADER_Y, GuiTheme.TITLE_WIDTH, 20);
         try {
@@ -1212,24 +1214,63 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
         }
     }
 
-    private void addHeaderIcon(Object gui, String iconItemId) {
-        if (iconItemId == null) {
+    /**
+     * Header icon = item renderer (guaranteed base) + generated PNG overlay.
+     * CustomNPCs 1.21.1-unofficial accepts textured rect/button components
+     * server-side but does not draw their textures client-side (verified
+     * against the shipped jar and live pixels); the item renderer still shows
+     * the role/action icon. On builds where textured components render, the
+     * PNG is drawn on top of the item at the same position.
+     */
+    private void addHeaderIcon(Object gui, String iconKey) {
+        if (iconKey == null) {
+            return;
+        }
+        String iconItemId = GuiTheme.iconItemFallback(iconKey);
+        if (iconItemId != null) {
+            try {
+                // GuiItemIcons owns the Minecraft item types so this class
+                // stays verifiable in the Minecraft-free unit-test JVM.
+                Object stack = GuiItemIcons.mcItemStack(iconItemId);
+                if (stack != null) {
+                    Object wrapped = invoke(bridge.api(), "getIItemStack", stack);
+                    invoke(gui, "addItemRenderer", HEADER_ICON_ID,
+                            GuiTheme.MARGIN, GuiTheme.HEADER_Y,
+                            GuiTheme.HEADER_ICON_SIZE, GuiTheme.HEADER_ICON_SIZE, wrapped);
+                }
+            } catch (RuntimeException exception) {
+                diagnostics.accept("CustomNPCs header icon unavailable for " + iconKey
+                        + "; rendering text-only header");
+            }
+        }
+        if (GuiTheme.USE_TEXTURE_ICONS && GuiTheme.hasTextureIcon(iconKey)) {
+            addTexturedIcon(gui, iconKey);
+        }
+    }
+
+    /** Tier-2 PNG overlay for builds where textured components draw. */
+    private void addTexturedIcon(Object gui, String iconKey) {
+        try {
+            // 8-arg form: explicit texture offset — the 6-arg wrapper leaves
+            // textureX/Y at -1 which skips texPos serialization client-side.
+            invoke(gui, "addTexturedRect", HEADER_TEXTURE_ICON_ID,
+                    GuiTheme.iconTexture(iconKey),
+                    GuiTheme.MARGIN, GuiTheme.HEADER_Y,
+                    GuiTheme.HEADER_ICON_SIZE, GuiTheme.HEADER_ICON_SIZE, 0, 0);
+        } catch (RuntimeException exception) {
+            diagnostics.accept("CustomNPCs textured icon unavailable for " + iconKey);
+        }
+    }
+
+    /** Generated parchment panel; absent texture support degrades silently. */
+    private void applyPanelBackground(Object gui) {
+        if (!GuiTheme.USE_PANEL_BACKGROUND) {
             return;
         }
         try {
-            // GuiItemIcons owns the Minecraft item types so this class stays
-            // verifiable in the Minecraft-free unit-test JVM.
-            Object stack = GuiItemIcons.mcItemStack(iconItemId);
-            if (stack == null) {
-                return;
-            }
-            Object wrapped = invoke(bridge.api(), "getIItemStack", stack);
-            invoke(gui, "addItemRenderer", HEADER_ICON_ID,
-                    GuiTheme.MARGIN, GuiTheme.HEADER_Y,
-                    GuiTheme.HEADER_ICON_SIZE, GuiTheme.HEADER_ICON_SIZE, wrapped);
+            invoke(gui, "setBackgroundTexture", GuiTheme.PANEL_TEXTURE);
         } catch (RuntimeException exception) {
-            diagnostics.accept("CustomNPCs header icon unavailable for " + iconItemId
-                    + "; rendering text-only header");
+            diagnostics.accept("CustomNPCs panel background unavailable; keeping default");
         }
     }
 
@@ -1294,7 +1335,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                 playerApi);
         boolean accepted = result.status() == NpcProvisioningUseCase.Status.ACCEPTED;
         addGuiHeader(gui, 1, "NPC provisioning — " + result.status(),
-                accepted ? GuiTheme.ICON_CONFIRM : GuiTheme.ICON_DENIED,
+                accepted ? GuiTheme.ICON_OK : GuiTheme.ICON_DENIED,
                 accepted ? GuiTheme.COLOR_BRASS : GuiTheme.COLOR_SEAL_BRIGHT);
         int y = 36;
         int rowId = 200;
