@@ -173,10 +173,13 @@ class PreflightTests(unittest.TestCase):
 class _FakeMct:
     binary = "mct"
     env = {}
+    client = "ci-straja"
 
-    def __init__(self, replies=None):
+    def __init__(self, replies=None, client=None):
         self.replies = replies or {}
         self.calls = []
+        if client:
+            self.client = client
 
     def __call__(self, args, timeout=60):
         self.calls.append(list(args))
@@ -242,6 +245,38 @@ class ClientModTests(unittest.TestCase):
             verify.assert_called_once_with(bridge_path, sha256="abc",
                                            label="mct client-mod bridge")
 
+    def test_create_client_uses_mct_instance_name_and_account_override(self):
+        manifest = {
+            "client": {"name": "ci-straja", "loader": "neoforge",
+                       "minecraftVersion": "1.21.1", "account": "ci",
+                       "language": "en_us"},
+            "clientMod": {"file": "mct-client-mod.jar", "sha256": "abc"},
+        }
+        with tempfile.TemporaryDirectory() as home:
+            mods_dir = os.path.join(home, "mods")
+            minecraft_dir = os.path.join(home, "minecraft")
+            os.makedirs(mods_dir)
+            os.makedirs(minecraft_dir)
+            jar_path = os.path.join(home, "straja.jar")
+            open(jar_path, "wb").close()
+            open(os.path.join(mods_dir, "mct-client-mod.jar"), "wb").close()
+            reply = {"success": True,
+                     "data": {"modsDir": mods_dir,
+                              "minecraftDir": minecraft_dir,
+                              "wsPort": 25599}}
+            mct = _FakeMct({("client", "create", "ci-straja-2", "--loader",
+                              "neoforge", "--version", "1.21.1", "--account",
+                              "ci_2", "--java", "java"): reply},
+                            client="ci-straja-2")
+            import unittest.mock as mock
+            with mock.patch.object(cu.sh, "verify_artifact"):
+                result = cu.create_client(mct, manifest, jar_path, [], {},
+                                          lambda _: None, account="ci_2")
+
+            self.assertEqual(result, "ci-straja-2")
+            self.assertEqual(25599, manifest["client"]["wsPorts"]["ci-straja-2"])
+            self.assertNotIn("ci-straja", manifest["client"]["wsPorts"])
+
 
 class _FakeRcon:
     def __init__(self, out="ok"):
@@ -294,7 +329,7 @@ class WsPortReleaseTests(unittest.TestCase):
         manifest = {"client": {"wsPort": free_port}}
         transcript = cu.Transcript()
         start = time.monotonic()
-        cu._await_ws_port_release(manifest, transcript, timeout_s=30)
+        cu._await_ws_port_release(manifest, "ci-straja", transcript, timeout_s=30)
         self.assertLess(time.monotonic() - start, 5)
         self.assertEqual([], transcript.entries)
 
@@ -306,7 +341,8 @@ class WsPortReleaseTests(unittest.TestCase):
         manifest = {"client": {"wsPort": held_port}}
         transcript = cu.Transcript()
         try:
-            cu._await_ws_port_release(manifest, transcript, timeout_s=2)
+            cu._await_ws_port_release(manifest, "ci-straja", transcript,
+                                      timeout_s=2)
         finally:
             listener.close()
         self.assertEqual("ws-port-release",
@@ -320,7 +356,8 @@ class WsPortReleaseTests(unittest.TestCase):
         manifest = {"client": {"wsPort": held_port}}
         transcript = cu.Transcript()
         threading.Timer(0.5, listener.close).start()
-        cu._await_ws_port_release(manifest, transcript, timeout_s=30)
+        cu._await_ws_port_release(manifest, "ci-straja", transcript,
+                                  timeout_s=30)
         self.assertEqual([], transcript.entries)
 
 

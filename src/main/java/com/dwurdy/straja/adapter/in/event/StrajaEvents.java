@@ -1,5 +1,6 @@
 package com.dwurdy.straja.adapter.in.event;
 
+import com.dwurdy.straja.StrajaMod;
 import com.dwurdy.straja.adapter.in.npc.NpcRoles;
 import com.dwurdy.straja.adapter.in.npc.StrajaNpcEntity;
 import com.dwurdy.straja.adapter.in.compat.OptionalCustodyProvider;
@@ -378,6 +379,22 @@ public final class StrajaEvents {
     }
 
     /**
+     * Diagnostic probe: fires before any other EntityInteract listener and
+     * still runs when the event was already canceled, so the server log can
+     * distinguish "interact packet never dispatched" from "a higher-priority
+     * listener canceled before Straja's handler ran". Limited to Straja NPC
+     * targets to keep the log quiet.
+     */
+    @SubscribeEvent(priority = EventPriority.HIGHEST, receiveCanceled = true)
+    public void probeEntityInteract(
+            net.neoforged.neoforge.event.entity.player.PlayerInteractEvent.EntityInteract event) {
+        if (event.getLevel().isClientSide()
+                || !(event.getTarget() instanceof StrajaNpcEntity)) return;
+        StrajaMod.LOGGER.info("npc-interact probe: hand={} canceled={} target={}",
+                event.getHand(), event.isCanceled(), event.getTarget().getStringUUID());
+    }
+
+    /**
      * Right-clicking a player with a restraint tool routes to the custody
      * service: cuffs request, rope bind, head sack, key/cutters release.
      */
@@ -387,6 +404,10 @@ public final class StrajaEvents {
         StrajaRuntime runtime = StrajaRuntime.get();
         if (runtime == null || event.getLevel().isClientSide()
                 || !(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) return;
+        if (event.getTarget() instanceof StrajaNpcEntity) {
+            StrajaMod.LOGGER.info("npc-interact handle: hand={} canceled={} target={}",
+                    event.getHand(), event.isCanceled(), event.getTarget().getStringUUID());
+        }
         var gateway = new MinecraftPlayerGateway(player.getServer(), player.getUUID());
         if (runtime.custodyRoleplay().actionBlocked(gateway, "interact")) {
             event.setCanceled(true);
