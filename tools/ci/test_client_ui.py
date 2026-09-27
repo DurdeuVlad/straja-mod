@@ -579,6 +579,48 @@ class OccurrencesTests(unittest.TestCase):
                            "expect": [{"occurrences": "depus",
                                        "count": 1}]}, ctx, [])
 
+    def test_message_occurrences_counts_messages_not_raw_dupes(self):
+        # A single deposited report serializes its text into `plain`/`content`
+        # AND inside `raw` component JSON (content/extra/hoverEvent repeats) —
+        # messageOccurrences must count matching messages, not regex hits in
+        # the serialized reply.
+        raw_component = json.dumps(
+            {"extra": [{"text": "Raportul R1 a fost depus la Secretariat."}],
+             "hoverEvent": {"contents": "a fost depus la Secretariat"}})
+        reply = {"messages": [{"plain": "Raportul R1 a fost depus la "
+                                        "Secretariat.",
+                               "raw": raw_component},
+                              {"plain": "unrelated", "raw": "{}"}]}
+        cu._expect_json(
+            reply,
+            [{"messageOccurrences": "a fost depus la Secretariat",
+              "count": 1}], "t")
+        with self.assertRaises(cu.ClientUiError):
+            cu._expect_json(
+                reply,
+                [{"messageOccurrences": "a fost depus la Secretariat",
+                  "count": 2}], "t")
+
+    def test_message_occurrences_supports_content_field(self):
+        reply = {"messages": [{"content": "hello depus"}]}
+        cu._expect_json(reply, [{"messageOccurrences": "depus"}], "t")
+
+    def test_warn_regex_records_instead_of_failing(self):
+        rec = _RecordingTranscript()
+        reply = {"messages": [{"plain": "nothing relevant"}]}
+        cu._expect_json(reply,
+                        [{"warnRegex": "monede", "note": "dead-ws join"}],
+                        "t", rec)
+        self.assertTrue(any("monede" in str(e[1]) for e in rec.entries))
+
+
+class _RecordingTranscript:
+    def __init__(self):
+        self.entries = []
+
+    def record(self, kind, data):
+        self.entries.append((kind, data))
+
 
 class Client2Tests(unittest.TestCase):
     def _patch_mct(self):
