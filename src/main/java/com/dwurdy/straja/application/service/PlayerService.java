@@ -269,7 +269,8 @@ public class PlayerService implements com.dwurdy.straja.application.port.in.Play
             case MILITARY_STRAJER -> Rank.GUARD.level();
             case MILITARY_SERGENT -> Rank.SERGENT.level();
             case INSPECTOR -> Rank.INSPECTOR.level();
-            case PROFESSIONAL_STAGIAR_SPECIALIST, PROFESSIONAL_SPECIALIST -> Rank.CIVIL.level();
+            case PROFESSIONAL_STAGIAR_SPECIALIST, PROFESSIONAL_SPECIALIST, PROFESSIONAL_MAISTRU ->
+                    Rank.CIVIL.level();
         };
         state.applicationState = record.membershipStatus == com.dwurdy.straja.domain.model.PersonnelStatus.AUTHORIZED_ACTIVE
                 ? "AUTHORIZED" : state.applicationState;

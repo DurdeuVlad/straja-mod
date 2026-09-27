@@ -44,5 +44,8 @@
   "straja.trades.refused.sworn": "You are a sworn Straja member — the trades path is separate; ask the Commissioner for a transfer.",
   "straja.trades.refused.status": "Your personnel file does not allow enrollment right now.",
   "straja.trades.refused.unknown": "That trade is not open for enrollment.",
-  "straja.trades.none": "No trades are open for enrollment right now."
+  "straja.trades.none": "No trades are open for enrollment right now.",
+  "straja.trades.promote.requested": "Advancement request %2$s for %1$s submitted — awaiting the Commissioner's review.",
+  "straja.trades.promote.not_member": "Only active trades members can request advancement.",
+  "straja.trades.promote.max": "You already hold the highest trades rank."
 }

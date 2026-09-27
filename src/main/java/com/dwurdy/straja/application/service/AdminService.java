@@ -192,7 +192,8 @@ public class AdminService implements AdminRoleplayUseCase {
             case "STRAJER", "GENDARME", "JANDAR" -> CareerGrade.MILITARY_STRAJER;
             case "SERGENT", "SERGEANT" -> CareerGrade.MILITARY_SERGENT;
             case "ZILER", "DAYMAN" -> CareerGrade.PROFESSIONAL_STAGIAR_SPECIALIST;
-            case "MESERIAS", "TRADESMAN", "MAISTRU", "MASTER" -> CareerGrade.PROFESSIONAL_SPECIALIST;
+            case "MESERIAS", "TRADESMAN" -> CareerGrade.PROFESSIONAL_SPECIALIST;
+            case "MAISTRU", "MASTER" -> CareerGrade.PROFESSIONAL_MAISTRU;
             default -> null;
         };
     }

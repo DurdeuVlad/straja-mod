@@ -104,6 +104,7 @@ public final class NpcRoles {
             case "v2-campaign-status" -> tellV2Campaigns(runtime, gw);
             case "v2-professional-work" -> tellV2ProfessionalWork(runtime, gw);
             case "trades-list" -> tellTradesEnroll(player, runtime, gw);
+            case "trades-promote" -> requestTradesPromotion(player, runtime, gw);
             case "application-submit" -> runtime.guardRecruitment().applyForStraja(gw);
             case "recruit" -> runtime.guardRecruitment().recruit(gw);
             case "quiz-answer" -> openQuizForm(player, level, runtime, gw);
@@ -329,6 +330,46 @@ public final class NpcRoles {
                             profession.toLowerCase(java.util.Locale.ROOT)),
                     Component.translatable("straja.trades.enroll.button"),
                     "trades-enroll:" + profession);
+        }
+    }
+
+    /**
+     * Trades advancement request: submits the next professional grade (Ziler →
+     * Meseriaș → Maistru) as a promotion application. The Comisar reviews and
+     * approves it through the standard promotion pipeline; approval upgrades
+     * the member to full-time employment for the upper grades.
+     */
+    private static void requestTradesPromotion(Player player,
+                                               com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                               com.dwurdy.straja.application.port.out.PlayerGateway gw) {
+        var personnel = runtime.v2Personnel().find(gw.uuid().toString());
+        if (personnel == null || !personnel.active() || personnel.careerGrade == null
+                || !personnel.careerGrade.isProfessional()) {
+            gw.tellKey("straja.trades.promote.not_member");
+            return;
+        }
+        var next = switch (personnel.careerGrade) {
+            case PROFESSIONAL_STAGIAR_SPECIALIST ->
+                    com.dwurdy.straja.domain.model.CareerGrade.PROFESSIONAL_SPECIALIST;
+            case PROFESSIONAL_SPECIALIST ->
+                    com.dwurdy.straja.domain.model.CareerGrade.PROFESSIONAL_MAISTRU;
+            default -> null;
+        };
+        if (next == null) {
+            gw.tellKey("straja.trades.promote.max");
+            return;
+        }
+        try {
+            var application = runtime.v2Promotions().submit(gw.uuid().toString(), next);
+            String gradeName = runtime.policies().rankName(next);
+            if (player instanceof ServerPlayer serverPlayer) {
+                serverPlayer.sendSystemMessage(Component.translatable(
+                        "straja.trades.promote.requested", gradeName, application.applicationId));
+            } else {
+                gw.tellKey("straja.trades.promote.requested");
+            }
+        } catch (RuntimeException error) {
+            gw.tell("Cererea de avansare a fost refuzată: " + error.getMessage());
         }
     }
 

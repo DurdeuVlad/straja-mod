@@ -82,7 +82,7 @@ class NpcContentProfileTest {
 
         assertEquals(NpcContentId.of("straja.reception.admission"), profile.contentId());
         assertEquals(NpcProfileId.of("straja:receptionist"), profile.profileId());
-        assertEquals(8, profile.actions().size());
+        assertEquals(9, profile.actions().size());
         assertEquals(1, profile.dialogue().size());
         assertEquals(4, profile.quests().size());
         assertTrue(profile.requiredCapabilities().contains(
@@ -94,6 +94,7 @@ class NpcContentProfileTest {
         assertEquals(List.of(
                 NpcContentId.of("application-submit"),
                 NpcContentId.of("trades-list"),
+                NpcContentId.of("trades-promote"),
                 NpcContentId.of("training-progress"),
                 NpcContentId.of("complaint-submit"),
                 NpcContentId.of("fine-list"),

@@ -9,6 +9,7 @@
   "actions": [
     {"id": "application-submit", "label": "Submit admission application", "enabled": true},
     {"id": "trades-list", "label": "Tradesmen — enroll (part-time)", "enabled": true},
+    {"id": "trades-promote", "label": "Tradesmen — request advancement", "enabled": true},
     {"id": "training-progress", "label": "View basic training", "enabled": true},
     {"id": "complaint-submit", "label": "Submit complaint", "enabled": false},
     {"id": "fine-list", "label": "View fines", "enabled": true},
@@ -23,6 +24,7 @@
       "choices": [
         {"actionId": "application-submit", "label": "I want to enlist", "enabled": true},
         {"actionId": "trades-list", "label": "I want to work as a tradesman", "enabled": true},
+        {"actionId": "trades-promote", "label": "I want to advance as a tradesman", "enabled": true},
         {"actionId": "training-progress", "label": "Show me the training path", "enabled": true},
         {"actionId": "complaint-submit", "label": "Submit a complaint", "enabled": false},
         {"actionId": "fine-list", "label": "View my fines", "enabled": true},

@@ -50,7 +50,9 @@ class V2FoundationTest {
     void specialistIsAProfessionalCareerAndNotAThirdMilitaryRank() {
         assertEquals(5, com.dwurdy.straja.domain.model.Rank.values().length);
         assertTrue(CareerGrade.PROFESSIONAL_SPECIALIST.isProfessional());
-        assertFalse(CareerGrade.PROFESSIONAL_SPECIALIST.fullTimeRequired());
+        assertFalse(CareerGrade.PROFESSIONAL_STAGIAR_SPECIALIST.fullTimeRequired());
+        assertTrue(CareerGrade.PROFESSIONAL_SPECIALIST.fullTimeRequired());
+        assertTrue(CareerGrade.PROFESSIONAL_MAISTRU.fullTimeRequired());
     }
 
     @Test
@@ -216,7 +218,7 @@ class V2FoundationTest {
         var personnel = new PersonnelService(people, clock, ids);
         personnel.authorize("system", "sergeant", CareerGrade.MILITARY_SERGENT, EmploymentMode.FULL_TIME,
                 "TEST", "hq", "auth:sergeant");
-        personnel.authorize("system", "specialist", CareerGrade.PROFESSIONAL_SPECIALIST, EmploymentMode.PART_TIME,
+        personnel.authorize("system", "specialist", CareerGrade.PROFESSIONAL_SPECIALIST, EmploymentMode.FULL_TIME,
                 "TEST", "hq", "auth:specialist");
         var mobilizationRepository = new SavedStores.Mobilizations(access);
         var authorization = new AuthorizationService(people, null, mobilizationRepository, clock);
@@ -467,7 +469,48 @@ class V2FoundationTest {
         assertEquals("Inspector", policies.rankName(CareerGrade.INSPECTOR));
         assertEquals("Ziler", policies.rankName(CareerGrade.PROFESSIONAL_STAGIAR_SPECIALIST));
         assertEquals("Meseriaș", policies.rankName(CareerGrade.PROFESSIONAL_SPECIALIST));
+        assertEquals("Maistru", policies.rankName(CareerGrade.PROFESSIONAL_MAISTRU));
         policies.meseriasRankNames.put(1, "Zirist");
         assertEquals("Zirist", policies.rankName(CareerGrade.PROFESSIONAL_STAGIAR_SPECIALIST));
+    }
+    @Test
+    void tradesPromotionChainRequiresCommissionerApprovalAndUpgradesToFullTime() {
+        var people = new SavedStores.Personnel(access);
+        var personnel = new PersonnelService(people, clock, ids);
+        var promotions = new PromotionService(new SavedStores.Promotions(access), people,
+                new AuthorizationService(people, clock), clock, ids);
+        // A commissioner record must exist for the APPROVE_PROMOTION gate.
+        personnel.authorize("bootstrap", "commissioner", CareerGrade.INSPECTOR,
+                EmploymentMode.FULL_TIME, "TEST", "hq", "auth:commissioner");
+        personnel.appoint("bootstrap", "commissioner", AppointmentType.COMMISSIONER, "hq", "", null);
+        var ziler = personnel.enrollProfessional("worker", "MINER");
+        assertEquals(EmploymentMode.PART_TIME, ziler.employmentMode);
+
+        // A nonexistent application cannot be approved.
+        assertThrows(IllegalArgumentException.class,
+                () -> promotions.approve("commissioner", "missing", 0));
+
+        // Player leaves a request; commissioner records review evidence, marks ready, approves.
+        var application = promotions.submit("worker", CareerGrade.PROFESSIONAL_SPECIALIST);
+        promotions.recordCommissionerEvidence(application.applicationId, "commissioner",
+                "REVIEW", "PASS", null, "review:" + application.applicationId);
+        promotions.markReady(application.applicationId);
+        promotions.approveOpen("commissioner", "worker", CareerGrade.PROFESSIONAL_SPECIALIST);
+
+        var record = personnel.find("worker");
+        assertEquals(CareerGrade.PROFESSIONAL_SPECIALIST, record.careerGrade);
+        assertEquals(EmploymentMode.FULL_TIME, record.employmentMode);
+
+        // Second step: Meseriaș → Maistru, same request-driven path.
+        var top = promotions.submit("worker", CareerGrade.PROFESSIONAL_MAISTRU);
+        promotions.recordCommissionerEvidence(top.applicationId, "commissioner",
+                "REVIEW", "PASS", null, "review:" + top.applicationId);
+        promotions.markReady(top.applicationId);
+        promotions.approveOpen("commissioner", "worker", CareerGrade.PROFESSIONAL_MAISTRU);
+        assertEquals(CareerGrade.PROFESSIONAL_MAISTRU, personnel.find("worker").careerGrade);
+
+        // Maistru is the professional ceiling — no further trades transition.
+        assertThrows(IllegalArgumentException.class,
+                () -> promotions.submit("worker", CareerGrade.INSPECTOR));
     }
 }

@@ -125,6 +125,7 @@ public final class AuthorizationService {
             case CREATE_MISSIONS, APPROVE_REWARDS, REVIEW_APPEALS -> grade == CareerGrade.INSPECTOR;
             case PROFESSIONAL_JOBS -> grade == CareerGrade.PROFESSIONAL_SPECIALIST
                     || grade == CareerGrade.PROFESSIONAL_STAGIAR_SPECIALIST
+                    || grade == CareerGrade.PROFESSIONAL_MAISTRU
                     || (grade == CareerGrade.INSPECTOR && actor.careerOrigin == CareerTrack.PROFESSIONAL);
             case MOBILIZE_SPECIALISTS ->
                     grade == CareerGrade.MILITARY_SERGENT || grade == CareerGrade.INSPECTOR;

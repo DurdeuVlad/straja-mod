@@ -251,10 +251,10 @@ public class StrajaPolicies {
     public Map<Integer, String> rankNames = new LinkedHashMap<>(Map.of(
             1, "Stagiar", 2, "Străjer", 3, "Sergent", 4, "Inspector"));
 
-    // trades (Meseriași) path display names — the part-time specialist ladder:
-    // 1=Ziler (freelance day-hand) → 2=Meseriaș (contracted tradesman).
+    // trades (Meseriași) path display names — 1=Ziler (part-time day-hand),
+    // 2=Meseriaș and 3=Maistru (full-time, Comisar-approved advancement).
     public Map<Integer, String> meseriasRankNames = new LinkedHashMap<>(Map.of(
-            1, "Ziler", 2, "Meseriaș"));
+            1, "Ziler", 2, "Meseriaș", 3, "Maistru"));
 
     // promotions
     public Map<Integer, Integer> promotionServiceBlocks = new LinkedHashMap<>(Map.of(2, 60, 3, 180));
@@ -475,6 +475,7 @@ public class StrajaPolicies {
             case INSPECTOR -> rankName(4);
             case PROFESSIONAL_STAGIAR_SPECIALIST -> meseriasRankName(1);
             case PROFESSIONAL_SPECIALIST -> meseriasRankName(2);
+            case PROFESSIONAL_MAISTRU -> meseriasRankName(3);
         };
     }
 
