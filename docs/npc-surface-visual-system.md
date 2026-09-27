@@ -71,6 +71,15 @@ Common grid (all surfaces):
 - Inline `addLabel` calls do not render inside scroll-panel regions on current
   CustomNPCs builds — multi-line text inside a panel region must use a
   disabled `addTextArea`, not stacked labels.
+- **Component ids are Z-depth.** `CustomGuiItemRenderer` (and other rendered
+  components) translate by `id` on the Z axis — ids ≥ ~1000 render beyond the
+  clip range and never draw. Header components use low free ids (96/97);
+  always verify a new component's id is inside the visible range.
+- GUI backgrounds are transparent: entity nameplates render through open
+  surfaces (observed as ghost text mid-panel). The M2 panel texture makes
+  surfaces opaque and eliminates this.
+- Verified live: `addItemRenderer` + `NpcAPI.getIItemStack` render Straja item
+  icons in surfaces (selector/confirm/status/audit/result screenshots).
 
 ## 3. Icon taxonomy
 

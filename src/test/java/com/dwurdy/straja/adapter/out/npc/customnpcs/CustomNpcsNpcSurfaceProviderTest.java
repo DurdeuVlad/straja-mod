@@ -117,6 +117,39 @@ class CustomNpcsNpcSurfaceProviderTest {
                 CustomNpcsNpcSurfaceProvider.wrapText("one\n\ntwo", 30));
     }
 
+    @Test
+    void roleIconItemIdMapsEveryProfileFamilyAndFailsClosed() {
+        assertEquals("straja:mission_carnet", GuiTheme.roleIconItemId("straja.reception.admission"));
+        assertEquals("straja:archive_stamp", GuiTheme.roleIconItemId("straja.secretary.workflows"));
+        assertEquals("straja:fine_book", GuiTheme.roleIconItemId("straja.instructor.admission"));
+        assertEquals("straja:baton", GuiTheme.roleIconItemId("straja.armorer.orders"));
+        assertEquals("straja:cuffs", GuiTheme.roleIconItemId("straja.jailer.custody"));
+        assertEquals("straja:archive_folder", GuiTheme.roleIconItemId("straja.archivist.archive"));
+        assertEquals(null, GuiTheme.roleIconItemId("straja.unknown.profile"));
+        assertEquals(null, GuiTheme.roleIconItemId(null));
+    }
+
+    @Test
+    void iconTextureLandsUnderTheGuiTextureRoot() {
+        assertEquals("straja:textures/gui/icons/state_ok.png", GuiTheme.iconTexture("state_ok"));
+    }
+
+    @Test
+    void reflectiveCompatUnboxesWiderPrimitives() {
+        assertTrue(CustomNpcsNpcSurfaceProvider.compatible(
+                new Class<?>[] {float.class}, new Object[] {1.0f}));
+        assertTrue(CustomNpcsNpcSurfaceProvider.compatible(
+                new Class<?>[] {double.class}, new Object[] {1.0d}));
+        assertTrue(CustomNpcsNpcSurfaceProvider.compatible(
+                new Class<?>[] {long.class}, new Object[] {1L}));
+        assertTrue(CustomNpcsNpcSurfaceProvider.compatible(
+                new Class<?>[] {int.class}, new Object[] {1}));
+        assertFalse(CustomNpcsNpcSurfaceProvider.compatible(
+                new Class<?>[] {float.class}, new Object[] {"x"}));
+        assertFalse(CustomNpcsNpcSurfaceProvider.compatible(
+                new Class<?>[] {char.class}, new Object[] {'x'}));
+    }
+
     private static NpcProvisioningUseCase.ProfileOption option(boolean enabled, String disabledReason) {
         return new NpcProvisioningUseCase.ProfileOption(
                 "straja:jailer",
