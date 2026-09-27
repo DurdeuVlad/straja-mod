@@ -105,6 +105,18 @@ class CustomNpcsNpcSurfaceProviderTest {
                 CustomNpcsNpcSurfaceProvider.unassignButtonLabel(true, "UNBIND"));
     }
 
+    @Test
+    void wrappedLabelsStayInsideTheirColumnWidth() {
+        assertEquals(List.of("State your purpose at the", "desk."),
+                CustomNpcsNpcSurfaceProvider.wrapText("State your purpose at the desk.", 30));
+        assertEquals(List.of("short"), CustomNpcsNpcSurfaceProvider.wrapText("short", 30));
+        assertEquals(List.of(""), CustomNpcsNpcSurfaceProvider.wrapText("", 30));
+        assertEquals(List.of("abcdefghij", "klmnop"),
+                CustomNpcsNpcSurfaceProvider.wrapText("abcdefghijklmnop", 10));
+        assertEquals(List.of("one", "", "two"),
+                CustomNpcsNpcSurfaceProvider.wrapText("one\n\ntwo", 30));
+    }
+
     private static NpcProvisioningUseCase.ProfileOption option(boolean enabled, String disabledReason) {
         return new NpcProvisioningUseCase.ProfileOption(
                 "straja:jailer",
