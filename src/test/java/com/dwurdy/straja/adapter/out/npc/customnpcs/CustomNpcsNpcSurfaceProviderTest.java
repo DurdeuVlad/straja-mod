@@ -2,6 +2,7 @@ package com.dwurdy.straja.adapter.out.npc.customnpcs;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.dwurdy.straja.application.port.in.NpcProvisioningUseCase;
@@ -125,8 +126,10 @@ class CustomNpcsNpcSurfaceProviderTest {
         assertEquals("straja:baton", GuiTheme.roleIconItemId("straja.armorer.orders"));
         assertEquals("straja:cuffs", GuiTheme.roleIconItemId("straja.jailer.custody"));
         assertEquals("straja:archive_folder", GuiTheme.roleIconItemId("straja.archivist.archive"));
-        assertEquals(null, GuiTheme.roleIconItemId("straja.unknown.profile"));
-        assertEquals(null, GuiTheme.roleIconItemId(null));
+        assertNull(GuiTheme.roleIconItemId("straja.unknown.profile"));
+        assertNull(GuiTheme.roleIconItemId(null));
+        assertNull(GuiTheme.roleIconItemId("straja.receptionist.fake"));
+        assertNull(GuiTheme.roleIconItemId("straja.receptionX.y"));
     }
 
     @Test
@@ -148,6 +151,10 @@ class CustomNpcsNpcSurfaceProviderTest {
                 new Class<?>[] {float.class}, new Object[] {"x"}));
         assertFalse(CustomNpcsNpcSurfaceProvider.compatible(
                 new Class<?>[] {char.class}, new Object[] {'x'}));
+        assertFalse(CustomNpcsNpcSurfaceProvider.compatible(
+                new Class<?>[] {long.class}, new Object[] {1}));
+        assertFalse(CustomNpcsNpcSurfaceProvider.compatible(
+                new Class<?>[] {int.class}, new Object[] {1L}));
     }
 
     private static NpcProvisioningUseCase.ProfileOption option(boolean enabled, String disabledReason) {

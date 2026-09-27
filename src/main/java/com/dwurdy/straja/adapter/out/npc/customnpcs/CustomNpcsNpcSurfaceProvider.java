@@ -462,7 +462,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                         + " · role " + assignment.roleId()
                         + (recoveryPending ? " · provider recovery pending" : ""))
                 .orElse("Current: unassigned");
-        invoke(gui, "addLabel", 2, currentText, 12, 31, 396, 20);
+        invoke(gui, "addLabel", 2, currentText, 12, 34, 396, 20);
         if (duplicateAssignments) {
             invoke(gui, "addLabel", 3,
                     "Multiple durable bindings found. Resolve one exact binding before editing the profile.",
@@ -1197,7 +1197,11 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
         addHeaderIcon(gui, iconItemId);
         Object label = invoke(gui, "addLabel", titleId, title,
                 GuiTheme.TITLE_X, GuiTheme.HEADER_Y, GuiTheme.TITLE_WIDTH, 20);
-        invoke(label, "setColor", titleColor);
+        try {
+            invoke(label, "setColor", titleColor);
+        } catch (RuntimeException exception) {
+            diagnostics.accept("CustomNPCs label color unavailable; header renders default");
+        }
         try {
             invoke(gui, "addColoredLine", HEADER_RULE_ID,
                     GuiTheme.MARGIN, GuiTheme.RULE_Y,
@@ -1291,9 +1295,9 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
         boolean accepted = result.status() == NpcProvisioningUseCase.Status.ACCEPTED;
         addGuiHeader(gui, 1, "NPC provisioning — " + result.status(),
                 accepted ? GuiTheme.ICON_CONFIRM : GuiTheme.ICON_DENIED,
-                accepted ? GuiTheme.COLOR_PAPER_BRIGHT : GuiTheme.COLOR_SEAL_BRIGHT);
+                accepted ? GuiTheme.COLOR_BRASS : GuiTheme.COLOR_SEAL_BRIGHT);
         int y = 36;
-        int rowId = 2;
+        int rowId = 200;
         for (String line : wrapText(result.message(), WIDE_LABEL_CHARS)) {
             invoke(gui, "addLabel", rowId++, line, 12, y, 396, 14);
             y += 14;
@@ -1343,7 +1347,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                 bridge.api(),
                 "createCustomGui",
                 Math.floorMod((binding.bindingId() + action.actionId().value()).hashCode(), 20_000) + 1_000,
-                422,
+                421,
                 320,
                 false,
                 playerApi);

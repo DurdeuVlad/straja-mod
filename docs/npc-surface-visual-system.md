@@ -41,8 +41,7 @@ Two GUI classes exist today; the revamp standardizes on them:
 
 | Class | Size (px) | Surfaces |
 |---|---|---|
-| **Tall** | 421 × 320 | role dialogue surfaces, input/quiz forms |
-| **Standard** | 421 × 240 | admin selector, duplicate cleanup, confirmations, status, audit, result |
+| **Standard** | 421 × 240 | all surfaces (see §6 — the tall 421×320 role/input class is being retired) |
 
 Common grid (all surfaces):
 
@@ -83,7 +82,7 @@ Common grid (all surfaces):
 
 ## 3. Icon taxonomy
 
-Two delivery tiers; both resolve through the same `GuiIcons` registry:
+Two delivery tiers; both resolve through `GuiTheme`/`GuiItemIcons`:
 
 - **Tier 1 (zero-asset, ships first):** `addItemRenderer` + existing Straja
   items — no new files.
