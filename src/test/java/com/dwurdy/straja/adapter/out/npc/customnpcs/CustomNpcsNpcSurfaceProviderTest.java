@@ -6,10 +6,10 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.dwurdy.straja.adapter.out.theme.GuiTheme;
 import com.dwurdy.straja.application.port.in.NpcProvisioningUseCase;
 import com.dwurdy.straja.domain.model.NpcContentId;
 import com.dwurdy.straja.domain.model.NpcSurfaceSnapshot;
-import com.dwurdy.straja.adapter.out.theme.GuiTheme;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
