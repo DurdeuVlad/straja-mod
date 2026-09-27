@@ -41,8 +41,7 @@ Two GUI classes exist today; the revamp standardizes on them:
 
 | Class | Size (px) | Surfaces |
 |---|---|---|
-| **Tall** | 421 × 320 | role dialogue surfaces, input/quiz forms |
-| **Standard** | 421 × 240 | admin selector, duplicate cleanup, confirmations, status, audit, result |
+| **Standard** | 421 × 240 | all surfaces (see §6 — the tall 421×320 role/input class is being retired) |
 
 Common grid (all surfaces):
 
@@ -71,10 +70,19 @@ Common grid (all surfaces):
 - Inline `addLabel` calls do not render inside scroll-panel regions on current
   CustomNPCs builds — multi-line text inside a panel region must use a
   disabled `addTextArea`, not stacked labels.
+- **Component ids are Z-depth.** `CustomGuiItemRenderer` (and other rendered
+  components) translate by `id` on the Z axis — ids ≥ ~1000 render beyond the
+  clip range and never draw. Header components use low free ids (96/97);
+  always verify a new component's id is inside the visible range.
+- GUI backgrounds are transparent: entity nameplates render through open
+  surfaces (observed as ghost text mid-panel). The M2 panel texture makes
+  surfaces opaque and eliminates this.
+- Verified live: `addItemRenderer` + `NpcAPI.getIItemStack` render Straja item
+  icons in surfaces (selector/confirm/status/audit/result screenshots).
 
 ## 3. Icon taxonomy
 
-Two delivery tiers; both resolve through the same `GuiIcons` registry:
+Two delivery tiers; both resolve through `GuiTheme`/`GuiItemIcons`:
 
 - **Tier 1 (zero-asset, ships first):** `addItemRenderer` + existing Straja
   items — no new files.

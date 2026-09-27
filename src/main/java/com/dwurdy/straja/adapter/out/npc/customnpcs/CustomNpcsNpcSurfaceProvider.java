@@ -57,6 +57,11 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
             NpcCapability.RICH_TEXT));
     private static final int FALLBACK_PROFILE_PAGE_SIZE = 5;
     private static final int ADMIN_GUI_HEIGHT = 240;
+    // CustomNPCs translates GUI components on Z by their component id, so
+    // header pieces must use low ids that stay inside the projection depth
+    // range; 96/97 are free in every surface's id map.
+    private static final int HEADER_ICON_ID = 96;
+    private static final int HEADER_RULE_ID = 97;
     // CustomNPCs labels draw on a single line and overflow their width;
     // these budgets keep wrapped lines inside their columns.
     private static final int NARROW_LABEL_CHARS = 30;
@@ -376,7 +381,8 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                 320,
                 false,
                 playerApi);
-        invoke(gui, "addLabel", 1, surface.title(), 12, 8, 396, 20);
+        addGuiHeader(gui, 1, surface.title(),
+                GuiTheme.roleIconItemId(surface.profileId().value()), GuiTheme.COLOR_PAPER_BRIGHT);
         Object body = invoke(gui, "addTextArea", 2, 12, 32, 396, 58);
         invoke(body, "setText", surface.body());
         invoke(body, "setEnabled", false);
@@ -440,7 +446,8 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                 ADMIN_GUI_HEIGHT,
                 false,
                 playerApi);
-        invoke(gui, "addLabel", 1, "Target NPC: " + hostUuid, 12, 8, 396, 20);
+        addGuiHeader(gui, 1, "Target NPC: " + hostUuid,
+                GuiTheme.ICON_ADMIN_WAND, GuiTheme.COLOR_PAPER_BRIGHT);
 
         String displayedRevision = provisioning.assignmentRevision(hostUuid);
         var assignments = provisioning.assignments(providerId(), hostUuid);
@@ -455,7 +462,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                         + " · role " + assignment.roleId()
                         + (recoveryPending ? " · provider recovery pending" : ""))
                 .orElse("Current: unassigned");
-        invoke(gui, "addLabel", 2, currentText, 12, 31, 396, 20);
+        invoke(gui, "addLabel", 2, currentText, 12, 34, 396, 20);
         if (duplicateAssignments) {
             invoke(gui, "addLabel", 3,
                     "Multiple durable bindings found. Resolve one exact binding before editing the profile.",
@@ -608,7 +615,8 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                 ADMIN_GUI_HEIGHT,
                 false,
                 playerApi);
-        invoke(gui, "addLabel", 1, "Duplicate bindings for NPC " + hostUuid, 12, 8, 396, 20);
+        addGuiHeader(gui, 1, "Duplicate bindings for NPC " + hostUuid,
+                GuiTheme.ICON_CLEANUP, GuiTheme.COLOR_PAPER_BRIGHT);
         int descriptionY = 32;
         for (String line : wrapText(
                 "Select the exact durable binding to unassign. Other bindings remain untouched.",
@@ -687,7 +695,8 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                 ADMIN_GUI_HEIGHT,
                 false,
                 playerApi);
-        invoke(gui, "addLabel", 1, "Confirm profile for NPC " + hostUuid, 12, 8, 396, 20);
+        addGuiHeader(gui, 1, "Confirm profile for NPC " + hostUuid,
+                GuiTheme.ICON_CONFIRM, GuiTheme.COLOR_PAPER_BRIGHT);
         Object profileLabel = invoke(
                 gui, "addLabel", 2,
                 option.title() + " · " + option.profileId() + " · " + option.roleId(),
@@ -778,9 +787,9 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                 ADMIN_GUI_HEIGHT,
                 false,
                 playerApi);
-        invoke(gui, "addLabel", 1,
+        addGuiHeader(gui, 1,
                 (recoveryPending ? "Cancel pending for NPC " : "Unassign NPC ") + hostUuid,
-                12, 8, 396, 20);
+                GuiTheme.ICON_UNASSIGN, GuiTheme.COLOR_PAPER_BRIGHT);
         String profileId = provisioning.assignments(providerId(), hostUuid).stream()
                 .filter(assignment -> assignment.bindingId().equals(bindingId))
                 .map(NpcProvisioningUseCase.AssignmentView::profileId)
@@ -815,7 +824,8 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                 bridge.api(), "createCustomGui",
                 Math.floorMod(("status:" + hostUuid).hashCode(), 20_000) + 80_000,
                 421, ADMIN_GUI_HEIGHT, false, playerApi);
-        invoke(gui, "addLabel", 1, "NPC assignment status", 12, 8, 396, 20);
+        addGuiHeader(gui, 1, "NPC assignment status",
+                GuiTheme.ICON_STATUS, GuiTheme.COLOR_PAPER_BRIGHT);
         Object details = invoke(gui, "addTextArea", 2, 12, 34, 396, 172);
         String projectionError = status.lastProjectionError().isBlank()
                 ? "none" : status.lastProjectionError();
@@ -850,7 +860,8 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                 bridge.api(), "createCustomGui",
                 Math.floorMod(("audit:" + hostUuid).hashCode(), 20_000) + 100_000,
                 421, ADMIN_GUI_HEIGHT, false, playerApi);
-        invoke(gui, "addLabel", 1, "Provisioning audit", 12, 8, 396, 20);
+        addGuiHeader(gui, 1, "Provisioning audit",
+                GuiTheme.ICON_AUDIT, GuiTheme.COLOR_PAPER_BRIGHT);
         Object details = invoke(gui, "addTextArea", 2, 12, 34, 396, 172);
         String history = events.isEmpty() ? "No provisioning events recorded."
                 : events.stream().skip(Math.max(0, events.size() - 10L))
@@ -1176,6 +1187,52 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                 .format(Instant.ofEpochMilli(epochMillis));
     }
 
+    /**
+     * Header band per docs/npc-surface-visual-system.md: 16px item icon,
+     * parchment-bright title, leather rule. Icon and rule degrade to absent
+     * when the CustomNPCs component or the item is unavailable — a header
+     * never blocks the surface.
+     */
+    private void addGuiHeader(Object gui, int titleId, String title, String iconItemId, int titleColor) {
+        addHeaderIcon(gui, iconItemId);
+        Object label = invoke(gui, "addLabel", titleId, title,
+                GuiTheme.TITLE_X, GuiTheme.HEADER_Y, GuiTheme.TITLE_WIDTH, 20);
+        try {
+            invoke(label, "setColor", titleColor);
+        } catch (RuntimeException exception) {
+            diagnostics.accept("CustomNPCs label color unavailable; header renders default");
+        }
+        try {
+            invoke(gui, "addColoredLine", HEADER_RULE_ID,
+                    GuiTheme.MARGIN, GuiTheme.RULE_Y,
+                    GuiTheme.MARGIN + GuiTheme.CONTENT_WIDTH, GuiTheme.RULE_Y,
+                    GuiTheme.COLOR_LEATHER, 1.0f);
+        } catch (RuntimeException exception) {
+            diagnostics.accept("CustomNPCs header rule unavailable; header renders without it");
+        }
+    }
+
+    private void addHeaderIcon(Object gui, String iconItemId) {
+        if (iconItemId == null) {
+            return;
+        }
+        try {
+            // GuiItemIcons owns the Minecraft item types so this class stays
+            // verifiable in the Minecraft-free unit-test JVM.
+            Object stack = GuiItemIcons.mcItemStack(iconItemId);
+            if (stack == null) {
+                return;
+            }
+            Object wrapped = invoke(bridge.api(), "getIItemStack", stack);
+            invoke(gui, "addItemRenderer", HEADER_ICON_ID,
+                    GuiTheme.MARGIN, GuiTheme.HEADER_Y,
+                    GuiTheme.HEADER_ICON_SIZE, GuiTheme.HEADER_ICON_SIZE, wrapped);
+        } catch (RuntimeException exception) {
+            diagnostics.accept("CustomNPCs header icon unavailable for " + iconItemId
+                    + "; rendering text-only header");
+        }
+    }
+
     private void showAuthorizationResult(Object gui, ServerPlayer player, String hostUuid) {
         if (player == null || player.getServer() == null
                 || player.getServer().getPlayerList().getPlayer(player.getUUID()) != player) return;
@@ -1235,9 +1292,12 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                 ADMIN_GUI_HEIGHT,
                 false,
                 playerApi);
-        invoke(gui, "addLabel", 1, "NPC provisioning — " + result.status(), 12, 8, 396, 20);
+        boolean accepted = result.status() == NpcProvisioningUseCase.Status.ACCEPTED;
+        addGuiHeader(gui, 1, "NPC provisioning — " + result.status(),
+                accepted ? GuiTheme.ICON_CONFIRM : GuiTheme.ICON_DENIED,
+                accepted ? GuiTheme.COLOR_BRASS : GuiTheme.COLOR_SEAL_BRIGHT);
         int y = 36;
-        int rowId = 2;
+        int rowId = 200;
         for (String line : wrapText(result.message(), WIDE_LABEL_CHARS)) {
             invoke(gui, "addLabel", rowId++, line, 12, y, 396, 14);
             y += 14;
@@ -1287,11 +1347,11 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
                 bridge.api(),
                 "createCustomGui",
                 Math.floorMod((binding.bindingId() + action.actionId().value()).hashCode(), 20_000) + 1_000,
-                422,
+                421,
                 320,
                 false,
                 playerApi);
-        invoke(gui, "addLabel", 1, action.label(), 12, 8, 396, 20);
+        addGuiHeader(gui, 1, action.label(), GuiTheme.ICON_INPUT, GuiTheme.COLOR_PAPER_BRIGHT);
         Map<String, Integer> fieldIds = new java.util.LinkedHashMap<>();
         Object fieldHost = gui;
         int fieldX = 12;
@@ -1483,14 +1543,17 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
         throw new IllegalStateException("CustomNPCs method is missing: " + name);
     }
 
-    private static boolean compatible(Class<?>[] parameters, Object[] arguments) {
+    static boolean compatible(Class<?>[] parameters, Object[] arguments) {
         for (int i = 0; i < parameters.length; i++) {
             if (arguments[i] == null) continue;
             Class<?> parameter = parameters[i];
             Class<?> argument = arguments[i].getClass();
             if (parameter.isPrimitive()) {
                 if ((parameter == int.class && argument == Integer.class)
-                        || (parameter == boolean.class && argument == Boolean.class)) continue;
+                        || (parameter == boolean.class && argument == Boolean.class)
+                        || (parameter == float.class && argument == Float.class)
+                        || (parameter == double.class && argument == Double.class)
+                        || (parameter == long.class && argument == Long.class)) continue;
                 return false;
             }
             if (!parameter.isAssignableFrom(argument)) return false;

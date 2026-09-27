@@ -2,6 +2,7 @@ package com.dwurdy.straja.adapter.out.npc.customnpcs;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.dwurdy.straja.application.port.in.NpcProvisioningUseCase;
@@ -115,6 +116,45 @@ class CustomNpcsNpcSurfaceProviderTest {
                 CustomNpcsNpcSurfaceProvider.wrapText("abcdefghijklmnop", 10));
         assertEquals(List.of("one", "", "two"),
                 CustomNpcsNpcSurfaceProvider.wrapText("one\n\ntwo", 30));
+    }
+
+    @Test
+    void roleIconItemIdMapsEveryProfileFamilyAndFailsClosed() {
+        assertEquals("straja:mission_carnet", GuiTheme.roleIconItemId("straja.reception.admission"));
+        assertEquals("straja:archive_stamp", GuiTheme.roleIconItemId("straja.secretary.workflows"));
+        assertEquals("straja:fine_book", GuiTheme.roleIconItemId("straja.instructor.admission"));
+        assertEquals("straja:baton", GuiTheme.roleIconItemId("straja.armorer.orders"));
+        assertEquals("straja:cuffs", GuiTheme.roleIconItemId("straja.jailer.custody"));
+        assertEquals("straja:archive_folder", GuiTheme.roleIconItemId("straja.archivist.archive"));
+        assertNull(GuiTheme.roleIconItemId("straja.unknown.profile"));
+        assertNull(GuiTheme.roleIconItemId(null));
+        assertNull(GuiTheme.roleIconItemId("straja.receptionist.fake"));
+        assertNull(GuiTheme.roleIconItemId("straja.receptionX.y"));
+    }
+
+    @Test
+    void iconTextureLandsUnderTheGuiTextureRoot() {
+        assertEquals("straja:textures/gui/icons/state_ok.png", GuiTheme.iconTexture("state_ok"));
+    }
+
+    @Test
+    void reflectiveCompatUnboxesWiderPrimitives() {
+        assertTrue(CustomNpcsNpcSurfaceProvider.compatible(
+                new Class<?>[] {float.class}, new Object[] {1.0f}));
+        assertTrue(CustomNpcsNpcSurfaceProvider.compatible(
+                new Class<?>[] {double.class}, new Object[] {1.0d}));
+        assertTrue(CustomNpcsNpcSurfaceProvider.compatible(
+                new Class<?>[] {long.class}, new Object[] {1L}));
+        assertTrue(CustomNpcsNpcSurfaceProvider.compatible(
+                new Class<?>[] {int.class}, new Object[] {1}));
+        assertFalse(CustomNpcsNpcSurfaceProvider.compatible(
+                new Class<?>[] {float.class}, new Object[] {"x"}));
+        assertFalse(CustomNpcsNpcSurfaceProvider.compatible(
+                new Class<?>[] {char.class}, new Object[] {'x'}));
+        assertFalse(CustomNpcsNpcSurfaceProvider.compatible(
+                new Class<?>[] {long.class}, new Object[] {1}));
+        assertFalse(CustomNpcsNpcSurfaceProvider.compatible(
+                new Class<?>[] {int.class}, new Object[] {1L}));
     }
 
     private static NpcProvisioningUseCase.ProfileOption option(boolean enabled, String disabledReason) {
