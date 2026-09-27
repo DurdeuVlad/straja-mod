@@ -500,6 +500,20 @@ class NpcActionTests(unittest.TestCase):
                           ctx, [])
         self.assertEqual(cm.exception.kind, "assertion")
 
+    def test_newest_duplicate_label_wins(self):
+        # Re-issued surface messages mint fresh tokens; the parser must pick
+        # the newest matching action, not the consumed one from an older menu.
+        old = self.RAW.replace("tok-1", "tok-stale")
+        new = self.RAW.replace("tok-1", "tok-fresh")
+        mct = _FakeMct({("chat", "history", "--last", "20"):
+                        {"messages": [{"plain": "a", "raw": old},
+                                      {"plain": "b", "raw": new}]}})
+        ctx = _ctx(mct=mct)
+        cu._exec_step({"type": "npc-action", "label": "Depune cererea"},
+                      ctx, [])
+        self.assertIn(["chat", "send", "/straja npc-action tok-fresh"],
+                      mct.calls)
+
     def test_nested_siblings_walked(self):
         raw = json.dumps({"siblings": [{"text": "[X]",
                                         "clickEvent": {"action": "run_command",

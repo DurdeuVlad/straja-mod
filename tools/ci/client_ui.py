@@ -520,7 +520,9 @@ def _npc_action(step: dict, ctx: ClientContext):
     ctx.transcript.record("npc-actions",
                           [{"text": t, "command": c} for t, c in found])
     needle = f"[{label}]"
-    command = next((c for t, c in found if needle in t or label in t), None)
+    # History is chronological; prefer the NEWEST match so re-issued tokens
+    # from a repeat interaction win over consumed ones from an earlier menu.
+    command = next((c for t, c in reversed(found) if needle in t or label in t), None)
     if command is None:
         raise ClientUiError(
             "assertion",
