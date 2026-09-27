@@ -324,6 +324,56 @@ class WsPortReleaseTests(unittest.TestCase):
         self.assertEqual([], transcript.entries)
 
 
+class LaunchAndWaitTests(unittest.TestCase):
+    def _free_port(self):
+        probe = socket.socket()
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+        probe.close()
+        return port
+
+    def _launch_ctx(self, port, wait_results):
+        waits = []
+        launches = []
+        ctx = _ctx()
+        ctx.manifest = {"client": {"wsPort": port}}
+        ctx.launch_client = lambda: launches.append(True)
+        def wait():
+            waits.append(True)
+            if wait_results and wait_results[0] is not None:
+                raise wait_results.pop(0)
+        ctx.wait_ready = wait
+        return ctx, launches, waits
+
+    def test_retries_once_when_ws_never_binds(self):
+        ctx, launches, _ = self._launch_ctx(
+            self._free_port(), [cu.ClientUiError("process", "exited 2")])
+        cu._launch_and_wait(ctx, 60)
+        self.assertEqual(2, len(launches))
+        self.assertEqual("relaunch-retry", ctx.transcript.entries[-1]["label"])
+
+    def test_no_retry_when_bridge_is_bound_but_world_join_fails(self):
+        listener = socket.socket()
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(5)
+        try:
+            ctx, launches, _ = self._launch_ctx(
+                listener.getsockname()[1],
+                [cu.ClientUiError("process", "world check failed")])
+            with self.assertRaises(cu.ClientUiError):
+                cu._launch_and_wait(ctx, 60)
+        finally:
+            listener.close()
+        self.assertEqual(1, len(launches))
+
+    def test_no_retry_for_assertion_errors(self):
+        ctx, launches, _ = self._launch_ctx(
+            self._free_port(), [cu.ClientUiError("assertion", "bad step")])
+        with self.assertRaises(cu.ClientUiError):
+            cu._launch_and_wait(ctx, 60)
+        self.assertEqual(1, len(launches))
+
+
 def _ctx(mct=None, rcon=None):
     return cu.ClientContext(
         mct=mct or _FakeMct(), rcon=rcon or _FakeRcon(),
