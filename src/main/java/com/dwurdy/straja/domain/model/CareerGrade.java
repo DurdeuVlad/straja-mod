@@ -5,7 +5,8 @@ public enum CareerGrade {
     MILITARY_STRAJER(CareerTrack.MILITARY, false),
     MILITARY_SERGENT(CareerTrack.MILITARY, true),
     PROFESSIONAL_STAGIAR_SPECIALIST(CareerTrack.PROFESSIONAL, false),
-    PROFESSIONAL_SPECIALIST(CareerTrack.PROFESSIONAL, false),
+    PROFESSIONAL_SPECIALIST(CareerTrack.PROFESSIONAL, true),
+    PROFESSIONAL_MAISTRU(CareerTrack.PROFESSIONAL, true),
     INSPECTOR(CareerTrack.MILITARY, true);
 
     private final CareerTrack track;

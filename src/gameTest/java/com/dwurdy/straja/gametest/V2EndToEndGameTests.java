@@ -114,7 +114,7 @@ public final class V2EndToEndGameTests {
         authorize(runtime, actor, sergeant, CareerGrade.MILITARY_SERGENT,
                 EmploymentMode.FULL_TIME, operation("mobilization-sergeant"));
         authorize(runtime, actor, specialist, CareerGrade.PROFESSIONAL_SPECIALIST,
-                EmploymentMode.PART_TIME, operation("mobilization-specialist"));
+                EmploymentMode.FULL_TIME, operation("mobilization-specialist"));
         var order = runtime.v2Mobilizations().authorize(sergeant, specialist, "hq", "district",
                 60_000, "E2E-MISSION", "", "E2E");
         runtime.v2Mobilizations().muster(specialist, order.mobilizationId);

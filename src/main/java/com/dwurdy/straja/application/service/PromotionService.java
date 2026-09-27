@@ -170,7 +170,12 @@ public final class PromotionService implements com.dwurdy.straja.application.por
         context.requiresIndependentApproval = true;
         if (!authorization.allowed(context)) throw new IllegalStateException("DENIED_APPROVAL");
         if (application.targetGrade.fullTimeRequired()) {
-            if (person.employmentMode != EmploymentMode.FULL_TIME || person.hasIncompatibleAffiliation(clock.nowMillis()))
+            // Military full-time grades require an existing full-time posting.
+            // Trades (Meseriași) grades carry their own contract: approval itself
+            // upgrades the member to full-time employment at reconcile time.
+            boolean employmentOk = application.targetGrade.isProfessional()
+                    || person.employmentMode == EmploymentMode.FULL_TIME;
+            if (!employmentOk || person.hasIncompatibleAffiliation(clock.nowMillis()))
                 throw new IllegalStateException("DENIED_AFFILIATION_CONFLICT");
         }
         application.status = PromotionStatus.APPROVED;
@@ -241,6 +246,8 @@ public final class PromotionService implements com.dwurdy.straja.application.por
             person.careerGrade = application.targetGrade;
             person.careerTrack = application.targetGrade.track();
             person.careerOrigin = application.careerOrigin;
+            if (application.targetGrade.isProfessional() && application.targetGrade.fullTimeRequired())
+                person.employmentMode = EmploymentMode.FULL_TIME;
             person.membershipStatus = PersonnelStatus.AUTHORIZED_ACTIVE;
             person.version++;
             person.updatedAt = clock.nowMillis();
@@ -336,7 +343,8 @@ public final class PromotionService implements com.dwurdy.straja.application.por
             case MILITARY_STRAJER -> target == CareerGrade.MILITARY_SERGENT;
             case MILITARY_SERGENT -> target == CareerGrade.INSPECTOR;
             case PROFESSIONAL_STAGIAR_SPECIALIST -> target == CareerGrade.PROFESSIONAL_SPECIALIST;
-            case PROFESSIONAL_SPECIALIST -> target == CareerGrade.INSPECTOR;
+            case PROFESSIONAL_SPECIALIST -> target == CareerGrade.PROFESSIONAL_MAISTRU;
+            case PROFESSIONAL_MAISTRU -> false;
             default -> false;
         };
     }

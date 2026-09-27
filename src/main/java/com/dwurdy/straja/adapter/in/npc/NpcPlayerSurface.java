@@ -84,6 +84,7 @@ final class NpcPlayerSurface {
                     List.of(
                             new ChatAction("Depune cererea", "application-submit"),
                             new ChatAction("Meseriași — înscriere", "trades-list"),
+                            new ChatAction("Meseriași — avansare", "trades-promote"),
                             new ChatAction("Regulament", "rules"),
                             new ChatAction("Stare Străjer", "guard-status"),
                             new ChatAction("Amenzile mele", "fine-list"),

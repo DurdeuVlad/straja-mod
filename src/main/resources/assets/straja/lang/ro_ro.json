@@ -44,5 +44,8 @@
   "straja.trades.refused.sworn": "Ești deja străjer jurat — drumul meseriașilor este separat; cere transferul la Comisar.",
   "straja.trades.refused.status": "Fișa ta de personal nu permite înscrierea acum.",
   "straja.trades.refused.unknown": "Profesia nu este deschisă pentru înscrieri.",
-  "straja.trades.none": "Momentan nu sunt deschise înscrieri pentru meseriași."
+  "straja.trades.none": "Momentan nu sunt deschise înscrieri pentru meseriași.",
+  "straja.trades.promote.requested": "Cererea de avansare %2$s pentru %1$s a fost trimisă — așteaptă decizia Comisarului.",
+  "straja.trades.promote.not_member": "Doar meseriașii activi pot cere avansarea.",
+  "straja.trades.promote.max": "Ai deja cel mai înalt grad de meseriaș."
 }
