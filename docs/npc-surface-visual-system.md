@@ -62,14 +62,19 @@ Common grid (all surfaces):
   destructive/secondary. 240-class: y=214 (current). 320-class: y=292.
 - Columns inside content: left column x=12 w=195, right column x=218 w=190,
   gutter 11px. Labels wrap at `NARROW_LABEL_CHARS`=30 (190px) /
-  `WIDE_LABEL_CHARS`=62 (396px); line height 14px; button height 20px with 3px
-  gap in scroll panels, 22px at GUI level.
-- Scroll panels declare their rect explicitly (`init(x,y,w,h)`); children use
-  panel-local coordinates. **Never** attach `setHoverText` to scroll-panel
-  children (renders at panel-local origin — known artifact).
-- Inline `addLabel` calls do not render inside scroll-panel regions on current
-  CustomNPCs builds — multi-line text inside a panel region must use a
-  disabled `addTextArea`, not stacked labels.
+  `WIDE_LABEL_CHARS`=62 (396px); line height 14px; button height 22px at GUI
+  level (paged rows: 22px, stride 24–25px).
+- **Scroll panels are retired.** Verified live on CustomNPCs
+  1.21.1.20251230: `GuiCustomScroll` ignores the mouse wheel, and clicks are
+  not delivered to children below the fold — scrolled content is
+  unreachable. All previously-scrolled regions (selector profile rows, role
+  choices, input fields, duplicate rows) are paged GUI-level rows with a
+  fixed footer pager (`< Prev` / `n/m` / `Next >`). Paging preserves the
+  mockups' bounded-list intent while keeping every row clickable.
+- Scroll-panel artifacts (for reference if a future build fixes scrolling):
+  children use panel-local coordinates; `setHoverText` on panel children
+  renders at panel-local origin; inline `addLabel` does not render inside
+  panel regions (use a disabled `addTextArea` for multi-line text).
 - **Component ids are Z-depth.** `CustomGuiItemRenderer` (and other rendered
   components) translate by `id` on the Z axis — ids ≥ ~1000 render beyond the
   clip range and never draw. Header components use low free ids (96–98);
@@ -143,25 +148,32 @@ never break).
 | Success result | `state_ok` icon + `brass` title text |
 | Header | 16×16 icon + `paper-bright` title + `leather` rule |
 
-Hover tooltips (`setHoverText`) on GUI-level buttons only; informational hover
-moves to the header or an `ⓘ`-style info line, never scroll-panel children.
+Hover tooltips (`setHoverText`) are not emitted at all: this CustomNPCs build
+draws hover text at the component origin (not the cursor), which overlaps the
+row it describes. Informational detail lives in labels.
+
+Disabled choices must carry a non-color cue: CustomNPCs does not dim disabled
+buttons, so disabled rows are prefixed `✕` (enabled rows use `◆`). Color is
+additive, never the sole state carrier.
 
 ## 5. Wrap & text rules
 
 - Wrap widths: 30 chars / 190px column, 62 chars / 396px full width — reuse
   `wrapText`; never emit a single-line label wider than its column.
-- Role surface body: `addTextArea` (12,34,396,58) disabled — reads as flavor
-  text; choices go in the left scroll panel, quest journal in the right column.
+- Role surface body: `addTextArea` (12,34,396,52) disabled — reads as flavor
+  text; choices are paged GUI-level buttons in the left column (3/page,
+  slots y=134/158/182), quest journal in the right column.
 - Long values (UUIDs, profile ids): truncate middle with `…` at column width.
 
 ## 6. Small-window decision — **compress to 240**
 
 Decision: all surfaces standardize to **421×240**. Rationale: the tall 320px
 class already clips ±40px at small logical heights (observed: title rendered
-off-screen); no content requires 320px once wrapped text scrolls. Role
-surfaces move choices+journal into the two-column scroll region
-(y=34..206) and the footer to y=214. This closes a known residual defect
-rather than decorating around it.
+off-screen); no content requires 320px once lists are paged (scroll panels
+are inert in this build — see §2). Role surfaces use the two-column layout
+(node text + paged choices left, quest journal right, y=34..206) and the
+footer at y=214. This closes a known residual defect rather than decorating
+around it.
 
 ## 7. Accessibility
 

@@ -83,7 +83,7 @@
     {
       "name": "choose-jailer-profile",
       "type": "mct",
-      "args": ["input", "click", "108", "119"],
+      "args": ["input", "click", "213", "113"],
       "expect": [{"rawRegex": "\\\"clicked\\\"\\s*:\\s*true"}]
     },
     {
@@ -136,7 +136,7 @@
     {
       "name": "player-surface-action-dispatches",
       "type": "mct",
-      "args": ["input", "click", "108", "132"],
+      "args": ["input", "click", "110", "145"],
       "expect": [{"rawRegex": "\\\"clicked\\\"\\s*:\\s*true"}]
     },
     {
@@ -173,7 +173,7 @@
     {
       "name": "choose-secretary-profile",
       "type": "mct",
-      "args": ["input", "click", "108", "169"],
+      "args": ["input", "click", "213", "163"],
       "expect": [{"rawRegex": "\\\"clicked\\\"\\s*:\\s*true"}]
     },
     {
