@@ -326,6 +326,51 @@ public final class PersonnelService implements com.dwurdy.straja.application.por
         return record;
     }
 
+    /**
+     * Self-service entry into the trades (Meseriași) path: a civilian signs on
+     * as a part-time Ziler — no exam, no approval chain. Sworn members and
+     * fired/suspended records are refused; resigned members may rejoin on the
+     * trades track. Idempotent per player; re-enrolling an active trades
+     * member only adds the newly chosen profession.
+     */
+    public synchronized PersonnelRecord enrollProfessional(String subjectUuid, String profession) {
+        if (subjectUuid == null || subjectUuid.isBlank()) throw new IllegalArgumentException("subject required");
+        if (profession == null || profession.isBlank()) throw new IllegalArgumentException("profession required");
+        PersonnelStore store = repository.read();
+        PersonnelRecord existing = store.records == null ? null : store.records.get(subjectUuid);
+        if (existing != null && existing.active()) {
+            if (existing.careerGrade != null && existing.careerGrade.isProfessional()) {
+                return assignProfessionUnchecked(store, existing, profession);
+            }
+            throw new IllegalStateException("TRADES_ENROLL_DENIED_SWORN_MEMBER");
+        }
+        if (existing != null && (existing.membershipStatus == PersonnelStatus.SUSPENDED
+                || existing.membershipStatus == PersonnelStatus.TERMINATED)) {
+            throw new IllegalStateException("TRADES_ENROLL_DENIED_" + existing.membershipStatus);
+        }
+        authorizeUnchecked(subjectUuid, subjectUuid,
+                CareerGrade.PROFESSIONAL_STAGIAR_SPECIALIST, EmploymentMode.PART_TIME,
+                "TRADES_ENROLLMENT", "hq", "trades-enroll:" + subjectUuid);
+        // authorizeUnchecked wrote its own store snapshot; repositories may
+        // round-trip through serialization, so re-read and mutate the persisted
+        // instance rather than the copy authorizeUnchecked returned.
+        PersonnelStore fresh = repository.read();
+        PersonnelRecord persisted = fresh.records == null ? null : fresh.records.get(subjectUuid);
+        if (persisted == null) throw new IllegalStateException("TRADES_ENROLL_PERSIST_FAILED");
+        return assignProfessionUnchecked(fresh, persisted, profession);
+    }
+
+    private PersonnelRecord assignProfessionUnchecked(PersonnelStore store, PersonnelRecord record,
+                                                      String profession) {
+        String normalized = profession.trim().toUpperCase(java.util.Locale.ROOT);
+        if (!record.professions.contains(normalized)) record.professions.add(normalized);
+        record.updatedAt = clock.nowMillis();
+        record.version++;
+        store.storeRevision++;
+        repository.write(store);
+        return record;
+    }
+
     /** Idempotent shadow projection from legacy GuardState. */
     public synchronized PersonnelRecord projectLegacy(UUID playerUuid, GuardState legacy, String actorUuid) {
         if (playerUuid == null || legacy == null) throw new IllegalArgumentException("player and legacy state required");

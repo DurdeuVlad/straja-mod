@@ -166,13 +166,13 @@ public final class FormSubmissionRouter {
                     audiences.resolve(gateway, submission.recordId(), values.get("decision"),
                             values.get("note"));
             case ADMIN_AUTHORIZE -> {
-                Integer rank = parseInt(values.get("rank"));
-                if (rank == null) {
+                String rankOrGrade = values.get("rank");
+                if (rankOrGrade == null || rankOrGrade.isBlank()) {
                     player.sendSystemMessage(net.minecraft.network.chat.Component
-                            .literal("Rangul trebuie să fie un număr (1-4)."));
+                            .literal("Rangul sau gradul lipsește."));
                     return;
                 }
-                admin.authorize(gateway, values.get("name"), rank);
+                admin.authorize(gateway, values.get("name"), rankOrGrade);
             }
             case ADMIN_POLICY_SET ->
                     admin.policySet(gateway, values.get("key"), values.get("value"));

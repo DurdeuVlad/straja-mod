@@ -143,6 +143,7 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.IntValue WEEKLY_STIPEND_REQUIRED_SERVICE_BLOCKS;
     public static final ModConfigSpec.IntValue MOBILIZATION_PAY;
     public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> RANK_NAMES;
+    public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> RANK_MESERIAS_NAMES;
     public static final ModConfigSpec.BooleanValue RANK_PREFIX_CHAT;
     public static final ModConfigSpec.BooleanValue RANK_PREFIX_TAB;
     public static final ModConfigSpec.BooleanValue RANK_PREFIX_NAMEPLATE;
@@ -549,6 +550,13 @@ public final class StrajaServerConfig {
                 .defineListAllowEmpty(List.of("names"),
                         StrajaPolicies.formatIntStringMap(defaults.rankNames),
                         () -> "1=Stagiar", StrajaServerConfig::isIntStringMapEntry);
+        RANK_MESERIAS_NAMES = B.comment(
+                        "Display names per trades (Meseriași) path level",
+                        "(1=Ziler freelance day-hand, 2=Meseriaș contracted",
+                        "tradesman). Entries: \"nivel=nume\".")
+                .defineListAllowEmpty(List.of("meseriasNames"),
+                        StrajaPolicies.formatIntStringMap(defaults.meseriasRankNames),
+                        () -> "1=Ziler", StrajaServerConfig::isIntStringMapEntry);
         RANK_PREFIX_CHAT = B.comment(
                         "Show the [Rank] prefix on chat messages.")
                 .define("prefixChat", defaults.rankPrefixChat);
@@ -1017,6 +1025,8 @@ public final class StrajaServerConfig {
         p.mobilizationPay = MOBILIZATION_PAY.get();
         p.rankNames = mapOrDefault(StrajaPolicies.parseIntStringMap(RANK_NAMES.get()),
                 defaults().rankNames);
+        p.meseriasRankNames = mapOrDefault(StrajaPolicies.parseIntStringMap(RANK_MESERIAS_NAMES.get()),
+                defaults().meseriasRankNames);
         p.rankPrefixChat = RANK_PREFIX_CHAT.get();
         p.rankPrefixTab = RANK_PREFIX_TAB.get();
         p.rankPrefixNameplate = RANK_PREFIX_NAMEPLATE.get();

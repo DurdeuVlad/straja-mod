@@ -103,6 +103,7 @@ public final class NpcRoles {
             case "v2-equipment-status" -> tellV2Equipment(runtime, gw);
             case "v2-campaign-status" -> tellV2Campaigns(runtime, gw);
             case "v2-professional-work" -> tellV2ProfessionalWork(runtime, gw);
+            case "trades-list" -> tellTradesEnroll(player, runtime, gw);
             case "application-submit" -> runtime.guardRecruitment().applyForStraja(gw);
             case "recruit" -> runtime.guardRecruitment().recruit(gw);
             case "quiz-answer" -> openQuizForm(player, level, runtime, gw);
@@ -217,8 +218,10 @@ public final class NpcRoles {
             player.tell("Fișa V2 nu este încă proiectată. Reautentifică-te sau vorbește cu Recepția.");
             return;
         }
+        String gradeName = record.careerGrade == null ? "-"
+                : runtime.policies().rankName(record.careerGrade) + " (" + record.careerGrade + ")";
         player.tell("Fișă V2: " + record.serviceNumber + " | " + record.membershipStatus
-                + " | " + record.careerGrade + " | " + record.employmentMode
+                + " | " + gradeName + " | " + record.employmentMode
                 + " | stație: " + record.homeStationId + " | versiune: " + record.version);
     }
 
@@ -289,6 +292,69 @@ public final class NpcRoles {
         }
     }
 
+    /**
+     * Meseriași entry point: lists the registered professions as one clickable
+     * enroll button each. Sworn Străjer members are told to use the Comisar
+     * track transfer instead of enrolling here.
+     */
+    private static void tellTradesEnroll(Player player,
+                                         com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                         com.dwurdy.straja.application.port.out.PlayerGateway gw) {
+        var personnel = runtime.v2Personnel().find(gw.uuid().toString());
+        if (personnel != null && personnel.active()
+                && personnel.careerGrade != null && !personnel.careerGrade.isProfessional()) {
+            gw.tellKey("straja.trades.refused.sworn");
+            return;
+        }
+        if (personnel != null && (personnel.membershipStatus
+                == com.dwurdy.straja.domain.model.PersonnelStatus.SUSPENDED
+                || personnel.membershipStatus
+                        == com.dwurdy.straja.domain.model.PersonnelStatus.TERMINATED)) {
+            gw.tellKey("straja.trades.refused.status");
+            return;
+        }
+        var professions = new java.util.TreeSet<>(runtime.v2Generators().professions());
+        if (professions.isEmpty()) {
+            gw.tellKey("straja.trades.none");
+            return;
+        }
+        if (!(player instanceof ServerPlayer serverPlayer)) {
+            gw.tell(String.join(", ", professions));
+            return;
+        }
+        serverPlayer.sendSystemMessage(Component.translatable("straja.trades.list.header"));
+        for (String profession : professions) {
+            sendToolPrompt(serverPlayer,
+                    Component.translatable("straja.trades.profession",
+                            profession.toLowerCase(java.util.Locale.ROOT)),
+                    Component.translatable("straja.trades.enroll.button"),
+                    "trades-enroll:" + profession);
+        }
+    }
+
+    private static void enrollTrades(String profession, Player player,
+                                     com.dwurdy.straja.application.port.out.PlayerGateway gw,
+                                     com.dwurdy.straja.bootstrap.StrajaRuntime runtime) {
+        String normalized = profession == null ? ""
+                : profession.trim().toUpperCase(java.util.Locale.ROOT);
+        if (!runtime.v2Generators().professions().contains(normalized)) {
+            gw.tellKey("straja.trades.refused.unknown");
+            return;
+        }
+        try {
+            runtime.v2Personnel().enrollProfessional(gw.uuid().toString(), normalized);
+            String trade = normalized.toLowerCase(java.util.Locale.ROOT);
+            if (player instanceof ServerPlayer serverPlayer) {
+                serverPlayer.sendSystemMessage(Component.translatable(
+                        "straja.trades.enrolled", trade));
+            } else {
+                gw.tellKey("straja.trades.enrolled");
+            }
+        } catch (RuntimeException error) {
+            gw.tell("Înscrierea a fost refuzată: " + error.getMessage());
+        }
+    }
+
     private static boolean performParameterizedAction(NpcPlayerSurface.ActionRef action,
                                                        Player player, ServerLevel level,
                                                        com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
@@ -313,6 +379,7 @@ public final class NpcRoles {
             case "mission-fail" -> openMissionForm(player, runtime, gw,
                     com.dwurdy.straja.application.port.in.MissionRoleplayUseCase.Action.FAIL, id);
             case "mission-template-issue" -> runtime.missionRoleplay().draftFromTemplate(gw, id);
+            case "trades-enroll" -> enrollTrades(id, player, gw, runtime);
             case "complaint-report" -> openComplaintForm(player, runtime, gw,
                     com.dwurdy.straja.application.port.in.ComplaintRoleplayUseCase.Action.REPORT, id);
             case "complaint-review" -> openComplaintForm(player, runtime, gw,
@@ -513,7 +580,7 @@ public final class NpcRoles {
         MutableComponent message = Component.literal(menu.title());
         for (var action : menu.actions()) {
             message.append(Component.literal(" "))
-                    .append(toolButton(player, action.label(), action.actionId()));
+                    .append(toolButton(player, Component.literal(action.label()), action.actionId()));
         }
         player.sendSystemMessage(message);
     }
@@ -522,12 +589,20 @@ public final class NpcRoles {
     public static void sendToolPrompt(ServerPlayer player, String text, String label, String actionId) {
         if (player == null) return;
         player.sendSystemMessage(Component.literal(text).append(Component.literal(" "))
+                .append(toolButton(player, Component.literal(label), actionId)));
+    }
+
+    /** Component variant — translatable text/labels resolve per client locale. */
+    public static void sendToolPrompt(ServerPlayer player, Component text, Component label, String actionId) {
+        if (player == null) return;
+        player.sendSystemMessage(text.copy().append(Component.literal(" "))
                 .append(toolButton(player, label, actionId)));
     }
 
-    private static MutableComponent toolButton(ServerPlayer player, String label, String actionId) {
+    private static MutableComponent toolButton(ServerPlayer player, Component label, String actionId) {
         String token = NpcInteractionService.issueToolActionToken(player.getUUID(), actionId);
-        return Component.literal("[" + label + "]").withStyle(style -> style
+        return Component.literal("[").append(label).append(Component.literal("]"))
+                .withStyle(style -> style
                 .withColor(ChatFormatting.AQUA)
                 .withUnderlined(true)
                 .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
@@ -1144,6 +1219,8 @@ public final class NpcRoles {
                                                  com.dwurdy.straja.application.port.out.PlayerGateway player) {
         return switch (operation) {
             case "faq" -> true;
+            case "trades-enroll" -> runtime.v2Generators().professions().stream()
+                    .anyMatch(p2 -> p2.equalsIgnoreCase(id));
             case "duty-checkpoint" -> {
                 var view = runtime.guardDuty().dutyView(player);
                 yield view != null && id.equals(view.checkpointId());

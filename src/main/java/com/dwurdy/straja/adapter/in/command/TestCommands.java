@@ -971,12 +971,12 @@ final class TestCommands {
         test.then(Commands.literal("admin-authorize")
                 .then(Commands.argument("id", StringArgumentType.word())
                         .then(Commands.argument("name", StringArgumentType.word())
-                                .then(Commands.argument("rank", IntegerArgumentType.integer(1, 4))
+                                .then(Commands.argument("rank", StringArgumentType.word())
                                         .executes(ctx -> run(ctx, runtime ->
                                                 runtime.adminRoleplay().authorize(
                                                         player(ctx, runtime),
                                                         StringArgumentType.getString(ctx, "name"),
-                                                        IntegerArgumentType.getInteger(ctx, "rank"))))))));
+                                                        StringArgumentType.getString(ctx, "rank"))))))));
         for (String op : new String[]{"promote", "demote", "suspend", "fire", "reinstate"}) {
             test.then(Commands.literal("admin-" + op)
                     .then(Commands.argument("id", StringArgumentType.word())

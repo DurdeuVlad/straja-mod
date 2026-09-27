@@ -5,6 +5,8 @@ import com.dwurdy.straja.application.port.in.AdminRoleplayUseCase;
 import com.dwurdy.straja.application.port.in.EmergencyUseCase;
 import com.dwurdy.straja.application.port.in.PolicyConfigUseCase;
 import com.dwurdy.straja.application.port.out.PlayerGateway;
+import com.dwurdy.straja.domain.model.CareerGrade;
+import com.dwurdy.straja.domain.model.EmploymentMode;
 import com.dwurdy.straja.domain.model.GuardState;
 import com.dwurdy.straja.domain.model.Rank;
 import java.util.ArrayList;
@@ -23,6 +25,7 @@ public class AdminService implements AdminRoleplayUseCase {
     private final GuardService guards;
     private final PolicyConfigUseCase policies;
     private final EmergencyUseCase emergency;
+    private com.dwurdy.straja.application.port.in.PersonnelV2UseCase v2Personnel;
 
     public AdminService(StrajaContext ctx, PlayerService players, GuardService guards,
                         PolicyConfigUseCase policies, EmergencyUseCase emergency) {
@@ -31,6 +34,11 @@ public class AdminService implements AdminRoleplayUseCase {
         this.guards = guards;
         this.policies = policies;
         this.emergency = emergency;
+    }
+
+    /** Late-bound V2 personnel port, mirroring GuardService's useV2* wiring. */
+    public void useV2Personnel(com.dwurdy.straja.application.port.in.PersonnelV2UseCase personnel) {
+        this.v2Personnel = personnel;
     }
 
     @Override
@@ -126,10 +134,67 @@ public class AdminService implements AdminRoleplayUseCase {
     // ------------------------------------------------------------ mutations
 
     @Override
-    public void authorize(PlayerGateway actor, String name, int rank) {
+    public void authorize(PlayerGateway actor, String name, String rankOrGrade) {
         if (!gate(actor)) return;
         PlayerGateway target = ctx.server().findPlayer(name);
-        guards.authorizeAt(actor, target, rank);
+        Integer rank = parseRank(rankOrGrade);
+        if (rank != null) {
+            guards.authorizeAt(actor, target, rank);
+            return;
+        }
+        CareerGrade grade = gradeFor(rankOrGrade);
+        if (grade == null) {
+            actor.tell("Rang sau grad necunoscut: " + rankOrGrade
+                    + ". Folosește un rang 1-4 sau un grad (ex. ziler, meserias, inspector).");
+            return;
+        }
+        if (target == null) {
+            actor.tell("Jucătorul nu este online sau nu există.");
+            return;
+        }
+        if (v2Personnel == null) {
+            actor.tell("Autorizarea V2 nu este disponibilă.");
+            return;
+        }
+        try {
+            v2Personnel.authorize(actor.uuid().toString(), target.uuid().toString(), grade,
+                    grade.fullTimeRequired() ? EmploymentMode.FULL_TIME : EmploymentMode.PART_TIME,
+                    "COMMISSIONER_DIRECT", "hq", "authorize:" + target.uuid());
+            actor.tell(name + " autorizat la gradul " + grade.name() + ".");
+        } catch (RuntimeException error) {
+            actor.tell("Autorizarea V2 a fost refuzată: " + error.getMessage());
+        }
+    }
+
+    private static Integer parseRank(String token) {
+        if (token == null) return null;
+        try {
+            return Integer.valueOf(token.trim());
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    /** Friendly aliases for grades whose enum names do not read naturally in chat. */
+    private static CareerGrade gradeFor(String token) {
+        if (token == null) return null;
+        String normalized = java.text.Normalizer
+                .normalize(token.trim(), java.text.Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "")
+                .toUpperCase(java.util.Locale.ROOT)
+                .replace(' ', '_').replace('-', '_');
+        try {
+            return CareerGrade.valueOf(normalized);
+        } catch (IllegalArgumentException ignored) {
+        }
+        return switch (normalized) {
+            case "STAGIAR" -> CareerGrade.MILITARY_STAGIAR;
+            case "STRAJER", "GENDARME", "JANDAR" -> CareerGrade.MILITARY_STRAJER;
+            case "SERGENT", "SERGEANT" -> CareerGrade.MILITARY_SERGENT;
+            case "ZILER", "DAYMAN" -> CareerGrade.PROFESSIONAL_STAGIAR_SPECIALIST;
+            case "MESERIAS", "TRADESMAN", "MAISTRU", "MASTER" -> CareerGrade.PROFESSIONAL_SPECIALIST;
+            default -> null;
+        };
     }
 
     @Override

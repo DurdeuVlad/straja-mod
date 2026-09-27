@@ -420,4 +420,54 @@ class V2FoundationTest {
                         "missing", "caller", "EXAM", "COMMAND", "PASS", null, "fingerprint"));
         assertEquals("personnel:candidate:v1", outbox.all().getFirst().dedupeKey);
     }
+
+    @Test
+    void tradesEnrollmentAuthorizesZilerAndAssignsProfessions() {
+        var people = new SavedStores.Personnel(access);
+        var personnel = new PersonnelService(people, clock, ids);
+        var record = personnel.enrollProfessional("recruit", "miner");
+        assertEquals(CareerGrade.PROFESSIONAL_STAGIAR_SPECIALIST, record.careerGrade);
+        assertEquals(com.dwurdy.straja.domain.model.CareerTrack.PROFESSIONAL, record.careerTrack);
+        assertEquals(EmploymentMode.PART_TIME, record.employmentMode);
+        assertEquals(com.dwurdy.straja.domain.model.PersonnelStatus.AUTHORIZED_ACTIVE,
+                record.membershipStatus);
+        assertTrue(personnel.find("recruit").professions.contains("MINER"));
+        // Re-enrolling keeps the same service record and adds the new profession.
+        var second = personnel.enrollProfessional("recruit", "BLACKSMITH");
+        assertEquals(record.serviceNumber, second.serviceNumber);
+        assertTrue(second.professions.contains("MINER"));
+        assertTrue(second.professions.contains("BLACKSMITH"));
+    }
+
+    @Test
+    void tradesEnrollmentRefusesSwornSuspendedAndTerminatedRecords() {
+        var people = new SavedStores.Personnel(access);
+        var personnel = new PersonnelService(people, clock, ids);
+        personnel.authorize("commissioner", "guard", CareerGrade.MILITARY_STAGIAR,
+                EmploymentMode.PART_TIME, "TEST", "hq", "auth:guard");
+        assertThrows(IllegalStateException.class,
+                () -> personnel.enrollProfessional("guard", "MINER"));
+        personnel.authorize("commissioner", "worker", CareerGrade.PROFESSIONAL_STAGIAR_SPECIALIST,
+                EmploymentMode.PART_TIME, "TEST", "hq", "auth:worker");
+        personnel.suspend("commissioner", "worker", "TEST");
+        assertThrows(IllegalStateException.class,
+                () -> personnel.enrollProfessional("worker", "MINER"));
+        personnel.reinstate("commissioner", "worker");
+        personnel.terminate("commissioner", "worker", "TEST");
+        assertThrows(IllegalStateException.class,
+                () -> personnel.enrollProfessional("worker", "MINER"));
+        assertThrows(IllegalArgumentException.class,
+                () -> personnel.enrollProfessional("recruit", "  "));
+    }
+
+    @Test
+    void rankNamesResolvePerTrackForDisplay() {
+        var policies = new com.dwurdy.straja.domain.model.StrajaPolicies();
+        assertEquals("Străjer", policies.rankName(CareerGrade.MILITARY_STRAJER));
+        assertEquals("Inspector", policies.rankName(CareerGrade.INSPECTOR));
+        assertEquals("Ziler", policies.rankName(CareerGrade.PROFESSIONAL_STAGIAR_SPECIALIST));
+        assertEquals("Meseriaș", policies.rankName(CareerGrade.PROFESSIONAL_SPECIALIST));
+        policies.meseriasRankNames.put(1, "Zirist");
+        assertEquals("Zirist", policies.rankName(CareerGrade.PROFESSIONAL_STAGIAR_SPECIALIST));
+    }
 }

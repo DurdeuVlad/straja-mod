@@ -31,7 +31,7 @@ public interface AdminRoleplayUseCase {
     void personnel(PlayerGateway actor);
     void activeRoster(PlayerGateway actor);
     void dossier(PlayerGateway actor, String memberId);
-    void authorize(PlayerGateway actor, String name, int rank);
+    void authorize(PlayerGateway actor, String name, String rankOrGrade);
     void promote(PlayerGateway actor, String memberId);
     void demote(PlayerGateway actor, String memberId);
     void suspend(PlayerGateway actor, String memberId);
