@@ -59,7 +59,7 @@ public final class CustomNpcsNpcSurfaceProvider implements NpcSurfaceProvider {
     private static final int ADMIN_GUI_HEIGHT = 240;
     // CustomNPCs translates GUI components on Z by their component id, so
     // header pieces must use low ids that stay inside the projection depth
-    // range; 96/97 are free in every surface's id map.
+    // range; 96-98 are free in every surface's id map.
     private static final int HEADER_ICON_ID = 96;
     private static final int HEADER_TEXTURE_ICON_ID = 98;
     private static final int HEADER_RULE_ID = 97;

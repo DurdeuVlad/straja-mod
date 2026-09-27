@@ -9,9 +9,10 @@ import java.util.Set;
  * icon rules are defined in {@code docs/npc-surface-visual-system.md}.
  *
  * <p>Icons resolve in two tiers: registered Straja items rendered through the
- * CustomNPCs item-renderer component (zero new assets), and generated texture
- * files under {@link #TEXTURE_ROOT} wired through textured rects/buttons once
- * the icon pack lands.</p>
+ * CustomNPCs item-renderer component as the guaranteed base layer, and
+ * generated PNGs under {@link #TEXTURE_ROOT} drawn as textured-rect overlays.
+ * CustomNPCs 1.21.1.20251230 does not draw textured components client-side;
+ * the overlay is a no-op there and upgrades automatically where fixed.</p>
  */
 final class GuiTheme {
     private GuiTheme() {
@@ -35,7 +36,7 @@ final class GuiTheme {
     static final String TEXTURE_ROOT = "straja:textures/gui/";
     static final String PANEL_TEXTURE = TEXTURE_ROOT + "panel_bg.png";
 
-    /** Tier-2 generated PNGs via textured rect; Tier-1 item renderers when off. */
+    /** Tier-2 PNG overlay via textured rect (inert on this CNPC build). */
     static final boolean USE_TEXTURE_ICONS = true;
     /** Generated parchment panel via {@code setBackgroundTexture} when on. */
     static final boolean USE_PANEL_BACKGROUND = true;

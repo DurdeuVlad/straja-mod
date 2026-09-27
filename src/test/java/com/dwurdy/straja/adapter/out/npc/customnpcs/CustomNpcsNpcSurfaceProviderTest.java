@@ -181,6 +181,30 @@ class CustomNpcsNpcSurfaceProviderTest {
     }
 
     @Test
+    void textureIconSetMatchesFilesCommittedUnderGuiIcons() throws Exception {
+        java.util.Set<String> onDisk = new java.util.TreeSet<>();
+        try (java.util.stream.Stream<java.nio.file.Path> stream = java.nio.file.Files.list(
+                java.nio.file.Path.of("src/main/resources/assets/straja/textures/gui/icons"))) {
+            stream.map(p -> p.getFileName().toString())
+                    .map(n -> n.replace(".png", ""))
+                    .forEach(onDisk::add);
+        }
+        for (String key : onDisk) {
+            assertTrue(GuiTheme.hasTextureIcon(key),
+                    "shipped PNG " + key + " has no TEXTURED_ICONS entry");
+        }
+        for (String key : new String[] {
+            "role_receptionist", "role_secretary", "role_instructor", "role_armorer",
+            "role_jailer", "role_archivist", "act_assign", "act_unassign",
+            "act_status", "act_audit", "act_cleanup", "act_input", "quest_active",
+            "quest_new", "quest_done", "state_ok", "state_denied", "state_warn",
+        }) {
+            assertTrue(onDisk.contains(key), "TEXTURED_ICONS key " + key + " ships no PNG");
+        }
+        assertEquals(18, onDisk.size(), "unexpected files under textures/gui/icons");
+    }
+
+    @Test
     void reflectiveCompatUnboxesWiderPrimitives() {
         assertTrue(CustomNpcsNpcSurfaceProvider.compatible(
                 new Class<?>[] {float.class}, new Object[] {1.0f}));

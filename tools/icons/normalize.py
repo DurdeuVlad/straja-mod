@@ -43,7 +43,8 @@ def normalize(path, out=None, check=False):
     img = Image.open(path).convert("RGBA")
     size = expected_size(path.stem)
     if img.size != (size, size):
-        problems.append(f"size {img.size[0]}x{img.size[1]}, expected {size}x{size}")
+        # Canvas size is unfixable — always a hard failure.
+        return [f"size {img.size[0]}x{img.size[1]}, expected {size}x{size}"]
     px = img.load()
     off_palette = {}
     bad_alpha = 0
@@ -71,6 +72,7 @@ def normalize(path, out=None, check=False):
         detail = ", ".join(f"#{c:06x}x{n}" for c, n in worst)
         problems.append(f"{sum(off_palette.values())} off-palette pixels ({detail})")
     if out and not check:
+        out.parent.mkdir(parents=True, exist_ok=True)
         img.save(out)
     return problems
 
@@ -82,26 +84,39 @@ def main():
     out_dir = None
     if "--out" in args:
         i = args.index("--out")
+        if i + 1 >= len(args):
+            print(__doc__)
+            return 2
         out_dir = Path(args[i + 1])
         args = args[:i] + args[i + 2:]
         out_dir.mkdir(parents=True, exist_ok=True)
+    if not args:
+        print(__doc__)
+        return 2
     src = Path(args[0])
-    files = sorted(src.glob("*.png")) if src.is_dir() else [src]
+    files = sorted(src.rglob("*.png")) if src.is_dir() else [src]
     if not files:
         print(f"no PNGs in {src}")
         return 1
+    if not check and out_dir is None:
+        print("write mode requires --out (refusing in-place overwrite)")
+        return 2
     failures = 0
+    written = 0
     for f in files:
-        out = out_dir / f.name if out_dir else None
+        rel = f.relative_to(src) if src.is_dir() else f.name
+        out = out_dir / rel if out_dir else None
         problems = normalize(f, out=out, check=check)
-        status = "OK  " if not problems else ("FAIL" if check else "FIX ")
-        print(f"{status} {f.name}" + ("" if not problems else f"  -> {'; '.join(problems)}"))
-        failures += bool(problems and check)
-    if check and failures:
+        hard = [p for p in problems if p.startswith("size ")]
+        status = "OK  " if not problems else ("FAIL" if check or hard else "FIX ")
+        print(f"{status} {rel}" + ("" if not problems else f"  -> {'; '.join(problems)}"))
+        failures += bool(problems and (check or hard))
+        written += bool(out and not hard)
+    if failures:
         print(f"\n{failures}/{len(files)} file(s) violate the asset contract")
         return 1
     if out_dir:
-        print(f"\nwrote {len(files)} normalized file(s) to {out_dir}")
+        print(f"\nwrote {written} normalized file(s) to {out_dir}")
     return 0
 
 
