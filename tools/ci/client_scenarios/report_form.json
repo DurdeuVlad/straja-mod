@@ -73,7 +73,7 @@
      "expect": [{"rawRegex": "a fost depus"}]},
     {"name": "exactly-once", "type": "mct",
      "args": ["chat", "history", "--last", "30"],
-     "expect": [{"occurrences": "a fost depus la Secretariat",
+     "expect": [{"messageOccurrences": "a fost depus la Secretariat",
                  "count": 1}]},
     {"name": "report-screenshot", "type": "screenshot",
      "name": "report-submitted"}

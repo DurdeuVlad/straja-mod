@@ -133,8 +133,6 @@ public class StrajaNpcEntity extends PathfinderMob {
     @Override
     protected InteractionResult mobInteract(Player player, InteractionHand hand) {
         if (level() instanceof ServerLevel serverLevel) {
-            StrajaMod.LOGGER.info("npc-interact mobInteract: uuid={} player={}",
-                    getStringUUID(), player.getUUID());
             NpcInteractionService.interact(this, player, serverLevel);
             return InteractionResult.CONSUME;
         }

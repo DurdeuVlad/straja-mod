@@ -322,8 +322,50 @@ def _step_expects(step: dict) -> list:
             if k in step]
 
 
-def _expect_json(reply, rules: list, label: str):
+def _message_texts(reply) -> list:
+    """Rendered text of each chat-history message.  Entries carry a plain
+    text field (`plain`/`content`) plus `raw` serialized component JSON;
+    counting must use the rendered text because the raw component repeats
+    literals across nested content/extra/hoverEvent fields."""
+    texts = []
+    def scan(node):
+        if isinstance(node, dict):
+            msgs = node.get("messages")
+            if isinstance(msgs, list):
+                for m in msgs:
+                    if isinstance(m, dict):
+                        texts.append(str(m.get("plain")
+                                         or m.get("content") or ""))
+            for value in node.values():
+                scan(value)
+        elif isinstance(node, list):
+            for item in node:
+                scan(item)
+    scan(reply)
+    return texts
+
+
+def _expect_json(reply, rules: list, label: str, transcript=None):
     for rule in rules:
+        if "warnRegex" in rule:
+            haystack = (reply if isinstance(reply, str)
+                        else json.dumps(reply, ensure_ascii=False))
+            if not re.search(rule["warnRegex"], haystack) and transcript:
+                note = rule.get("note", "")
+                transcript.record(
+                    "warn", f"{label}: /{rule['warnRegex']}/ not observed"
+                            + (f" — {note}" if note else ""))
+            continue
+        if "messageOccurrences" in rule:
+            count = sum(1 for t in _message_texts(reply)
+                        if re.search(rule["messageOccurrences"], t))
+            expected = int(rule.get("count", 1))
+            if count != expected:
+                raise ClientUiError(
+                    "assertion",
+                    f"{label}: /{rule['messageOccurrences']}/ matched "
+                    f"{count} messages, expected {expected}")
+            continue
         if "rawRegex" in rule:
             if not re.search(rule["rawRegex"], reply if isinstance(reply, str)
                              else json.dumps(reply, ensure_ascii=False)):
@@ -561,7 +603,7 @@ def _client2(step: dict, ctx: ClientContext):
         args = [_interp(str(a), ctx) for a in step["args"]]
         if step.get("expect"):
             reply = mct2.json(args, timeout=int(step.get("timeout", 60)))
-            _expect_json(reply, step["expect"], "client2")
+            _expect_json(reply, step["expect"], "client2", ctx.transcript)
         else:
             mct2(args, timeout=int(step.get("timeout", 60)))
         return
@@ -635,7 +677,7 @@ def _exec_step(step: dict, ctx: ClientContext, report_steps: list):
                     or step.get("captures"):
                 reply = ctx.mct.json(args, timeout=timeout)
                 if step.get("expect"):
-                    _expect_json(reply, step["expect"], label)
+                    _expect_json(reply, step["expect"], label, ctx.transcript)
                 _capture(step, json.dumps(reply, ensure_ascii=False), ctx)
             else:
                 out = ctx.mct(args, timeout=timeout)
