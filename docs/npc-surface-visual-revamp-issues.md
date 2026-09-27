@@ -265,7 +265,9 @@ the user-visible "frontend revamp."
 **Expectation.** Per Issue 1 spec: selector gains `IEntityDisplay` NPC portrait
 + per-profile icons + paged footer; role surfaces get role-icon header, wrapped
 body in the text column, quest journal with state glyphs; action buttons become
-icon buttons (`addTexturedButton`); input GUI restates the question above the
+icon buttons (`addTexturedButton` — superseded: inert in this build, see the
+visual-system doc §3 build-limitation note; item icons + glyph prefixes carry
+the cue instead); input GUI restates the question above the
 field; result screens carry success/denial icons; surfaces respect the
 small-window decision; the 320px clip and first-line textarea clip are fixed
 or explicitly accepted per the M0 ruling.

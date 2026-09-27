@@ -3,10 +3,12 @@ package com.dwurdy.straja.adapter.out.npc.customnpcs;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.dwurdy.straja.application.port.in.NpcProvisioningUseCase;
 import com.dwurdy.straja.domain.model.NpcContentId;
+import com.dwurdy.straja.domain.model.NpcSurfaceSnapshot;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -37,6 +39,31 @@ class CustomNpcsNpcSurfaceProviderTest {
         assertEquals(List.of(10), CustomNpcsNpcSurfaceProvider.page(profiles, 2, 5));
         assertEquals(List.of(10), CustomNpcsNpcSurfaceProvider.page(profiles, 99, 5));
         assertEquals(List.of(0, 1, 2, 3), CustomNpcsNpcSurfaceProvider.page(profiles, -1, 4));
+        assertEquals(List.of(), CustomNpcsNpcSurfaceProvider.page(List.of(), 0, 5));
+        assertEquals(List.of(), CustomNpcsNpcSurfaceProvider.page(List.of(), 3, 5));
+        assertEquals(profiles, CustomNpcsNpcSurfaceProvider.page(profiles, 0, 99));
+        assertThrows(IllegalArgumentException.class,
+                () -> CustomNpcsNpcSurfaceProvider.page(profiles, 0, 0));
+    }
+
+    @Test
+    void wrapTextRejectsNonPositiveBudget() {
+        assertThrows(IllegalArgumentException.class,
+                () -> CustomNpcsNpcSurfaceProvider.wrapText("x", 0));
+        assertEquals(List.of("ab"), CustomNpcsNpcSurfaceProvider.wrapText("ab", 2));
+    }
+
+    @Test
+    void choiceLabelCarriesNonColorStateAndColumnBudget() {
+        assertEquals("◆ View custody status",
+                CustomNpcsNpcSurfaceProvider.choiceLabel(true, "View custody status"));
+        assertEquals("✕ Hand detainee to prison",
+                CustomNpcsNpcSurfaceProvider.choiceLabel(false, "Hand detainee to prison"));
+        String longLabel = CustomNpcsNpcSurfaceProvider.choiceLabel(
+                false, "Release target " + "x".repeat(80));
+        assertTrue(longLabel.startsWith("✕ "));
+        assertEquals(30, longLabel.length());
+        assertEquals("✕ ", CustomNpcsNpcSurfaceProvider.choiceLabel(false, null));
     }
 
     public static final class NativePlayerGui {
@@ -58,7 +85,7 @@ class CustomNpcsNpcSurfaceProviderTest {
         NpcProvisioningUseCase.ProfileOption unavailable = option(false, "missing GUI capability");
 
         String label = CustomNpcsNpcSurfaceProvider.profileOptionLabel(unavailable, false, false);
-        String[] hover = CustomNpcsNpcSurfaceProvider.profileOptionHoverText(unavailable, false);
+        String[] hover = CustomNpcsNpcSurfaceProvider.profileOptionInfoLines(unavailable, false);
 
         assertTrue(label.contains("Jailer"));
         assertTrue(label.contains("straja:jailer"));
@@ -75,7 +102,7 @@ class CustomNpcsNpcSurfaceProviderTest {
                 .contains("(current)"));
         assertTrue(CustomNpcsNpcSurfaceProvider.profileOptionLabel(available, false, true)
                 .contains("unavailable"));
-        assertTrue(List.of(CustomNpcsNpcSurfaceProvider.profileOptionHoverText(available, true))
+        assertTrue(List.of(CustomNpcsNpcSurfaceProvider.profileOptionInfoLines(available, true))
                 .contains("Availability: Unavailable: provider recovery is pending"));
     }
 
@@ -141,6 +168,16 @@ class CustomNpcsNpcSurfaceProviderTest {
     void roleIconKeyReturnsTaxonomyNamesAndFailsClosed() {
         assertEquals("role_jailer", GuiTheme.roleIconKey("straja.jailer.custody"));
         assertEquals("role_receptionist", GuiTheme.roleIconKey("straja.reception.admission"));
+        // Selector rows expose the npcProfileId (colon form) — every shipped
+        // id must map, including trainer whose name differs from the role.
+        for (String npcId : new String[] {
+            "straja:receptionist", "straja:secretary", "straja:trainer",
+            "straja:armorer", "straja:jailer", "straja:archivist",
+        }) {
+            assertTrue(GuiTheme.roleIconKey(npcId) != null,
+                    "npcProfileId " + npcId + " has no role icon");
+        }
+        assertEquals("role_instructor", GuiTheme.roleIconKey("straja:trainer"));
         assertNull(GuiTheme.roleIconKey("straja.unknown.profile"));
         assertNull(GuiTheme.roleIconKey(null));
     }
@@ -202,6 +239,45 @@ class CustomNpcsNpcSurfaceProviderTest {
             assertTrue(onDisk.contains(key), "TEXTURED_ICONS key " + key + " ships no PNG");
         }
         assertEquals(18, onDisk.size(), "unexpected files under textures/gui/icons");
+    }
+
+    @Test
+    void questStatesMapToGlyphIconsAndDistinctColors() {
+        for (NpcSurfaceSnapshot.QuestState state : NpcSurfaceSnapshot.QuestState.values()) {
+            String key = GuiTheme.questIconKey(state);
+            assertTrue(key != null && GuiTheme.iconItemFallback(key) != null,
+                    "quest state " + state + " lacks a fallback item");
+        }
+        assertEquals("quest_new", GuiTheme.questIconKey(NpcSurfaceSnapshot.QuestState.AVAILABLE));
+        assertEquals("quest_active", GuiTheme.questIconKey(NpcSurfaceSnapshot.QuestState.ACTIVE));
+        assertEquals("quest_done", GuiTheme.questIconKey(NpcSurfaceSnapshot.QuestState.COMPLETED));
+        assertEquals("state_denied", GuiTheme.questIconKey(NpcSurfaceSnapshot.QuestState.FAILED));
+        assertEquals("state_warn", GuiTheme.questIconKey(NpcSurfaceSnapshot.QuestState.LOCKED));
+        assertNull(GuiTheme.questIconKey(null));
+        // Finished and failed quests must not share the active accent color.
+        assertEquals(GuiTheme.COLOR_PAPER_DIM,
+                GuiTheme.questLabelColor(NpcSurfaceSnapshot.QuestState.COMPLETED));
+        assertEquals(GuiTheme.COLOR_SEAL_BRIGHT,
+                GuiTheme.questLabelColor(NpcSurfaceSnapshot.QuestState.FAILED));
+        assertEquals(GuiTheme.COLOR_PAPER,
+                GuiTheme.questLabelColor(NpcSurfaceSnapshot.QuestState.AVAILABLE));
+        assertEquals(GuiTheme.COLOR_PAPER_BRIGHT,
+                GuiTheme.questLabelColor(NpcSurfaceSnapshot.QuestState.ACTIVE));
+        assertEquals(GuiTheme.COLOR_STEEL,
+                GuiTheme.questLabelColor(NpcSurfaceSnapshot.QuestState.LOCKED));
+        assertEquals(GuiTheme.COLOR_PAPER, GuiTheme.questLabelColor(null));
+    }
+
+    @Test
+    void ellipsizeMiddleTruncatesInsideColumnBudget() {
+        assertEquals("short", CustomNpcsNpcSurfaceProvider.ellipsize("short", 56));
+        assertEquals("abc…wxyz",
+                CustomNpcsNpcSurfaceProvider.ellipsize("abcdefghijklmnopqrstuvwxyz", 8));
+        assertEquals(56, CustomNpcsNpcSurfaceProvider.ellipsize("x".repeat(80), 56).length());
+        assertNull(CustomNpcsNpcSurfaceProvider.ellipsize(null, 10));
+        assertEquals("f47ac10b…",
+                CustomNpcsNpcSurfaceProvider.shortHostId("f47ac10b-58cc-4372-a567-0e02b2c3d479"));
+        assertEquals("npc-1", CustomNpcsNpcSurfaceProvider.shortHostId("npc-1"));
     }
 
     @Test

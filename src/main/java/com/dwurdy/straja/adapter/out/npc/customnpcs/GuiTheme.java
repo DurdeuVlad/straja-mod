@@ -1,5 +1,6 @@
 package com.dwurdy.straja.adapter.out.npc.customnpcs;
 
+import com.dwurdy.straja.domain.model.NpcSurfaceSnapshot;
 import java.util.Map;
 import java.util.Set;
 
@@ -24,6 +25,7 @@ final class GuiTheme {
     static final int COLOR_LEATHER = 0x78501E;
     static final int COLOR_SEAL_BRIGHT = 0xA02828;
     static final int COLOR_BRASS = 0xD2B43C;
+    static final int COLOR_STEEL = 0x787882;
 
     static final int MARGIN = 12;
     static final int CONTENT_WIDTH = 396;
@@ -32,6 +34,18 @@ final class GuiTheme {
     static final int TITLE_X = 34;
     static final int TITLE_WIDTH = 374;
     static final int RULE_Y = 30;
+    // Standard 421x240 surface grid (docs/npc-surface-visual-system.md §2/§6).
+    static final int GUI_HEIGHT = 240;
+    static final int BODY_Y = 34;
+    static final int BODY_H = 52;
+    static final int COLUMN_TOP = 92;
+    static final int COLUMN_BOTTOM = 206;
+    static final int CHOICE_W = 195;
+    static final int QUEST_X = 218;
+    static final int QUEST_TEXT_X = 238;
+    static final int QUEST_TEXT_W = 170;
+    static final int FOOTER_Y = 214;
+    static final int FOOTER_H = 22;
 
     static final String TEXTURE_ROOT = "straja:textures/gui/";
     static final String PANEL_TEXTURE = TEXTURE_ROOT + "panel_bg.png";
@@ -51,8 +65,14 @@ final class GuiTheme {
     static final String ICON_AUDIT = "act_audit";
     static final String ICON_OK = "state_ok";
     static final String ICON_DENIED = "state_denied";
+    static final String ICON_WARN = "state_warn";
     static final String ICON_INPUT = "act_input";
+    static final String ICON_QUEST_ACTIVE = "quest_active";
+    static final String ICON_QUEST_NEW = "quest_new";
+    static final String ICON_QUEST_DONE = "quest_done";
 
+    // Content-profile ids are dotted ("straja.jailer.custody") while the
+    // provisioning selector exposes npcProfileId ("straja:jailer") — match both.
     private static final Map<String, String> ROLE_ICONS = Map.of(
             "straja.reception.", "role_receptionist",
             "straja.secretary.", "role_secretary",
@@ -60,6 +80,13 @@ final class GuiTheme {
             "straja.armorer.", "role_armorer",
             "straja.jailer.", "role_jailer",
             "straja.archivist.", "role_archivist");
+    private static final Map<String, String> NPC_ROLE_ICONS = Map.of(
+            "straja:receptionist", "role_receptionist",
+            "straja:secretary", "role_secretary",
+            "straja:trainer", "role_instructor",
+            "straja:armorer", "role_armorer",
+            "straja:jailer", "role_jailer",
+            "straja:archivist", "role_archivist");
 
     /** Keys that ship a generated PNG; anything else uses the item fallback. */
     private static final Set<String> TEXTURED_ICONS = Set.of(
@@ -98,6 +125,10 @@ final class GuiTheme {
         if (profileId == null) {
             return null;
         }
+        String npcForm = NPC_ROLE_ICONS.get(profileId);
+        if (npcForm != null) {
+            return npcForm;
+        }
         for (Map.Entry<String, String> entry : ROLE_ICONS.entrySet()) {
             if (profileId.startsWith(entry.getKey())) {
                 return entry.getValue();
@@ -122,6 +153,34 @@ final class GuiTheme {
     /** True when the key ships a generated PNG and may use a textured rect. */
     static boolean hasTextureIcon(String iconKey) {
         return iconKey != null && TEXTURED_ICONS.contains(iconKey);
+    }
+
+    /** Quest-journal state glyph: taxonomy icon key for a quest state. */
+    static String questIconKey(NpcSurfaceSnapshot.QuestState state) {
+        if (state == null) {
+            return null;
+        }
+        return switch (state) {
+            case AVAILABLE -> ICON_QUEST_NEW;
+            case ACTIVE -> ICON_QUEST_ACTIVE;
+            case COMPLETED -> ICON_QUEST_DONE;
+            case FAILED -> ICON_DENIED;
+            case LOCKED -> ICON_WARN;
+        };
+    }
+
+    /** Quest-journal line color by state; dim for finished, steel for locked. */
+    static int questLabelColor(NpcSurfaceSnapshot.QuestState state) {
+        if (state == null) {
+            return COLOR_PAPER;
+        }
+        return switch (state) {
+            case ACTIVE -> COLOR_PAPER_BRIGHT;
+            case AVAILABLE -> COLOR_PAPER;
+            case COMPLETED -> COLOR_PAPER_DIM;
+            case FAILED -> COLOR_SEAL_BRIGHT;
+            case LOCKED -> COLOR_STEEL;
+        };
     }
 
     /** Resource-location string for a generated icon in the Tier-2 pack. */
