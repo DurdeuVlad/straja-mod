@@ -66,6 +66,7 @@
     {
       "name": "click-custody-status",
       "type": "mct",
+      "note": "coordinate click — mct exposes no component ids/labels for GuiCustom (snapshot slots are empty). Targets role choice slot 0 (View custody status) at gui (12,134,190,22) -> screen center ~(110,145).",
       "args": ["input", "click", "110", "145"],
       "expect": [{"rawRegex": "\"clicked\"\\s*:\\s*true"}]
     },

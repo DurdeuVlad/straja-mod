@@ -14,29 +14,33 @@ import java.util.Set;
  * generated PNGs under {@link #TEXTURE_ROOT} drawn as textured-rect overlays.
  * CustomNPCs 1.21.1.20251230 does not draw textured components client-side;
  * the overlay is a no-op there and upgrades automatically where fixed.</p>
+ *
+ * <p>Public since M4: {@code StrajaFormScreen} (the native form surface)
+ * shares the same palette/grid tokens.</p>
  */
-final class GuiTheme {
+public final class GuiTheme {
     private GuiTheme() {
     }
 
-    static final int COLOR_PAPER = 0xDCD7BE;
-    static final int COLOR_PAPER_BRIGHT = 0xF0E9C9;
-    static final int COLOR_PAPER_DIM = 0xB4AF96;
-    static final int COLOR_LEATHER = 0x78501E;
+    public static final int COLOR_PAPER = 0xDCD7BE;
+    public static final int COLOR_PAPER_BRIGHT = 0xF0E9C9;
+    public static final int COLOR_PAPER_DIM = 0xB4AF96;
+    public static final int COLOR_LEATHER = 0x78501E;
+    public static final int COLOR_NIGHT = 0x141428;
     static final int COLOR_SEAL_BRIGHT = 0xA02828;
     static final int COLOR_BRASS = 0xD2B43C;
     static final int COLOR_STEEL = 0x787882;
 
-    static final int MARGIN = 12;
+    public static final int MARGIN = 12;
     static final int CONTENT_WIDTH = 396;
-    static final int HEADER_Y = 8;
-    static final int HEADER_ICON_SIZE = 16;
-    static final int TITLE_X = 34;
+    public static final int HEADER_Y = 8;
+    public static final int HEADER_ICON_SIZE = 16;
+    public static final int TITLE_X = 34;
     static final int TITLE_WIDTH = 374;
-    static final int RULE_Y = 30;
+    public static final int RULE_Y = 30;
     // Standard 421x240 surface grid (docs/npc-surface-visual-system.md §2/§6).
     static final int GUI_HEIGHT = 240;
-    static final int BODY_Y = 34;
+    public static final int BODY_Y = 34;
     static final int BODY_H = 52;
     static final int COLUMN_TOP = 92;
     static final int COLUMN_BOTTOM = 206;
@@ -66,7 +70,7 @@ final class GuiTheme {
     static final String ICON_OK = "state_ok";
     static final String ICON_DENIED = "state_denied";
     static final String ICON_WARN = "state_warn";
-    static final String ICON_INPUT = "act_input";
+    public static final String ICON_INPUT = "act_input";
     static final String ICON_QUEST_ACTIVE = "quest_active";
     static final String ICON_QUEST_NEW = "quest_new";
     static final String ICON_QUEST_DONE = "quest_done";
@@ -138,7 +142,7 @@ final class GuiTheme {
     }
 
     /** Tier-1 fallback: Straja item id for a taxonomy icon key, or null. */
-    static String iconItemFallback(String iconKey) {
+    public static String iconItemFallback(String iconKey) {
         return iconKey == null ? null : ICON_ITEM_FALLBACKS.get(iconKey);
     }
 
