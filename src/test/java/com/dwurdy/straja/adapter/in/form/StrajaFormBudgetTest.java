@@ -38,9 +38,9 @@ class StrajaFormBudgetTest {
             String src = Files.readString(file);
             for (int at = src.indexOf(REQUEST); at >= 0; requests++) {
                 int end = matchingParen(src, at + REQUEST.length() - 1);
-                int fields = 0;
-                for (int f = at; (f = src.indexOf(FIELD, f)) >= 0 && f < end;
-                        fields++, f += FIELD.length());
+                String span = src.substring(at, end);
+                int fields = occurrences(span, FIELD)
+                        + occurrences(span.replace(FIELD, " "), "new Field(");
                 assertTrue(fields <= FormSessionUseCase.MAX_FIELDS,
                         file + " request at offset " + at + " sends " + fields
                                 + " fields over the " + FormSessionUseCase.MAX_FIELDS
@@ -60,6 +60,14 @@ class StrajaFormBudgetTest {
         }
         assertThrows(IllegalArgumentException.class,
                 () -> new Request(Action.OTHER_REQUEST, "", "T", "P", fields));
+    }
+
+    private static int occurrences(String src, String token) {
+        int count = 0;
+        for (int i = src.indexOf(token); i >= 0; i = src.indexOf(token, i + token.length())) {
+            count++;
+        }
+        return count;
     }
 
     /** Index of the ')' matching the '(' at {@code open}. */
