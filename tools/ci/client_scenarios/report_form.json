@@ -75,8 +75,7 @@
      "args": ["chat", "history", "--last", "30"],
      "expect": [{"messageOccurrences": "a fost depus la Secretariat",
                  "count": 1}]},
-    {"name": "report-screenshot", "type": "screenshot",
-     "name": "report-submitted"}
+    {"type": "screenshot", "name": "report-submitted"}
   ],
   "cleanup": [
     {"name": "remove-secretary", "type": "rcon",

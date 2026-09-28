@@ -1,5 +1,6 @@
 package com.dwurdy.straja.adapter.in.form;
 
+import com.dwurdy.straja.application.port.in.FormSessionUseCase;
 import com.dwurdy.straja.application.port.in.FormSessionUseCase.Field;
 import com.dwurdy.straja.application.port.in.FormSessionUseCase.View;
 import com.dwurdy.straja.bootstrap.StrajaMenus;
@@ -20,7 +21,7 @@ public class StrajaFormMenu extends AbstractContainerMenu {
     private static final int MAX_SESSION_ID = 128;
     private static final int MAX_TITLE = 80;
     private static final int MAX_PROMPT = 512;
-    private static final int MAX_FIELDS = 4;
+    private static final int MAX_FIELDS = FormSessionUseCase.MAX_FIELDS;
     private static final int MAX_FIELD_ID = 32;
     private static final int MAX_LABEL = 80;
     private static final int MAX_FIELD_LENGTH = 2_000;
@@ -51,6 +52,10 @@ public class StrajaFormMenu extends AbstractContainerMenu {
     }
 
     public static void writeView(RegistryFriendlyByteBuf buf, View view) {
+        if (view.fields().size() > MAX_FIELDS) {
+            throw new IllegalArgumentException(
+                    "form field count out of bounds: " + view.fields().size());
+        }
         buf.writeUtf(view.sessionId(), MAX_SESSION_ID);
         buf.writeUtf(view.title(), MAX_TITLE);
         buf.writeUtf(view.prompt(), MAX_PROMPT);
