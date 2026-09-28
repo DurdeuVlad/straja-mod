@@ -163,11 +163,32 @@ def syncStrajaGameTestStructures = tasks.register('syncStrajaGameTestStructures'
     from layout.projectDirectory.dir('gameteststructures')
     into layout.projectDirectory.dir('run-straja-game-test/gameteststructures')
 }
+
+// GameTest servers generate a fresh world per run. An unlucky default
+// worldgen roll can flood chunk/entity ticking before the first batch
+// starts and burn the whole CI timeout (observed on the RC pipeline).
+// Pin flat generation and disable ambient spawns so test placement is
+// deterministic and cheap; difficulty stays non-peaceful for damage tests.
+def writeFlatWorldProps = { File dir ->
+    dir.mkdirs()
+    new File(dir, 'server.properties').text = '''level-type=minecraft\\:flat
+level-seed=straja-gametest
+spawn-monsters=false
+spawn-animals=false
+spawn-npcs=false
+difficulty=easy
+'''
+}
+def strajaGameTestDir = layout.projectDirectory.dir('run-straja-game-test').asFile
+def rpExpansionGameTestDir = layout.projectDirectory.dir('run-rp-expansion-test').asFile
+
 tasks.named('runGameTestServer') {
     dependsOn syncStrajaGameTestStructures
+    doFirst { writeFlatWorldProps(strajaGameTestDir) }
 }
 tasks.named('runRpExpansionGameTestServer') {
     dependsOn syncRpExpansionGameTestStructures
+    doFirst { writeFlatWorldProps(rpExpansionGameTestDir) }
 }
 
 // Sets up a dependency configuration called 'localRuntime'.
