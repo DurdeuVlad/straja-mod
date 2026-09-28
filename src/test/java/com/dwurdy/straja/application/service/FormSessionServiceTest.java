@@ -225,14 +225,15 @@ class FormSessionServiceTest {
 
     @Test
     void malformedFieldSpecsRejected() {
-        Field ok = new Field("details", "Details", 200, true);
         assertTrue(forms.open(owner, new Request(Action.OTHER_REQUEST, "", "T", "P",
                 null)).isEmpty());
         assertTrue(forms.open(owner, new Request(Action.OTHER_REQUEST, "", "T", "P",
                 List.of())).isEmpty());
         assertTrue(forms.open(owner, new Request(Action.OTHER_REQUEST, "", "T", "P",
-                List.of(ok, ok, ok, ok, new Field("e", "E", 10, false)))).isEmpty(),
-                "five fields exceeds the bound");
+                List.of(new Field("a", "A", 10, false), new Field("b", "B", 10, false),
+                        new Field("c", "C", 10, false), new Field("d", "D", 10, false),
+                        new Field("e", "E", 10, false)))).isPresent(),
+                "five fields at the bound accepted");
         assertTrue(forms.open(owner, new Request(Action.OTHER_REQUEST, "", "T", "P",
                 listWithNull())).isEmpty());
         for (Field bad : List.of(

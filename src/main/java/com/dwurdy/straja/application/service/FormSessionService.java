@@ -25,7 +25,7 @@ public class FormSessionService implements FormSessionUseCase {
     private static final int MAX_FIELD_ID = 32;
     private static final Pattern SAFE_FIELD_ID =
             Pattern.compile("[A-Za-z0-9_-]{1," + MAX_FIELD_ID + "}");
-    private static final int MAX_FIELDS = 4;
+    private static final int MAX_FIELDS = FormSessionUseCase.MAX_FIELDS;
     private static final int MAX_TITLE = 80;
     private static final int MAX_PROMPT = 512;
     private static final int MAX_FIELD_LENGTH = 2_000;

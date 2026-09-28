@@ -1,6 +1,7 @@
 package com.dwurdy.straja.adapter.in.form;
 
 import com.dwurdy.straja.StrajaMod;
+import com.dwurdy.straja.application.port.in.FormSessionUseCase;
 import com.dwurdy.straja.application.port.in.FormSessionUseCase.Submission;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -20,7 +21,7 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
  */
 public final class FormPayloads {
     private static final int MAX_SESSION_ID = 128;
-    private static final int MAX_FIELDS = 4;
+    private static final int MAX_FIELDS = FormSessionUseCase.MAX_FIELDS;
     private static final int MAX_FIELD_ID = 32;
     private static final int MAX_VALUE = 2_000;
 

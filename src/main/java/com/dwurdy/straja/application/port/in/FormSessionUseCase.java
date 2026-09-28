@@ -13,6 +13,9 @@ import java.util.UUID;
  * session id plus field values — never player identity or record state.
  */
 public interface FormSessionUseCase {
+    /** Wire contract bound: a form view may carry at most this many fields. */
+    int MAX_FIELDS = 5;
+
     enum Action {
         QUIZ_ANSWER("quiz-answer"),
         FACTION_DECLARE("faction-declare"),
@@ -84,6 +87,10 @@ public interface FormSessionUseCase {
     record Request(Action action, String recordId, String title, String prompt, List<Field> fields) {
         public Request {
             if (fields != null) {
+                if (fields.size() > MAX_FIELDS) {
+                    throw new IllegalArgumentException(
+                            "form field count out of bounds: " + fields.size());
+                }
                 fields = Collections.unmodifiableList(new ArrayList<>(fields));
             }
         }
