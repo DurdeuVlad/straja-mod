@@ -40,7 +40,6 @@ class CommandSurfaceTest {
             assertEquals(4, StrajaCommands.CommandPolicy.permissionLevel(name),
                     name + " must require OP 4");
         }
-        assertEquals(3, StrajaCommands.CommandPolicy.permissionLevel("help"));
         assertEquals(3, StrajaCommands.CommandPolicy.permissionLevel("identity"));
         assertEquals(4, StrajaCommands.CommandPolicy.permissionLevel("checkpoint add"));
         assertEquals(4, StrajaCommands.CommandPolicy.permissionLevel("checkpoint remove"));
@@ -61,6 +60,19 @@ class CommandSurfaceTest {
         }
         assertTrue(publicHelp.contains("status"));
         assertTrue(publicHelp.contains("rules"));
+    }
+
+    @Test
+    void helpAndAjutorArePlayerFacingRecoverySurfaces() {
+        assertFalse(StrajaCommands.CommandPolicy.isAdminOnly("ajutor"));
+        assertEquals(0, StrajaCommands.CommandPolicy.permissionLevel("ajutor"));
+        // Root /straja help is public since #201; subtree /straja <cmd> help
+        // gating is structural (AdminCommandHelp.attach requires OP 3), not
+        // a manifest level.
+        assertEquals(0, StrajaCommands.CommandPolicy.permissionLevel("help"));
+        String publicHelp = String.join("\n", StrajaCommands.CommandPolicy.helpLines(false));
+        assertTrue(publicHelp.contains("ajutor"), "public help must advertise the ajutor alias");
+        assertTrue(publicHelp.contains("help"), "public help must advertise /straja help");
     }
 
     @Test

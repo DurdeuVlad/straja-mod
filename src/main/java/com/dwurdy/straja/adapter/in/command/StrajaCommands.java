@@ -44,6 +44,10 @@ public final class StrajaCommands {
         // NPC clicks use a short-lived, player-bound token; this is not a
         // public gameplay-command alias and is intentionally absent from help.
         root.then(npcActionNode());
+        // Bare /straja is the universal recovery surface: players get the
+        // orientation, admins get the index — dispatched on permission.
+        root.executes(AdminCommandHelp::showRoot);
+        root.then(Commands.literal("ajutor").executes(AdminCommandHelp::showRoot));
         root.then(Commands.literal("status").executes(c -> player(c, StrajaRuntime.get().guards()::showStatus)));
         root.then(Commands.literal("rules").executes(c -> player(c, StrajaRuntime.get().guards()::showRules)));
         root.then(Commands.literal("regulament").executes(c -> player(c, StrajaRuntime.get().guards()::showRules)));
@@ -1673,9 +1677,38 @@ public final class StrajaCommands {
             return CommandPermissions.permissionLevel(command);
         }
 
+        /** One advertised command + its lang description key — the pairing is structural, not positional. */
+        record PlayerHelpEntry(String command, String descKey) {}
+
+        private static final List<PlayerHelpEntry> PLAYER_HELP_ENTRIES = List.of(
+                new PlayerHelpEntry("/straja status", "straja.help.player.cmd.status"),
+                new PlayerHelpEntry("/straja rules", "straja.help.player.cmd.rules"),
+                new PlayerHelpEntry("/straja regulament", "straja.help.player.cmd.regulament"),
+                new PlayerHelpEntry("/straja stop", "straja.help.player.cmd.stop"));
+
+        /** Commands advertised by the player orientation — all must stay permission-0. */
+        static List<PlayerHelpEntry> playerHelpEntries() {
+            return PLAYER_HELP_ENTRIES;
+        }
+
+        static List<String> playerHelpCommands() {
+            return PLAYER_HELP_ENTRIES.stream().map(PlayerHelpEntry::command).toList();
+        }
+
+        /** Every lang key the player orientation resolves — pinned for the lang-parity test. */
+        static List<String> playerHelpKeys() {
+            var keys = new java.util.ArrayList<>(List.of(
+                    "straja.help.player.intro",
+                    "straja.help.player.first_step"));
+            for (var entry : PLAYER_HELP_ENTRIES) keys.add(entry.descKey());
+            keys.add("straja.help.player.faq");
+            return List.copyOf(keys);
+        }
+
         static List<String> helpLines(boolean admin) {
             if (!admin) {
                 return List.of(
+                        "/straja help | ajutor — orientare pentru jucători",
                         "/straja status — starea și rangul tău",
                         "/straja rules | regulament — regulamentul",
                         "/straja stop — încheierea serviciului");

@@ -47,5 +47,12 @@
   "straja.trades.none": "No trades are open for enrollment right now.",
   "straja.trades.promote.requested": "Advancement request %2$s for %1$s submitted — awaiting the Commissioner's review.",
   "straja.trades.promote.not_member": "Only active trades members can request advancement.",
-  "straja.trades.promote.max": "You already hold the highest trades rank."
+  "straja.trades.promote.max": "You already hold the highest trades rank.",
+  "straja.help.player.intro": "Straja is the server's police force — it recruits members, patrols and resolves incidents.",
+  "straja.help.player.first_step": "First step: go to the Receptionist and press «Depune cererea».",
+  "straja.help.player.cmd.status": "your status and rank",
+  "straja.help.player.cmd.rules": "the server rules",
+  "straja.help.player.cmd.regulament": "the rules (Romanian alias)",
+  "straja.help.player.cmd.stop": "end your duty",
+  "straja.help.player.faq": "Questions? Every Straja NPC has an «Am o întrebare» menu."
 }

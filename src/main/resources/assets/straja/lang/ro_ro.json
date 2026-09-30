@@ -47,5 +47,12 @@
   "straja.trades.none": "Momentan nu sunt deschise înscrieri pentru meseriași.",
   "straja.trades.promote.requested": "Cererea de avansare %2$s pentru %1$s a fost trimisă — așteaptă decizia Comisarului.",
   "straja.trades.promote.not_member": "Doar meseriașii activi pot cere avansarea.",
-  "straja.trades.promote.max": "Ai deja cel mai înalt grad de meseriaș."
+  "straja.trades.promote.max": "Ai deja cel mai înalt grad de meseriaș.",
+  "straja.help.player.intro": "Straja este forța de ordine a serverului — recrutează membri, patrulează și rezolvă incidente.",
+  "straja.help.player.first_step": "Primul pas: mergi la Recepție și apasă «Depune cererea».",
+  "straja.help.player.cmd.status": "starea și rangul tău",
+  "straja.help.player.cmd.rules": "regulamentul serverului",
+  "straja.help.player.cmd.regulament": "regulamentul (varianta românească)",
+  "straja.help.player.cmd.stop": "încheie serviciul",
+  "straja.help.player.faq": "Ai întrebări? Fiecare NPC Straja are meniul «Am o întrebare»."
 }

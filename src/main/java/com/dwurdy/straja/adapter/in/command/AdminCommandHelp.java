@@ -6,6 +6,7 @@ import com.mojang.brigadier.tree.ArgumentCommandNode;
 import com.mojang.brigadier.tree.CommandNode;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
@@ -29,8 +30,7 @@ final class AdminCommandHelp {
             new RootEntry("/straja status", "Afișează starea și rangul tău Straja.", 0, "INFORMARE"),
             new RootEntry("/straja rules | regulament", "Afișează regulamentul operațional.", 0, "INFORMARE"),
             new RootEntry("/straja stop", "Încheie serviciul când regulile rangului permit asta.", 0, "INFORMARE"),
-
-            new RootEntry("/straja help", "Afișează acest index și instrucțiunile pentru o comandă.", ADMIN_PERMISSION, "ADMIN — OP 3"),
+            new RootEntry("/straja help | ajutor", "Afișează orientarea (jucători) sau acest index (admini).", 0, "INFORMARE"),
             new RootEntry("/straja backup", "Creează un snapshot persistent și bounded al datelor Straja.", ADMIN_PERMISSION, "ADMIN — OP 3"),
             new RootEntry("/straja personnel ...", "Inspectează personalul V2 server-authoritative.", ADMIN_PERMISSION, "V2 — OP 3"),
             new RootEntry("/straja promotion ...", "Gestionează cereri și dovezi de promovare V2.", ADMIN_PERMISSION, "V2 — OP 3"),
@@ -304,10 +304,14 @@ final class AdminCommandHelp {
                                String commandKey) {
         if (!"help".equals(node.getName()) && node.getChild("help") == null) {
             String path = String.join(" ", displayPath);
-            node.addChild(Commands.literal("help")
-                    .requires(source -> source.hasPermission(ADMIN_PERMISSION))
-                    .executes(ctx -> show(ctx, node, path, commandKey))
-                    .build());
+            var help = Commands.literal("help")
+                    .executes(ctx -> show(ctx, node, path, commandKey));
+            // Root help is the player recovery surface — parseable at
+            // permission 0; subtree help stays admin-only at the parse gate.
+            if (!commandKey.isEmpty()) {
+                help.requires(source -> source.hasPermission(ADMIN_PERMISSION));
+            }
+            node.addChild(help.build());
         }
 
         for (CommandNode<CommandSourceStack> child : new ArrayList<>(node.getChildren())) {
@@ -335,13 +339,12 @@ final class AdminCommandHelp {
                             String displayPath,
                             String commandKey) {
         CommandSourceStack source = ctx.getSource();
+        if (commandKey.isEmpty()) {
+            return sendRoot(source);
+        }
         if (!source.hasPermission(ADMIN_PERMISSION)) {
             source.sendFailure(Component.literal("Ajutorul Straja cere OP 3."));
             return 0;
-        }
-        if (commandKey.isEmpty()) {
-            send(source, rootHelpLines(effectivePermission(source)));
-            return 1;
         }
 
         int permission = permissionLevel(commandKey);
@@ -397,14 +400,22 @@ final class AdminCommandHelp {
         for (String line : lines) source.sendSystemMessage(Component.literal(line));
     }
 
-    static List<String> rootHelpLines(int permission) {
-        if (permission < ADMIN_PERMISSION) {
-            return List.of(
-                    "/straja status — starea și rangul tău",
-                    "/straja rules | regulament — regulamentul",
-                    "/straja stop — încheierea serviciului"
-            );
+    /** Bare /straja, /straja help and /straja ajutor entry point for every audience. */
+    static int showRoot(CommandContext<CommandSourceStack> ctx) {
+        return sendRoot(ctx.getSource());
+    }
+
+    private static int sendRoot(CommandSourceStack source) {
+        int permission = effectivePermission(source);
+        if (permission >= ADMIN_PERMISSION) {
+            send(source, rootHelpLines(permission));
+            return 1;
         }
+        for (Component line : playerHelp()) source.sendSystemMessage(line);
+        return 1;
+    }
+
+    static List<String> rootHelpLines(int permission) {
         List<String> lines = new ArrayList<>();
         lines.add("§lStraja — help administrativ");
         lines.add("Detalii: /straja <comandă> help");
@@ -422,6 +433,22 @@ final class AdminCommandHelp {
         return lines;
     }
 
+    private static List<Component> playerHelp() {
+        List<Component> lines = new ArrayList<>(List.of(
+                Component.translatable("straja.help.player.intro"),
+                Component.translatable("straja.help.player.first_step")));
+        for (var entry : StrajaCommands.CommandPolicy.playerHelpEntries()) {
+            lines.add(Component.literal(entry.command())
+                    .withStyle(style -> style
+                            .withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, entry.command()))
+                            .withUnderlined(true))
+                    .append(Component.literal(" — "))
+                    .append(Component.translatable(entry.descKey())));
+        }
+        lines.add(Component.translatable("straja.help.player.faq"));
+        return lines;
+    }
+
     static int permissionLevel(String command) {
         return CommandPermissions.permissionLevel(command);
     }
@@ -432,8 +459,9 @@ final class AdminCommandHelp {
         if (command == null || command.isBlank()) return "Indexul comenzilor Straja.";
         String last = command.substring(command.lastIndexOf(' ') + 1);
         if (last.startsWith("<")) return "Completează parametrul " + last + ".";
+        if (!command.contains(" ")) return "Execută «" + last + "».";
         return "Execută operațiunea «" + last + "» din fluxul "
-                + command.substring(0, Math.max(0, command.lastIndexOf(' '))) + ".";
+                + command.substring(0, command.lastIndexOf(' ')) + ".";
     }
 
     private static int effectivePermission(CommandSourceStack source) {
