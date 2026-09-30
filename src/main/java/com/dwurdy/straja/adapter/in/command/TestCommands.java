@@ -385,7 +385,8 @@ final class TestCommands {
         test.then(Commands.literal("setup")
                 .then(Commands.argument("id", StringArgumentType.word())
                         .executes(ctx -> run(ctx, runtime ->
-                                runtime.guards().showSetup(player(ctx, runtime))))));
+                                runtime.guards().showSetup(player(ctx, runtime),
+                                        runtime.setupProbes())))));
 
         test.then(Commands.literal("setup-here")
                 .then(Commands.argument("id", StringArgumentType.word())

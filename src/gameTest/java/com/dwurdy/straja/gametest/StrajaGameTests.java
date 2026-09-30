@@ -5,20 +5,32 @@ import com.dwurdy.straja.adapter.in.npc.StrajaNpcEntity;
 import com.dwurdy.straja.adapter.in.test.VirtualPlayerGateway;
 import com.dwurdy.straja.adapter.out.minecraft.MinecraftPlayerGateway;
 import com.dwurdy.straja.adapter.out.minecraft.WhipItem;
+import com.dwurdy.straja.adapter.out.persistence.StrajaDataProvider;
+import com.dwurdy.straja.application.service.NpcAdminService;
 import com.dwurdy.straja.bootstrap.StrajaItems;
 import com.dwurdy.straja.bootstrap.StrajaMenus;
 import com.dwurdy.straja.bootstrap.StrajaRuntime;
+import com.dwurdy.straja.domain.model.Cell;
 import com.dwurdy.straja.domain.model.ItemSpec;
+import com.dwurdy.straja.domain.model.NpcRegistry;
+import com.dwurdy.straja.domain.model.PrisonStore;
 import com.dwurdy.straja.domain.model.Rank;
+import com.dwurdy.straja.domain.model.SetupData;
+import com.google.gson.GsonBuilder;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import net.minecraft.commands.CommandSource;
+import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
@@ -27,6 +39,8 @@ import net.minecraft.tags.ItemTags;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
+import net.minecraft.world.phys.Vec2;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.common.damagesource.DamageContainer;
 import net.neoforged.neoforge.event.level.BlockEvent;
@@ -506,6 +520,122 @@ public final class StrajaGameTests {
         } catch (CommandSyntaxException e) {
             helper.fail("admin help must keep working: " + e.getMessage());
         }
+        helper.succeed();
+    }
+
+    /** Captures every chat line a command sends, so output text is assertable. */
+    private static CommandSourceStack capturingSource(GameTestHelper helper, List<String> sink) {
+        var server = helper.getLevel().getServer();
+        CommandSource capture = new CommandSource() {
+            @Override public void sendSystemMessage(Component component) {
+                sink.add(component.getString());
+            }
+            @Override public boolean acceptsSuccess() { return true; }
+            @Override public boolean acceptsFailure() { return true; }
+            @Override public boolean shouldInformAdmins() { return false; }
+        };
+        return new CommandSourceStack(capture, Vec3.ZERO, Vec2.ZERO, helper.getLevel(),
+                4, "gametest", Component.literal("gametest"), server, null);
+    }
+
+    private static void run(GameTestHelper helper,
+                            com.mojang.brigadier.CommandDispatcher<CommandSourceStack> dispatcher,
+                            CommandSourceStack source, String command) {
+        try {
+            helper.assertTrue(dispatcher.execute(command, source) == 1,
+                    "'" + command + "' must execute at operator level");
+        } catch (CommandSyntaxException e) {
+            helper.fail("'" + command + "' must parse: " + e.getMessage());
+        }
+    }
+
+    private static void assertLine(GameTestHelper helper, List<String> lines, String fragment) {
+        helper.assertTrue(lines.stream().anyMatch(line -> line.contains(fragment)),
+                "expected a line containing '" + fragment + "', got: " + lines);
+    }
+
+    /** Writes an aggregate through the same JSON envelope JsonBackedStore reads. */
+    private static void putStore(MinecraftServer server, String name, Object value) {
+        StrajaDataProvider.edit(server, name).putString("json",
+                new GsonBuilder().serializeNulls().create().toJson(value));
+        StrajaDataProvider.save(server, name);
+    }
+
+    /** Reads one aggregate through the same JSON envelope JsonBackedStore uses. */
+    private static <T> T readStore(MinecraftServer server, String name, Class<T> type,
+                                   java.util.function.Supplier<T> fallback) {
+        String raw = StrajaDataProvider.data(server, name).getString("json");
+        if (raw == null || raw.isEmpty()) return fallback.get();
+        return new GsonBuilder().serializeNulls().create().fromJson(raw, type);
+    }
+
+    /**
+     * #205: /straja setup lists every install category and /straja setup
+     * verify reports an honest ready verdict. The GameTest world persists
+     * between runs and other tests share it, so seeding here is strictly
+     * additive — existing locations, cells and registrations are preserved.
+     */
+    @GameTest(template = "empty")
+    public static void strajaSetupAndVerifyTrackInstallState(GameTestHelper helper) {
+        var runtime = runtime(helper);
+        var server = helper.getLevel().getServer();
+        var dispatcher = server.getCommands().getDispatcher();
+        List<String> lines = new ArrayList<>();
+        var admin = capturingSource(helper, lines);
+
+        // Whatever the leftover world state, every category must render.
+        run(helper, dispatcher, admin, "straja setup");
+        assertLine(helper, lines, "Comisar:");
+        assertLine(helper, lines, "Locații administrative:");
+        assertLine(helper, lines, "Checkpoint-uri patrulare:");
+        assertLine(helper, lines, "NPC-uri:");
+        assertLine(helper, lines, "Celule de detenție:");
+        assertLine(helper, lines, "Economie");
+        assertLine(helper, lines, "Stații:");
+        helper.assertTrue(lines.stream().anyMatch(line -> line.contains("Următorul pas:")
+                        || line.contains("Configurare completă")),
+                "the checklist must end with a next step or the complete marker, got: " + lines);
+        lines.clear();
+        run(helper, dispatcher, admin, "straja setup verify");
+        assertLine(helper, lines, "Verificare post-instalare");
+        helper.assertTrue(lines.stream().anyMatch(line -> line.contains("gata")),
+                "verify must print a verdict, got: " + lines);
+        lines.clear();
+
+        // Seed a complete install additively through the persisted stores,
+        // then confirm the checklist and smoke step agree it is ready.
+        SetupData setup = readStore(server, "setup", SetupData.class, SetupData::defaults);
+        for (String key : SetupData.LOCATION_KEYS) {
+            setup.locations.putIfAbsent(key, new SetupData.Location());
+        }
+        if (setup.checkpoints.isEmpty()) {
+            setup.checkpoints.add(SetupData.newCheckpoint("checkpoint_1"));
+        }
+        for (var point : setup.checkpoints) {
+            point.x = 1d; point.y = 64d; point.z = 1d;
+        }
+        putStore(server, "setup", setup);
+        PrisonStore prison = readStore(server, "prisons", PrisonStore.class, PrisonStore::new);
+        if (prison.cells.isEmpty()) {
+            var cell = new Cell();
+            cell.id = "cell_gametest";
+            prison.cells.add(cell);
+            putStore(server, "prisons", prison);
+        }
+        for (String role : NpcAdminService.ROLE_ORDER) {
+            runtime.npcRegistry().adopt("gametest-" + role, role);
+        }
+
+        run(helper, dispatcher, admin, "straja setup");
+        assertLine(helper, lines, "Configurare completă");
+        lines.clear();
+        run(helper, dispatcher, admin, "straja setup verify");
+        assertLine(helper, lines, "Checklist configurare: complet");
+        assertLine(helper, lines, "Validare stații: OK");
+        // The verdict must correlate with the live doctor report either way.
+        assertLine(helper, lines, runtime.v2Consistency().check("consistency").isEmpty()
+                ? "gata pentru jucători"
+                : "NU este gata");
         helper.succeed();
     }
 }

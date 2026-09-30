@@ -11,6 +11,17 @@ import java.util.List;
 public final class SetupChecklist {
     private SetupChecklist() {}
 
+    /**
+     * Install-state probes the checklist cannot reach itself: policies are
+     * already domain-owned, while cell counts and station health are read by
+     * the runtime and handed in pre-computed.
+     */
+    public record Probes(StrajaPolicies policies, int prisonCells, List<String> stationErrors) {
+        public Probes {
+            stationErrors = stationErrors == null ? List.of() : List.copyOf(stationErrors);
+        }
+    }
+
     public static List<String> missingLocations(SetupData setup) {
         var missing = new ArrayList<String>();
         for (String key : SetupData.LOCATION_KEYS) {
@@ -46,8 +57,46 @@ public final class SetupChecklist {
         return List.copyOf(missing);
     }
 
+    /** A commissioner identity is appointed when a uuid or a name is configured. */
+    public static boolean commissionerAppointed(Probes probes) {
+        var policies = probes.policies();
+        return policies != null
+                && (!blank(policies.commissionerUuid) || !blank(policies.commissionerName));
+    }
+
+    /** At least one discovered cell must exist for detention to work. */
+    public static boolean prisonCellsConfigured(Probes probes) {
+        return probes.prisonCells() > 0;
+    }
+
+    /** The item-coin adapter needs at least one configured denomination. */
+    public static boolean currencyConfigured(Probes probes) {
+        var policies = probes.policies();
+        return policies != null && policies.coinItemIds != null && !policies.coinItemIds.isEmpty();
+    }
+
+    public static boolean stationsReady(Probes probes) {
+        return probes.stationErrors().isEmpty();
+    }
+
+    /**
+     * Merges the fallback-chain validation with hq presence/enabled so the
+     * checklist shows one station health line.
+     */
+    public static List<String> stationProblems(Station hq, List<String> fallbackErrors) {
+        var problems = new ArrayList<>(fallbackErrors == null ? List.<String>of() : fallbackErrors);
+        if (hq == null) problems.add("missing:hq");
+        else if (!hq.enabled) problems.add("disabled:hq");
+        return List.copyOf(problems);
+    }
+
     /** One-line next-step hint; null when nothing is missing. */
-    public static String nextStep(SetupData setup, NpcRegistry registry, List<String> expectedRoles) {
+    public static String nextStep(SetupData setup, NpcRegistry registry, List<String> expectedRoles,
+                                  Probes probes) {
+        if (!commissionerAppointed(probes)) {
+            return "Comisarul nu este configurat — setează commissionerName sau commissionerUuid "
+                    + "în straja-server.toml și repornește.";
+        }
         if (!missingLocations(setup).isEmpty()) {
             return "Lipsesc locațiile administrative — stai unde vrei ghișeele și rulează /straja setup here.";
         }
@@ -57,11 +106,27 @@ public final class SetupChecklist {
         if (!missingNpcRoles(registry, expectedRoles).isEmpty()) {
             return "Lipsesc NPC-uri — configurează locațiile lor și rulează /straja setup npcs.";
         }
+        if (!prisonCellsConfigured(probes)) {
+            return "Lipsesc celulele de detenție — ia prison_marker din /straja setup tools "
+                    + "și marchează două colțuri ale unei celule.";
+        }
+        if (!currencyConfigured(probes)) {
+            return "Economia nu este configurată — setează coinItemIds în straja-server.toml și repornește.";
+        }
+        if (!stationsReady(probes)) {
+            return "Configurarea stațiilor e invalidă — corectează lanțul de fallback "
+                    + "și revalidează cu /straja station validate.";
+        }
         return null;
     }
 
     /** True only when every setup category is complete. */
-    public static boolean isComplete(SetupData setup, NpcRegistry registry, List<String> expectedRoles) {
-        return nextStep(setup, registry, expectedRoles) == null;
+    public static boolean isComplete(SetupData setup, NpcRegistry registry, List<String> expectedRoles,
+                                     Probes probes) {
+        return nextStep(setup, registry, expectedRoles, probes) == null;
+    }
+
+    private static boolean blank(String value) {
+        return value == null || value.isBlank();
     }
 }
