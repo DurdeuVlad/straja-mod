@@ -6,6 +6,7 @@ import com.mojang.brigadier.tree.ArgumentCommandNode;
 import com.mojang.brigadier.tree.CommandNode;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
@@ -304,10 +305,14 @@ final class AdminCommandHelp {
                                String commandKey) {
         if (!"help".equals(node.getName()) && node.getChild("help") == null) {
             String path = String.join(" ", displayPath);
-            node.addChild(Commands.literal("help")
-                    .requires(source -> source.hasPermission(ADMIN_PERMISSION))
-                    .executes(ctx -> show(ctx, node, path, commandKey))
-                    .build());
+            var help = Commands.literal("help")
+                    .executes(ctx -> show(ctx, node, path, commandKey));
+            // Root help is the player recovery surface — parseable at
+            // permission 0; subtree help stays admin-only at the parse gate.
+            if (!commandKey.isEmpty()) {
+                help.requires(source -> source.hasPermission(ADMIN_PERMISSION));
+            }
+            node.addChild(help.build());
         }
 
         for (CommandNode<CommandSourceStack> child : new ArrayList<>(node.getChildren())) {
@@ -335,13 +340,12 @@ final class AdminCommandHelp {
                             String displayPath,
                             String commandKey) {
         CommandSourceStack source = ctx.getSource();
+        if (commandKey.isEmpty()) {
+            return sendRoot(source);
+        }
         if (!source.hasPermission(ADMIN_PERMISSION)) {
             source.sendFailure(Component.literal("Ajutorul Straja cere OP 3."));
             return 0;
-        }
-        if (commandKey.isEmpty()) {
-            send(source, rootHelpLines(effectivePermission(source)));
-            return 1;
         }
 
         int permission = permissionLevel(commandKey);
@@ -397,14 +401,22 @@ final class AdminCommandHelp {
         for (String line : lines) source.sendSystemMessage(Component.literal(line));
     }
 
-    static List<String> rootHelpLines(int permission) {
-        if (permission < ADMIN_PERMISSION) {
-            return List.of(
-                    "/straja status — starea și rangul tău",
-                    "/straja rules | regulament — regulamentul",
-                    "/straja stop — încheierea serviciului"
-            );
+    /** Bare /straja, /straja help and /straja ajutor entry point for every audience. */
+    static int showRoot(CommandContext<CommandSourceStack> ctx) {
+        return sendRoot(ctx.getSource());
+    }
+
+    private static int sendRoot(CommandSourceStack source) {
+        int permission = effectivePermission(source);
+        if (permission >= ADMIN_PERMISSION) {
+            send(source, rootHelpLines(permission));
+            return 1;
         }
+        for (Component line : playerHelp()) source.sendSystemMessage(line);
+        return 1;
+    }
+
+    static List<String> rootHelpLines(int permission) {
         List<String> lines = new ArrayList<>();
         lines.add("§lStraja — help administrativ");
         lines.add("Detalii: /straja <comandă> help");
@@ -419,6 +431,25 @@ final class AdminCommandHelp {
             }
             lines.add(entry.syntax() + " — " + entry.description());
         }
+        return lines;
+    }
+
+    private static List<Component> playerHelp() {
+        var commands = StrajaCommands.CommandPolicy.playerHelpCommands();
+        var descKeys = StrajaCommands.CommandPolicy.playerHelpDescKeys();
+        List<Component> lines = new ArrayList<>(List.of(
+                Component.translatable("straja.help.player.intro"),
+                Component.translatable("straja.help.player.first_step")));
+        for (int i = 0; i < commands.size(); i++) {
+            String command = commands.get(i);
+            lines.add(Component.literal(command)
+                    .withStyle(style -> style
+                            .withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, command))
+                            .withUnderlined(true))
+                    .append(Component.literal(" — "))
+                    .append(Component.translatable(descKeys.get(i))));
+        }
+        lines.add(Component.translatable("straja.help.player.faq"));
         return lines;
     }
 

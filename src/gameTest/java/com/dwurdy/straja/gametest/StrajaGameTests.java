@@ -10,6 +10,7 @@ import com.dwurdy.straja.bootstrap.StrajaMenus;
 import com.dwurdy.straja.bootstrap.StrajaRuntime;
 import com.dwurdy.straja.domain.model.ItemSpec;
 import com.dwurdy.straja.domain.model.Rank;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import java.util.List;
 import java.util.Map;
 import net.minecraft.core.BlockPos;
@@ -460,6 +461,51 @@ public final class StrajaGameTests {
                 net.minecraft.core.component.DataComponents.CUSTOM_NAME,
                 net.minecraft.network.chat.Component.empty()).getString().contains("Buletin"),
                 "the delivered item must carry a readable buletin name");
+        helper.succeed();
+    }
+
+    /**
+     * #201: bare /straja, /straja help and /straja ajutor are the player
+     * recovery surface — they must parse and execute at permission 0 — while
+     * subtree help and admin commands stay behind the parse-time gate.
+     */
+    @GameTest(template = "empty")
+    public static void strajaHelpRunsAtPermissionZero(GameTestHelper helper) {
+        runtime(helper);
+        var dispatcher = helper.getLevel().getServer().getCommands().getDispatcher();
+        var playerSource = mockPlayer(helper).createCommandSourceStack();
+        helper.assertTrue(!playerSource.hasPermission(1),
+                "the mock player must sit at permission 0 for this test");
+
+        for (String command : List.of("straja", "straja help", "straja ajutor")) {
+            try {
+                helper.assertTrue(dispatcher.execute(command, playerSource) == 1,
+                        "'" + command + "' must print the player orientation at permission 0");
+            } catch (CommandSyntaxException e) {
+                helper.fail("'" + command + "' must parse at permission 0: " + e.getMessage());
+            }
+        }
+
+        for (String adminOnly : List.of("straja backup", "straja status help")) {
+            boolean refused = false;
+            try {
+                dispatcher.execute(adminOnly, playerSource);
+            } catch (CommandSyntaxException e) {
+                refused = true;
+            }
+            helper.assertTrue(refused,
+                    "'" + adminOnly + "' must stay unparsed at permission 0");
+        }
+
+        var adminSource = helper.getLevel().getServer().createCommandSourceStack();
+        try {
+            helper.assertTrue(dispatcher.execute("straja help", adminSource) == 1,
+                    "/straja help must keep the admin index at operator level");
+            helper.assertTrue(dispatcher.execute("straja", adminSource) == 1,
+                    "bare /straja must resolve to the admin index at operator level");
+        } catch (CommandSyntaxException e) {
+            helper.fail("admin help must keep working: " + e.getMessage());
+        }
         helper.succeed();
     }
 }

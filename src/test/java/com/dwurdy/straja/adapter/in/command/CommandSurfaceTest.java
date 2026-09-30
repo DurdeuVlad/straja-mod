@@ -64,6 +64,15 @@ class CommandSurfaceTest {
     }
 
     @Test
+    void helpAndAjutorArePlayerFacingRecoverySurfaces() {
+        assertFalse(StrajaCommands.CommandPolicy.isAdminOnly("ajutor"));
+        assertEquals(0, StrajaCommands.CommandPolicy.permissionLevel("ajutor"));
+        String publicHelp = String.join("\n", StrajaCommands.CommandPolicy.helpLines(false));
+        assertTrue(publicHelp.contains("ajutor"), "public help must advertise the ajutor alias");
+        assertTrue(publicHelp.contains("help"), "public help must advertise /straja help");
+    }
+
+    @Test
     void stopIsPlayerFacingWithSecretaryGatingInsideTheUseCase() {
         // §7: free-duty ranks stop at will; patrol guards are directed back to
         // the Secretary inside GuardService.stopDuty — the command itself is open.

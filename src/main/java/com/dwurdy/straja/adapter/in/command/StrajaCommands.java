@@ -44,6 +44,10 @@ public final class StrajaCommands {
         // NPC clicks use a short-lived, player-bound token; this is not a
         // public gameplay-command alias and is intentionally absent from help.
         root.then(npcActionNode());
+        // Bare /straja is the universal recovery surface: players get the
+        // orientation, admins get the index — dispatched on permission.
+        root.executes(AdminCommandHelp::showRoot);
+        root.then(Commands.literal("ajutor").executes(AdminCommandHelp::showRoot));
         root.then(Commands.literal("status").executes(c -> player(c, StrajaRuntime.get().guards()::showStatus)));
         root.then(Commands.literal("rules").executes(c -> player(c, StrajaRuntime.get().guards()::showRules)));
         root.then(Commands.literal("regulament").executes(c -> player(c, StrajaRuntime.get().guards()::showRules)));
@@ -1673,9 +1677,34 @@ public final class StrajaCommands {
             return CommandPermissions.permissionLevel(command);
         }
 
+        /** Public commands advertised by the player orientation — all must stay permission-0. */
+        static List<String> playerHelpCommands() {
+            return List.of("/straja status", "/straja rules", "/straja regulament", "/straja stop");
+        }
+
+        /** Lang keys describing each advertised command, aligned with {@link #playerHelpCommands()}. */
+        static List<String> playerHelpDescKeys() {
+            return List.of(
+                    "straja.help.player.cmd.status",
+                    "straja.help.player.cmd.rules",
+                    "straja.help.player.cmd.regulament",
+                    "straja.help.player.cmd.stop");
+        }
+
+        /** Every lang key the player orientation resolves — pinned for the lang-parity test. */
+        static List<String> playerHelpKeys() {
+            var keys = new java.util.ArrayList<>(List.of(
+                    "straja.help.player.intro",
+                    "straja.help.player.first_step"));
+            keys.addAll(playerHelpDescKeys());
+            keys.add("straja.help.player.faq");
+            return List.copyOf(keys);
+        }
+
         static List<String> helpLines(boolean admin) {
             if (!admin) {
                 return List.of(
+                        "/straja help | ajutor — orientare pentru jucători",
                         "/straja status — starea și rangul tău",
                         "/straja rules | regulament — regulamentul",
                         "/straja stop — încheierea serviciului");
