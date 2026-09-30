@@ -30,8 +30,7 @@ final class AdminCommandHelp {
             new RootEntry("/straja status", "Afișează starea și rangul tău Straja.", 0, "INFORMARE"),
             new RootEntry("/straja rules | regulament", "Afișează regulamentul operațional.", 0, "INFORMARE"),
             new RootEntry("/straja stop", "Încheie serviciul când regulile rangului permit asta.", 0, "INFORMARE"),
-
-            new RootEntry("/straja help", "Afișează acest index și instrucțiunile pentru o comandă.", ADMIN_PERMISSION, "ADMIN — OP 3"),
+            new RootEntry("/straja help | ajutor", "Afișează orientarea (jucători) sau acest index (admini).", 0, "INFORMARE"),
             new RootEntry("/straja backup", "Creează un snapshot persistent și bounded al datelor Straja.", ADMIN_PERMISSION, "ADMIN — OP 3"),
             new RootEntry("/straja personnel ...", "Inspectează personalul V2 server-authoritative.", ADMIN_PERMISSION, "V2 — OP 3"),
             new RootEntry("/straja promotion ...", "Gestionează cereri și dovezi de promovare V2.", ADMIN_PERMISSION, "V2 — OP 3"),
@@ -435,19 +434,16 @@ final class AdminCommandHelp {
     }
 
     private static List<Component> playerHelp() {
-        var commands = StrajaCommands.CommandPolicy.playerHelpCommands();
-        var descKeys = StrajaCommands.CommandPolicy.playerHelpDescKeys();
         List<Component> lines = new ArrayList<>(List.of(
                 Component.translatable("straja.help.player.intro"),
                 Component.translatable("straja.help.player.first_step")));
-        for (int i = 0; i < commands.size(); i++) {
-            String command = commands.get(i);
-            lines.add(Component.literal(command)
+        for (var entry : StrajaCommands.CommandPolicy.playerHelpEntries()) {
+            lines.add(Component.literal(entry.command())
                     .withStyle(style -> style
-                            .withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, command))
+                            .withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, entry.command()))
                             .withUnderlined(true))
                     .append(Component.literal(" — "))
-                    .append(Component.translatable(descKeys.get(i))));
+                    .append(Component.translatable(entry.descKey())));
         }
         lines.add(Component.translatable("straja.help.player.faq"));
         return lines;
@@ -463,8 +459,9 @@ final class AdminCommandHelp {
         if (command == null || command.isBlank()) return "Indexul comenzilor Straja.";
         String last = command.substring(command.lastIndexOf(' ') + 1);
         if (last.startsWith("<")) return "Completează parametrul " + last + ".";
+        if (!command.contains(" ")) return "Execută «" + last + "».";
         return "Execută operațiunea «" + last + "» din fluxul "
-                + command.substring(0, Math.max(0, command.lastIndexOf(' '))) + ".";
+                + command.substring(0, command.lastIndexOf(' ')) + ".";
     }
 
     private static int effectivePermission(CommandSourceStack source) {

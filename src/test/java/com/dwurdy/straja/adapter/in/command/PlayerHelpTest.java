@@ -48,6 +48,20 @@ class PlayerHelpTest {
     }
 
     @Test
+    void advertisedCommandsAreExactlyThePublicGameplayRoots() {
+        var expected = new java.util.HashSet<String>();
+        for (var e : CommandPermissions.rootLevels().entrySet()) {
+            String root = e.getKey().split(" ")[0];
+            // ajutor is the help entry itself; npc-action is an internal token endpoint
+            if (e.getValue() == 0 && !root.equals("npc-action") && !root.equals("ajutor")) {
+                expected.add("/straja " + root);
+            }
+        }
+        assertEquals(expected, new java.util.HashSet<>(StrajaCommands.CommandPolicy.playerHelpCommands()),
+                "the player orientation must advertise exactly the permission-0 gameplay commands");
+    }
+
+    @Test
     void orientationNamesTheFirstStepAndFaqEntry() throws Exception {
         var ro = lang("ro_ro");
         String firstStep = ro.get("straja.help.player.first_step").getAsString();
@@ -62,10 +76,10 @@ class PlayerHelpTest {
     void playerHelpLeaksNoAdminCommandNames() throws Exception {
         var ro = lang("ro_ro");
         var en = lang("en_us");
-        List<String> adminOnly = List.of(
-                "setup", "personnel", "promotion", "backup", "policy", "migrate",
-                "debug", "invite", "recruit", "promote", "mission", "prison",
-                "fine", "checkpoint", "identity", "emergency", "npc", "test");
+        var adminOnly = new java.util.HashSet<String>();
+        for (var e : CommandPermissions.rootLevels().entrySet()) {
+            if (e.getValue() >= CommandPermissions.ADMIN) adminOnly.add(e.getKey().split(" ")[0]);
+        }
         for (String key : StrajaCommands.CommandPolicy.playerHelpKeys()) {
             for (JsonObject file : List.of(ro, en)) {
                 String value = file.get(key).getAsString();

@@ -8,7 +8,6 @@ final class CommandPermissions {
     static final int SETUP = 4;
 
     private static final Map<String, Integer> ROOT_LEVELS = Map.ofEntries(
-            Map.entry("help", ADMIN),
             Map.entry("backup", ADMIN),
             Map.entry("personnel", ADMIN),
             Map.entry("promotion", ADMIN),
@@ -86,5 +85,15 @@ final class CommandPermissions {
 
     static boolean isAdminOnly(String command) {
         return permissionLevel(command) >= ADMIN;
+    }
+
+    /**
+     * The raw root→permission manifest for source-level assertions. Root
+     * {@code help} is deliberately unlisted: /straja help is the public
+     * recovery surface (perm 0) while subtree help gating lives structurally
+     * in {@code AdminCommandHelp.attach}.
+     */
+    static Map<String, Integer> rootLevels() {
+        return ROOT_LEVELS;
     }
 }

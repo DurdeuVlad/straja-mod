@@ -1677,18 +1677,22 @@ public final class StrajaCommands {
             return CommandPermissions.permissionLevel(command);
         }
 
-        /** Public commands advertised by the player orientation — all must stay permission-0. */
-        static List<String> playerHelpCommands() {
-            return List.of("/straja status", "/straja rules", "/straja regulament", "/straja stop");
+        /** One advertised command + its lang description key — the pairing is structural, not positional. */
+        record PlayerHelpEntry(String command, String descKey) {}
+
+        private static final List<PlayerHelpEntry> PLAYER_HELP_ENTRIES = List.of(
+                new PlayerHelpEntry("/straja status", "straja.help.player.cmd.status"),
+                new PlayerHelpEntry("/straja rules", "straja.help.player.cmd.rules"),
+                new PlayerHelpEntry("/straja regulament", "straja.help.player.cmd.regulament"),
+                new PlayerHelpEntry("/straja stop", "straja.help.player.cmd.stop"));
+
+        /** Commands advertised by the player orientation — all must stay permission-0. */
+        static List<PlayerHelpEntry> playerHelpEntries() {
+            return PLAYER_HELP_ENTRIES;
         }
 
-        /** Lang keys describing each advertised command, aligned with {@link #playerHelpCommands()}. */
-        static List<String> playerHelpDescKeys() {
-            return List.of(
-                    "straja.help.player.cmd.status",
-                    "straja.help.player.cmd.rules",
-                    "straja.help.player.cmd.regulament",
-                    "straja.help.player.cmd.stop");
+        static List<String> playerHelpCommands() {
+            return PLAYER_HELP_ENTRIES.stream().map(PlayerHelpEntry::command).toList();
         }
 
         /** Every lang key the player orientation resolves — pinned for the lang-parity test. */
@@ -1696,7 +1700,7 @@ public final class StrajaCommands {
             var keys = new java.util.ArrayList<>(List.of(
                     "straja.help.player.intro",
                     "straja.help.player.first_step"));
-            keys.addAll(playerHelpDescKeys());
+            for (var entry : PLAYER_HELP_ENTRIES) keys.add(entry.descKey());
             keys.add("straja.help.player.faq");
             return List.copyOf(keys);
         }
