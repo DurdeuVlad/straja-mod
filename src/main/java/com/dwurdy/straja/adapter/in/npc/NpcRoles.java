@@ -52,9 +52,15 @@ public final class NpcRoles {
     }
 
     public static void interact(String roleId, Player player, ServerLevel level) {
-        NpcPlayerSurface.InteractionPlan plan = NpcPlayerSurface.interactionPlan(roleId);
-        NpcPlayerSurface.RoleSurface surface = plan.surface();
-        surface = NpcPlayerSurface.withAdditionalActions(surface, stateAwareActions(roleId, player, level));
+        var runtime = com.dwurdy.straja.bootstrap.StrajaRuntime.get();
+        NpcPlayerSurface.RoleSurface surface;
+        if (runtime == null) {
+            surface = NpcPlayerSurface.interactionPlan(roleId).surface();
+        } else {
+            var gw = gateway(player, level);
+            surface = NpcPlayerSurface.orderedFor(roleId,
+                    stateAwareActions(roleId, runtime, gw), faqContext(runtime, gw)).surface();
+        }
         sendGuidance(player, surface);
     }
 
@@ -63,10 +69,46 @@ public final class NpcRoles {
         return guidanceComponent(NpcPlayerSurface.surfaceFor(roleId), null);
     }
 
+    /**
+     * Observable contract of {@link #interact}: the primary-page action ids a
+     * player would see on this NPC right now, in display order. Lets tests
+     * assert the state-ordered surface without replaying chat components.
+     */
+    public static List<String> orderedActionIds(String roleId, Player player, ServerLevel level) {
+        return orderedSurfaceFor(roleId, player, level)
+                .surface().actions().stream()
+                .map(NpcPlayerSurface.ChatAction::actionId).toList();
+    }
+
+    /** The «Mai multe…» overflow action ids for the same player and role. */
+    public static List<String> overflowActionIds(String roleId, Player player, ServerLevel level) {
+        return orderedSurfaceFor(roleId, player, level).overflow().stream()
+                .map(NpcPlayerSurface.ChatAction::actionId).toList();
+    }
+
+    private static NpcPlayerSurface.OrderedSurface orderedSurfaceFor(
+            String roleId, Player player, ServerLevel level) {
+        var runtime = com.dwurdy.straja.bootstrap.StrajaRuntime.get();
+        if (runtime == null) {
+            return new NpcPlayerSurface.OrderedSurface(
+                    NpcPlayerSurface.interactionPlan(roleId).surface(), List.of());
+        }
+        var gw = gateway(player, level);
+        return NpcPlayerSurface.orderedFor(roleId,
+                stateAwareActions(roleId, runtime, gw), faqContext(runtime, gw));
+    }
+
     private static Component guidanceComponent(NpcPlayerSurface.RoleSurface surface, Player player) {
-        MutableComponent message = Component.literal("[Straja] " + surface.title() + ": " + surface.guidance());
+        String head = surface.title();
+        if (!surface.guidance().isBlank()) {
+            head = head.isBlank() ? surface.guidance() : head + ": " + surface.guidance();
+        }
+        MutableComponent message = head.isBlank() ? Component.empty() : Component.literal("[Straja] " + head);
         for (NpcPlayerSurface.ChatAction action : surface.actions()) {
-            MutableComponent label = Component.literal("[" + action.label() + "]").withStyle(style -> style
+            MutableComponent label = (action.labelKey() == null
+                    ? Component.literal("[" + action.label() + "]")
+                    : Component.translatableWithFallback(action.labelKey(), "[" + action.label() + "]"))
+                    .withStyle(style -> style
                     .withColor(ChatFormatting.AQUA)
                     .withUnderlined(true)
                     .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
@@ -76,7 +118,8 @@ public final class NpcRoles {
                         ClickEvent.Action.RUN_COMMAND,
                         NpcInteractionService.issueActionCommand(player, action))));
             }
-            message.append(Component.literal(" ")).append(label);
+            if (!message.getString().isEmpty()) message.append(Component.literal(" "));
+            message.append(label);
         }
         return message;
     }
@@ -408,6 +451,7 @@ public final class NpcRoles {
         }
         switch (operation) {
             case "faq" -> performFaq(id, player, runtime, gw);
+            case "more", "main" -> showSurfacePage(player, runtime, gw, id, "main".equals(operation));
             case "duty-checkpoint" -> runtime.guardDuty().checkpoint(gw, id);
             case "mission-join" -> runtime.missionRoleplay().join(gw, id);
             case "mission-accept" -> runtime.missionRoleplay().accept(gw, id);
@@ -522,13 +566,7 @@ public final class NpcRoles {
             gw.tell("[Straja] Întrebarea FAQ nu mai este disponibilă.");
             return;
         }
-        var state = runtime.playerQueries().readState(gw);
-        int rank = state == null ? com.dwurdy.straja.domain.model.Rank.CIVIL.level() : state.rank;
-        var personnel = runtime.v2Personnel().find(gw.uuid().toString());
-        String stationId = personnel == null || personnel.homeStationId == null
-                || personnel.homeStationId.isBlank() ? "hq" : personnel.homeStationId;
-        var context = NpcFaqSurface.Context.from(state, runtime.playerQueries().isCommissioner(gw),
-                runtime.policies().rankName(rank), runtime.v2Stations().messageTemplates(stationId));
+        var context = faqContext(runtime, gw);
         var targetRef = parsed.get();
         if (!NpcFaqSurface.targetAvailable(targetRef, context)) {
             gw.tell("[FAQ] Ramura nu mai este disponibilă pentru statutul tău.");
@@ -547,6 +585,46 @@ public final class NpcRoles {
             }
             default -> gw.tell("[Straja] Ramură FAQ necunoscută.");
         }
+    }
+
+    /**
+     * Shared player-state context for surface ordering and FAQ gating — the two
+     * must classify a player identically, so both read this one source.
+     */
+    private static NpcFaqSurface.Context faqContext(
+            com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+            com.dwurdy.straja.application.port.out.PlayerGateway gw) {
+        var state = runtime.playerQueries().readState(gw);
+        int rank = state == null ? com.dwurdy.straja.domain.model.Rank.CIVIL.level() : state.rank;
+        var personnel = runtime.v2Personnel().find(gw.uuid().toString());
+        String stationId = personnel == null || personnel.homeStationId == null
+                || personnel.homeStationId.isBlank() ? "hq" : personnel.homeStationId;
+        return NpcFaqSurface.Context.from(state, runtime.playerQueries().isCommissioner(gw),
+                runtime.policies().rankName(rank), runtime.v2Stations().messageTemplates(stationId));
+    }
+
+    /** Re-renders a role surface page: the primary page for "main", the «Mai multe…» overflow for "more". */
+    private static void showSurfacePage(Player player,
+                                        com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                        com.dwurdy.straja.application.port.out.PlayerGateway gw,
+                                        String roleKey, boolean primaryPage) {
+        var route = NpcFaqSurface.roleForKey(roleKey);
+        String roleId = NpcPlayerSurface.roleIdFor(route);
+        if (route == NpcPlayerSurface.RoleRoute.UNKNOWN || roleId.isEmpty()) {
+            gw.tell("[Straja] Acest meniu nu mai este disponibil.");
+            return;
+        }
+        var ordered = NpcPlayerSurface.orderedFor(roleId,
+                stateAwareActions(roleId, runtime, gw), faqContext(runtime, gw));
+        if (primaryPage || ordered.overflow().isEmpty()) {
+            sendGuidance(player, ordered.surface());
+            return;
+        }
+        player.sendSystemMessage(Component.translatable("straja.ui.more.header"));
+        var actions = new ArrayList<>(ordered.overflow());
+        actions.add(NpcPlayerSurface.backLink(roleKey));
+        sendGuidance(player, new NpcPlayerSurface.RoleSurface(
+                route, "", "", List.copyOf(actions)));
     }
 
     /** The loaded Straja NPC entity across all server levels, or null. */
@@ -1259,7 +1337,7 @@ public final class NpcRoles {
                                                  com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
                                                  com.dwurdy.straja.application.port.out.PlayerGateway player) {
         return switch (operation) {
-            case "faq" -> true;
+            case "faq", "more", "main" -> true;
             case "trades-enroll" -> runtime.v2Generators().professions().stream()
                     .anyMatch(p2 -> p2.equalsIgnoreCase(id));
             case "duty-checkpoint" -> {
@@ -1424,10 +1502,9 @@ public final class NpcRoles {
     }
 
     private static List<NpcPlayerSurface.ChatAction> stateAwareActions(
-            String roleId, Player player, ServerLevel level) {
-        var runtime = com.dwurdy.straja.bootstrap.StrajaRuntime.get();
+            String roleId, com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+            com.dwurdy.straja.application.port.out.PlayerGateway gateway) {
         if (runtime == null) return List.of();
-        var gateway = gateway(player, level);
         var actions = new ArrayList<NpcPlayerSurface.ChatAction>();
         switch (NpcPlayerSurface.routeFor(roleId)) {
             case SECRETARY -> {

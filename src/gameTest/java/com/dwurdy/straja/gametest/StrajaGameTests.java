@@ -1,6 +1,7 @@
 package com.dwurdy.straja.gametest;
 
 import com.dwurdy.straja.adapter.in.event.StrajaEvents;
+import com.dwurdy.straja.adapter.in.npc.NpcRoles;
 import com.dwurdy.straja.adapter.in.npc.StrajaNpcEntity;
 import com.dwurdy.straja.adapter.in.test.VirtualPlayerGateway;
 import com.dwurdy.straja.adapter.out.minecraft.MinecraftPlayerGateway;
@@ -636,6 +637,57 @@ public final class StrajaGameTests {
         assertLine(helper, lines, runtime.v2Consistency().check("consistency").isEmpty()
                 ? "gata pentru jucători"
                 : "NU este gata");
+        helper.succeed();
+    }
+
+    /**
+     * #203: the receptionist surface reorders around the player's state —
+     * civilians lead with «Depune cererea», sworn members lead with duty
+     * bookkeeping and admission sinks under «Mai multe…». Seeded through the
+     * real players store so {@code readState} observes the transition.
+     */
+    @GameTest(template = "empty")
+    public static void npcSurfaceReordersOnStateTransition(GameTestHelper helper) {
+        var runtime = runtime(helper);
+        var player = mockPlayer(helper);
+
+        // Fresh player = civilian: admission leads, member bookkeeping sinks.
+        var civilIds = NpcRoles.orderedActionIds(
+                NpcRoles.RECEPTIONIST, player, helper.getLevel());
+        helper.assertTrue("application-submit".equals(civilIds.get(0)),
+                "civilian receptionist must lead with «Depune cererea», got: " + civilIds);
+        int civilFaq = civilIds.indexOf("faq:root_receptionist");
+        helper.assertTrue(civilFaq >= 0 && civilFaq < 3,
+                "FAQ must be within the first three actions for civilians, index " + civilFaq);
+        helper.assertTrue(civilIds.size() <= 6,
+                "primary page exceeds the 6-action cap");
+        var civilOverflow = NpcRoles.overflowActionIds(
+                NpcRoles.RECEPTIONIST, player, helper.getLevel());
+        helper.assertTrue(civilOverflow.contains("guard-status"),
+                "member bookkeeping must wait under «Mai multe…» for civilians");
+
+        // Same player sworn in: the surface reorders without losing actions.
+        var state = runtime.players().state(player.getUUID());
+        state.rank = Rank.STAGIAR.level();
+        runtime.players().save(player.getUUID(), state);
+        var memberIds = NpcRoles.orderedActionIds(
+                NpcRoles.RECEPTIONIST, player, helper.getLevel());
+        helper.assertTrue("guard-status".equals(memberIds.get(0)),
+                "member receptionist must lead with «Stare Străjer», got: " + memberIds);
+        helper.assertTrue(!memberIds.contains("application-submit"),
+                "members must not see «Depune cererea» on the primary page");
+        helper.assertTrue(NpcRoles.overflowActionIds(
+                        NpcRoles.RECEPTIONIST, player, helper.getLevel())
+                        .contains("application-submit"),
+                "admission stays reachable under «Mai multe…»");
+
+        // The overflow page navigates through the same tokenized dispatch.
+        helper.assertTrue(
+                NpcRoles.performAction("more:receptionist", player, helper.getLevel()),
+                "the «Mai multe…» token must render the overflow page");
+        helper.assertTrue(
+                NpcRoles.performAction("main:receptionist", player, helper.getLevel()),
+                "the «Înapoi» token must re-render the primary page");
         helper.succeed();
     }
 }

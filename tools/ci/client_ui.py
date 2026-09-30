@@ -517,7 +517,11 @@ def _walk_components(node, out: list):
     ce = node.get("clickEvent")
     if isinstance(ce, dict) and ce.get("action") == "run_command" \
             and ce.get("value"):
-        out.append((str(node.get("text", "")), str(ce["value"])))
+        # translatableWithFallback components carry the literal in "fallback",
+        # plain translatables only in "translatable" — the label needle must
+        # match either so keyed labels stay clickable in scenarios.
+        text = node.get("text") or node.get("fallback") or node.get("translatable") or ""
+        out.append((str(text), str(ce["value"])))
     for key in ("extra", "siblings", "with", "hoverEvent"):
         child = node.get(key)
         if isinstance(child, (dict, list)):

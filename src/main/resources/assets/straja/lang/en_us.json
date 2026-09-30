@@ -54,5 +54,8 @@
   "straja.help.player.cmd.rules": "the server rules",
   "straja.help.player.cmd.regulament": "the rules (Romanian alias)",
   "straja.help.player.cmd.stop": "end your duty",
-  "straja.help.player.faq": "Questions? Every Straja NPC has an «Am o întrebare» menu."
+  "straja.help.player.faq": "Questions? Every Straja NPC has an «Am o întrebare» menu.",
+  "straja.ui.more": "[More…]",
+  "straja.ui.back": "[« Back]",
+  "straja.ui.more.header": "[Straja] More actions:"
 }
