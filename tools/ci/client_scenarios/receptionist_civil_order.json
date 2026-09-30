@@ -1,0 +1,159 @@
+{
+  "name": "receptionist-civil-order",
+  "group": "client-proof",
+  "timeoutSeconds": 180,
+  "observable": "a civilian clicking the receptionist sees «Depune cererea» first, «Regulament» second and «Am o întrebare» within the first three actions, with «Mai multe…» as the last primary link; member bookkeeping (Fișa mea V2 etc.) is absent from the primary page, appears after clicking «Mai multe…», and «Înapoi» returns to the primary page",
+  "failure": "the primary order differs, «Am o întrebare» is not in the first three positions, member-only actions leak onto the civilian page, or the overflow/back navigation is unreachable",
+  "prerequisites": [
+    "combined server running",
+    "client joined as ci_straja"
+  ],
+  "steps": [
+    {
+      "name": "reset-state",
+      "type": "rcon",
+      "setup": true,
+      "command": "straja test reset-all"
+    },
+    {
+      "name": "player-position",
+      "type": "mct",
+      "setup": true,
+      "args": [
+        "position",
+        "get"
+      ],
+      "captures": [
+        {
+          "name": "px",
+          "regex": "\"x\"\\s*:\\s*(-?[0-9.]+)"
+        },
+        {
+          "name": "py",
+          "regex": "\"y\"\\s*:\\s*(-?[0-9.]+)"
+        },
+        {
+          "name": "pz",
+          "regex": "\"z\"\\s*:\\s*(-?[0-9.]+)"
+        }
+      ]
+    },
+    {
+      "name": "spawn-receptionist",
+      "type": "rcon",
+      "setup": true,
+      "command": "straja npc spawn receptionist {px} {py} {pz}"
+    },
+    {
+      "name": "interact-receptionist",
+      "type": "mct",
+      "setup": true,
+      "args": [
+        "entity",
+        "interact",
+        "--type",
+        "straja:straja_npc",
+        "--nearest",
+        "--max-distance",
+        "8"
+      ]
+    },
+    {
+      "name": "surface-settle",
+      "type": "sleep",
+      "seconds": 2,
+      "setup": true
+    },
+    {
+      "name": "primary-order",
+      "type": "mct",
+      "args": [
+        "chat",
+        "history",
+        "--last",
+        "20"
+      ],
+      "expect": [
+        {
+          "rawRegex": "Depune cererea.*Regulament.*Am o întrebare"
+        },
+        {
+          "rawRegex": "Mai multe"
+        }
+      ]
+    },
+    {
+      "name": "no-member-actions-on-primary",
+      "type": "mct",
+      "args": [
+        "chat",
+        "history",
+        "--last",
+        "20"
+      ],
+      "expectAbsentRegex": "Fișa mea V2"
+    },
+    {
+      "name": "open-overflow",
+      "type": "npc-action",
+      "label": "Mai multe…"
+    },
+    {
+      "name": "overflow-settle",
+      "type": "sleep",
+      "seconds": 1,
+      "setup": true
+    },
+    {
+      "name": "overflow-contents",
+      "type": "mct",
+      "args": [
+        "chat",
+        "history",
+        "--last",
+        "20"
+      ],
+      "expect": [
+        {
+          "rawRegex": "Fișa mea V2"
+        },
+        {
+          "rawRegex": "Înapoi"
+        }
+      ]
+    },
+    {
+      "name": "back-to-primary",
+      "type": "npc-action",
+      "label": "Înapoi"
+    },
+    {
+      "name": "back-settle",
+      "type": "sleep",
+      "seconds": 1,
+      "setup": true
+    },
+    {
+      "name": "primary-restored",
+      "type": "mct",
+      "args": [
+        "chat",
+        "history",
+        "--last",
+        "20"
+      ],
+      "expect": [
+        {
+          "rawRegex": "Depune cererea.*Regulament.*Am o întrebare"
+        }
+      ]
+    }
+  ],
+  "cleanup": [
+    {
+      "name": "reset",
+      "type": "rcon",
+      "command": "straja test reset-all"
+    }
+  ]
+}

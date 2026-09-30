@@ -381,7 +381,7 @@ final class NpcFaqSurface {
         };
     }
 
-    private static String roleKey(NpcPlayerSurface.RoleRoute origin) {
+    static String roleKey(NpcPlayerSurface.RoleRoute origin) {
         return switch (origin == null ? NpcPlayerSurface.RoleRoute.UNKNOWN : origin) {
             case RECEPTIONIST -> "receptionist";
             case TRAINER, RECRUITER -> "trainer";
@@ -393,7 +393,7 @@ final class NpcFaqSurface {
         };
     }
 
-    private static NpcPlayerSurface.RoleRoute roleForKey(String key) {
+    static NpcPlayerSurface.RoleRoute roleForKey(String key) {
         return switch (key == null ? "" : key.toLowerCase(Locale.ROOT)) {
             case "receptionist" -> NpcPlayerSurface.RoleRoute.RECEPTIONIST;
             case "trainer" -> NpcPlayerSurface.RoleRoute.TRAINER;

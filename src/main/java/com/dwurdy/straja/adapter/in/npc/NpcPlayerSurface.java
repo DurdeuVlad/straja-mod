@@ -21,6 +21,7 @@ final class NpcPlayerSurface {
             "archive-sheet-read", "archive-sheet-edit", "archive-recipients",
             "archive-sheet-submit", "archive-sheet-sign", "archive-sheet-copy",
             "archive-sheet-envelope", "archive-sheet-issue", "archive-sheet-revoke",
+            "more", "main",
             "report-review", "audience-review",
             "incident-accept", "incident-join", "incident-leave", "incident-resolve",
             "bolo-cancel", "evidence-deposit", "evidence-return", "evidence-transfer",
@@ -37,7 +38,11 @@ final class NpcPlayerSurface {
 
     enum RoleRoute { RECEPTIONIST, SECRETARY, JAILER, ARCHIVIST, TRAINER, RECRUITER, ARMORER, UNKNOWN }
 
-    record ChatAction(String label, String actionId) {
+    record ChatAction(String label, String actionId, String labelKey) {
+        ChatAction(String label, String actionId) {
+            this(label, actionId, null);
+        }
+
         /** Command shape used by the surface; the actual token is player-bound. */
         String command() {
             return NPC_ACTION_COMMAND + "<token>";
@@ -54,6 +59,30 @@ final class NpcPlayerSurface {
                     + String.join(" ", actions.stream().map(ChatAction::label).toList());
         }
     }
+
+    /**
+     * Ordered surface result: {@code surface()} is the primary page (never more
+     * than {@link #PRIMARY_CAP} actions, including the «Mai multe…» link),
+     * {@code overflow()} holds the remaining reachable actions in order.
+     */
+    record OrderedSurface(RoleSurface surface, List<ChatAction> overflow) {
+        /** Every reachable content action in display order, navigation links excluded. */
+        List<ChatAction> contentActions() {
+            var all = new java.util.ArrayList<ChatAction>();
+            surface.actions().stream()
+                    .filter(action -> !action.actionId().startsWith("more:"))
+                    .forEach(all::add);
+            all.addAll(overflow);
+            return List.copyOf(all);
+        }
+    }
+
+    /** Max actions on the primary surface page, including the «Mai multe…» link. */
+    static final int PRIMARY_CAP = 6;
+    private static final String FAQ_SPEC = "@faq";
+
+    /** Ordering phases derived from the player's Straja state. */
+    enum SurfacePhase { CIVIL, APPLICANT, MEMBER }
 
     record ActionRef(String operation, String recordId) {}
 
@@ -168,11 +197,141 @@ final class NpcPlayerSurface {
         return new InteractionPlan(surfaceFor(roleId), false);
     }
 
-    static RoleSurface withAdditionalActions(RoleSurface surface, List<ChatAction> additional) {
-        if (additional == null || additional.isEmpty()) return surface;
-        var actions = new java.util.ArrayList<>(surface.actions());
-        actions.addAll(additional);
-        return new RoleSurface(surface.route(), surface.title(), surface.guidance(), List.copyOf(actions));
+    /**
+     * Orders a role's surface around the player's current state: the next
+     * meaningful actions lead, «Am o întrebare» stays within the first three
+     * positions, and everything else stays reachable under «Mai multe…».
+     * Pure and deterministic — same inputs always produce the same order.
+     */
+    static OrderedSurface orderedFor(String roleId, List<ChatAction> dynamicActions,
+                                     NpcFaqSurface.Context context) {
+        RoleSurface base = surfaceFor(roleId);
+        var present = new java.util.LinkedHashMap<String, ChatAction>();
+        base.actions().forEach(action -> present.putIfAbsent(action.actionId(), action));
+        var extras = dynamicActions == null ? List.<ChatAction>of() : dynamicActions;
+        extras.forEach(action -> present.putIfAbsent(action.actionId(), action));
+
+        SurfacePhase phase = phaseFor(context);
+        String faqId = faqEntry(base.route()).actionId();
+        var seen = new java.util.HashSet<String>();
+        var eligible = new java.util.ArrayList<ChatAction>();
+        java.util.function.Consumer<ChatAction> push = action -> {
+            if (action != null && seen.add(action.actionId())) eligible.add(action);
+        };
+        // Members see their actionable-now (dynamic) actions ahead of the static
+        // bookkeeping; civilians and applicants see orientation first instead.
+        if (phase == SurfacePhase.MEMBER) extras.forEach(push);
+        String routeKey = NpcFaqSurface.roleKey(base.route());
+        for (String specId : orderSpec(base.route(), phase)) {
+            String actionId = FAQ_SPEC.equals(specId) ? faqId : specId;
+            push.accept(present.get(actionId));
+        }
+        if (phase != SurfacePhase.MEMBER) extras.forEach(push);
+
+        // Actions that do not fit the current state stay reachable, but only
+        // under «Mai multe…» — nothing is removed outright.
+        var deferred = new java.util.ArrayList<ChatAction>();
+        present.values().forEach(action -> {
+            if (!seen.contains(action.actionId())) deferred.add(action);
+        });
+
+        int faqIndex = indexOf(eligible, faqId);
+        if (faqIndex > 2) eligible.add(2, eligible.remove(faqIndex));
+
+        boolean needsMore = !deferred.isEmpty() || eligible.size() > PRIMARY_CAP;
+        int contentCap = needsMore ? PRIMARY_CAP - 1 : PRIMARY_CAP;
+        var primary = new java.util.ArrayList<>(
+                eligible.subList(0, Math.min(contentCap, eligible.size())));
+        var overflow = new java.util.ArrayList<ChatAction>();
+        if (eligible.size() > contentCap) {
+            overflow.addAll(eligible.subList(contentCap, eligible.size()));
+        }
+        overflow.addAll(deferred);
+        if (!overflow.isEmpty()) {
+            primary.add(new ChatAction("Mai multe…", "more:" + routeKey, "straja.ui.more"));
+        }
+        var surface = new RoleSurface(base.route(), base.title(), base.guidance(), List.copyOf(primary));
+        return new OrderedSurface(surface, List.copyOf(overflow));
+    }
+
+    static ChatAction backLink(String roleKey) {
+        return new ChatAction("« Înapoi", "main:" + roleKey, "straja.ui.back");
+    }
+
+    static String roleIdFor(RoleRoute route) {
+        return switch (route) {
+            case RECEPTIONIST -> NpcRoles.RECEPTIONIST;
+            case SECRETARY -> NpcRoles.SECRETARY;
+            case JAILER -> NpcRoles.JAILER;
+            case ARCHIVIST -> NpcRoles.ARCHIVIST;
+            case TRAINER, RECRUITER -> NpcRoles.TRAINER;
+            case ARMORER -> NpcRoles.ARMORER;
+            case UNKNOWN -> "";
+        };
+    }
+
+    private static SurfacePhase phaseFor(NpcFaqSurface.Context context) {
+        if (context == null) return SurfacePhase.CIVIL;
+        if (context.commissioner() || context.activeMember()) return SurfacePhase.MEMBER;
+        if (context.memberRecord()) return SurfacePhase.APPLICANT;
+        return SurfacePhase.CIVIL;
+    }
+
+    private static int indexOf(List<ChatAction> actions, String actionId) {
+        for (int i = 0; i < actions.size(); i++) {
+            if (actions.get(i).actionId().equals(actionId)) return i;
+        }
+        return -1;
+    }
+
+    /**
+     * Primary-page eligibility per route and phase. Unlisted actions are still
+     * reachable — they drop to «Mai multe…» in declaration order. The "@faq"
+     * placeholder resolves to the route's FAQ entry.
+     */
+    private static List<String> orderSpec(RoleRoute route, SurfacePhase phase) {
+        boolean member = phase == SurfacePhase.MEMBER;
+        return switch (route) {
+            case RECEPTIONIST -> switch (phase) {
+                case CIVIL -> List.of("application-submit", "rules", FAQ_SPEC,
+                        "trades-list", "fine-list", "identity-request",
+                        "trades-promote", "incident-report", "reputation-self");
+                case APPLICANT -> List.of("rules", FAQ_SPEC, "trades-list",
+                        "fine-list", "identity-request", "trades-promote",
+                        "incident-report", "reputation-self");
+                case MEMBER -> List.of("guard-status", FAQ_SPEC, "v2-personnel-status",
+                        "v2-promotion-status", "v2-document-status", "room-status",
+                        "reputation-self", "faction-declare", "identity-request",
+                        "identity-list", "fine-list", "rules", "trades-list",
+                        "trades-promote", "application-submit", "incident-report");
+            };
+            case SECRETARY -> member
+                    ? List.of("guard-status", "mission-list", "mission-carnet", FAQ_SPEC,
+                            "v2-personnel-status", "v2-campaign-status",
+                            "v2-professional-work", "duty-roster", "incident-list",
+                            "bolo-list", "bolo-create")
+                    : List.of("mission-list", FAQ_SPEC, "incident-list");
+            case TRAINER -> switch (phase) {
+                case CIVIL -> List.of(FAQ_SPEC, "training-manual");
+                case APPLICANT -> List.of("training-progress", FAQ_SPEC, "training-manual");
+                case MEMBER -> List.of("training-progress", FAQ_SPEC,
+                        "v2-promotion-status", "training-manual");
+            };
+            case RECRUITER -> orderSpec(RoleRoute.TRAINER, phase);
+            // Custody actions are driven by detention state, not membership —
+            // the same order serves every phase.
+            case JAILER -> List.of("cuffs-status", "prison-status", FAQ_SPEC,
+                    "arrest-handoff", "arrest-record", "downed-status", "cuffs-item");
+            case ARCHIVIST -> member
+                    ? List.of("archive-list", "v2-document-status", FAQ_SPEC,
+                            "evidence-list", "evidence-case-view")
+                    : List.of(FAQ_SPEC, "archive-list");
+            case ARMORER -> member
+                    ? List.of("armory-status", "v2-equipment-status", FAQ_SPEC,
+                            "v2-professional-work", "duty-kit")
+                    : List.of(FAQ_SPEC, "armory-status");
+            case UNKNOWN -> List.of();
+        };
     }
 
     static ChatAction faqEntry(RoleRoute origin) {

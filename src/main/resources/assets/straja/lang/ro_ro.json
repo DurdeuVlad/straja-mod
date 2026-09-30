@@ -54,5 +54,8 @@
   "straja.help.player.cmd.rules": "regulamentul serverului",
   "straja.help.player.cmd.regulament": "regulamentul (varianta românească)",
   "straja.help.player.cmd.stop": "încheie serviciul",
-  "straja.help.player.faq": "Ai întrebări? Fiecare NPC Straja are meniul «Am o întrebare»."
+  "straja.help.player.faq": "Ai întrebări? Fiecare NPC Straja are meniul «Am o întrebare».",
+  "straja.ui.more": "[Mai multe…]",
+  "straja.ui.back": "[« Înapoi]",
+  "straja.ui.more.header": "[Straja] Mai multe acțiuni:"
 }
