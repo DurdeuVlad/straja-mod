@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import com.dwurdy.straja.application.StrajaContext;
 import com.dwurdy.straja.domain.model.PermissionLevel;
 import com.dwurdy.straja.domain.model.Rank;
+import com.dwurdy.straja.domain.model.SetupChecklist;
 import com.dwurdy.straja.domain.model.SetupData;
 import com.dwurdy.straja.domain.model.StrajaPolicies;
 import com.dwurdy.straja.support.Fakes;
@@ -1179,31 +1180,101 @@ class GuardServiceTest {
         assertTrue(setup.checkpoints.stream().noneMatch(SetupData.Checkpoint::isPlaced));
     }
 
+    private SetupChecklist.Probes probes() {
+        return new SetupChecklist.Probes(ctx.policies(),
+                ctx.prison().read().cells.size(), java.util.List.of());
+    }
+
+    private void addCell() {
+        var data = ctx.prison().read();
+        var cell = new com.dwurdy.straja.domain.model.Cell();
+        cell.id = "cell_1";
+        data.cells.add(cell);
+        ctx.prison().write(data);
+    }
+
     @Test
     void setupChecklistGuidesThroughMissingPieces() {
         TestPlayer c = commissioner();
-        guards.showSetup(c);
+        guards.showSetup(c, probes());
+        assertTrue(c.told("Comisar: dwurdy"),
+                "the configured commissioner name is shown, not just a flag");
         assertTrue(c.told("Locații administrative: 0/" + SetupData.LOCATION_KEYS.length));
+        assertTrue(c.told("Celule de detenție: 0"), "cells category is listed");
+        assertTrue(c.told("Economie (itemi monedă):"), "currency category is listed");
+        assertTrue(c.told("Stații:"), "station health category is listed");
         assertTrue(c.told("Următorul pas:"));
 
         stampAllLocations();
         placeCheckpoints();
         registerAllNpcs();
-        guards.showSetup(c);
+        addCell();
+        guards.showSetup(c, probes());
+        assertTrue(c.told("✓ Celule de detenție: 1"));
         assertTrue(c.told("Configurare completă"));
+        assertTrue(c.told("setup verify"), "a complete checklist points at the smoke step");
+    }
+
+    @Test
+    void setupChecklistFlagsMissingCommissioner() {
+        ctx.policies().commissionerName = "";
+        ctx.policies().commissionerUuid = "";
+        TestPlayer c = commissioner();
+        guards.showSetup(c, probes());
+        assertTrue(c.told("✗ Comisar: nesetat"));
+        assertTrue(c.told("Comisarul nu este configurat"),
+                "the commissioner step leads because it gates setup here");
+    }
+
+    @Test
+    void setupVerifyReportsReadiness() {
+        TestPlayer c = commissioner();
+        guards.showSetupVerify(c, probes(), java.util.List.of());
+        assertTrue(c.told("Verificare post-instalare"));
+        assertTrue(c.told("NU este gata"), "incomplete checklist is not ready");
+
+        stampAllLocations();
+        placeCheckpoints();
+        registerAllNpcs();
+        addCell();
+        guards.showSetupVerify(c, probes(), java.util.List.of());
+        assertTrue(c.told("Checklist configurare: complet"));
+        assertTrue(c.told("Validare stații: OK"));
+        assertTrue(c.told("gata pentru jucători"));
+
+        guards.showSetupVerify(c, probes(), java.util.List.of("personnel.null:x"));
+        assertTrue(c.told("Consistență (doctor): 1 probleme"));
+        assertTrue(c.told("NU este gata"), "doctor issues block the ready verdict");
     }
 
     @Test
     void setupHintOnlyNudgesTheCommissioner() {
         TestPlayer c = commissioner();
         TestPlayer other = server.add("visitor");
-        assertNotNull(players.setupHintFor(c), "commissioner sees the next step");
-        assertNull(players.setupHintFor(other), "non-commissioners get no setup hints");
+        assertNotNull(players.setupHintFor(c, probes()), "commissioner sees the next step");
+        assertNull(players.setupHintFor(other, probes()), "non-commissioners get no setup hints");
 
         stampAllLocations();
         placeCheckpoints();
         registerAllNpcs();
-        assertNull(players.setupHintFor(c), "no nudge once setup is complete");
+        addCell();
+        assertNull(players.setupHintFor(c, probes()), "no nudge once setup is complete");
+    }
+
+    @Test
+    void setupHintTracksInstallProbes() {
+        TestPlayer c = commissioner();
+        stampAllLocations();
+        placeCheckpoints();
+        registerAllNpcs();
+        String hint = players.setupHintFor(c, new SetupChecklist.Probes(
+                ctx.policies(), 0, java.util.List.of()));
+        assertNotNull(hint);
+        assertTrue(hint.contains("prison_marker"),
+                "the login nudge surfaces the new categories too: " + hint);
+        assertNull(players.setupHintFor(c, new SetupChecklist.Probes(
+                        ctx.policies(), 1, java.util.List.of())),
+                "identical probes yield identical verdicts between hint and checklist");
     }
 
     // ------------------------------------------------------------ §7 secretary gating + factions

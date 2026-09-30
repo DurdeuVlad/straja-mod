@@ -185,7 +185,8 @@ public final class StrajaCommands {
                                 .setLocation(p, StringArgumentType.getString(c, "name")))));
         root.then(adminOnly(setLocation));
         var setup = Commands.literal("setup")
-                .executes(c -> adminActor(c, StrajaRuntime.get().guards()::showSetup));
+                .executes(c -> adminActor(c, p -> StrajaRuntime.get().guards()
+                        .showSetup(p, StrajaRuntime.get().setupProbes())));
         setup.then(Commands.literal("here")
                 .executes(c -> adminActor(c, StrajaRuntime.get().guards()::setupLocationsHere)));
         setup.then(Commands.literal("patrol")
@@ -194,6 +195,13 @@ public final class StrajaCommands {
         // Admin tool kit: Comisar/op holder gate re-checked inside the service.
         setup.then(Commands.literal("tools")
                 .executes(c -> adminActor(c, StrajaRuntime.get().adminTools()::giveToolKit)));
+        // Read-only post-install smoke: checklist + station chain + doctor.
+        setup.then(Commands.literal("verify")
+                .executes(c -> adminActor(c, p -> {
+                    var runtime = StrajaRuntime.get();
+                    runtime.guards().showSetupVerify(p, runtime.setupProbes(),
+                            runtime.v2Consistency().check("consistency"));
+                })));
         root.then(adminOnly(setup));
 
         // runtime policy overrides (persisted YAML layer, live apply)

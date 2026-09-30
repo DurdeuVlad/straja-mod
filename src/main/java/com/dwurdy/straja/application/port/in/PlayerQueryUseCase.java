@@ -3,6 +3,7 @@ package com.dwurdy.straja.application.port.in;
 import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.domain.model.Capability;
 import com.dwurdy.straja.domain.model.GuardState;
+import com.dwurdy.straja.domain.model.SetupChecklist;
 
 /**
  * Read-only authority/capability queries for inbound adapters. Adapters use
@@ -28,8 +29,9 @@ public interface PlayerQueryUseCase {
      * Guided-setup nudge for the commissioner at login: the next missing
      * installation step, or null when setup is complete (or the player is not
      * the commissioner). Read-only; never reveals setup state to others.
+     * {@code probes} carries the install-state the domain cannot reach itself.
      */
-    String setupHintFor(PlayerGateway player);
+    String setupHintFor(PlayerGateway player, SetupChecklist.Probes probes);
 
     /**
      * §4 display composition: the bracketed rank prefix ("[Sergent]") for

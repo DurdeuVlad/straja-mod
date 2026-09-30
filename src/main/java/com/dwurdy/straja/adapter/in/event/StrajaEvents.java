@@ -236,7 +236,7 @@ public final class StrajaEvents {
         runtime.roomRoleplay().assignAutomatically(gateway);
         runtime.roomRoleplay().processWaitlist();
         runtime.audienceRoleplay().deliverOutcome(gateway);
-        String setupHint = runtime.playerQueries().setupHintFor(gateway);
+        String setupHint = runtime.playerQueries().setupHintFor(gateway, runtime.setupProbes());
         if (setupHint != null) {
             gateway.tell("[Straja] Configurarea este incompletă. " + setupHint
                     + " Rulează /straja setup pentru checklist-ul complet.");

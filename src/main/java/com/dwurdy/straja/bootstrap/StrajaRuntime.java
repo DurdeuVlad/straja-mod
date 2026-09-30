@@ -496,6 +496,19 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.service.AuthorizationService v2Authorization() { return v2Authorization; }
     public com.dwurdy.straja.application.service.PromotionService v2Promotions() { return v2Promotions; }
     public com.dwurdy.straja.application.service.StationService v2Stations() { return v2Stations; }
+
+    /**
+     * Assembles the install-state probes the setup checklist cannot reach on
+     * its own: policies + cell count live on ctx, station health on the V2
+     * service. Shared by /straja setup, /straja setup verify and the
+     * commissioner login nudge so all three never disagree.
+     */
+    public com.dwurdy.straja.domain.model.SetupChecklist.Probes setupProbes() {
+        var stationErrors = com.dwurdy.straja.domain.model.SetupChecklist.stationProblems(
+                v2Stations.get("hq"), v2Stations.validateFallbacks());
+        return new com.dwurdy.straja.domain.model.SetupChecklist.Probes(
+                ctx.policies(), ctx.prison().read().cells.size(), stationErrors);
+    }
     public com.dwurdy.straja.application.service.DocumentService v2Documents() { return v2Documents; }
     public com.dwurdy.straja.application.service.EquipmentLedgerService v2EquipmentLedger() { return v2EquipmentLedger; }
     public com.dwurdy.straja.application.service.MobilizationService v2Mobilizations() { return v2Mobilizations; }

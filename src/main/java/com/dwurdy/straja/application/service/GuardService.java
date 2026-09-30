@@ -1810,16 +1810,17 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         player.tell(key + " salvat la " + (int) location.x + ", " + (int) location.y + ", " + (int) location.z + ".");
     }
 
-    public void showSetup(PlayerGateway player) {
+    public void showSetup(PlayerGateway player, SetupChecklist.Probes probes) {
         SetupData setup = ctx.setup().read();
         var registry = ctx.npcs().read();
         var missingLocations = SetupChecklist.missingLocations(setup);
         var missingPoints = SetupChecklist.unplacedCheckpoints(setup);
         var missingNpcs = SetupChecklist.missingNpcRoles(registry, NpcAdminService.ROLE_ORDER);
+        boolean commissioner = SetupChecklist.commissionerAppointed(probes);
         player.tell("[Straja] Checklist de configurare:");
-        player.tell(check(players.isCommissioner(player))
-                + " Comisar: " + (players.isCommissioner(player)
-                        ? "setat (tu)"
+        player.tell(check(commissioner)
+                + " Comisar: " + (commissioner
+                        ? commissionerLabel(probes) + (players.isCommissioner(player) ? " (tu)" : "")
                         : "nesetat — definește-l în [identity] din straja-server.toml"));
         player.tell(check(missingLocations.isEmpty())
                 + " Locații administrative: " + (SetupData.LOCATION_KEYS.length - missingLocations.size())
@@ -1833,10 +1834,55 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
                 + " NPC-uri: " + (NpcAdminService.ROLE_ORDER.size() - missingNpcs.size())
                 + "/" + NpcAdminService.ROLE_ORDER.size()
                 + (missingNpcs.isEmpty() ? "" : " — lipsesc: " + String.join(", ", missingNpcs)));
-        String next = SetupChecklist.nextStep(setup, registry, NpcAdminService.ROLE_ORDER);
+        player.tell(check(SetupChecklist.prisonCellsConfigured(probes))
+                + " Celule de detenție: " + probes.prisonCells()
+                + (probes.prisonCells() > 0 ? "" : " — marchează colțurile cu prison_marker"));
+        boolean currency = SetupChecklist.currencyConfigured(probes);
+        player.tell(check(currency)
+                + " Economie (itemi monedă): " + (currency
+                        ? probes.policies().coinItemIds.size() + " paliere"
+                        : "neconfigurată — coinItemIds în straja-server.toml"));
+        player.tell(check(SetupChecklist.stationsReady(probes))
+                + " Stații: " + (probes.stationErrors().isEmpty()
+                        ? "lanț de fallback valid"
+                        : "erori: " + String.join(", ", probes.stationErrors())));
+        String next = SetupChecklist.nextStep(setup, registry, NpcAdminService.ROLE_ORDER, probes);
         player.tell(next == null
-                ? "Configurare completă. Rafinează punctele cu /straja set-location / set-checkpoint."
+                ? "Configurare completă — confirmă cu /straja setup verify. "
+                        + "Rafinează punctele cu /straja set-location / set-checkpoint."
                 : "Următorul pas: " + next);
+    }
+
+    /**
+     * Read-only post-install smoke: re-checks the full checklist, the station
+     * fallback chain and the doctor consistency report, then prints one
+     * honest ready/not-ready verdict.
+     */
+    public void showSetupVerify(PlayerGateway player, SetupChecklist.Probes probes,
+                                java.util.List<String> consistencyIssues) {
+        SetupData setup = ctx.setup().read();
+        var registry = ctx.npcs().read();
+        boolean complete = SetupChecklist.isComplete(setup, registry, NpcAdminService.ROLE_ORDER, probes);
+        var issues = consistencyIssues == null ? java.util.List.<String>of() : consistencyIssues;
+        player.tell("[Straja] Verificare post-instalare (read-only):");
+        player.tell(check(complete) + " Checklist configurare: " + (complete
+                ? "complet"
+                : "incomplet — " + SetupChecklist.nextStep(setup, registry, NpcAdminService.ROLE_ORDER, probes)));
+        player.tell(check(probes.stationErrors().isEmpty()) + " Validare stații: "
+                + (probes.stationErrors().isEmpty() ? "OK" : String.join(", ", probes.stationErrors())));
+        player.tell(check(issues.isEmpty()) + " Consistență (doctor): "
+                + (issues.isEmpty() ? "OK" : issues.size() + " probleme — " + issues.get(0)));
+        player.tell(complete && issues.isEmpty()
+                ? "Instalare funcțională — gata pentru jucători."
+                : "Instalarea NU este gata — rezolvă elementele marcate cu ✗ din /straja setup.");
+    }
+
+    private static String commissionerLabel(SetupChecklist.Probes probes) {
+        var policies = probes.policies();
+        if (policies == null) return "";
+        return policies.commissionerUuid != null && !policies.commissionerUuid.isBlank()
+                ? "uuid " + policies.commissionerUuid
+                : String.valueOf(policies.commissionerName);
     }
 
     private static String check(boolean done) {

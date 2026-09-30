@@ -143,10 +143,11 @@ public class PlayerService implements com.dwurdy.straja.application.port.in.Play
     }
 
     @Override
-    public String setupHintFor(PlayerGateway player) {
+    public String setupHintFor(PlayerGateway player,
+                               com.dwurdy.straja.domain.model.SetupChecklist.Probes probes) {
         if (!isCommissioner(player)) return null;
         return com.dwurdy.straja.domain.model.SetupChecklist.nextStep(
-                ctx.setup().read(), ctx.npcs().read(), NpcAdminService.ROLE_ORDER);
+                ctx.setup().read(), ctx.npcs().read(), NpcAdminService.ROLE_ORDER, probes);
     }
 
     public PermissionLevel permissionLevel(PlayerGateway player, GuardState state) {
