@@ -37,3 +37,6 @@ __pycache__/
 
 # Codex planning scratch files
 .codex-scratch/
+
+# local trinity orchestrator state (SQLite, machine-local)
+trinity_pilot.db*
