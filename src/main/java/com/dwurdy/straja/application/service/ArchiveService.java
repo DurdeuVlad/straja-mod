@@ -498,7 +498,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
         sheet.updatedAt = now();
         ctx.archive().write(store);
         audit.record("archive_sheet_sign", player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), "SUCCESS", "signed sheetId=" + sheet.id + " signer=" + player.name());
-        player.tell("Act semnat și blocat: " + sheet.id + ". Corecțiile se fac printr-o foaie nouă.");
+        player.refuse("straja.archive.signed_locked", "straja.remedy.fix_retry", sheet.id);
         return true;
     }
 
@@ -535,7 +535,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
         ArchiveStore.Sheet sheet = store.sheets.get(id);
         ArchiveStore.Folder folder = sheet == null ? null : store.folders.get(sheet.folderId);
         if (sheet == null || folder == null || !canReadFolder(player, folder) || !"SIGNED".equals(sheet.status) || sheet.originId != null) {
-            player.tell("Numai originalul unui act semnat poate produce copii.");
+            player.refuse("straja.archive.copy_original", "straja.remedy.fix_retry");
             return false;
         }
         List<String> targets = new ArrayList<>();

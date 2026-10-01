@@ -273,7 +273,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
 
     public boolean requestCuffs(PlayerGateway issuer, PlayerGateway target) {
         if (!canIssueCuffs(issuer)) {
-            issuer.tell("Cătușele se acordă de la rangul Străjer în sus.");
+            issuer.refuse("straja.custody.cuffs_rank", "straja.remedy.instructor");
             return false;
         }
         if (!hasItem(issuer, CUFFS)) {
@@ -285,7 +285,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
 
     public boolean requestSurrender(PlayerGateway issuer, PlayerGateway target) {
         if (!canIssueCuffs(issuer)) {
-            issuer.tell("Cererea de predare și cătușele se folosesc de la rangul Străjer în sus.");
+            issuer.refuse("straja.custody.surrender_rank", "straja.remedy.instructor");
             return false;
         }
         if (!hasItem(issuer, CUFFS)) {
@@ -1289,7 +1289,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
         }
         String kind = releaseToolKind(issuer.mainHand());
         if ("NONE".equals(kind)) {
-            issuer.tell("Ține o Cheie, Foarfeca sau Brelocul Temnicerului în mâna principală.");
+            issuer.refuse("straja.custody.hold_tool", "straja.remedy.fix_retry");
             return false;
         }
         var store = store();
@@ -1434,7 +1434,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
 
     public boolean applyRope(PlayerGateway issuer, PlayerGateway target) {
         if (issuer == null || target == null || !issuer.isOnline() || !target.isOnline()) {
-            if (issuer != null) issuer.tell("Legarea cere doi jucători online.");
+            if (issuer != null) issuer.refuse("straja.custody.bind_online", "straja.remedy.retry");
             return false;
         }
         if (key(issuer).equals(key(target))) {
@@ -1511,7 +1511,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
 
     public boolean applyHeadSack(PlayerGateway issuer, PlayerGateway target) {
         if (issuer == null || target == null || !issuer.isOnline() || !target.isOnline()) {
-            if (issuer != null) issuer.tell("Sacul cere doi jucători online.");
+            if (issuer != null) issuer.refuse("straja.custody.bag_online", "straja.remedy.retry");
             return false;
         }
         if (key(issuer).equals(key(target))) {
@@ -1910,7 +1910,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
     @Override
     public boolean startCarry(PlayerGateway carrier, PlayerGateway target) {
         if (carrier == null || target == null || !carrier.isOnline() || !target.isOnline()) {
-            if (carrier != null) carrier.tell("Transportul cere doi jucători online.");
+            if (carrier != null) carrier.refuse("straja.custody.transport_online", "straja.remedy.retry");
             return false;
         }
         if (key(carrier).equals(key(target))) {
@@ -1999,7 +1999,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
     @Override
     public boolean startResuscitation(PlayerGateway rescuer, PlayerGateway target) {
         if (rescuer == null || target == null || !rescuer.isOnline() || !target.isOnline()) {
-            if (rescuer != null) rescuer.tell("Resuscitarea cere doi jucători online.");
+            if (rescuer != null) rescuer.refuse("straja.custody.rez_online", "straja.remedy.retry");
             return false;
         }
         if (key(rescuer).equals(key(target))) {
@@ -2347,9 +2347,10 @@ public class CustodyService implements CustodyRoleplayUseCase {
                 if (bound != null) bound.lastBlockedNoticeAt = now();
                 if (cuffed != null) cuffed.lastBlockedNoticeAt = now();
                 ctx.custody().write(store);
-                player.tell(bound != null
-                        ? "Ești legat. Nu poți interacționa până nu ești eliberat."
-                        : "Ești încătușat. Nu poți interacționa până nu ești eliberat.");
+                player.refuse(bound != null
+                        ? "straja.custody.bound_interact"
+                        : "straja.custody.cuffed_interact",
+                        "straja.remedy.jailer");
             }
             player.closeMenu();
             return true;
@@ -2360,7 +2361,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
     public void cuffStatus(PlayerGateway player) {
         var record = store().cuffed.get(key(player));
         if (record == null) player.refuse("straja.custody.self_not_cuffed", "straja.remedy.fix_retry");
-        else player.tell("Ești încătușat de " + record.issuer + ". Cheia trebuie folosită de acel gardian.");
+        else player.refuse("straja.custody.cuffed_by_other", "straja.remedy.jailer", record.issuer);
     }
 
     public void downedStatus(PlayerGateway player) {

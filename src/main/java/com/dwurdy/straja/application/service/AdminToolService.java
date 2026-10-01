@@ -48,7 +48,7 @@ public class AdminToolService implements AdminToolsUseCase {
     private boolean gate(PlayerGateway player) {
         if (isToolHolder(player)) return true;
         if (player != null) {
-            player.tell("Instrumentele administrative pot fi folosite doar de Comisar sau operatori.");
+            player.refuse("straja.admintool.comisar_only", "straja.remedy.ask_comisar");
         }
         return false;
     }
@@ -91,7 +91,7 @@ public class AdminToolService implements AdminToolsUseCase {
             // the wand on foreign NPCs — the record keys on the entity UUID
             // and never touches appearance. Players stay refused.
             if (!bindable) {
-                player.tell("Bagheta funcționează doar pe un NPC Straja înregistrat.");
+                player.refuse("straja.admintool.wand_npc", "straja.remedy.fix_retry");
                 return null;
             }
             var bind = new ArrayList<MenuAction>();
@@ -131,7 +131,7 @@ public class AdminToolService implements AdminToolsUseCase {
         if (npcs.assignRole(entityUuid, role).ok()) {
             player.tell("NPC " + entityUuid + " are acum rolul " + role + ".");
         } else {
-            player.tell("Rol necunoscut: " + role + ". Valide: " + NpcAdminService.KNOWN_ROLES);
+            player.refuse("straja.npc.role_unknown_valid", "straja.remedy.fix_retry", role, NpcAdminService.KNOWN_ROLES);
         }
     }
 
@@ -140,7 +140,7 @@ public class AdminToolService implements AdminToolsUseCase {
         if (!gate(player) || !requireRecord(player, entityUuid)) return;
         String trimmed = name == null ? "" : name.trim();
         if (trimmed.isEmpty() || trimmed.length() > 80) {
-            player.tell("Numele trebuie să aibă între 1 și 80 de caractere.");
+            player.refuse("straja.admintool.name_len", "straja.remedy.fix_retry");
             return;
         }
         npcs.setName(entityUuid, trimmed);
@@ -152,7 +152,7 @@ public class AdminToolService implements AdminToolsUseCase {
         if (!gate(player) || !requireRecord(player, entityUuid)) return;
         String trimmed = skin == null ? "" : skin.trim();
         if (trimmed.isEmpty() || trimmed.length() > 80) {
-            player.tell("Skin-ul trebuie să aibă între 1 și 80 de caractere.");
+            player.refuse("straja.admintool.skin_len", "straja.remedy.fix_retry");
             return;
         }
         npcs.setSkin(entityUuid, trimmed);
@@ -188,7 +188,7 @@ public class AdminToolService implements AdminToolsUseCase {
 
     private boolean requireRecord(PlayerGateway player, String entityUuid) {
         if (recordOf(entityUuid) != null) return true;
-        player.tell("NPC-ul nu mai este înregistrat.");
+        player.refuse("straja.admintool.npc_gone", "straja.remedy.retry");
         return false;
     }
 
@@ -299,7 +299,7 @@ public class AdminToolService implements AdminToolsUseCase {
         var target = surveyTarget(player);
         if (target == null) return;
         if (!players.isCommissioner(player)) {
-            player.tell("Doar Comisaru' poate configura locațiile administrative.");
+            player.refuse("straja.admintool.locations_comisar", "straja.remedy.ask_comisar");
             return;
         }
         var missing = SetupChecklist.missingLocations(ctx.setup().read());
@@ -357,7 +357,7 @@ public class AdminToolService implements AdminToolsUseCase {
         if (!dimension.equals(holder.cellCornerA.dimension)) {
             holder.cellCornerA = null;
             ctx.adminTools().write(store);
-            player.tell("Celula nu poate traversa dimensiuni — selecția a fost resetată.");
+            player.refuse("straja.admintool.cell_dimension", "straja.remedy.fix_retry");
             return false;
         }
         var corner = new AdminToolStore.Waypoint();
@@ -418,7 +418,7 @@ public class AdminToolService implements AdminToolsUseCase {
                 }
                 return;
             }
-            player.tell("Clonatorul capturează doar un NPC Straja înregistrat.");
+            player.refuse("straja.admintool.cloner_npc", "straja.remedy.fix_retry");
             return;
         }
         AdminToolStore store = ctx.adminTools().read();
@@ -454,7 +454,7 @@ public class AdminToolService implements AdminToolsUseCase {
         var holder = ctx.adminTools().read().holders.get(key(player));
         var template = holder == null ? null : holder.cloneTemplate;
         if (template == null || template.role == null) {
-            player.tell("Niciun șablon capturat — copia nu a fost înregistrată.");
+            player.refuse("straja.admintool.clone_fail", "straja.remedy.retry");
             return;
         }
         npcs.register(entityUuid, template.role);

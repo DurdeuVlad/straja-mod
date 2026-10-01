@@ -108,7 +108,7 @@ public class IdentityCardService implements IdentityCardRoleplayUseCase {
     public boolean request(PlayerGateway applicant) {
         if (applicant == null) return false;
         if (!p().identityCardsEnabled) {
-            applicant.tell("Sistemul de buletine este dezactivat.");
+            applicant.refuse("straja.idcard.disabled", "straja.remedy.ask_comisar");
             return false;
         }
         if (!applicant.isOnline()) return false;
@@ -123,7 +123,7 @@ public class IdentityCardService implements IdentityCardRoleplayUseCase {
     public boolean issue(PlayerGateway issuer, PlayerGateway target) {
         if (issuer == null) return false;
         if (!p().identityCardsEnabled) {
-            issuer.tell("Sistemul de buletine este dezactivat.");
+            issuer.refuse("straja.idcard.disabled", "straja.remedy.ask_comisar");
             return false;
         }
         if (!administrator(issuer)) {
@@ -199,7 +199,7 @@ public class IdentityCardService implements IdentityCardRoleplayUseCase {
     public boolean forge(PlayerGateway actor, PlayerGateway target) {
         if (actor == null) return false;
         if (!p().identityCardsEnabled) {
-            actor.tell("Sistemul de buletine este dezactivat.");
+            actor.refuse("straja.idcard.disabled", "straja.remedy.ask_comisar");
             return false;
         }
         if (!administrator(actor)) {

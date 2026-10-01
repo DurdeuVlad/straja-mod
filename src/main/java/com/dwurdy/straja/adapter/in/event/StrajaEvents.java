@@ -682,7 +682,7 @@ public final class StrajaEvents {
                 if (runtime.playerQueries().hasCapability(player, Capability.ISSUE_FINES)) {
                     player.tell(runtime.fineRoleplay().draftText(player));
                 } else {
-                    player.tell("Registrul de Amenzi este rezervat Străjii active.");
+                    player.refuse("straja.item.fine_book_reserved", "straja.remedy.duty");
                 }
                 return true;
             }

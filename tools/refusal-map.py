@@ -1420,5 +1420,499 @@ MAP = {
     "Depune cererea direct la Comisaru', cu toate detaliile necesare.":
         ("straja.inbox.request_empty", R + "fix_retry",
          "File the request directly to the Commissioner, with all details."),
+
+    # ── second pass: adversarial-review misses ──────────────────────────
+
+    # CustodyService
+    "Cătușele se acordă de la rangul Străjer în sus.":
+        ("straja.custody.cuffs_rank", R + "instructor",
+         "Cuffs are granted from the Guard rank up."),
+    "Cererea de predare și cătușele se folosesc de la rangul Străjer în sus.":
+        ("straja.custody.surrender_rank", R + "instructor",
+         "Surrender requests and cuffs are used from the Guard rank up."),
+    "Ține o Cheie, Foarfeca sau Brelocul Temnicerului în mâna principală.":
+        ("straja.custody.hold_tool", R + "fix_retry",
+         "Hold a Key, Shears, or the Jailer Keyring in your main hand."),
+    "Ești încătușat de %s. Cheia trebuie folosită de acel gardian.":
+        ("straja.custody.cuffed_by_other", R + "jailer",
+         "You are cuffed by %s. The key must be used by that guard."),
+
+    # GuardService
+    "Mai întâi finalizează instruirea: %s module rămase. Întreabă Instructorul pentru următoarea întrebare.":
+        ("straja.duty.finish_training", R + "instructor",
+         "Finish your training first: %s modules left. Ask the Instructor for the next question."),
+    "Raportul tău de activitate este restant. Depune-l la Secretariat înainte de a începe serviciul.":
+        ("straja.duty.report_overdue", R + "secretary",
+         "Your activity report is overdue. File it at the Secretariat before starting duty."),
+    "Tura de patrulare începe la secretară. Mergi la Secretara Străjii pentru a intra în serviciu.":
+        ("straja.duty.patrol_at_secretary", R + "secretary",
+         "Patrol duty starts at the secretary. Go to the Straja Secretary to start your shift."),
+    "Tura normală se încheie la secretară. Mergi la Secretara Străjii pentru a ieși din serviciu.":
+        ("straja.duty.end_at_secretary", R + "secretary",
+         "A normal shift ends at the secretary. Go to the Straja Secretary to leave duty."),
+    "Facțiunea nativă poate avea maximum %s caractere.":
+        ("straja.duty.faction_len", R + "fix_retry",
+         "The native faction may have at most %s characters."),
+    "Plata salariului este blocată pentru verificarea Comisarului.":
+        ("straja.duty.salary_locked", R + "wait",
+         "Salary payout is locked pending the Commissioner's check."),
+    "Hrana de serviciu se ridică numai în timpul unei ture active.":
+        ("straja.duty.food_duty", R + "duty",
+         "Duty meals are only issued during an active shift."),
+    "Manualul este pentru recruții invitați și străjeri. Vorbește cu Comisaru'.":
+        ("straja.duty.manual_ranks", R + "ask_comisar",
+         "The manual is for invited recruits and guards. Talk to the Commissioner."),
+    "Special Duty poate fi autorizat de Comisaru' sau de un Inspector pentru alt străjer.":
+        ("straja.duty.special_auth", R + "ask_comisar",
+         "Special Duty may be authorized by the Commissioner or an Inspector for another guard."),
+    "Locație necunoscută: reports, mailbox, office, receptionist, secretary, trainer, armorer, prison-release, infirmary sau hq.":
+        ("straja.admin.location_unknown", R + "fix_retry",
+         "Unknown location: reports, mailbox, office, receptionist, secretary, trainer, armorer, prison-release, infirmary or hq."),
+    "Prezintă raportul complet direct Comisaru'ului.":
+        ("straja.duty.report_blank", R + "fix_retry",
+         "Present the full report directly to the Commissioner."),
+
+    # ComplaintService
+    "Registrul de plângeri este dezactivat.":
+        ("straja.complaint.disabled", R + "ask_comisar",
+         "The complaints registry is disabled."),
+    "Depune la recepționistă un formular complet: acuzat și categorie (maximum %s caractere) și descriere (maximum %s caractere).":
+        ("straja.complaint.form_incomplete", R + "fix_retry",
+         "File a complete form at the receptionist: accused and category (max %s chars) and description (max %s chars)."),
+    "Ai prea multe plângeri deschise. Așteaptă soluționarea lor.":
+        ("straja.complaint.too_many", R + "wait",
+         "You have too many open complaints. Wait for them to be resolved."),
+    "Plângerea este deja preluată de %s.":
+        ("straja.complaint.already_claimed", R + "fix_retry",
+         "The complaint is already claimed by %s."),
+    "Dosarele se preiau la secretară.":
+        ("straja.complaint.claim_secretary", R + "secretary",
+         "Case files are claimed at the secretary."),
+    "Jucătorul este deja pe dosar.":
+        ("straja.complaint.already_on_case", R + "fix_retry",
+         "The player is already on the case file."),
+    "Dosarul are deja numărul maxim de participanți.":
+        ("straja.complaint.case_full", R + "wait",
+         "The case file already has the maximum number of participants."),
+    "Raportarea pentru dosar se face la secretară.":
+        ("straja.complaint.checkin_secretary", R + "secretary",
+         "Case reporting is done at the secretary."),
+    "Părăsirea dosarului se face la secretară.":
+        ("straja.complaint.leave_secretary", R + "secretary",
+         "Leaving a case file is done at the secretary."),
+    "Raportul de investigație se depune la secretară.":
+        ("straja.complaint.report_secretary", R + "secretary",
+         "The investigation report is filed at the secretary."),
+    "Dosarul %s are un raport. Mergi la recepționistă și confirmă rezultatul sau retrage plângerea.":
+        ("straja.complaint.confirm_reception", R + "reception",
+         "Case file %s has a report. Go to the receptionist and confirm the result or withdraw the complaint."),
+    "Confirmarea plângerii se face la recepționistă.":
+        ("straja.complaint.confirmation_reception", R + "reception",
+         "Complaint confirmation is done at the receptionist."),
+    "Retragerea plângerii cere un motiv de maximum %s caractere.":
+        ("straja.complaint.withdraw_reason", R + "fix_retry",
+         "Withdrawing a complaint needs a reason of at most %s characters."),
+    "La recepționistă, alege confirmarea soluționării sau retragerea plângerii.":
+        ("straja.complaint.decision_reception", R + "reception",
+         "At the receptionist, choose confirming the resolution or withdrawing the complaint."),
+    "Bugetul zilnic al Inspectorului este insuficient (%s/%s).":
+        ("straja.complaint.budget", R + "wait",
+         "The Inspector's daily budget is insufficient (%s/%s)."),
+    "Verificarea dosarelor se face la secretară.":
+        ("straja.complaint.verify_secretary", R + "secretary",
+         "Case verification is done at the secretary."),
+    "În registrul de plângeri, alege aprobarea, returnarea pentru completări sau clasarea dosarului.":
+        ("straja.complaint.pick_action", R + "fix_retry",
+         "In the complaints registry, choose approving, returning for amendments, or closing the file."),
+    "Așteaptă confirmarea petentului sau folosește override-ul Comisarului.":
+        ("straja.complaint.wait_complainant", R + "wait",
+         "Wait for the complainant's confirmation or use the Commissioner's override."),
+    "Plângerea se depune la recepționistă.":
+        ("straja.complaint.at_reception", R + "reception",
+         "Complaints are filed at the receptionist."),
+
+    # EvidenceService
+    "Inventarul proprietarului este plin; proba rămâne în Arhivă.":
+        ("straja.evidence.owner_full", R + "wait",
+         "The owner's inventory is full; the evidence stays in the Archive."),
+    "Transferul cere un arhivist/Comisar și un custode autorizat.":
+        ("straja.evidence.transfer_auth", R + "ask_comisar",
+         "Transfers require an archivist/Commissioner and an authorized custodian."),
+
+    # AudienceService
+    "Cererea de audiență are nevoie de un motiv.":
+        ("straja.audience.need_reason", R + "fix_retry",
+         "The audience request needs a reason."),
+    "Decizie necunoscută — folosește resolve sau dismiss.":
+        ("straja.audience.bad_decision", R + "fix_retry",
+         "Unknown decision — use resolve or dismiss."),
+
+    # ReportService
+    "Decizie necunoscută — folosește accept, return sau call.":
+        ("straja.report.bad_decision", R + "fix_retry",
+         "Unknown decision — use accept, return or call."),
+    "Un raport returnat are nevoie de o notă pentru autor.":
+        ("straja.report.return_note", R + "fix_retry",
+         "A returned report needs a note for its author."),
+
+    # ArrestRecordService
+    "Predarea la Temnicer cere un străjer activ.":
+        ("straja.arrest.jailer_only", R + "duty",
+         "Handing over to the Jailer requires an on-duty guard."),
+
+    # MissionService
+    "Sfera ordinului: minim %s, maximum %s participanți. Semnează și sigilează din nou.":
+        ("straja.mission.scope_range", R + "fix_retry",
+         "Order scope: min %s, max %s participants. Sign and seal it again."),
+    "Crearea rapidă de misiuni este dezactivată de configurația serverului.":
+        ("straja.mission.quick_off", R + "ask_comisar",
+         "Quick mission creation is disabled by the server configuration."),
+    "Recompensa se poate ridica numai după completarea misiunii.":
+        ("straja.mission.reward_early", R + "wait",
+         "The reward can only be claimed after the mission is completed."),
+    "Misiunile oficiale se declară la secretară.":
+        ("straja.mission.declare_secretary", R + "secretary",
+         "Official missions are declared at the secretary."),
+    "Predarea oficială se face la secretară.":
+        ("straja.mission.submit_secretary", R + "secretary",
+         "Official submission is done at the secretary."),
+
+    # PrisonService
+    "Numărul maxim de celule a fost atins.":
+        ("straja.prison.max_cells", R + "ask_comisar",
+         "The maximum number of cells has been reached."),
+    "Sistemul de detenție este dezactivat.":
+        ("straja.prison.disabled", R + "ask_comisar",
+         "The detention system is disabled."),
+
+    # IdentityCardService / IncidentService / BoloService / FineService
+    "Sistemul de buletine este dezactivat.":
+        ("straja.idcard.disabled", R + "ask_comisar",
+         "The identity-card system is disabled."),
+    "Sistemul de incidente este dezactivat.":
+        ("straja.incident.disabled", R + "ask_comisar",
+         "The incident system is disabled."),
+    "Incidentul are deja numărul maxim de sprijinitori.":
+        ("straja.incident.max_supporters", R + "wait",
+         "The incident already has the maximum number of supporters."),
+    "Sistemul BOLO este dezactivat.":
+        ("straja.bolo.disabled", R + "ask_comisar",
+         "The BOLO system is disabled."),
+    "Sistemul de amenzi este dezactivat.":
+        ("straja.fine.disabled", R + "ask_comisar",
+         "The fines system is disabled."),
+    "Retry este blocat: inventarul poate fi modificat parțial. Verifică tranzacția și folosește recover paid dacă plata a fost pierdută.":
+        ("straja.fine.retry_blocked", R + "fix_retry",
+         "Retry is blocked: the inventory may be partially modified. Check the transaction and use recover paid if the payment was lost."),
+    "Contestațiile sunt dezactivate.":
+        ("straja.fine.appeals_off", R + "ask_comisar",
+         "Appeals are disabled."),
+    "Contestațiile tale sunt blocate temporar pentru depuneri repetate.":
+        ("straja.fine.appeals_blocked_self", R + "wait",
+         "Your appeals are temporarily blocked for repeated filings."),
+    "Contestațiile au fost blocate temporar pentru depuneri repetate.":
+        ("straja.fine.appeals_blocked", R + "wait",
+         "Appeals were temporarily blocked for repeated filings."),
+    "Scrie motivul contestației, maximum %s caractere.":
+        ("straja.fine.appeal_reason", R + "fix_retry",
+         "Write the appeal reason, at most %s characters."),
+    "Misiunea are deja numărul maxim de gărzi.":
+        ("straja.fine.mission_full", R + "wait",
+         "The mission already has the maximum number of guards."),
+    "Plata se face la recepționistă. Mergi la locația configurată de Comisaru'.":
+        ("straja.fine.pay_reception", R + "reception",
+         "Payment is made at the receptionist. Go to the location configured by the Commissioner."),
+    "Contestația se depune la recepționistă.":
+        ("straja.fine.appeal_reception", R + "reception",
+         "Appeals are filed at the receptionist."),
+    "Decizia contestației se dă la recepționistă.":
+        ("straja.fine.appeal_decision_reception", R + "reception",
+         "The appeal decision is given at the receptionist."),
+    "Audierea cere ținta, executantul și Comisaru' prezenți la biroul configurat.":
+        ("straja.fine.hearing_office", R + "fix_retry",
+         "A hearing needs the target, the executor, and the Commissioner present at the configured office."),
+
+    # ArchiveService
+    "Act semnat și blocat: %s. Corecțiile se fac printr-o foaie nouă.":
+        ("straja.archive.signed_locked", R + "fix_retry",
+         "Signed and locked document: %s. Corrections are made via a new sheet."),
+    "Numai originalul unui act semnat poate produce copii.":
+        ("straja.archive.copy_original", R + "fix_retry",
+         "Only the original of a signed document can produce copies."),
+
+    # ArmoryService
+    "Fonduri insuficiente. Preț: %s monede.":
+        ("straja.armory.no_funds", R + "secretary",
+         "Insufficient funds. Price: %s coins."),
+    "Puncte de rechiziție insuficiente. Ai %s, cost: %s.":
+        ("straja.armory.no_points", R + "secretary",
+         "Insufficient requisition points. You have %s, cost: %s."),
+
+    # AdminToolService
+    "Instrumentele administrative pot fi folosite doar de Comisar sau operatori.":
+        ("straja.admintool.comisar_only", R + "ask_comisar",
+         "Admin tools may only be used by the Commissioner or operators."),
+    "Bagheta funcționează doar pe un NPC Straja înregistrat.":
+        ("straja.admintool.wand_npc", R + "fix_retry",
+         "The wand only works on a registered Straja NPC."),
+    "Numele trebuie să aibă între 1 și 80 de caractere.":
+        ("straja.admintool.name_len", R + "fix_retry",
+         "The name must be between 1 and 80 characters."),
+    "Skin-ul trebuie să aibă între 1 și 80 de caractere.":
+        ("straja.admintool.skin_len", R + "fix_retry",
+         "The skin must be between 1 and 80 characters."),
+    "NPC-ul nu mai este înregistrat.":
+        ("straja.admintool.npc_gone", R + "retry",
+         "The NPC is no longer registered."),
+    "Doar Comisaru' poate configura locațiile administrative.":
+        ("straja.admintool.locations_comisar", R + "ask_comisar",
+         "Only the Commissioner can configure admin locations."),
+
+    # StrajaEvents / StrajaCommands
+    "Registrul de Amenzi este rezervat Străjii active.":
+        ("straja.item.fine_book_reserved", R + "duty",
+         "The Fines register is reserved for active Straja members."),
+    "Arestarea cere rangul de Străjer sau Comisaru'.":
+        ("straja.cmd.arrest_rank", R + "duty",
+         "Arresting requires the rank of Guard or Commissioner."),
+    "Jucător offline.":
+        ("straja.cmd.offline", R + "retry",
+         "Player offline."),
+    "Jucător offline sau necunoscut.":
+        ("straja.cmd.unknown_target", R + "fix_retry",
+         "Player offline or unknown."),
+    "Această comandă necesită un jucător.":
+        ("straja.cmd.player_only", R + "fix_retry",
+         "This command requires a player."),
+    "Această acțiune necesită un jucător.":
+        ("straja.cmd.action_player_only", R + "fix_retry",
+         "This action requires a player."),
+    "Straja runtime is not running.":
+        ("straja.cmd.runtime_down", R + "wait",
+         "Straja runtime is not running."),
+
+    "Niciun șablon capturat — copia nu a fost înregistrată.":
+        ("straja.admintool.clone_fail", R + "retry",
+         "No template captured — the copy was not registered."),
+    "Clonatorul capturează doar un NPC Straja înregistrat.":
+        ("straja.admintool.cloner_npc", R + "fix_retry",
+         "The cloner only captures a registered Straja NPC."),
+    "Celula nu poate traversa dimensiuni — selecția a fost resetată.":
+        ("straja.admintool.cell_dimension", R + "fix_retry",
+         "The cell cannot cross dimensions — the selection was reset."),
+
+    # ── third pass: convention-test sweep of remaining surfaces ─────────
+
+    # Admin command help / debug / npc command surfaces
+    "Ajutorul Straja cere OP 3.":
+        ("straja.cmd.help_op", R + "ask_comisar",
+         "Straja help requires OP 3."),
+    "Comanda cere OP %s.":
+        ("straja.cmd.command_op", R + "ask_comisar",
+         "This command requires OP %s."),
+    "Revelarea răspunsurilor este dezactivată.":
+        ("straja.debug.reveal_off", R + "ask_comisar",
+         "Answer revealing is disabled."),
+    "Debug este dezactivat sau interzis în acest mediu.":
+        ("straja.debug.off", R + "ask_comisar",
+         "Debug is disabled or forbidden in this environment."),
+    "Rol necunoscut: %s":
+        ("straja.npc.role_unknown", R + "fix_retry",
+         "Unknown role: %s"),
+    "Rol necunoscut: %s. Valide: %s":
+        ("straja.npc.role_unknown_valid", R + "fix_retry",
+         "Unknown role: %s. Valid: %s"),
+    "NPC necunoscut: %s":
+        ("straja.npc.npc_unknown", R + "fix_retry",
+         "Unknown NPC: %s"),
+
+    # StrajaCommands admin validations
+    "Promotion necunoscută.":
+        ("straja.cmd.promotion_unknown", R + "fix_retry",
+         "Unknown promotion."),
+    "Document necunoscut.":
+        ("straja.cmd.document_unknown", R + "fix_retry",
+         "Unknown document."),
+    "Obligație necunoscută.":
+        ("straja.cmd.obligation_unknown", R + "fix_retry",
+         "Unknown obligation."),
+    "Mobilizare necunoscută.":
+        ("straja.cmd.mobilization_unknown", R + "fix_retry",
+         "Unknown mobilization."),
+    "Campanie necunoscută.":
+        ("straja.cmd.campaign_unknown", R + "fix_retry",
+         "Unknown campaign."),
+    "Decontare necunoscută.":
+        ("straja.cmd.settlement_unknown", R + "fix_retry",
+         "Unknown settlement."),
+
+    # FormSubmissionRouter validation
+    "Datele ordinului nu sunt valide.":
+        ("straja.form.order_invalid", R + "fix_retry",
+         "The order data is not valid."),
+    "Datele verificării nu sunt valide.":
+        ("straja.form.verify_invalid", R + "fix_retry",
+         "The verification data is not valid."),
+    "Datele amenzii nu sunt valide.":
+        ("straja.form.fine_invalid", R + "fix_retry",
+         "The fine data is not valid."),
+    "Datele contestației nu sunt valide.":
+        ("straja.form.appeal_invalid", R + "fix_retry",
+         "The appeal data is not valid."),
+    "Datele copierii nu sunt valide.":
+        ("straja.form.copy_invalid", R + "fix_retry",
+         "The copy data is not valid."),
+
+    # Misc keyed denials
+    "[Straja] Ramură FAQ necunoscută.":
+        ("straja.npc.faq_unknown", R + "fix_retry",
+         "[Straja] Unknown FAQ branch."),
+    "Rang sau grad necunoscut: %s. Folosește un rang 1-4 sau un grad (ex. ziler, meserias, inspector).":
+        ("straja.admin.rank_unknown", R + "fix_retry",
+         "Unknown rank or grade: %s. Use a rank 1-4 or a grade (e.g. ziler, meserias, inspector)."),
+    "[Straja] Membru necunoscut: %s":
+        ("straja.admin.member_unknown", R + "fix_retry",
+         "[Straja] Unknown member: %s"),
+
+    # Custody two-player gates and bound-interaction denial
+    "Legarea cere doi jucători online.":
+        ("straja.custody.bind_online", R + "retry",
+         "Binding requires two players online."),
+    "Sacul cere doi jucători online.":
+        ("straja.custody.bag_online", R + "retry",
+         "The captive bag requires two players online."),
+    "Transportul cere doi jucători online.":
+        ("straja.custody.transport_online", R + "retry",
+         "Transport requires two players online."),
+    "Resuscitarea cere doi jucători online.":
+        ("straja.custody.rez_online", R + "retry",
+         "Resuscitation requires two players online."),
+
+    # Equipment delivery
+    "Kitul nu încape în inventar. Eliberează sloturi și încearcă din nou.":
+        ("straja.equipment.kit_full", R + "fix_retry",
+         "The kit does not fit in your inventory. Free up slots and try again."),
+    "Kitul nu a putut fi predat complet.":
+        ("straja.equipment.kit_partial", R + "retry",
+         "The kit could not be delivered completely."),
+
+    # GuardService checkpoints / routes
+    "Checkpoint necunoscut. Creează slotul cu /straja checkpoint add.":
+        ("straja.duty.checkpoint_unknown", R + "fix_retry",
+         "Unknown checkpoint. Create the slot with /straja checkpoint add."),
+    "Checkpoint necunoscut: %s.":
+        ("straja.duty.checkpoint_unknown_arg", R + "fix_retry",
+         "Unknown checkpoint: %s."),
+    "Traseul cere între %s și %s puncte distincte — %s înregistrate.":
+        ("straja.duty.route_range", R + "fix_retry",
+         "The route needs between %s and %s distinct points — %s registered."),
+
+    # Mission/Policy/Reputation/Room gates
+    "Cod de rezolvare necunoscut.":
+        ("straja.incident.code_unknown", R + "fix_retry",
+         "Unknown resolution code."),
+    "Câmp necunoscut. Folosește: name|minrank|hours|risk|participants|deadline|objective|supersedesPatrol.":
+        ("straja.mission.field_unknown", R + "fix_retry",
+         "Unknown field. Use: name|minrank|hours|risk|participants|deadline|objective|supersedesPatrol."),
+    "Doar Comisaru' sau un operator poate vedea configurația.":
+        ("straja.policy.view_comisar", R + "ask_comisar",
+         "Only the Commissioner or an operator can view the configuration."),
+    "Doar Comisaru' sau un operator poate modifica configurația.":
+        ("straja.policy.modify_comisar", R + "ask_comisar",
+         "Only the Commissioner or an operator can modify the configuration."),
+    "Cheie necunoscută: %s. Vezi /straja policy list.":
+        ("straja.policy.key_unknown", R + "fix_retry",
+         "Unknown key: %s. See /straja policy list."),
+    "Comanda trebuie să fie Comisar și să aibă motiv.":
+        ("straja.reputation.comisar_reason", R + "ask_comisar",
+         "The caller must be the Commissioner and give a reason."),
+    "Doar Comisaru' poate inversa un eveniment de reputație.":
+        ("straja.reputation.reverse_comisar", R + "ask_comisar",
+         "Only the Commissioner can reverse a reputation event."),
+    "Selecția camerei este într-o altă dimensiune decât cea curentă.":
+        ("straja.room.other_dimension", R + "fix_retry",
+         "The room selection is in a different dimension than the current one."),
+
+    # FineService payment failure paths
+    "Plata a eșuat după o modificare posibilă a inventarului. Amenda este blocată pentru verificarea Comisarului; nu încerca din nou.":
+        ("straja.fine.pay_failed_review", R + "wait",
+         "Payment failed after a possible inventory change. The fine is locked for the Commissioner's review; do not try again."),
+    "Plata nu a putut fi efectuată; monedele nu au fost debitate.":
+        ("straja.fine.pay_failed", R + "retry",
+         "The payment could not be completed; no coins were debited."),
+
+    # RoomService geometry codes
+    "Blocul selectat nu pare să fie în interiorul unei camere.":
+        ("straja.room.not_interior", R + "fix_retry",
+         "The selected block does not appear to be inside a room."),
+    "Nu există camere libere. Ești pe poziția %s.":
+        ("straja.room.no_free", R + "wait",
+         "There are no free rooms. You are at position %s."),
+    "Ai deja o cameră atribuită.":
+        ("straja.room.already", R + "fix_retry",
+         "You already have a room assigned."),
+    "Nu ești eligibil pentru o cameră.":
+        ("straja.room.not_eligible", R + "ask_comisar",
+         "You are not eligible for a room."),
+    "Nu există camere configurate.":
+        ("straja.room.none_configured", R + "ask_comisar",
+         "There are no rooms configured."),
+    "Nu aveai o cameră atribuită.":
+        ("straja.room.no_room", R + "fix_retry",
+         "You had no room assigned."),
+
+    # PolicyService apply-result codes
+    "Valoare lipsă pentru %s.":
+        ("straja.policy.empty_value", R + "fix_retry",
+         "Missing value for %s."),
+    "Valoare invalidă pentru %s (tip: %s).":
+        ("straja.policy.bad_value", R + "fix_retry",
+         "Invalid value for %s (type: %s)."),
+
+    # ── manual sites (switches/ternaries — edited by hand) ──────────────
+    "Interiorul trebuie să aibă cel puțin %s×%s×%s blocuri.":
+        ("straja.room.too_small", R + "fix_retry",
+         "The interior must be at least %s×%s×%s blocks."),
+    "Camera depășește limita sigură de %s×%s×%s / %s blocuri.":
+        ("straja.room.too_large", R + "fix_retry",
+         "The room exceeds the safe limit of %s×%s×%s / %s blocks."),
+    "Camera este deschisă sau depășește limita de scanare %s×%s×%s.":
+        ("straja.room.open_large", R + "fix_retry",
+         "The room is open or exceeds the scan limit %s×%s×%s."),
+    "Pereții camerei nu sunt închiși complet.":
+        ("straja.room.open_wall", R + "fix_retry",
+         "The room walls are not fully closed."),
+    "Camera trebuie să aibă exact o ușă standard de două blocuri.":
+        ("straja.room.door_required", R + "fix_retry",
+         "The room needs exactly one standard two-block door."),
+    "Un bloc din zona scanată nu poate fi citit; nu s-a creat camera.":
+        ("straja.room.unreadable", R + "fix_retry",
+         "A block in the scanned area could not be read; the room was not created."),
+    "Camera nu a putut fi validată (%s).":
+        ("straja.room.invalid", R + "fix_retry",
+         "The room could not be validated (%s)."),
+    "Ești legat. Nu poți interacționa până nu ești eliberat.":
+        ("straja.custody.bound_interact", R + "jailer",
+         "You are bound. You cannot interact until you are freed."),
+    "Ești încătușat. Nu poți interacționa până nu ești eliberat.":
+        ("straja.custody.cuffed_interact", R + "jailer",
+         "You are cuffed. You cannot interact until you are freed."),
+
+    # ── fourth pass: line-wrapped Component.literal sites ───────────────
+    "Lipsesc locațiile NPC-urilor: %s. Folosește /straja set-location <nume> înainte de setup npcs.":
+        ("straja.npc.locations_missing", R + "fix_retry",
+         "NPC locations are missing: %s. Use /straja set-location <name> before setup npcs."),
+    "Rangul sau gradul lipsește.":
+        ("straja.form.rank_missing", R + "fix_retry",
+         "The rank or grade is missing."),
+    "Backup Straja eșuat: %s":
+        ("straja.cmd.backup_failed", R + "retry",
+         "Straja backup failed: %s"),
+    "Migrație eșuată: %s":
+        ("straja.cmd.migration_failed", R + "retry",
+         "Migration failed: %s"),
+    "Lipsește %s":
+        ("straja.cmd.missing_dep", R + "fix_retry",
+         "Missing %s"),
 }
 

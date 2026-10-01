@@ -45,8 +45,16 @@ SWEPT = [
     "application/service/PrisonService.java",
     "application/service/ReportService.java",
     "application/service/RoomService.java",
+    "application/service/ArrestRecordService.java",
+    "application/service/AdminToolService.java",
+    "application/service/EquipmentService.java",
+    "application/service/PolicyService.java",
+    "application/service/ReputationService.java",
     "application/service/RpExpansionService.java",
     "application/service/SecretaryService.java",
+    "adapter/in/command/AdminCommandHelp.java",
+    "adapter/in/command/DebugCommands.java",
+    "adapter/in/command/NpcCommands.java",
     "adapter/in/command/StrajaCommands.java",
     "adapter/in/event/StrajaEvents.java",
     "adapter/in/form/FormSubmissionRouter.java",
@@ -73,8 +81,17 @@ def extract(arg):
     """Return (template, args) for a call argument."""
     parts = split_concat(arg)
     if not any(k == "lit" for k, _ in parts):
-        nested = re.findall(r'Component\.literal\(\s*"((?:[^"\\]|\\.)*)"\s*\)', arg)
-        parts = [("lit", decode_java(t)) for t in nested]
+        # nested Component.literal( ... ) — possibly line-wrapped and holding
+        # a concat chain; parse the inner call's argument instead
+        nested = re.search(r'Component\s*\.\s*literal\s*\(', arg)
+        if nested:
+            inner_open = arg.index("(", nested.end() - 1)
+            try:
+                inner_end = find_call_end(arg, inner_open)
+            except ValueError:
+                inner_end = -1
+            if inner_end > inner_open:
+                parts = split_concat(arg[inner_open + 1:inner_end])
     return template_of(parts)
 
 

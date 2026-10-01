@@ -144,8 +144,7 @@ public class AdminService implements AdminRoleplayUseCase {
         }
         CareerGrade grade = gradeFor(rankOrGrade);
         if (grade == null) {
-            actor.tell("Rang sau grad necunoscut: " + rankOrGrade
-                    + ". Folosește un rang 1-4 sau un grad (ex. ziler, meserias, inspector).");
+            actor.refuse("straja.admin.rank_unknown", "straja.remedy.fix_retry", rankOrGrade);
             return;
         }
         if (target == null) {
@@ -299,7 +298,7 @@ public class AdminService implements AdminRoleplayUseCase {
         try {
             return UUID.fromString(memberId);
         } catch (Exception e) {
-            actor.tell("[Straja] Membru necunoscut: " + memberId);
+            actor.refuse("straja.admin.member_unknown", "straja.remedy.fix_retry", memberId);
             return null;
         }
     }

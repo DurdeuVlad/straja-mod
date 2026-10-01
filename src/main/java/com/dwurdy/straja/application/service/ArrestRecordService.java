@@ -68,13 +68,13 @@ public final class ArrestRecordService {
                                                     String notes) {
         if (actor == null || detainee == null
                 || (!players.isCommissioner(actor) && !players.isOnDutyGuard(actor))) {
-            if (actor != null) actor.tell("Predarea la Temnicer cere un străjer activ.");
+            if (actor != null) actor.refuse("straja.arrest.jailer_only", "straja.remedy.duty");
             return false;
         }
         Sentence sentence = ctx.prison().read().activeSentenceFor(detainee.uuid().toString());
         if (sentence == null || (sentenceId != null && !sentenceId.isBlank()
                 && !sentenceId.equals(sentence.id))) {
-            actor.tell("Nu există o sentință activă pentru această predare.");
+            actor.refuse("straja.arrest.no_sentence", "straja.remedy.jailer");
             return false;
         }
         ArrestRecord record = finalizeForSentence(sentence, notes);

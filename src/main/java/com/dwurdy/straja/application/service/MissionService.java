@@ -332,8 +332,7 @@ public class MissionService implements MissionRoleplayUseCase {
         draft.signedAt = null;
         draft.packagedAt = null;
         ctx.missions().write(store);
-        player.tell("Sfera ordinului: minim " + ctx.policies().rankName(minimumRank) + ", maximum "
-                + maxAssignees + " participanți. Semnează și sigilează din nou.");
+        player.refuse("straja.mission.scope_range", "straja.remedy.fix_retry", ctx.policies().rankName(minimumRank), maxAssignees);
     }
 
     private int rankValue(String name) {
@@ -682,7 +681,7 @@ public class MissionService implements MissionRoleplayUseCase {
             }
             case "supersedespatrol" -> t.supersedesPatrol = "da".equals(v) || "true".equals(v) || "yes".equals(v);
             default -> {
-                player.tell("Câmp necunoscut. Folosește: name|minrank|hours|risk|participants|deadline|objective|supersedesPatrol.");
+                player.refuse("straja.mission.field_unknown", "straja.remedy.fix_retry");
                 return;
             }
         }
@@ -762,7 +761,7 @@ public class MissionService implements MissionRoleplayUseCase {
                               String objective, int reward) {
         if (!ctx.policies().missionQuickCreateEnabled
                 || (ctx.policies().missionQuickCreateLocalOnly && !ctx.policies().isLocalEnvironment())) {
-            issuer.tell("Crearea rapidă de misiuni este dezactivată de configurația serverului.");
+            issuer.refuse("straja.mission.quick_off", "straja.remedy.ask_comisar");
             return;
         }
         if (!missionAuthority(issuer)) {
@@ -774,7 +773,7 @@ public class MissionService implements MissionRoleplayUseCase {
             return;
         }
         if (!atSecretary(issuer)) {
-            issuer.tell("Misiunile oficiale se declară la secretară.");
+            issuer.refuse("straja.mission.declare_secretary", "straja.remedy.secretary");
             return;
         }
         int minimumRank = ctx.policies().missionDefaultMinimumRank;
@@ -870,7 +869,7 @@ public class MissionService implements MissionRoleplayUseCase {
             return false;
         }
         if (!atSecretary(issuer)) {
-            issuer.tell("Predarea oficială se face la secretară.");
+            issuer.refuse("straja.mission.submit_secretary", "straja.remedy.secretary");
             return false;
         }
         var store = store();
@@ -1527,7 +1526,7 @@ public class MissionService implements MissionRoleplayUseCase {
             return false;
         }
         if (!"COMPLETED".equals(mission.status)) {
-            player.tell("Recompensa se poate ridica numai după completarea misiunii.");
+            player.refuse("straja.mission.reward_early", "straja.remedy.wait");
             return false;
         }
         if (!rewardValid(mission.reward)) {

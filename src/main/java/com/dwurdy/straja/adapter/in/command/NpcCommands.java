@@ -1,5 +1,7 @@
 package com.dwurdy.straja.adapter.in.command;
 
+import static com.dwurdy.straja.adapter.in.StrajaText.refusal;
+
 import com.dwurdy.straja.adapter.in.npc.StrajaNpcEntity;
 import com.dwurdy.straja.bootstrap.StrajaRuntime;
 import com.dwurdy.straja.bootstrap.NpcPresentationRuntime;
@@ -75,7 +77,7 @@ final class NpcCommands {
                                     if (record == null) return 0;
                                     var result = runtime.npcs().assignRole(record.entityUuid, role);
                                     if (!result.ok()) {
-                                        ctx.getSource().sendFailure(Component.literal("Rol necunoscut: " + role));
+                                        ctx.getSource().sendFailure(refusal("straja.npc.role_unknown", "straja.remedy.fix_retry", role));
                                         return 0;
                                     }
                                     var entity = loaded(ctx, record.entityUuid);
@@ -224,9 +226,7 @@ final class NpcCommands {
         var runtime = StrajaRuntime.get();
         if (runtime == null) return 0;
         if (!com.dwurdy.straja.application.service.NpcAdminService.KNOWN_ROLES.contains(role)) {
-            ctx.getSource().sendFailure(Component.literal(
-                    "Rol necunoscut: " + role + ". Valide: "
-                            + com.dwurdy.straja.application.service.NpcAdminService.KNOWN_ROLES));
+            ctx.getSource().sendFailure(refusal("straja.npc.role_unknown_valid", "straja.remedy.fix_retry", role, com.dwurdy.straja.application.service.NpcAdminService.KNOWN_ROLES));
             return 0;
         }
         var level = ctx.getSource().getLevel();
@@ -299,9 +299,7 @@ final class NpcCommands {
             }
         }
         if (!missingLocations.isEmpty()) {
-            ctx.getSource().sendFailure(Component.literal(
-                    "Lipsesc locațiile NPC-urilor: " + String.join(", ", missingLocations)
-                            + ". Folosește /straja set-location <nume> înainte de setup npcs."));
+            ctx.getSource().sendFailure(refusal("straja.npc.locations_missing", "straja.remedy.fix_retry", String.join(", ", missingLocations)));
             return 0;
         }
         for (String role : missing) {
@@ -339,7 +337,7 @@ final class NpcCommands {
             }
         }
         if (record == null) {
-            ctx.getSource().sendFailure(Component.literal("NPC necunoscut: " + key));
+            ctx.getSource().sendFailure(refusal("straja.npc.npc_unknown", "straja.remedy.fix_retry", key));
         }
         return record;
     }

@@ -67,7 +67,7 @@ public class AudienceService implements AudienceUseCase {
         }
         String text = reason == null ? "" : reason.trim();
         if (text.isBlank()) {
-            player.tell("Cererea de audiență are nevoie de un motiv.");
+            player.refuse("straja.audience.need_reason", "straja.remedy.fix_retry");
             return false;
         }
         if (text.length() > REASON_LIMIT) text = text.substring(0, REASON_LIMIT);
@@ -160,7 +160,7 @@ public class AudienceService implements AudienceUseCase {
             default -> null;
         };
         if (status == null) {
-            player.tell("Decizie necunoscută — folosește resolve sau dismiss.");
+            player.refuse("straja.audience.bad_decision", "straja.remedy.fix_retry");
             return false;
         }
         request.status = status;

@@ -256,7 +256,7 @@ public final class EvidenceService {
         ItemSpec original = new ItemSpec(evidence.itemId, evidence.amount,
                 Map.copyOf(evidence.itemData), null);
         if (!owner.giveVerified(original)) {
-            actor.tell("Inventarul proprietarului este plin; proba rămâne în Arhivă.");
+            actor.refuse("straja.evidence.owner_full", "straja.remedy.wait");
             return false;
         }
         move(evidence, evidence.status, EvidenceStatus.RETURNED,
@@ -279,7 +279,7 @@ public final class EvidenceService {
             return false;
         }
         if (!authorizedArchive(actor) || !authorizedCustodian(recipient)) {
-            if (actor != null) actor.tell("Transferul cere un arhivist/Comisar și un custode autorizat.");
+            if (actor != null) actor.refuse("straja.evidence.transfer_auth", "straja.remedy.ask_comisar");
             return false;
         }
         EvidenceStatus next = players.isOnDutyGuard(recipient)

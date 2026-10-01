@@ -40,7 +40,7 @@ public final class BoloService {
                                            String reason, String notes,
                                            BoloAuthority authority, String incidentId) {
         if (issuer == null || subject == null || !ctx.policies().bolosEnabled) {
-            if (issuer != null) issuer.tell("Sistemul BOLO este dezactivat.");
+            if (issuer != null) issuer.refuse("straja.bolo.disabled", "straja.remedy.ask_comisar");
             return null;
         }
         var issuerState = players.state(issuer);

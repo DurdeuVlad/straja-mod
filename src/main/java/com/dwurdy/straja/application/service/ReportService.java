@@ -195,11 +195,11 @@ public class ReportService implements ReportUseCase {
             default -> null;
         };
         if (status == null) {
-            player.tell("Decizie necunoscută — folosește accept, return sau call.");
+            player.refuse("straja.report.bad_decision", "straja.remedy.fix_retry");
             return false;
         }
         if (ActivityReport.RETURNED.equals(status) && (note == null || note.isBlank())) {
-            player.tell("Un raport returnat are nevoie de o notă pentru autor.");
+            player.refuse("straja.report.return_note", "straja.remedy.fix_retry");
             return false;
         }
         report.status = status;

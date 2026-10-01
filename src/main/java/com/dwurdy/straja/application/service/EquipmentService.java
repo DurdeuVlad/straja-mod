@@ -29,12 +29,12 @@ public class EquipmentService {
         List<ItemSpec> stacks = ctx.policies().kits.get(state.rank);
         if (stacks == null || stacks.isEmpty()) return false;
         if (!player.inventory().canReceive(stacks)) {
-            player.tell("Kitul nu încape în inventar. Eliberează sloturi și încearcă din nou.");
+            player.refuse("straja.equipment.kit_full", "straja.remedy.fix_retry");
             return false;
         }
         for (ItemSpec stack : stacks) {
             if (!player.giveVerified(stack)) {
-                player.tell("Kitul nu a putut fi predat complet.");
+                player.refuse("straja.equipment.kit_partial", "straja.remedy.retry");
                 return false;
             }
         }

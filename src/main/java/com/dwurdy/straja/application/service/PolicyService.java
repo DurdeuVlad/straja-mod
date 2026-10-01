@@ -57,7 +57,7 @@ public class PolicyService implements PolicyConfigUseCase {
 
     @Override
     public void list(PlayerGateway actor) {
-        if (!allowed(actor)) { actor.tell("Doar Comisaru' sau un operator poate vedea configurația."); return; }
+        if (!allowed(actor)) { actor.refuse("straja.policy.view_comisar", "straja.remedy.ask_comisar"); return; }
         Map<String, List<String>> bySection = new TreeMap<>();
         for (String path : PolicyRegistry.keys().keySet()) {
             bySection.computeIfAbsent(path.substring(0, path.indexOf('.')), s -> new ArrayList<>())
@@ -70,9 +70,9 @@ public class PolicyService implements PolicyConfigUseCase {
 
     @Override
     public void get(PlayerGateway actor, String key) {
-        if (!allowed(actor)) { actor.tell("Doar Comisaru' sau un operator poate vedea configurația."); return; }
+        if (!allowed(actor)) { actor.refuse("straja.policy.view_comisar", "straja.remedy.ask_comisar"); return; }
         if (!PolicyRegistry.keys().containsKey(key)) {
-            actor.tell("Cheie necunoscută: " + key + ". Vezi /straja policy list.");
+            actor.refuse("straja.policy.key_unknown", "straja.remedy.fix_retry", key);
             return;
         }
         boolean overridden = store.read().containsKey(key);
@@ -82,15 +82,21 @@ public class PolicyService implements PolicyConfigUseCase {
 
     @Override
     public void set(PlayerGateway actor, String key, String rawValue) {
-        if (!allowed(actor)) { actor.tell("Doar Comisaru' sau un operator poate modifica configurația."); return; }
+        if (!allowed(actor)) { actor.refuse("straja.policy.modify_comisar", "straja.remedy.ask_comisar"); return; }
         Result applied = PolicyRegistry.apply(ctx.policies(), key, rawValue);
         if (!applied.ok()) {
-            actor.tell(switch (applied.code()) {
-                case "unknown_key" -> "Cheie necunoscută: " + key + ". Vezi /straja policy list.";
-                case "empty_value" -> "Valoare lipsă pentru " + key + ".";
-                default -> "Valoare invalidă pentru " + key + " (tip: "
-                        + PolicyRegistry.keys().get(key).kind() + ").";
-            });
+            switch (applied.code()) {
+                case "unknown_key" ->
+                        actor.refuse("straja.policy.key_unknown",
+                                "straja.remedy.fix_retry", key);
+                case "empty_value" ->
+                        actor.refuse("straja.policy.empty_value",
+                                "straja.remedy.fix_retry", key);
+                default ->
+                        actor.refuse("straja.policy.bad_value",
+                                "straja.remedy.fix_retry", key,
+                                PolicyRegistry.keys().get(key).kind());
+            }
             return;
         }
         Map<String, String> overrides = new LinkedHashMap<>(store.read());
@@ -108,10 +114,10 @@ public class PolicyService implements PolicyConfigUseCase {
 
     @Override
     public void reset(PlayerGateway actor, String key) {
-        if (!allowed(actor)) { actor.tell("Doar Comisaru' sau un operator poate modifica configurația."); return; }
+        if (!allowed(actor)) { actor.refuse("straja.policy.modify_comisar", "straja.remedy.ask_comisar"); return; }
         Map<String, String> overrides = new LinkedHashMap<>(store.read());
         if (!PolicyRegistry.keys().containsKey(key)) {
-            actor.tell("Cheie necunoscută: " + key + ". Vezi /straja policy list.");
+            actor.refuse("straja.policy.key_unknown", "straja.remedy.fix_retry", key);
             return;
         }
         overrides.remove(key);

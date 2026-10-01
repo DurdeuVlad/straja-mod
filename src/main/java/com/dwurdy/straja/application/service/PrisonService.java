@@ -80,7 +80,7 @@ public class PrisonService implements PrisonRoleplayUseCase {
             return false;
         }
         if (data.cells.size() >= ctx.policies().prisonMaxCells && data.cell(id) == null) {
-            actor.tell("Numărul maxim de celule a fost atins.");
+            actor.refuse("straja.prison.max_cells", "straja.remedy.ask_comisar");
             return false;
         }
         var cell = new Cell();
@@ -254,7 +254,7 @@ public class PrisonService implements PrisonRoleplayUseCase {
     public Sentence arrest(PlayerGateway target, String fineId, int days,
                            PlayerGateway actor, String missionId) {
         if (!ctx.policies().prisonEnabled) {
-            if (actor != null) actor.tell("Sistemul de detenție este dezactivat.");
+            if (actor != null) actor.refuse("straja.prison.disabled", "straja.remedy.ask_comisar");
             audit.record("prison_arrest", actor == null ? "" : actor.name(),
                     actor == null ? "" : uuidOf(actor), target.name(), uuidOf(target),
                     "REFUSED", "prison_disabled");

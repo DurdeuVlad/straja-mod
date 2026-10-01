@@ -349,19 +349,19 @@ public final class NpcRoles {
         var personnel = runtime.v2Personnel().find(gw.uuid().toString());
         if (personnel != null && personnel.active()
                 && personnel.careerGrade != null && !personnel.careerGrade.isProfessional()) {
-            gw.tellKey("straja.trades.refused.sworn");
+            gw.refuse("straja.trades.refused.sworn", "straja.remedy.ask_comisar");
             return;
         }
         if (personnel != null && (personnel.membershipStatus
                 == com.dwurdy.straja.domain.model.PersonnelStatus.SUSPENDED
                 || personnel.membershipStatus
                         == com.dwurdy.straja.domain.model.PersonnelStatus.TERMINATED)) {
-            gw.tellKey("straja.trades.refused.status");
+            gw.refuse("straja.trades.refused.status", "straja.remedy.ask_comisar");
             return;
         }
         var professions = new java.util.TreeSet<>(runtime.v2Generators().professions());
         if (professions.isEmpty()) {
-            gw.tellKey("straja.trades.none");
+            gw.refuse("straja.trades.none", "straja.remedy.wait");
             return;
         }
         if (!(player instanceof ServerPlayer serverPlayer)) {
@@ -390,7 +390,7 @@ public final class NpcRoles {
         var personnel = runtime.v2Personnel().find(gw.uuid().toString());
         if (personnel == null || !personnel.active() || personnel.careerGrade == null
                 || !personnel.careerGrade.isProfessional()) {
-            gw.tellKey("straja.trades.promote.not_member");
+            gw.refuse("straja.trades.promote.not_member", "straja.remedy.retry");
             return;
         }
         var next = switch (personnel.careerGrade) {
@@ -401,7 +401,7 @@ public final class NpcRoles {
             default -> null;
         };
         if (next == null) {
-            gw.tellKey("straja.trades.promote.max");
+            gw.refuse("straja.trades.promote.max", "straja.remedy.status");
             return;
         }
         try {
@@ -424,7 +424,7 @@ public final class NpcRoles {
         String normalized = profession == null ? ""
                 : profession.trim().toUpperCase(java.util.Locale.ROOT);
         if (!runtime.v2Generators().professions().contains(normalized)) {
-            gw.tellKey("straja.trades.refused.unknown");
+            gw.refuse("straja.trades.refused.unknown", "straja.remedy.fix_retry");
             return;
         }
         try {
@@ -585,7 +585,7 @@ public final class NpcRoles {
                 sendGuidance(player,
                         NpcFaqSurface.menu(targetRef.origin(), context, targetRef.topic()));
             }
-            default -> gw.tell("[Straja] Ramură FAQ necunoscută.");
+            default -> gw.refuse("straja.npc.faq_unknown", "straja.remedy.fix_retry");
         }
     }
 

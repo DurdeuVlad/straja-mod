@@ -1,5 +1,7 @@
 package com.dwurdy.straja.adapter.in.command;
 
+import static com.dwurdy.straja.adapter.in.StrajaText.refusal;
+
 import com.dwurdy.straja.bootstrap.StrajaRuntime;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
@@ -67,7 +69,7 @@ final class DebugCommands {
                     var runtime = StrajaRuntime.get();
                     if (runtime == null || !debugAllowed(ctx.getSource(), runtime)) return deny(ctx);
                     if (!runtime.policies().debugRevealQuizAnswers) {
-                        ctx.getSource().sendFailure(Component.literal("Revelarea răspunsurilor este dezactivată."));
+                        ctx.getSource().sendFailure(refusal("straja.debug.reveal_off", "straja.remedy.ask_comisar"));
                         return 0;
                     }
                     int index = 1;
@@ -91,7 +93,7 @@ final class DebugCommands {
     }
 
     private static int deny(com.mojang.brigadier.context.CommandContext<CommandSourceStack> ctx) {
-        ctx.getSource().sendFailure(Component.literal("Debug este dezactivat sau interzis în acest mediu."));
+        ctx.getSource().sendFailure(refusal("straja.debug.off", "straja.remedy.ask_comisar"));
         return 0;
     }
 

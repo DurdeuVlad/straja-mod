@@ -54,7 +54,7 @@ public final class IncidentService {
 
     private boolean enabled(PlayerGateway actor) {
         if (ctx.policies().incidentsEnabled) return true;
-        if (actor != null) actor.tell("Sistemul de incidente este dezactivat.");
+        if (actor != null) actor.refuse("straja.incident.disabled", "straja.remedy.ask_comisar");
         return false;
     }
 
@@ -317,7 +317,7 @@ public final class IncidentService {
         if (key.equals(incident.leadGuardUuid)
                 || incident.supportingGuardUuids.contains(key)) return true;
         if (incident.supportingGuardUuids.size() >= ctx.policies().incidentMaxSupportingGuards) {
-            guard.tell("Incidentul are deja numărul maxim de sprijinitori.");
+            guard.refuse("straja.incident.max_supporters", "straja.remedy.wait");
             return false;
         }
         incident.supportingGuardUuids.add(key);
@@ -375,7 +375,7 @@ public final class IncidentService {
             code = IncidentResolution.valueOf((resolution == null ? "" : resolution.trim())
                     .toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
-            guard.tell("Cod de rezolvare necunoscut.");
+            guard.refuse("straja.incident.code_unknown", "straja.remedy.fix_retry");
             return false;
         }
         incident.status = IncidentStatus.RESOLVED;

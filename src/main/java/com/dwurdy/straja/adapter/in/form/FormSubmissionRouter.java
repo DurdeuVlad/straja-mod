@@ -68,8 +68,7 @@ public final class FormSubmissionRouter {
                 Integer minutes = parseInt(values.get("minutes"));
                 Integer reward = parseInt(values.get("reward"));
                 if (minutes == null || reward == null) {
-                    player.sendSystemMessage(net.minecraft.network.chat.Component
-                            .literal("Datele ordinului nu sunt valide."));
+                    player.sendSystemMessage(refusal("straja.form.order_invalid", "straja.remedy.fix_retry"));
                     return;
                 }
                 missions.draftWrite(gateway, minutes, values.get("start"), reward, values.get("objective"));
@@ -77,8 +76,7 @@ public final class FormSubmissionRouter {
             case MISSION_DRAFT_SCOPE -> {
                 Integer maxAssignees = parseInt(firstValue(values, "max-assignees", "maxAssignees"));
                 if (maxAssignees == null) {
-                    player.sendSystemMessage(net.minecraft.network.chat.Component
-                            .literal("Datele ordinului nu sunt valide."));
+                    player.sendSystemMessage(refusal("straja.form.order_invalid", "straja.remedy.fix_retry"));
                     return;
                 }
                 missions.draftScope(gateway, firstValue(values, "minimum-rank", "minimumRank"), maxAssignees);
@@ -96,8 +94,7 @@ public final class FormSubmissionRouter {
             case COMPLAINT_REVIEW -> {
                 Integer reward = parseInt(values.get("reward"));
                 if (reward == null) {
-                    player.sendSystemMessage(net.minecraft.network.chat.Component
-                            .literal("Datele verificării nu sunt valide."));
+                    player.sendSystemMessage(refusal("straja.form.verify_invalid", "straja.remedy.fix_retry"));
                     return;
                 }
                 complaints.review(gateway, submission.recordId(), values.get("decision"), reward);
@@ -105,8 +102,7 @@ public final class FormSubmissionRouter {
             case FINE_DRAFT -> {
                 Integer amount = parseInt(values.get("amount"));
                 if (amount == null) {
-                    player.sendSystemMessage(net.minecraft.network.chat.Component
-                            .literal("Datele amenzii nu sunt valide."));
+                    player.sendSystemMessage(refusal("straja.form.fine_invalid", "straja.remedy.fix_retry"));
                     return;
                 }
                 fines.writeDraft(gateway, values.get("target"), amount,
@@ -121,8 +117,7 @@ public final class FormSubmissionRouter {
                         "reduce", "redu", "micsoreaza", "micșorează")
                         .contains(decision.toLowerCase());
                 if (reduce && reduced == null) {
-                    player.sendSystemMessage(net.minecraft.network.chat.Component
-                            .literal("Datele contestației nu sunt valide."));
+                    player.sendSystemMessage(refusal("straja.form.appeal_invalid", "straja.remedy.fix_retry"));
                     return;
                 }
                 fines.reviewAppeal(gateway, submission.recordId(), decision,
@@ -146,8 +141,7 @@ public final class FormSubmissionRouter {
             case ARCHIVE_COPY -> {
                 Integer count = parseInt(values.get("count"));
                 if (count == null) {
-                    player.sendSystemMessage(net.minecraft.network.chat.Component
-                            .literal("Datele copierii nu sunt valide."));
+                    player.sendSystemMessage(refusal("straja.form.copy_invalid", "straja.remedy.fix_retry"));
                     return;
                 }
                 archive.copySheet(gateway, submission.recordId(), count, values.get("targets"));
@@ -170,8 +164,7 @@ public final class FormSubmissionRouter {
             case ADMIN_AUTHORIZE -> {
                 String rankOrGrade = values.get("rank");
                 if (rankOrGrade == null || rankOrGrade.isBlank()) {
-                    player.sendSystemMessage(net.minecraft.network.chat.Component
-                            .literal("Rangul sau gradul lipsește."));
+                    player.sendSystemMessage(refusal("straja.form.rank_missing", "straja.remedy.fix_retry"));
                     return;
                 }
                 admin.authorize(gateway, values.get("name"), rankOrGrade);

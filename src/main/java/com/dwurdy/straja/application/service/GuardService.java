@@ -249,7 +249,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         Object[] args = switch (code == null ? "" : code) {
             case "route_invalid" -> new Object[]{ctx.policies().patrolMinCheckpoints};
             case "checkpoint_not_active" -> new Object[]{ctx.policies().checkpointUnlockMinutes};
-            default -> new Object[0];
+            default -> new Object[]{code};
         };
         player.refuse(coreKey(code), coreRemedy(code), args);
     }
@@ -392,8 +392,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
                 || normalized.equalsIgnoreCase("niciuna") || normalized.equalsIgnoreCase("niciună")) {
             normalized = null;
         } else if (normalized.length() > ctx.policies().nativeFactionMaxLength) {
-            actor.tell("Facțiunea nativă poate avea maximum "
-                    + ctx.policies().nativeFactionMaxLength + " caractere.");
+            actor.refuse("straja.duty.faction_len", "straja.remedy.fix_retry", ctx.policies().nativeFactionMaxLength);
             return false;
         }
         GuardState state = players.state(target);
@@ -777,13 +776,12 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
                 ? "Instruire teoretică: completă pentru rangul tău."
                 : "Instruire teoretică: " + pending.size() + " module rămase la rangul tău.");
         if (view.nextRank() == null) {
-            player.refuse(promotableState(state)
-                            ? "straja.duty.promotion_comisar"
-                            : "straja.duty.no_promotion",
-                    promotableState(state)
-                            ? "straja.remedy.ask_comisar"
-                            : "straja.remedy.instructor",
-                    ctx.policies().rankName(state.rank + 1));
+            if (promotableState(state)) {
+                player.refuse("straja.duty.promotion_comisar", "straja.remedy.ask_comisar",
+                        ctx.policies().rankName(state.rank + 1));
+            } else {
+                player.refuse("straja.duty.no_promotion", "straja.remedy.instructor");
+            }
         } else {
             player.refuse("straja.duty.promotion_points", "straja.remedy.duty", ctx.policies().rankName(view.nextRank()), view.requiredBlocks(), Math.max(0, view.requiredBlocks() - state.serviceBlocks));
         }
@@ -812,8 +810,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         }
         var pending = pendingModules(state);
         if (!pending.isEmpty()) {
-            player.tell("Mai întâi finalizează instruirea: " + pending.size()
-                    + " module rămase. Întreabă Instructorul pentru următoarea întrebare.");
+            player.refuse("straja.duty.finish_training", "straja.remedy.instructor", pending.size());
             return;
         }
         state.rank = nextRank;
@@ -877,7 +874,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
     public void giveManual(PlayerGateway player) {
         GuardState state = players.state(player);
         if ((!state.invited || state.fired) && state.rank < Rank.STAGIAR.level()) {
-            player.tell("Manualul este pentru recruții invitați și străjeri. Vorbește cu Comisaru'.");
+            player.refuse("straja.duty.manual_ranks", "straja.remedy.ask_comisar");
             return;
         }
         if (state.suspended || state.fired || state.resigned) {
@@ -1159,8 +1156,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             }
             if (com.dwurdy.straja.domain.model.ActivityReports.isOverdue(
                     reports, uuid, now(), ctx.policies().reportIntervalDays * 86_400_000L)) {
-                player.tell("Raportul tău de activitate este restant. "
-                        + "Depune-l la Secretariat înainte de a începe serviciul.");
+                player.refuse("straja.duty.report_overdue", "straja.remedy.secretary");
                 return;
             }
         }
@@ -1178,7 +1174,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             return;
         }
         if (!nearSecretary(player)) {
-            player.tell("Tura de patrulare începe la secretară. Mergi la Secretara Străjii pentru a intra în serviciu.");
+            player.refuse("straja.duty.patrol_at_secretary", "straja.remedy.secretary");
             return;
         }
         SetupData setup = ctx.setup().read();
@@ -1253,7 +1249,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             return;
         }
         if (!"FREE".equals(state.mode) && !nearSecretary(player)) {
-            player.tell("Tura normală se încheie la secretară. Mergi la Secretara Străjii pentru a ieși din serviciu.");
+            player.refuse("straja.duty.end_at_secretary", "straja.remedy.secretary");
             return;
         }
         markDutyActivity(player, state, now());
@@ -1304,7 +1300,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
     public void specialStart(PlayerGateway actor, PlayerGateway target) {
         GuardState targetState = players.state(target);
         if (!canAuthorize(actor, "special_duty", target.name(), targetState.rank)) {
-            actor.tell("Special Duty poate fi autorizat de Comisaru' sau de un Inspector pentru alt străjer.");
+            actor.refuse("straja.duty.special_auth", "straja.remedy.ask_comisar");
             return;
         }
         if (!operational(targetState)) {
@@ -1499,7 +1495,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
                         + (state.salaryWindowKey == null ? "legacy" : state.salaryWindowKey)
                         + ":amount=" + amount;
         if ("REVIEW".equals(state.salaryPaymentStatus)) {
-            player.tell("Plata salariului este blocată pentru verificarea Comisarului.");
+            player.refuse("straja.duty.salary_locked", "straja.remedy.wait");
             return;
         }
         if ("IN_PROGRESS".equals(state.salaryPaymentStatus)) {
@@ -1569,7 +1565,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             return;
         }
         if (!state.duty) {
-            player.tell("Hrana de serviciu se ridică numai în timpul unei ture active.");
+            player.refuse("straja.duty.food_duty", "straja.remedy.duty");
             return;
         }
         if (state.foodReadyAt != null && state.foodReadyAt > now()) {
@@ -1655,7 +1651,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         SetupData setup = ctx.setup().read();
         var point = setup.checkpoints.stream().filter(c -> c.id.equals(id)).findFirst().orElse(null);
         if (point == null) {
-            player.tell("Checkpoint necunoscut. Creează slotul cu /straja checkpoint add.");
+            player.refuse("straja.duty.checkpoint_unknown", "straja.remedy.fix_retry");
             return;
         }
         point.dimension = dimension;
@@ -1703,7 +1699,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         SetupData setup = ctx.setup().read();
         boolean removed = setup.checkpoints.removeIf(c -> c.id.equals(id));
         if (!removed) {
-            player.tell("Checkpoint necunoscut: " + id + ".");
+            player.refuse("straja.duty.checkpoint_unknown_arg", "straja.remedy.fix_retry", id);
             return false;
         }
         setup.missionMinutes.remove(id);
@@ -1727,8 +1723,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         int max = Math.max(1, ctx.policies().patrolMaxCheckpoints);
         int n = points == null ? 0 : points.size();
         if (n < min || n > max) {
-            player.tell("Traseul cere între " + min + " și " + max
-                    + " puncte distincte — " + n + " înregistrate.");
+            player.refuse("straja.duty.route_range", "straja.remedy.fix_retry", min, max, n);
             return false;
         }
         SetupData setup = ctx.setup().read();
@@ -1798,7 +1793,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         aliases.put("sediu", "hq");
         String key = aliases.get(name == null ? "" : name.trim().toLowerCase());
         if (key == null) {
-            player.tell("Locație necunoscută: reports, mailbox, office, receptionist, secretary, trainer, armorer, prison-release, infirmary sau hq.");
+            player.refuse("straja.admin.location_unknown", "straja.remedy.fix_retry");
             return;
         }
         stampLocation(player, key, player.dimension(), player.x(), player.y(), player.z());
@@ -1815,7 +1810,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             return;
         }
         if (java.util.Arrays.asList(SetupData.LOCATION_KEYS).indexOf(key) < 0) {
-            player.tell("Locație necunoscută: reports, mailbox, office, receptionist, secretary, trainer, armorer, prison-release, infirmary sau hq.");
+            player.refuse("straja.admin.location_unknown", "straja.remedy.fix_retry");
             return;
         }
         SetupData setup = ctx.setup().read();
@@ -2043,7 +2038,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
 
     public void report(PlayerGateway player, String text) {
         if (text == null || text.isBlank()) {
-            player.tell("Prezintă raportul complet direct Comisaru'ului.");
+            player.refuse("straja.duty.report_blank", "straja.remedy.fix_retry");
             return;
         }
         addInbox("REPORT", player.name(), text.trim());

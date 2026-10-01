@@ -78,7 +78,7 @@ public class ArmoryService implements com.dwurdy.straja.application.port.in.Armo
         }
         CurrencyProvider.Withdrawal withdrawal = ctx.currency().withdraw(player, item.cost());
         if (!withdrawal.ok()) {
-            player.tell("Fonduri insuficiente. Preț: " + item.cost() + " monede.");
+            player.refuse("straja.armory.no_funds", "straja.remedy.secretary", item.cost());
             return refused("armory_buy", player, key, "insufficient_funds");
         }
         if (!player.giveVerified(ItemSpec.of(item.itemId(), item.count()))) {
@@ -115,8 +115,7 @@ public class ArmoryService implements com.dwurdy.straja.application.port.in.Armo
             return refused("armory_reserve", player, key, "unavailable");
         }
         if (state.requisitionPoints < item.cost()) {
-            player.tell("Puncte de rechiziție insuficiente. Ai " + state.requisitionPoints
-                    + ", cost: " + item.cost() + ".");
+            player.refuse("straja.armory.no_points", "straja.remedy.secretary", state.requisitionPoints, item.cost());
             return refused("armory_reserve", player, key, "insufficient_points");
         }
         if (!player.inventory().canReceive(List.of(ItemSpec.of(item.itemId(), item.count())))) {
