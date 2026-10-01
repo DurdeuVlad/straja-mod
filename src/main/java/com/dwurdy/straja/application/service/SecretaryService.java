@@ -12,7 +12,7 @@ public final class SecretaryService implements SecretaryRoleplayUseCase {
         PlayerGateway.BookCopyResult result = player.copyMainHandBook();
         switch (result) {
             case COPIED -> player.tell("Secretarul ți-a dat o copie a cărții. Originalul a rămas la tine.");
-            case NO_SPACE -> player.tell("Nu ai loc în inventar pentru copia cărții.");
+            case NO_SPACE -> player.refuse("straja.secretary.copy_full", "straja.remedy.retry");
             case NOT_A_BOOK -> { }
         }
         return result;

@@ -124,6 +124,10 @@ public final class Fakes {
         @Override public double absorption() { return absorption; }
         @Override public void setHealth(double value) { health = value; }
         @Override public void tell(String text) { messages.add(text); }
+        @Override public void refuse(String reasonKey, String remedyKey, Object... reasonArgs) {
+            messages.add(com.dwurdy.straja.adapter.in.test.VirtualLang.refusal(
+                    reasonKey, remedyKey, reasonArgs));
+        }
         @Override public void actionbar(String text) { actionbarMessages.add(text); }
         @Override public boolean give(ItemSpec item) {
             return inventory.insert(new ItemView(item.id(), item.count(), 64, item.customData()));

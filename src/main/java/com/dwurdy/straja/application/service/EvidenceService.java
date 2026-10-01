@@ -87,24 +87,24 @@ public final class EvidenceService {
         SearchSession session = sessions.remove(token);
         if (session == null || !session.guardUuid.equals(guard == null ? null : guard.uuid())
                 || session.expiresAt() < now()) {
-            if (guard != null) guard.tell("Percheziția nu mai este validă. Deschide-o din nou.");
+            if (guard != null) guard.refuse("straja.evidence.search_stale", "straja.remedy.retry");
             return false;
         }
         PlayerGateway target = ctx.server().findPlayer(session.targetUuid);
         if (target == null || eligibilityFailure(guard, target) != null) {
-            if (guard != null) guard.tell("Ținta s-a îndepărtat sau nu mai poate fi percheziționată.");
+            if (guard != null) guard.refuse("straja.evidence.search_moved", "straja.remedy.retry");
             audit.record("item_confiscated", name(guard), uuid(guard),
                     session.targetUuid.toString(), "", "REFUSED", "context_changed");
             return false;
         }
         RoleplayExpansionUseCase.SearchSlot selected = session.slot(slot);
         if (selected == null || amount != selected.item().count() || amount <= 0) {
-            guard.tell("Obiectul sau cantitatea s-au schimbat; confiscarea a fost refuzată.");
+            guard.refuse("straja.evidence.stack_changed", "straja.remedy.retry");
             return false;
         }
         ItemView current = target.inventory().stackAt(slot);
         if (!sameStack(selected.item(), current)) {
-            guard.tell("Obiectul s-a schimbat; confiscarea a fost refuzată.");
+            guard.refuse("straja.evidence.item_changed", "straja.remedy.retry");
             audit.record("item_confiscated", guard.name(), uuid(guard),
                     target.name(), uuid(target), "REFUSED", "stale_slot");
             return false;
@@ -114,20 +114,20 @@ public final class EvidenceService {
         ItemSpec previewBag = evidenceBag(previewId);
         ItemSpec previewReceipt = confiscationReceipt(previewId);
         if (!guard.inventory().canReceive(List.of(previewBag))) {
-            guard.tell("Nu ai loc pentru punga de probe; confiscarea a fost refuzată.");
+            guard.refuse("straja.evidence.bag_full", "straja.remedy.retry");
             audit.record("item_confiscated", guard.name(), uuid(guard),
                     target.name(), uuid(target), "REFUSED", "guard_inventory_full");
             return false;
         }
         if (!target.inventory().canReceive(List.of(previewReceipt))) {
-            guard.tell("Ținta nu are loc pentru dovada de confiscare; confiscarea a fost refuzată.");
+            guard.refuse("straja.evidence.target_full", "straja.remedy.retry");
             audit.record("item_confiscated", guard.name(), uuid(guard),
                     target.name(), uuid(target), "REFUSED", "target_inventory_full");
             return false;
         }
         ItemView taken = target.inventory().extract(slot, amount);
         if (!sameStack(selected.item(), taken)) {
-            guard.tell("Stiva nu a putut fi preluată integral; nimic nu a fost înregistrat ca probă.");
+            guard.refuse("straja.evidence.take_fail", "straja.remedy.retry");
             return false;
         }
         EvidenceRecord evidence = new EvidenceRecord();
@@ -174,7 +174,7 @@ public final class EvidenceService {
         target.tell(msg);
         guard.tell(msg);
         if (!bagDelivered || !receiptDelivered) {
-            guard.tell("Un document fizic nu a putut fi livrat; va fi reîncercat la reconectare.");
+            guard.refuse("straja.evidence.doc_deferred", "straja.remedy.wait");
             target.tell("Dovada fizică va fi reîncercată la reconectare.");
         }
         audit.record("item_confiscated", guard.name(), uuid(guard),
@@ -218,11 +218,11 @@ public final class EvidenceService {
         EvidenceStore data = store();
         EvidenceRecord evidence = data.records.get(evidenceId);
         if (evidence == null || evidence.status != EvidenceStatus.IN_GUARD_CUSTODY) {
-            if (actor != null) actor.tell("Proba nu mai este în custodia unui străjer.");
+            if (actor != null) actor.refuse("straja.evidence.not_in_custody", "straja.remedy.archivist");
             return false;
         }
         if (!authorizedArchive(actor)) {
-            actor.tell("Doar personalul autorizat poate depune probe.");
+            actor.refuse("straja.evidence.deposit_rank", "straja.remedy.archivist");
             return false;
         }
         move(evidence, evidence.status, EvidenceStatus.DEPOSITED,
@@ -241,16 +241,16 @@ public final class EvidenceService {
         EvidenceRecord evidence = data.records.get(evidenceId);
         if (evidence == null || evidence.status == EvidenceStatus.RETURNED
                 || evidence.status == EvidenceStatus.DESTROYED) {
-            if (actor != null) actor.tell("Proba nu poate fi restituită.");
+            if (actor != null) actor.refuse("straja.evidence.no_return", "straja.remedy.archivist");
             return false;
         }
         if (!authorizedArchive(actor)) {
-            actor.tell("Doar personalul autorizat poate restitui probe.");
+            actor.refuse("straja.evidence.return_rank", "straja.remedy.archivist");
             return false;
         }
         PlayerGateway owner = ctx.server().findPlayer(evidence.sourcePlayerUuid);
         if (owner == null || !owner.isOnline()) {
-            actor.tell("Proprietarul probei nu este online.");
+            actor.refuse("straja.evidence.owner_offline", "straja.remedy.wait");
             return false;
         }
         ItemSpec original = new ItemSpec(evidence.itemId, evidence.amount,
@@ -275,7 +275,7 @@ public final class EvidenceService {
         EvidenceRecord evidence = data.records.get(evidenceId);
         if (evidence == null || evidence.status == EvidenceStatus.RETURNED
                 || evidence.status == EvidenceStatus.DESTROYED) {
-            if (actor != null) actor.tell("Proba nu mai poate fi transferată.");
+            if (actor != null) actor.refuse("straja.evidence.no_transfer", "straja.remedy.archivist");
             return false;
         }
         if (!authorizedArchive(actor) || !authorizedCustodian(recipient)) {
@@ -302,11 +302,11 @@ public final class EvidenceService {
         EvidenceRecord evidence = data.records.get(evidenceId);
         if (evidence == null || evidence.status == EvidenceStatus.RETURNED
                 || evidence.status == EvidenceStatus.DESTROYED) {
-            if (actor != null) actor.tell("Proba nu mai poate fi distrusă.");
+            if (actor != null) actor.refuse("straja.evidence.no_destroy", "straja.remedy.ask_comisar");
             return false;
         }
         if (actor == null || !players.isCommissioner(actor)) {
-            if (actor != null) actor.tell("Doar Comisaru' poate aproba distrugerea unei probe.");
+            if (actor != null) actor.refuse("straja.evidence.destroy_rank", "straja.remedy.ask_comisar");
             return false;
         }
         String safeReason = clean(reason, ctx.policies().evidenceMaxReasonLength);

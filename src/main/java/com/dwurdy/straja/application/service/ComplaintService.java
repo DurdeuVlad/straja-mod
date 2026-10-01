@@ -242,12 +242,12 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
         }
         AccusedIdentity target = resolveAccused(accusedName);
         if (target == null) {
-            player.tell("Acuzatul nu poate fi identificat printr-un cont conectat sau prin istoricul UUID persistent.");
+            player.refuse("straja.complaint.accused_unknown", "straja.remedy.fix_retry");
             return false;
         }
         if (PlayerService.identityMatches(player,
                 target.uuid(), target.name())) {
-            player.tell("Nu poți depune o plângere împotriva ta.");
+            player.refuse("straja.complaint.self", "straja.remedy.fix_retry");
             return false;
         }
         ComplaintStore data = ctx.complaints().read();
@@ -282,7 +282,7 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
 
     public void list(PlayerGateway player) {
         if (!canInvestigate(player) && !canReview(player)) {
-            player.tell("Doar Sergentul sau un rang superior poate vedea dosarele.");
+            player.refuse("straja.complaint.view_rank", "straja.remedy.instructor");
             return;
         }
         ComplaintStore data = ctx.complaints().read();
@@ -300,13 +300,13 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
 
     public boolean claim(PlayerGateway player, String id) {
         if (!canInvestigate(player)) {
-            player.tell("Doar Sergentul sau un rang superior poate prelua plângeri.");
+            player.refuse("straja.complaint.claim_rank", "straja.remedy.instructor");
             return false;
         }
         ComplaintStore data = ctx.complaints().read();
         Complaint complaint = data.find(id);
         if (complaint == null || !List.of("SUBMITTED", "CLAIMED").contains(complaint.status)) {
-            player.tell("Plângerea nu este disponibilă pentru preluare.");
+            player.refuse("straja.complaint.claim_gone", "straja.remedy.retry");
             return false;
         }
         if (!complaint.leadUuid.isEmpty() && !complaint.leadUuid.equals(player.uuid().toString())) {
@@ -329,22 +329,22 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
 
     public boolean mobilize(PlayerGateway player, String id, PlayerGateway target) {
         if (!players.hasCapability(player, Capability.MOBILIZE_PLAYERS)) {
-            player.tell("Doar Sergentul sau un rang superior poate mobiliza participanți.");
+            player.refuse("straja.complaint.mobilize_rank", "straja.remedy.instructor");
             return false;
         }
         ComplaintStore data = ctx.complaints().read();
         Complaint complaint = data.find(id);
         if (complaint == null || !PlayerService.identityMatches(player, complaint.leadUuid, complaint.lead)
                 || !complaint.isOpen()) {
-            player.tell("Dosarul nu îți este atribuit.");
+            player.refuse("straja.complaint.not_assigned", "straja.remedy.retry");
             return false;
         }
         if (target == null || !players.hasCapability(target, Capability.ASSIST_COMPLAINTS)) {
-            player.tell("Participantul trebuie să fie o gardă activă.");
+            player.refuse("straja.complaint.participant_inactive", "straja.remedy.duty");
             return false;
         }
         if (!players.isCommissioner(player) && players.state(target).rank >= players.state(player).rank) {
-            player.tell("Poți mobiliza doar Stagiari și Străjeri.");
+            player.refuse("straja.complaint.mobilize_ranks", "straja.remedy.fix_retry");
             return false;
         }
         for (Complaint.Participant participant : complaint.participants) {
@@ -376,7 +376,7 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
 
     public boolean join(PlayerGateway player, String id) {
         if (!players.hasCapability(player, Capability.ASSIST_COMPLAINTS)) {
-            player.tell("Doar o gardă activă poate participa la o investigație.");
+            player.refuse("straja.complaint.join_inactive", "straja.remedy.duty");
             return false;
         }
         if (!atLocation(player, "secretary", "receptionist")) {
@@ -392,7 +392,7 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
             }
         }
         if (participant == null) {
-            player.tell("Nu ai o mobilizare activă pentru acest dosar.");
+            player.refuse("straja.complaint.no_mobilization", "straja.remedy.retry");
             return false;
         }
         participant.status = "JOINED";
@@ -414,7 +414,7 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
             }
         }
         if (participant == null) {
-            player.tell("Nu ești participant activ pe acest dosar.");
+            player.refuse("straja.complaint.not_participant", "straja.remedy.retry");
             return false;
         }
         if (!atLocation(player, "secretary")) {
@@ -433,19 +433,19 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
 
     public boolean report(PlayerGateway player, String id, String report) {
         if (!canInvestigate(player)) {
-            player.tell("Doar Sergentul sau un rang superior poate depune raportul de investigație.");
+            player.refuse("straja.complaint.report_rank", "straja.remedy.instructor");
             return false;
         }
         String text = report == null ? "" : report.trim();
         if (text.isEmpty() || text.length() > p().complaintMaxEvidenceLength) {
-            player.tell("Raportul trebuie completat și să aibă maximum " + p().complaintMaxEvidenceLength + " caractere.");
+            player.refuse("straja.complaint.report_required", "straja.remedy.fix_retry", p().complaintMaxEvidenceLength);
             return false;
         }
         ComplaintStore data = ctx.complaints().read();
         Complaint complaint = data.find(id);
         if (complaint == null || !PlayerService.identityMatches(player, complaint.leadUuid, complaint.lead)
                 || !List.of("CLAIMED", "INVESTIGATING").contains(complaint.status)) {
-            player.tell("Dosarul nu îți este atribuit sau nu mai acceptă raport.");
+            player.refuse("straja.complaint.report_closed", "straja.remedy.retry");
             return false;
         }
         if (!atLocation(player, "secretary")) {
@@ -472,11 +472,11 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
         Complaint complaint = data.find(id);
         if (complaint == null
                 || !PlayerService.identityMatches(player, complaint.complainantUuid, complaint.complainant)) {
-            player.tell("Acest dosar nu îți aparține.");
+            player.refuse("straja.complaint.not_yours", "straja.remedy.retry");
             return false;
         }
         if (!List.of("REPORT_SUBMITTED", "UNDER_REVIEW").contains(complaint.status)) {
-            player.tell("Dosarul nu are încă un raport final.");
+            player.refuse("straja.complaint.no_report", "straja.remedy.instructor");
             return false;
         }
         String action = decision == null ? "" : decision.toLowerCase();
@@ -587,17 +587,17 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
 
     public boolean review(PlayerGateway player, String id, String decision, Integer reward) {
         if (!canReview(player)) {
-            player.tell("Doar Inspectorul sau Comisaru' poate verifica și plăti dosare.");
+            player.refuse("straja.complaint.verify_rank", "straja.remedy.ask_comisar");
             return false;
         }
         ComplaintStore data = ctx.complaints().read();
         Complaint complaint = data.find(id);
         if (complaint == null || !List.of("REPORT_SUBMITTED", "UNDER_REVIEW").contains(complaint.status)) {
-            player.tell("Dosarul nu este pregătit pentru verificare.");
+            player.refuse("straja.complaint.not_ready", "straja.remedy.retry");
             return false;
         }
         if (PlayerService.identityMatches(player, complaint.complainantUuid, complaint.complainant)) {
-            player.tell("Nu îți poți verifica propriul dosar.");
+            player.refuse("straja.complaint.self_verify", "straja.remedy.fix_retry");
             return false;
         }
         if (!atLocation(player, "secretary")) {
@@ -636,7 +636,7 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
         int configuredReward = reward == null ? rewardSuggestion(complaint) : reward;
         int maximum = Math.max(0, p().complaintMaxReward);
         if (configuredReward < 0 || configuredReward > maximum) {
-            player.tell("Reward-ul trebuie să fie un întreg între 0 și " + maximum + ".");
+            player.refuse("straja.complaint.reward_invalid", "straja.remedy.fix_retry", maximum);
             return false;
         }
         if (!reserveBudget(player, configuredReward, data)) return false;

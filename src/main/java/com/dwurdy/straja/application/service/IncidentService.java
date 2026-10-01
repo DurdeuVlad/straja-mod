@@ -92,7 +92,7 @@ public final class IncidentService {
     public synchronized Incident useWhistle(PlayerGateway guard) {
         if (guard == null || !enabled(guard) || !ctx.policies().whistleEnabled) return null;
         if (!players.isOnDutyGuard(guard)) {
-            guard.tell("Fluierul poate fi folosit doar în timpul serviciului.");
+            guard.refuse("straja.incident.whistle_duty", "straja.remedy.duty");
             audit.record("whistle", guard.name(), uuid(guard), "", "", "REFUSED", "not_on_duty");
             return null;
         }
@@ -142,7 +142,7 @@ public final class IncidentService {
         if (actor == null || !enabled(actor)
                 || (!players.isCommissioner(actor)
                     && !players.hasCapability(actor, Capability.INVESTIGATE_COMPLAINTS))) {
-            if (actor != null) actor.tell("Nu ai autoritatea de a crea incidente.");
+            if (actor != null) actor.refuse("straja.incident.create_auth", "straja.remedy.duty");
             return null;
         }
         IncidentStore data = store();
@@ -202,7 +202,7 @@ public final class IncidentService {
         String cleanTitle = clean(title, 80);
         String cleanDescription = clean(description, ctx.policies().incidentMaxDescriptionLength);
         if (cleanTitle.isBlank() || cleanDescription.isBlank()) {
-            if (creator != null) creator.tell("Incidentul trebuie să aibă titlu și descriere.");
+            if (creator != null) creator.refuse("straja.incident.fields_required", "straja.remedy.fix_retry");
             if (creator != null) audit.record("incident_create", creator.name(), uuid(creator),
                     "", "", "REFUSED", "invalid_text");
             return null;
@@ -288,7 +288,7 @@ public final class IncidentService {
         IncidentStore data = store();
         Incident incident = data.find(incidentId);
         if (incident == null || !isActive(incident.status)) {
-            guard.tell("Incidentul nu mai este activ.");
+            guard.refuse("straja.incident.inactive", "straja.remedy.retry");
             return false;
         }
         if (!incident.leadGuardUuid.isBlank()) {
@@ -310,7 +310,7 @@ public final class IncidentService {
         IncidentStore data = store();
         Incident incident = data.find(incidentId);
         if (incident == null || !isActive(incident.status)) {
-            guard.tell("Incidentul nu mai este activ.");
+            guard.refuse("straja.incident.inactive", "straja.remedy.retry");
             return false;
         }
         String key = uuid(guard);
@@ -334,7 +334,7 @@ public final class IncidentService {
         IncidentStore data = store();
         Incident incident = data.find(incidentId);
         if (incident == null || !isActive(incident.status)) {
-            if (guard != null) guard.tell("Incidentul nu mai este activ.");
+            if (guard != null) guard.refuse("straja.incident.inactive", "straja.remedy.retry");
             return false;
         }
         String key = uuid(guard);
@@ -360,14 +360,14 @@ public final class IncidentService {
         IncidentStore data = store();
         Incident incident = data.find(incidentId);
         if (incident == null || !isActive(incident.status)) {
-            if (guard != null) guard.tell("Incidentul nu mai este activ.");
+            if (guard != null) guard.refuse("straja.incident.inactive", "straja.remedy.retry");
             return false;
         }
         String key = uuid(guard);
         boolean lead = key.equals(incident.leadGuardUuid);
         if (!lead && !players.isCommissioner(guard)
                 && !players.hasCapability(guard, Capability.INVESTIGATE_COMPLAINTS)) {
-            guard.tell("Doar Străjerul principal sau un superior poate încheia incidentul.");
+            guard.refuse("straja.incident.close_rank", "straja.remedy.duty");
             return false;
         }
         IncidentResolution code;
@@ -442,7 +442,7 @@ public final class IncidentService {
 
     private boolean guardReady(PlayerGateway guard) {
         if (guard == null || !players.isOnDutyGuard(guard)) {
-            if (guard != null) guard.tell("Trebuie să fii Străjer activ pentru a lucra la incidente.");
+            if (guard != null) guard.refuse("straja.incident.work_rank", "straja.remedy.duty");
             return false;
         }
         return true;

@@ -95,7 +95,7 @@ public class RoomService implements RoomRoleplayUseCase {
 
     public void markerSelect(PlayerGateway player, String dimension, int x, int y, int z) {
         if (!players.isCommissioner(player)) {
-            player.tell("Sigiliul de inspecție poate fi folosit doar de Comisaru'.");
+            player.refuse("straja.room.seal_comisar", "straja.remedy.ask_comisar");
             return;
         }
         RoomStore data = ctx.rooms().read();
@@ -113,7 +113,7 @@ public class RoomService implements RoomRoleplayUseCase {
 
     public Room discover(PlayerGateway player, String requestedId) {
         if (!players.isCommissioner(player)) {
-            player.tell("Doar Comisaru' poate crea camere.");
+            player.refuse("straja.room.create_comisar", "straja.remedy.ask_comisar");
             return null;
         }
         RoomStore data = ctx.rooms().read();
@@ -152,7 +152,7 @@ public class RoomService implements RoomRoleplayUseCase {
         }
         String id = requestedId == null || requestedId.isBlank() ? nextId(data) : requestedId.toLowerCase();
         if (!id.matches("[a-z0-9_-]{1,32}")) {
-            player.tell("ID invalid. Folosește doar litere mici, cifre, _ sau - (maximum 32).");
+            player.refuse("straja.room.id_invalid", "straja.remedy.fix_retry");
             return null;
         }
         Room previous = null;
@@ -341,7 +341,7 @@ public class RoomService implements RoomRoleplayUseCase {
         var result = ctx.delivery().sendLetter(null, target.name(), subject, body);
         switch (result.mode()) {
             case DELIVERED, PENDING_MAILBOX -> target.tell("Ai primit o scrisoare Envelope: " + subject + ".");
-            case FAILED -> target.tell("Scrisoarea „" + subject + "” nu a putut fi pusă în inventar. Eliberează un slot și anunță Comisaru'.");
+            case FAILED -> target.refuse("straja.room.letter_fail", "straja.remedy.retry", subject);
             case CHAT_FALLBACK -> target.tell("Scrisoare Straja (" + subject + "): " + body);
             default -> { }
         }
@@ -454,7 +454,7 @@ public class RoomService implements RoomRoleplayUseCase {
             if (player.uuid().toString().equals(data.waitlist.get(i).playerUuid)) position = i + 1;
         }
         if (position > 0) player.tell("Ești pe poziția " + position + " în lista de așteptare.");
-        if (mine == null && position < 0) player.tell("Nu ai o cameră atribuită.");
+        if (mine == null && position < 0) player.refuse("straja.room.none_assigned", "straja.remedy.ask_comisar");
         player.tell("Camere libere: " + data.rooms.stream().filter(r -> data.assignments.get(r.id) == null).count()
                 + "/" + data.rooms.size() + ". Așteptare: " + data.waitlist.size() + ".");
     }
@@ -465,7 +465,7 @@ public class RoomService implements RoomRoleplayUseCase {
             var owner = data.assignments.get(room.id);
             player.tell(room.id + " " + (owner != null ? "OCUPATĂ " + owner.player : "NEOCUPATĂ"));
         }
-        if (data.rooms.isEmpty()) player.tell("Nu există camere configurate.");
+        if (data.rooms.isEmpty()) player.refuse("straja.room.none_configured", "straja.remedy.ask_comisar");
     }
 
     private void trimAndSave(RoomStore data) {

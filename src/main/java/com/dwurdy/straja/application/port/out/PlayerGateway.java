@@ -44,7 +44,18 @@ public interface PlayerGateway {
     void tell(String text);
 
     /** Sends a client-localized message when the concrete adapter supports it. */
-    default void tellKey(String translationKey) { tell(translationKey); }
+    default void tellKey(String translationKey, Object... args) { tell(translationKey); }
+
+    /**
+     * Sends a refusal that names the concrete remedy, not just the reason.
+     * Player-facing denials route through here so a bare reason can never
+     * ship: {@code straja.refusal.format} renders "{reason} → {remedy}" and
+     * the remedy key always points at the action, NPC or FAQ topic that
+     * unblocks the player.
+     */
+    default void refuse(String reasonKey, String remedyKey, Object... reasonArgs) {
+        tell(reasonKey + " -> " + remedyKey);
+    }
 
     /** Replaces the player's action-bar status without adding chat history. */
     default void actionbar(String text) {}

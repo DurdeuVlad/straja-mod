@@ -46,7 +46,7 @@ public final class BoloService {
         var issuerState = players.state(issuer);
         if (!players.isOnDutyGuard(issuer) || issuerState == null
                 || issuerState.rank < ctx.policies().boloMinimumIssuerRank) {
-            issuer.tell("Nu ai rangul sau serviciul necesar pentru a emite un BOLO.");
+            issuer.refuse("straja.bolo.issue_rank", "straja.remedy.duty");
             audit.record("bolo_create", issuer.name(), uuid(issuer), subject.name(),
                     uuid(subject), "REFUSED", "issuer_not_eligible");
             return null;
@@ -102,7 +102,7 @@ public final class BoloService {
         BoloStore data = store();
         BoloRecord record = data.find(boloId);
         if (record == null || record.status != BoloStatus.ACTIVE) {
-            if (actor != null) actor.tell("BOLO-ul nu mai este activ.");
+            if (actor != null) actor.refuse("straja.bolo.inactive", "straja.remedy.retry");
             return false;
         }
         boolean issuer = actor != null && uuid(actor).equals(record.issuerUuid);
@@ -111,7 +111,7 @@ public final class BoloService {
                 || (actorState != null
                     && actorState.rank >= ctx.policies().boloCancellationMinimumRank));
         if (!issuer && !superior) {
-            if (actor != null) actor.tell("Nu ai autoritatea de a anula acest BOLO.");
+            if (actor != null) actor.refuse("straja.bolo.cancel_auth", "straja.remedy.ask_comisar");
             return false;
         }
         record.status = BoloStatus.CANCELLED;

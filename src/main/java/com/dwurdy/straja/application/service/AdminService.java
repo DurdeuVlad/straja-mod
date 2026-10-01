@@ -91,7 +91,7 @@ public class AdminService implements AdminRoleplayUseCase {
         if (!gate(actor)) return;
         var rows = roster();
         if (rows.isEmpty()) {
-            actor.tell("[Straja] Nu există fișe de personal.");
+            actor.refuse("straja.admin.no_sheets", "straja.remedy.reception");
             return;
         }
         actor.tell("[Straja] Personal înregistrat (" + rows.size() + "):");
@@ -149,11 +149,11 @@ public class AdminService implements AdminRoleplayUseCase {
             return;
         }
         if (target == null) {
-            actor.tell("Jucătorul nu este online sau nu există.");
+            actor.refuse("straja.common.player_offline", "straja.remedy.retry");
             return;
         }
         if (v2Personnel == null) {
-            actor.tell("Autorizarea V2 nu este disponibilă.");
+            actor.refuse("straja.admin.auth_unavailable", "straja.remedy.wait");
             return;
         }
         try {
@@ -162,7 +162,7 @@ public class AdminService implements AdminRoleplayUseCase {
                     "COMMISSIONER_DIRECT", "hq", "authorize:" + target.uuid());
             actor.tell(name + " autorizat la gradul " + grade.name() + ".");
         } catch (RuntimeException error) {
-            actor.tell("Autorizarea V2 a fost refuzată: " + error.getMessage());
+            actor.refuse("straja.admin.auth_refused", "straja.remedy.retry", error.getMessage());
         }
     }
 
@@ -240,12 +240,12 @@ public class AdminService implements AdminRoleplayUseCase {
     private void mutate(PlayerGateway actor, String memberId, String op) {
         if (!gate(actor)) return;
         if (!isStillValid(actor, Action.valueOf(op.toUpperCase()), memberId)) {
-            actor.tell("[Straja] Acțiunea nu mai este disponibilă pentru acest membru.");
+            actor.refuse("straja.admin.action_stale", "straja.remedy.retry");
             return;
         }
         PlayerGateway target = ctx.server().findPlayer(memberId);
         if (target == null) {
-            actor.tell("[Straja] Membrul nu este online — acțiunile de personal cer prezența.");
+            actor.refuse("straja.admin.member_offline", "straja.remedy.wait");
             return;
         }
         switch (op) {
@@ -264,7 +264,7 @@ public class AdminService implements AdminRoleplayUseCase {
 
     private boolean gate(PlayerGateway actor) {
         if (authorized(actor)) return true;
-        actor.tell("Doar Comisarul poate folosi interfața administrativă.");
+        actor.refuse("straja.admin.interface_comisar", "straja.remedy.ask_comisar");
         return false;
     }
 

@@ -143,7 +143,7 @@ public final class RpExpansionService implements RoleplayExpansionUseCase {
                               String notes, String authority, String incidentId) {
         PlayerGateway subject = players.findPlayer(subjectName);
         if (subject == null) {
-            issuer.tell("Subiectul trebuie să fie online pentru această emitere.");
+            issuer.refuse("straja.expansion.subject_offline", "straja.remedy.wait");
             return false;
         }
         BoloAuthority parsed;

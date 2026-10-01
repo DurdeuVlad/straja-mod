@@ -62,7 +62,7 @@ public class AudienceService implements AudienceUseCase {
     @Override
     public boolean request(PlayerGateway player, String reason) {
         if (!isMember(player)) {
-            player.tell("Doar membrii Străjii pot cere audiență la Comisar.");
+            player.refuse("straja.audience.members_only", "straja.remedy.reception");
             return false;
         }
         String text = reason == null ? "" : reason.trim();
@@ -106,7 +106,7 @@ public class AudienceService implements AudienceUseCase {
     @Override
     public void status(PlayerGateway player) {
         if (!isMember(player)) {
-            player.tell("Doar membrii Străjii au cereri de audiență.");
+            player.refuse("straja.audience.list_members", "straja.remedy.reception");
             return;
         }
         String uuid = player.uuid().toString();
@@ -117,7 +117,7 @@ public class AudienceService implements AudienceUseCase {
         }
         AudienceRequest decided = store.latestDecidedFor(uuid);
         if (decided == null) {
-            if (open == null) player.tell("Nu ai nicio cerere de audiență.");
+            if (open == null) player.refuse("straja.audience.none_mine", "straja.remedy.faq");
         } else {
             deliverOutcome(store, decided, player);
         }
@@ -127,12 +127,12 @@ public class AudienceService implements AudienceUseCase {
     @Override
     public void listForReview(PlayerGateway player) {
         if (!players.isCommissioner(player)) {
-            player.tell("Doar Comisaru' vede cererile de audiență.");
+            player.refuse("straja.audience.list_comisar", "straja.remedy.ask_comisar");
             return;
         }
         var pending = ctx.audiences().read().pending();
         if (pending.isEmpty()) {
-            player.tell("Nu există cereri de audiență în așteptare.");
+            player.refuse("straja.audience.none_pending", "straja.remedy.wait");
             return;
         }
         player.tell("Cereri de audiență în așteptare: " + pending.size());
@@ -144,13 +144,13 @@ public class AudienceService implements AudienceUseCase {
     @Override
     public boolean resolve(PlayerGateway player, String id, String decision, String note) {
         if (!players.isCommissioner(player)) {
-            player.tell("Doar Comisaru' decide cererile de audiență.");
+            player.refuse("straja.audience.decide_comisar", "straja.remedy.ask_comisar");
             return false;
         }
         AudienceStore store = ctx.audiences().read();
         AudienceRequest request = id == null ? null : store.requests.get(id.trim());
         if (request == null || !AudienceRequest.PENDING.equals(request.status)) {
-            player.tell("Cererea " + id + " nu așteaptă o decizie.");
+            player.refuse("straja.audience.not_pending", "straja.remedy.retry", id);
             return false;
         }
         String normalized = decision == null ? "" : decision.trim().toLowerCase();

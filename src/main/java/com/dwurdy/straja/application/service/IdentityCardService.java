@@ -127,11 +127,11 @@ public class IdentityCardService implements IdentityCardRoleplayUseCase {
             return false;
         }
         if (!administrator(issuer)) {
-            issuer.tell("Doar Comisaru' sau un operator poate emite buletine direct.");
+            issuer.refuse("straja.idcard.issue_comisar", "straja.remedy.ask_comisar");
             return false;
         }
         if (target == null || !target.isOnline() || target.uuid() == null) {
-            issuer.tell("Titularul trebuie să fie conectat.");
+            issuer.refuse("straja.idcard.holder_offline", "straja.remedy.wait");
             return false;
         }
         return issueInternal(target, issuer, safeName(issuer), uuid(issuer));
@@ -140,7 +140,7 @@ public class IdentityCardService implements IdentityCardRoleplayUseCase {
     private boolean issueInternal(PlayerGateway target, PlayerGateway auditActor,
                                   String issuerName, String issuerUuid) {
         if (target.uuid() == null || safeName(target).isBlank()) {
-            auditActor.tell("Titularul nu are o identitate utilizabilă.");
+            auditActor.refuse("straja.idcard.holder_invalid", "straja.remedy.fix_retry");
             return false;
         }
         IdentityCardStore store = normalized(ctx.identityCards().read());
@@ -168,7 +168,7 @@ public class IdentityCardService implements IdentityCardRoleplayUseCase {
         var item = new ItemSpec("straja:identity_card", 1, itemData,
                 "Buletin — " + safeName(target));
         if (!target.inventory().canReceive(List.of(item)) || !target.giveVerified(item)) {
-            auditActor.tell("Buletinul nu a putut fi livrat; nu s-a creat niciun registru.");
+            auditActor.refuse("straja.idcard.undelivered", "straja.remedy.retry");
             return false;
         }
 
@@ -203,11 +203,11 @@ public class IdentityCardService implements IdentityCardRoleplayUseCase {
             return false;
         }
         if (!administrator(actor)) {
-            actor.tell("Doar Comisaru' sau un operator poate crea buletine contrafăcute.");
+            actor.refuse("straja.idcard.forge_comisar", "straja.remedy.ask_comisar");
             return false;
         }
         if (target == null || !target.isOnline() || target.uuid() == null) {
-            actor.tell("Titularul trebuie să fie conectat.");
+            actor.refuse("straja.idcard.holder_offline", "straja.remedy.wait");
             return false;
         }
 
@@ -230,7 +230,7 @@ public class IdentityCardService implements IdentityCardRoleplayUseCase {
         var item = new ItemSpec("straja:identity_card", 1, itemData,
                 "Buletin — " + safeName(target));
         if (!target.inventory().canReceive(List.of(item)) || !target.giveVerified(item)) {
-            actor.tell("Buletinul contrafăcut nu a putut fi livrat; nu s-a creat niciun registru.");
+            actor.refuse("straja.idcard.forged_fail", "straja.remedy.retry");
             return false;
         }
 
@@ -266,7 +266,7 @@ public class IdentityCardService implements IdentityCardRoleplayUseCase {
         if (viewer == null) return;
         IdentityCard card = view(viewer, cardId);
         if (card == null) {
-            viewer.tell("Buletinul nu există sau nu ai dreptul să-l verifici.");
+            viewer.refuse("straja.idcard.no_access", "straja.remedy.jailer");
             return;
         }
         viewer.tell("Buletin " + card.id + " — titular: " + card.holderName
@@ -330,19 +330,19 @@ public class IdentityCardService implements IdentityCardRoleplayUseCase {
     public boolean revoke(PlayerGateway actor, String cardId, String reason) {
         if (actor == null) return false;
         if (!administrator(actor)) {
-            actor.tell("Doar Comisaru' sau un operator poate revoca buletine.");
+            actor.refuse("straja.idcard.revoke_comisar", "straja.remedy.ask_comisar");
             return false;
         }
         String id = validCardId(cardId);
         String note = reason == null ? "" : reason.trim();
         if (id == null || note.isBlank() || note.length() > MAX_REASON_LENGTH) {
-            actor.tell("ID-ul sau motivul revocării nu este valid.");
+            actor.refuse("straja.idcard.revoke_invalid", "straja.remedy.fix_retry");
             return false;
         }
         IdentityCardStore store = normalized(ctx.identityCards().read());
         IdentityCard card = store.cards.get(id);
         if (card == null) {
-            actor.tell("Buletinul nu există.");
+            actor.refuse("straja.idcard.missing", "straja.remedy.retry");
             return false;
         }
         if (IdentityCardStatus.REVOKED.name().equals(card.status)) {

@@ -15,6 +15,8 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.player.Player;
 
+import static com.dwurdy.straja.adapter.in.StrajaText.refusal;
+
 /**
  * Registry of Straja NPC roles. Role assignment is explicit and persistent on
  * the entity; this class maps role IDs to behavior.
@@ -177,7 +179,7 @@ public final class NpcRoles {
             case "armory-status" -> {
                 var offers = runtime.armory().offers(gw);
                 if (offers.isEmpty()) {
-                    gw.tell("Armurierul nu are articole pentru tine acum.");
+                    gw.refuse("straja.armorer.no_items", "straja.remedy.wait");
                 } else {
                     gw.tell("Stoc armurier: " + offers.stream()
                             .filter(o -> !o.reserve())
@@ -259,7 +261,7 @@ public final class NpcRoles {
                                         com.dwurdy.straja.application.port.out.PlayerGateway player) {
         var record = runtime.v2Personnel().find(player.uuid().toString());
         if (record == null) {
-            player.tell("Fișa V2 nu este încă proiectată. Reautentifică-te sau vorbește cu Recepția.");
+            player.refuse("straja.npc.v2_unprojected", "straja.remedy.reception");
             return;
         }
         String gradeName = record.careerGrade == null ? "-"
@@ -275,7 +277,7 @@ public final class NpcRoles {
                 .filter(application -> player.uuid().toString().equals(application.subjectUuid))
                 .toList();
         if (applications.isEmpty()) {
-            player.tell("Nu există o cerere de promovare V2 deschisă pentru tine.");
+            player.refuse("straja.npc.no_promotion", "straja.remedy.ask_comisar");
             return;
         }
         applications.forEach(application -> player.tell("Promovare V2 " + application.applicationId
@@ -315,12 +317,12 @@ public final class NpcRoles {
                                                com.dwurdy.straja.application.port.out.PlayerGateway player) {
         var personnel = runtime.v2Personnel().find(player.uuid().toString());
         if (personnel == null || personnel.professions == null || personnel.professions.isEmpty()) {
-            player.tell("Nu ai încă o profesie V2 în fișa de personal. Cere o numire profesională la Comisar.");
+            player.refuse("straja.npc.no_profession", "straja.remedy.ask_comisar");
             return;
         }
         String profession = personnel.professions.get(0).toUpperCase(java.util.Locale.ROOT);
         if (!runtime.v2Generators().professions().contains(profession)) {
-            player.tell("Profesia " + profession + " nu are încă un generator activ.");
+            player.refuse("straja.npc.profession_inactive", "straja.remedy.ask_comisar", profession);
             return;
         }
         try {
@@ -332,7 +334,7 @@ public final class NpcRoles {
             player.tell("Ofertă profesională V2: " + mission.id + " — " + mission.objective
                     + " (scadentă la " + mission.dueAt + ").");
         } catch (RuntimeException error) {
-            player.tell("Nu există momentan o ofertă profesională: " + error.getMessage());
+            player.refuse("straja.npc.no_offer", "straja.remedy.wait", error.getMessage());
         }
     }
 
@@ -412,7 +414,7 @@ public final class NpcRoles {
                 gw.tellKey("straja.trades.promote.requested");
             }
         } catch (RuntimeException error) {
-            gw.tell("Cererea de avansare a fost refuzată: " + error.getMessage());
+            gw.refuse("straja.npc.promotion_refused", "straja.remedy.instructor", error.getMessage());
         }
     }
 
@@ -435,7 +437,7 @@ public final class NpcRoles {
                 gw.tellKey("straja.trades.enrolled");
             }
         } catch (RuntimeException error) {
-            gw.tell("Înscrierea a fost refuzată: " + error.getMessage());
+            gw.refuse("straja.npc.enroll_refused", "straja.remedy.reception", error.getMessage());
         }
     }
 
@@ -446,7 +448,7 @@ public final class NpcRoles {
         String operation = action.operation();
         String id = action.recordId();
         if (!isStillValidForPlayer(operation, id, runtime, gw)) {
-            player.sendSystemMessage(Component.literal("[Straja] Acțiunea NPC nu mai este disponibilă: dosarul sau cererea s-a schimbat."));
+            player.sendSystemMessage(refusal("straja.npc.action_stale", "straja.remedy.retry"));
             return false;
         }
         switch (operation) {
@@ -563,13 +565,13 @@ public final class NpcRoles {
                                     com.dwurdy.straja.application.port.out.PlayerGateway gw) {
         var parsed = NpcFaqSurface.parseTarget(target);
         if (parsed.isEmpty()) {
-            gw.tell("[Straja] Întrebarea FAQ nu mai este disponibilă.");
+            gw.refuse("straja.npc.faq_gone", "straja.remedy.retry");
             return;
         }
         var context = faqContext(runtime, gw);
         var targetRef = parsed.get();
         if (!NpcFaqSurface.targetAvailable(targetRef, context)) {
-            gw.tell("[FAQ] Ramura nu mai este disponibilă pentru statutul tău.");
+            gw.refuse("straja.npc.faq_branch_gone", "straja.remedy.faq");
             sendGuidance(player, NpcFaqSurface.root(targetRef.origin(), context));
             return;
         }
@@ -611,7 +613,7 @@ public final class NpcRoles {
         var route = NpcFaqSurface.roleForKey(roleKey);
         String roleId = NpcPlayerSurface.roleIdFor(route);
         if (route == NpcPlayerSurface.RoleRoute.UNKNOWN || roleId.isEmpty()) {
-            gw.tell("[Straja] Acest meniu nu mai este disponibil.");
+            gw.refuse("straja.npc.menu_gone", "straja.remedy.retry");
             return;
         }
         var ordered = NpcPlayerSurface.orderedFor(roleId,
@@ -645,7 +647,7 @@ public final class NpcRoles {
                                         com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
                                         String entityUuid, boolean name) {
         if (!runtime.adminTools().npcStillRegistered(entityUuid)) {
-            player.sendSystemMessage(Component.literal("[Straja] NPC-ul nu mai este înregistrat."));
+            player.sendSystemMessage(refusal("straja.npc.unregistered", "straja.remedy.faq"));
             return true;
         }
         if (!(player instanceof ServerPlayer serverPlayer)) return true;
@@ -665,7 +667,7 @@ public final class NpcRoles {
                                                 com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
                                                 String entityUuid) {
         if (!runtime.adminTools().npcStillRegistered(entityUuid)) {
-            player.sendSystemMessage(Component.literal("[Straja] NPC-ul nu mai este înregistrat."));
+            player.sendSystemMessage(refusal("straja.npc.unregistered", "straja.remedy.faq"));
             return true;
         }
         String token = NpcInteractionService.issueActionToken(player.getUUID(),
@@ -864,7 +866,7 @@ public final class NpcRoles {
                                       com.dwurdy.straja.application.port.out.PlayerGateway player) {
         var incidents = runtime.expansionRoleplay().activeIncidents(player);
         if (incidents.isEmpty()) {
-            player.tell("Nu există incidente active pentru rosterul tău.");
+            player.refuse("straja.npc.no_incidents", "straja.remedy.wait");
             return;
         }
         for (var incident : incidents) {
@@ -878,7 +880,7 @@ public final class NpcRoles {
                                    com.dwurdy.straja.application.port.out.PlayerGateway player) {
         var roster = runtime.expansionRoleplay().dutyRoster(player);
         if (roster.isEmpty()) {
-            player.tell("Rosterul de serviciu este gol sau nu ai acces.");
+            player.refuse("straja.npc.roster_empty", "straja.remedy.duty");
             return;
         }
         for (var entry : roster) {
@@ -891,7 +893,7 @@ public final class NpcRoles {
                                   com.dwurdy.straja.application.port.out.PlayerGateway player) {
         var bolos = runtime.expansionRoleplay().activeBolos(player);
         if (bolos.isEmpty()) {
-            player.tell("Nu există BOLO-uri active sau nu ai acces.");
+            player.refuse("straja.npc.no_bolos", "straja.remedy.wait");
             return;
         }
         for (var bolo : bolos) {
@@ -913,7 +915,7 @@ public final class NpcRoles {
                                          com.dwurdy.straja.application.port.out.PlayerGateway player) {
         var records = runtime.arrestRecords().recordsForDetainee(player);
         if (records.isEmpty()) {
-            player.tell("Nu există un dosar de arest pentru tine.");
+            player.refuse("straja.npc.no_arrest_case", "straja.remedy.faq");
             return;
         }
         for (var record : records) {
@@ -926,7 +928,7 @@ public final class NpcRoles {
                                           com.dwurdy.straja.application.port.out.PlayerGateway player) {
         var records = runtime.arrestRecords().recordsFor(player);
         if (records.isEmpty()) {
-            player.tell("Nu există dosare de arest vizibile pentru tine.");
+            player.refuse("straja.npc.no_arrest_cases", "straja.remedy.faq");
             return;
         }
         for (var record : records) {
@@ -940,7 +942,7 @@ public final class NpcRoles {
                                      com.dwurdy.straja.application.port.out.PlayerGateway player) {
         var records = runtime.evidence().recordsFor(player);
         if (records.isEmpty()) {
-            player.tell("Nu există probe vizibile pentru tine.");
+            player.refuse("straja.npc.no_evidence", "straja.remedy.archivist");
             return;
         }
         for (var record : records) {
@@ -995,8 +997,7 @@ public final class NpcRoles {
         boolean stillAvailable = runtime.missionRoleplay().availableActions(gw).stream()
                 .anyMatch(a -> a.action() == required && expected.equals(a.missionId()));
         if (!stillAvailable) {
-            player.sendSystemMessage(Component.literal(
-                    "[Straja] Acțiunea nu mai este disponibilă; starea misiunii s-a schimbat."));
+            player.sendSystemMessage(refusal("straja.npc.action_stale_mission", "straja.remedy.retry"));
             return true;
         }
         if (!(player instanceof ServerPlayer serverPlayer)) return true;
@@ -1049,8 +1050,7 @@ public final class NpcRoles {
         boolean stillAvailable = runtime.complaintRoleplay().availableActions(gw).stream()
                 .anyMatch(a -> a.action() == required && expected.equals(a.complaintId()));
         if (!stillAvailable) {
-            player.sendSystemMessage(Component.literal(
-                    "[Straja] Acțiunea nu mai este disponibilă; starea dosarului s-a schimbat."));
+            player.sendSystemMessage(refusal("straja.npc.action_stale_dossier", "straja.remedy.retry"));
             return true;
         }
         if (!(player instanceof ServerPlayer serverPlayer)) return true;
@@ -1096,8 +1096,7 @@ public final class NpcRoles {
         boolean stillAvailable = runtime.fineRoleplay().availableActions(gw).stream()
                 .anyMatch(a -> a.action() == required && expected.equals(a.recordId()));
         if (!stillAvailable) {
-            player.sendSystemMessage(Component.literal(
-                    "[Straja] Acțiunea nu mai este disponibilă; starea amenzii s-a schimbat."));
+            player.sendSystemMessage(refusal("straja.npc.action_stale_fine", "straja.remedy.retry"));
             return true;
         }
         if (!(player instanceof ServerPlayer serverPlayer)) return true;
@@ -1146,8 +1145,7 @@ public final class NpcRoles {
                 .anyMatch(a -> a.action()
                         == com.dwurdy.straja.application.port.in.ReportUseCase.Action.SUBMIT);
         if (!stillAvailable) {
-            player.sendSystemMessage(Component.literal(
-                    "[Straja] Doar membrii Străjii depun rapoarte de activitate."));
+            player.sendSystemMessage(refusal("straja.npc.reports_members_only", "straja.remedy.reception"));
             return true;
         }
         if (!(player instanceof ServerPlayer serverPlayer)) return true;
@@ -1169,8 +1167,7 @@ public final class NpcRoles {
                 .anyMatch(a -> a.action()
                         == com.dwurdy.straja.application.port.in.AudienceUseCase.Action.REQUEST);
         if (!stillAvailable) {
-            player.sendSystemMessage(Component.literal(
-                    "[Straja] Doar membrii Străjii pot cere audiență la Comisar."));
+            player.sendSystemMessage(refusal("straja.npc.audience_members_only", "straja.remedy.reception"));
             return true;
         }
         if (!(player instanceof ServerPlayer serverPlayer)) return true;
@@ -1204,8 +1201,7 @@ public final class NpcRoles {
         boolean stillAvailable = runtime.adminRoleplay().availableActions(gw).stream()
                 .anyMatch(a -> a.action() == required);
         if (!stillAvailable) {
-            player.sendSystemMessage(Component.literal(
-                    "[Straja] Doar Comisarul poate folosi interfața administrativă."));
+            player.sendSystemMessage(refusal("straja.npc.admin_comisar_only", "straja.remedy.ask_comisar"));
             return true;
         }
         if (!(player instanceof ServerPlayer serverPlayer)) return true;
@@ -1264,8 +1260,7 @@ public final class NpcRoles {
         boolean stillAvailable = runtime.archiveRoleplay().availableActions(gw).stream()
                 .anyMatch(a -> a.action() == required && expected.equals(a.recordId()));
         if (!stillAvailable) {
-            player.sendSystemMessage(Component.literal(
-                    "[Straja] Acțiunea nu mai este disponibilă; starea arhivei s-a schimbat."));
+            player.sendSystemMessage(refusal("straja.npc.action_stale_archive", "straja.remedy.retry"));
             return true;
         }
         if (!(player instanceof ServerPlayer serverPlayer)) return true;

@@ -65,18 +65,18 @@ public class PrisonService implements PrisonRoleplayUseCase {
                               String dimension, int minX, int minY, int minZ,
                               int maxX, int maxY, int maxZ) {
         if (!players.isCommissioner(actor)) {
-            actor.tell("Doar Comisaru' poate configura celule.");
+            actor.refuse("straja.prison.cells_comisar", "straja.remedy.ask_comisar");
             return false;
         }
         var data = store();
         String id = (requestedId == null || requestedId.isBlank()
                 ? nextCellId(data) : requestedId).toLowerCase();
         if (!id.matches("[a-z0-9_-]{1,32}")) {
-            actor.tell("ID de celulă invalid.");
+            actor.refuse("straja.prison.cell_invalid", "straja.remedy.fix_retry");
             return false;
         }
         if (data.assignments.containsKey(id)) {
-            actor.tell("Celula este ocupată și nu poate fi recreată până la eliberare.");
+            actor.refuse("straja.prison.cell_occupied", "straja.remedy.wait");
             return false;
         }
         if (data.cells.size() >= ctx.policies().prisonMaxCells && data.cell(id) == null) {
@@ -166,7 +166,7 @@ public class PrisonService implements PrisonRoleplayUseCase {
     public void listCells(PlayerGateway actor) {
         var data = store();
         if (data.cells.isEmpty()) {
-            actor.tell("Nu există celule configurate.");
+            actor.refuse("straja.prison.no_cells", "straja.remedy.ask_comisar");
             return;
         }
         for (Cell c : data.cells) {
@@ -300,7 +300,7 @@ public class PrisonService implements PrisonRoleplayUseCase {
             if (custody.enterJail(online, "prison")) {
                 teleportToCell(online, cell);
             } else {
-                online.tell("Arestarea a fost înregistrată, dar predarea la închisoare trebuie repetată.");
+                online.refuse("straja.prison.handover_retry", "straja.remedy.jailer");
             }
         }
         if (online != null) {
@@ -319,11 +319,11 @@ public class PrisonService implements PrisonRoleplayUseCase {
 
     public boolean release(PlayerGateway actor, PlayerGateway target, String reason) {
         if (target == null) {
-            actor.tell("Jucătorul țintă trebuie să fie online.");
+            actor.refuse("straja.common.target_offline", "straja.remedy.wait");
             return false;
         }
         if (!players.hasCapability(actor, Capability.EXECUTE_ARRESTS)) {
-            actor.tell("Doar un Străjer sau Comisaru' poate elibera un deținut.");
+            actor.refuse("straja.prison.release_rank", "straja.remedy.jailer");
             audit.record("prison_release", actor.name(), uuidOf(actor),
                     target.name(), uuidOf(target),
                     "REFUSED", "missing_authority");
@@ -332,7 +332,7 @@ public class PrisonService implements PrisonRoleplayUseCase {
         var data = store();
         var sentence = activeSentenceFrom(data, target);
         if (sentence == null) {
-            actor.tell(target.name() + " nu are o sentință activă.");
+            actor.refuse("straja.prison.no_sentence", "straja.remedy.jailer", target.name());
             return false;
         }
         if (!releaseSentence(data, sentence, target, "FORCED_RELEASE")) return false;
@@ -369,7 +369,7 @@ public class PrisonService implements PrisonRoleplayUseCase {
     public void status(PlayerGateway player) {
         var sentence = activeSentence(player);
         if (sentence == null) {
-            player.tell("Nu ai o sentință activă.");
+            player.refuse("straja.prison.self_no_sentence", "straja.remedy.jailer");
             return;
         }
         player.tell("Detenție: " + sentence.status + " | celulă: "

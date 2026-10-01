@@ -25,6 +25,8 @@ import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import java.util.List;
 import java.util.Set;
 
+import static com.dwurdy.straja.adapter.in.StrajaText.refusal;
+
 /**
  * Brigadier registration for /straja. This class only translates arguments to
  * application service calls; all rules live in the services.
@@ -283,7 +285,7 @@ public final class StrajaCommands {
                 .executes(c -> {
                     var source = c.getSource();
                     var runtime = StrajaRuntime.get();
-                    if (runtime == null) { source.sendFailure(Component.literal("Straja nu este pornită.")); return 0; }
+                    if (runtime == null) { source.sendFailure(refusal("straja.cmd.runtime_down", "straja.remedy.wait")); return 0; }
                     java.nio.file.Path world = java.nio.file.Path.of(
                             StringArgumentType.getString(c, "worldPath"));
                     int totalErrors = 0;
@@ -630,7 +632,7 @@ public final class StrajaCommands {
         var node = adminOnly(Commands.literal("fine"));
         node.then(Commands.literal("book").executes(c -> player(c, p -> {
             if (!StrajaRuntime.get().players().hasCapability(p, com.dwurdy.straja.domain.model.Capability.ISSUE_FINES)) {
-                p.tell("Registrul de Amenzi este disponibil doar Străjerilor activi.");
+                p.refuse("straja.cmd.fine_register_rank", "straja.remedy.reception");
                 return;
             }
             p.give(com.dwurdy.straja.domain.model.ItemSpec.of("straja:fine_book", 1));
@@ -951,7 +953,7 @@ public final class StrajaCommands {
         boolean handled = actionId != null
                 && NpcRoles.performAction(actionId, player, player.serverLevel());
         if (!handled) {
-            ctx.getSource().sendFailure(Component.literal("Acțiunea NPC a expirat sau nu este validă."));
+            ctx.getSource().sendFailure(refusal("straja.cmd.action_expired", "straja.remedy.retry"));
         }
         return handled ? 1 : 0;
     }
@@ -986,7 +988,7 @@ public final class StrajaCommands {
         if (runtime == null) return 0;
         var actor = actor(ctx);
         if (!runtime.players().isCommissioner(actor)) {
-            ctx.getSource().sendFailure(Component.literal("Doar Comisaru' poate citi inbox-ul."));
+            ctx.getSource().sendFailure(refusal("straja.cmd.inbox_comisar", "straja.remedy.ask_comisar"));
             return 0;
         }
         var messages = runtime.context().inbox().read();
@@ -1051,7 +1053,7 @@ public final class StrajaCommands {
                 .executes(c -> {
                     var target = target(c, "player"); var person = target == null ? null
                             : StrajaRuntime.get().v2Personnel().find(target.uuid().toString());
-                    if (person == null) { c.getSource().sendFailure(Component.literal("Personnel V2 nu există.")); return 0; }
+                    if (person == null) { c.getSource().sendFailure(refusal("straja.admin.personnel_missing", "straja.remedy.retry")); return 0; }
                     c.getSource().sendSystemMessage(Component.literal(person.playerUuid + " " + person.membershipStatus
                             + " " + person.careerGrade + " v" + person.version)); return 1;
                 })));

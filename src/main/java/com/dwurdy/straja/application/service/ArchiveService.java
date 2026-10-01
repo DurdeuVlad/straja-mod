@@ -157,11 +157,11 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
 
     public boolean grantArchivist(PlayerGateway actor, PlayerGateway target, boolean enabled) {
         if (!players.isCommissioner(actor)) {
-            actor.tell("Doar Comisaru' poate autoriza Arhivista.");
+            actor.refuse("straja.archive.authorize_comisar", "straja.remedy.ask_comisar");
             return false;
         }
         if (target == null) {
-            actor.tell("Ținta trebuie să fie online.");
+            actor.refuse("straja.common.target_offline", "straja.remedy.wait");
             return false;
         }
         ArchiveStore store = ctx.archive().read();
@@ -178,11 +178,11 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
     @Override
     public boolean createFolder(PlayerGateway player, String title, String department) {
         if (!canArchive(player)) {
-            player.tell("Doar Arhivista autorizată sau Comisaru' poate crea dosare.");
+            player.refuse("straja.archive.create_dossier_rank", "straja.remedy.archivist");
             return false;
         }
         if (title == null || title.isBlank() || title.length() > p().archiveMaxTitleLength) {
-            player.tell("Titlul dosarului trebuie completat (max " + p().archiveMaxTitleLength + " caractere).");
+            player.refuse("straja.archive.title_required", "straja.remedy.fix_retry", p().archiveMaxTitleLength);
             return false;
         }
         ArchiveStore store = ctx.archive().read();
@@ -210,11 +210,11 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
         ArchiveStore store = ctx.archive().read();
         ArchiveStore.Folder folder = store.folders.get(id);
         if (folder == null || !canReadFolder(player, folder)) {
-            player.tell("Dosarul nu există sau nu ai acces.");
+            player.refuse("straja.archive.dossier_missing", "straja.remedy.retry");
             return false;
         }
         if (!canArchive(player) && !isFolderOwner(player, folder)) {
-            player.tell("Nu poți modifica acest dosar.");
+            player.refuse("straja.archive.dossier_readonly", "straja.remedy.archivist");
             return false;
         }
         folder.status = "CLOSED".equalsIgnoreCase(status) ? "CLOSED" : "OPEN";
@@ -232,7 +232,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
             player.tell(folder.id + " — " + folder.title + " [" + folder.status + "] " + folder.department + " | foi: " + folder.sheetIds.size());
             if (++shown >= 30) break;
         }
-        if (shown == 0) player.tell("Nu există dosare accesibile.");
+        if (shown == 0) player.refuse("straja.archive.no_dossiers", "straja.remedy.archivist");
     }
 
     @Override
@@ -240,7 +240,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
         ArchiveStore store = ctx.archive().read();
         ArchiveStore.Folder folder = store.folders.get(id);
         if (folder == null || !canReadFolder(player, folder)) {
-            player.tell("Dosarul nu există sau nu ai acces.");
+            player.refuse("straja.archive.dossier_missing", "straja.remedy.retry");
             return;
         }
         player.tell(folder.id + " — " + folder.title + " [" + folder.status + "] dept " + folder.department + " | proprietar " + folder.owner);
@@ -260,24 +260,24 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
         ArchiveStore store = ctx.archive().read();
         ArchiveStore.Folder folder = id == null ? null : store.folders.get(id);
         if (folder == null || !(canArchive(player) || canReadFolder(player, folder))) {
-            player.tell("Dosarul nu există sau nu ai acces.");
+            player.refuse("straja.archive.dossier_missing", "straja.remedy.retry");
             return false;
         }
         PlayerGateway target = targetName == null ? null : ctx.server().findPlayer(targetName);
         if (target == null || target.uuid() == null
                 || target.uuid().equals(player.uuid())) {
-            player.tell("Ținta trebuie să fie un alt jucător online.");
+            player.refuse("straja.archive.target_offline", "straja.remedy.fix_retry");
             return false;
         }
         var spec = ItemSpec.of("straja:archive_folder", 1)
                 .withData("ArchiveFolderId", folder.id)
                 .named("Dosar — " + folder.title);
         if (!target.inventory().canReceive(List.of(spec))) {
-            player.tell("Destinatarul nu are loc pentru dosar.");
+            player.refuse("straja.archive.target_full_dossier", "straja.remedy.fix_retry");
             return false;
         }
         if (!target.giveVerified(spec)) {
-            player.tell("Dosarul nu a putut fi livrat; niciun acces nu a fost acordat.");
+            player.refuse("straja.archive.dossier_undelivered", "straja.remedy.retry");
             return false;
         }
         if (folder.readers.stream().noneMatch(r -> r != null
@@ -302,17 +302,17 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
     @Override
     public boolean newSheet(PlayerGateway player, String folderId, String type, String title) {
         if (!canArchive(player)) {
-            player.tell("Doar Arhivista autorizată sau Comisaru' poate crea foi.");
+            player.refuse("straja.archive.create_sheet_rank", "straja.remedy.archivist");
             return false;
         }
         ArchiveStore store = ctx.archive().read();
         ArchiveStore.Folder folder = store.folders.get(folderId);
         if (folder == null || !canEditFolder(player, folder)) {
-            player.tell("Dosarul nu există, nu este deschis sau nu ai drept de scriere.");
+            player.refuse("straja.archive.dossier_closed", "straja.remedy.retry");
             return false;
         }
         if (title == null || title.isBlank() || title.length() > p().archiveMaxTitleLength) {
-            player.tell("Titlul foii trebuie completat (max " + p().archiveMaxTitleLength + " caractere).");
+            player.refuse("straja.archive.sheet_title_required", "straja.remedy.fix_retry", p().archiveMaxTitleLength);
             return false;
         }
         long count = store.sheets.values().stream().filter(s -> folder.id.equals(s.folderId) && s.originId == null).count();
@@ -342,22 +342,22 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
     @Override
     public boolean editSheet(PlayerGateway player, String id, String content) {
         if (!canArchive(player)) {
-            player.tell("Doar Arhivista autorizată poate edita foaia.");
+            player.refuse("straja.archive.edit_rank", "straja.remedy.archivist");
             return false;
         }
         ArchiveStore store = ctx.archive().read();
         ArchiveStore.Sheet sheet = store.sheets.get(id);
         ArchiveStore.Folder folder = sheet == null ? null : store.folders.get(sheet.folderId);
         if (sheet == null || folder == null || !canEditFolder(player, folder)) {
-            player.tell("Foaia nu există, dosarul este închis sau nu ai drept de scriere.");
+            player.refuse("straja.archive.sheet_missing", "straja.remedy.retry");
             return false;
         }
         if (!"DRAFT".equals(sheet.status)) {
-            player.tell("Foaia nu mai este editabilă după trimiterea la semnătură.");
+            player.refuse("straja.archive.sheet_locked", "straja.remedy.archivist");
             return false;
         }
         if (content != null && content.length() > p().archiveMaxContentLength) {
-            player.tell("Conținutul depășește limita de " + p().archiveMaxContentLength + " caractere.");
+            player.refuse("straja.archive.content_too_long", "straja.remedy.fix_retry", p().archiveMaxContentLength);
             return false;
         }
         sheet.content = content == null ? "" : content;
@@ -371,14 +371,14 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
     @Override
     public boolean setRecipients(PlayerGateway player, String id, String rawRecipients) {
         if (!canArchive(player)) {
-            player.tell("Doar Arhivista autorizată poate modifica destinatarii.");
+            player.refuse("straja.archive.recipients_rank", "straja.remedy.archivist");
             return false;
         }
         ArchiveStore store = ctx.archive().read();
         ArchiveStore.Sheet sheet = store.sheets.get(id);
         ArchiveStore.Folder folder = sheet == null ? null : store.folders.get(sheet.folderId);
         if (sheet == null || folder == null || !canEditFolder(player, folder) || !"DRAFT".equals(sheet.status)) {
-            player.tell("Destinatarii pot fi schimbați doar pe un draft dintr-un dosar deschis.");
+            player.refuse("straja.archive.recipients_draft", "straja.remedy.fix_retry");
             return false;
         }
         List<ArchiveStore.Recipient> unique = new ArrayList<>();
@@ -414,14 +414,14 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
     @Override
     public boolean submitSheet(PlayerGateway player, String id) {
         if (!canArchive(player)) {
-            player.tell("Doar Arhivista autorizată poate trimite foi la semnătură.");
+            player.refuse("straja.archive.submit_rank", "straja.remedy.archivist");
             return false;
         }
         ArchiveStore store = ctx.archive().read();
         ArchiveStore.Sheet sheet = store.sheets.get(id);
         ArchiveStore.Folder folder = sheet == null ? null : store.folders.get(sheet.folderId);
         if (sheet == null || folder == null || !canEditFolder(player, folder) || !"DRAFT".equals(sheet.status)) {
-            player.tell("Doar un draft dintr-un dosar deschis poate fi trimis.");
+            player.refuse("straja.archive.submit_draft", "straja.remedy.fix_retry");
             return false;
         }
         if (sheet.content == null || sheet.content.isEmpty()) {
@@ -442,7 +442,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
         ArchiveStore store = ctx.archive().read();
         ArchiveStore.Sheet sheet = store.sheets.get(id);
         if (sheet == null || !canReadSheet(player, store, sheet)) {
-            player.tell("Foaia nu există sau nu ai acces.");
+            player.refuse("straja.archive.sheet_no_access", "straja.remedy.retry");
             return;
         }
         player.tell(sheet.id + " — " + sheet.title + " [" + sheet.status + "] tip " + sheet.type + " revizia " + sheet.revision);
@@ -455,7 +455,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
         ArchiveStore store = ctx.archive().read();
         ArchiveStore.Folder folder = store.folders.get(folderId);
         if (folder == null || !canReadFolder(player, folder)) {
-            player.tell("Dosarul nu există sau nu ai acces.");
+            player.refuse("straja.archive.dossier_missing", "straja.remedy.retry");
             return;
         }
         List<String> lines = new ArrayList<>();
@@ -469,14 +469,14 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
     @Override
     public boolean signSheet(PlayerGateway player, String id, String reason) {
         if (!canSign(player)) {
-            player.tell("Doar un Inspector sau Comisaru' poate semna acte.");
+            player.refuse("straja.archive.sign_rank", "straja.remedy.ask_comisar");
             return false;
         }
         ArchiveStore store = ctx.archive().read();
         ArchiveStore.Sheet sheet = store.sheets.get(id);
         ArchiveStore.Folder folder = sheet == null ? null : store.folders.get(sheet.folderId);
         if (sheet == null || folder == null || !canReadFolder(player, folder) || !"PENDING_SIGNATURE".equals(sheet.status)) {
-            player.tell("Foaia nu este pregătită pentru semnătură sau nu ai acces.");
+            player.refuse("straja.archive.sign_not_ready", "straja.remedy.archivist");
             return false;
         }
         if (player.inventory().countOf("straja:archive_stamp") < 1) {
@@ -484,7 +484,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
             return false;
         }
         if (reason != null && reason.length() > 240) {
-            player.tell("Motivul semnăturii depășește 240 de caractere.");
+            player.refuse("straja.archive.reason_too_long", "straja.remedy.fix_retry");
             return false;
         }
         sheet.status = "SIGNED";
@@ -505,13 +505,13 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
     @Override
     public boolean revokeSheet(PlayerGateway player, String id) {
         if (!canSign(player) && !canArchive(player)) {
-            player.tell("Doar Inspectorul, Comisaru' sau Arhivista pot revoca un act.");
+            player.refuse("straja.archive.revoke_rank", "straja.remedy.ask_comisar");
             return false;
         }
         ArchiveStore store = ctx.archive().read();
         ArchiveStore.Sheet sheet = store.sheets.get(id);
         if (sheet == null) {
-            player.tell("Foaia nu există.");
+            player.refuse("straja.archive.sheet_gone", "straja.remedy.retry");
             return false;
         }
         sheet.status = "REVOKED";
@@ -528,7 +528,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
     @Override
     public boolean copySheet(PlayerGateway player, String id, Integer rawCount, String rawTargets) {
         if (!canArchive(player) && !canSign(player)) {
-            player.tell("Doar Arhivista autorizată, Inspectorul sau Comisaru' pot genera copii.");
+            player.refuse("straja.archive.copy_rank", "straja.remedy.archivist");
             return false;
         }
         ArchiveStore store = ctx.archive().read();
@@ -546,7 +546,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
         }
         int requested = rawCount != null ? rawCount : targets.size();
         if (requested < 1 || requested > p().archiveMaxCopiesPerOperation) {
-            player.tell("Numărul de copii este invalid.");
+            player.refuse("straja.archive.copy_count", "straja.remedy.fix_retry");
             return false;
         }
         if (targets.isEmpty()) {
@@ -557,7 +557,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
         if (targets.size() > requested) targets = new ArrayList<>(targets.subList(0, requested));
         String carbon = "straja:carbon_paper";
         if (player.inventory().countOf(carbon) < requested) {
-            player.tell("Nu ai suficiente Foi Indigo: ai nevoie de " + requested + ".");
+            player.refuse("straja.archive.indigo_short", "straja.remedy.archivist", requested);
             return false;
         }
         // Capacity preflight for online targets — abort before consuming carbon.
@@ -569,7 +569,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
             if (!online.inventory().canReceive(List.of(stack))) unavailable.add(target);
         }
         if (!unavailable.isEmpty()) {
-            player.tell("Operația oprită: inventar plin pentru " + String.join(", ", unavailable) + ". Nicio Indigo nu a fost consumată.");
+            player.refuse("straja.archive.copy_inv_full", "straja.remedy.retry", String.join(", ", unavailable));
             return false;
         }
         ArchiveStore.Operation operation = new ArchiveStore.Operation();
@@ -584,7 +584,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
         if (!extractAll(player, carbon, requested)) {
             operation.status = "ABORTED";
             ctx.archive().write(store);
-            player.tell("Operația nu a putut consuma Foi Indigo; nimic nu a fost livrat.");
+            player.refuse("straja.archive.indigo_consume_fail", "straja.remedy.retry");
             return false;
         }
         operation.status = "CONSUMED";
@@ -647,14 +647,14 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
     @Override
     public boolean packEnvelope(PlayerGateway player, String id, String targetName) {
         if (!canArchive(player) && !canSign(player)) {
-            player.tell("Doar Arhivista autorizată, Inspectorul sau Comisaru' pot împacheta acte.");
+            player.refuse("straja.archive.pack_rank", "straja.remedy.archivist");
             return false;
         }
         ArchiveStore store = ctx.archive().read();
         ArchiveStore.Sheet sheet = store.sheets.get(id);
         ArchiveStore.Folder folder = sheet == null ? null : store.folders.get(sheet.folderId);
         if (sheet == null || folder == null || !canReadFolder(player, folder) || !"SIGNED".equals(sheet.status)) {
-            player.tell("Doar un act semnat poate fi împachetat.");
+            player.refuse("straja.archive.pack_unsigned", "straja.remedy.fix_retry");
             return false;
         }
         if (targetName == null || targetName.isBlank()) {
@@ -687,7 +687,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
                 .withData("ArchiveCopyId", copy.id)
                 .named("Plic Oficial — " + sheet.title);
         if (target != null && !target.inventory().canReceive(List.of(stack))) {
-            player.tell("Destinatarul nu are loc pentru plic.");
+            player.refuse("straja.archive.target_full_env", "straja.remedy.fix_retry");
             return false;
         }
         store.copies.add(copy);
@@ -702,7 +702,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
             copy.deliveryError = "source_consume_failed";
             ctx.archive().write(store);
             audit.record("archive_envelope_pack", player.name(), player.uuid().toString(), targetName, null, "FAILED", "source_consume_failed sheetId=" + sheet.id);
-            player.tell("Plicul nu a putut fi consumat; operația a fost anulată.");
+            player.refuse("straja.archive.env_consume_fail", "straja.remedy.retry");
             return false;
         }
         copy.sourceState = "CONSUMED";
@@ -738,13 +738,13 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
                 || sheet.originId != null
                 || !(canArchive(player) || canSign(player))
                 || !canReadSheet(player, store, sheet)) {
-            player.tell("Actul nu există, nu este semnat sau nu ai acces.");
+            player.refuse("straja.archive.act_missing", "straja.remedy.archivist");
             return false;
         }
         PlayerGateway target = targetName == null ? null : ctx.server().findPlayer(targetName);
         if (target == null || target.uuid() == null
                 || target.uuid().equals(player.uuid())) {
-            player.tell("Ținta trebuie să fie un alt jucător online.");
+            player.refuse("straja.archive.target_offline", "straja.remedy.fix_retry");
             return false;
         }
         String targetUuid = target.uuid().toString();
@@ -760,11 +760,11 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
                 .withData("ArchiveDocumentId", sheet.id)
                 .named("Act — " + sheet.title);
         if (!target.inventory().canReceive(List.of(spec))) {
-            player.tell("Destinatarul nu are loc pentru document.");
+            player.refuse("straja.archive.target_full_doc", "straja.remedy.fix_retry");
             return false;
         }
         if (!target.giveVerified(spec)) {
-            player.tell("Documentul nu a putut fi livrat; niciun acces nu a fost acordat.");
+            player.refuse("straja.archive.doc_undelivered", "straja.remedy.retry");
             return false;
         }
         if (sheet.recipients.stream().noneMatch(r -> r != null
@@ -863,13 +863,13 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
 
     public boolean catalogAdd(PlayerGateway player, String folderId, String alias) {
         if (!canArchive(player)) {
-            player.tell("Doar Arhivista autorizată poate cataloga dosare.");
+            player.refuse("straja.archive.catalog_rank", "straja.remedy.archivist");
             return false;
         }
         ArchiveStore store = ctx.archive().read();
         ArchiveStore.Folder folder = store.folders.get(folderId);
         if (folder == null || !canReadFolder(player, folder)) {
-            player.tell("Dosarul nu există sau nu ai acces.");
+            player.refuse("straja.archive.dossier_missing", "straja.remedy.retry");
             return false;
         }
         if (folder.catalogIds.size() >= p().archiveMaxCatalogEntriesPerFolder) {
@@ -893,11 +893,11 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
         ArchiveStore store = ctx.archive().read();
         ArchiveStore.Folder folder = store.folders.get(folderId);
         if (folder == null || !canReadFolder(player, folder)) {
-            player.tell("Dosarul nu există sau nu ai acces.");
+            player.refuse("straja.archive.dossier_missing", "straja.remedy.retry");
             return;
         }
         if (folder.catalogIds.isEmpty()) {
-            player.tell("Dosarul nu are înregistrări de catalog.");
+            player.refuse("straja.archive.no_catalog", "straja.remedy.archivist");
             return;
         }
         for (String id : folder.catalogIds) {

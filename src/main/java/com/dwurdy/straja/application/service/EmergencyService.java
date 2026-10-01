@@ -52,7 +52,7 @@ public class EmergencyService implements EmergencyUseCase {
         if (!authorized(actor)) return;
         EmergencyState state = ctx.emergency().read();
         if (!state.urgencyLive(now(), ctx.policies().emergencyUrgencyTtlMinutes)) {
-            actor.tell("Nu există o urgență activă.");
+            actor.refuse("straja.emergency.none", "straja.remedy.ask_comisar");
             return;
         }
         state.clearUrgency();
@@ -102,7 +102,7 @@ public class EmergencyService implements EmergencyUseCase {
         if (!authorized(actor)) return;
         EmergencyState state = ctx.emergency().read();
         if (!state.active) {
-            actor.tell("Starea de urgență nu este activă.");
+            actor.refuse("straja.emergency.inactive", "straja.remedy.ask_comisar");
             return;
         }
         state.clearEmergency();
@@ -129,7 +129,7 @@ public class EmergencyService implements EmergencyUseCase {
                     + ", " + state.requiredRounds + " runde/patrulă"
                     + (state.reason != null ? ", motiv: " + state.reason : "") + ".");
         } else {
-            actor.tell("[Straja] Starea de urgență nu este activă.");
+            actor.refuse("straja.emergency.inactive_tagged", "straja.remedy.ask_comisar");
         }
     }
 
@@ -148,7 +148,7 @@ public class EmergencyService implements EmergencyUseCase {
 
     private boolean authorized(PlayerGateway actor) {
         if (players.isCommissioner(actor) || actor.isOp()) return true;
-        actor.tell("Doar Comisarul sau un operator poate gestiona starea de urgență.");
+        actor.refuse("straja.emergency.comisar_only", "straja.remedy.ask_comisar");
         return false;
     }
 

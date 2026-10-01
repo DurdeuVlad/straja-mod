@@ -1,6 +1,8 @@
 package com.dwurdy.straja.adapter.in.form;
 
 import com.dwurdy.straja.adapter.out.minecraft.MinecraftPlayerGateway;
+
+import static com.dwurdy.straja.adapter.in.StrajaText.refusal;
 import com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase;
 import com.dwurdy.straja.application.port.in.ComplaintRoleplayUseCase;
 import com.dwurdy.straja.application.port.in.FineRoleplayUseCase;
@@ -210,8 +212,7 @@ public final class FormSubmissionRouter {
                 Integer slot = parseInt(values.get("slot"));
                 Integer amount = parseInt(values.get("amount"));
                 if (slot == null || amount == null) {
-                    player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
-                            "Slotul și cantitatea probei trebuie să fie numere."));
+                    player.sendSystemMessage(refusal("straja.form.slot_not_numbers", "straja.remedy.fix_retry"));
                     return;
                 }
                 expansion.confiscate(gateway, submission.recordId(), slot, amount,
@@ -225,7 +226,7 @@ public final class FormSubmissionRouter {
             case EVIDENCE_CASE_VIEW -> {
                 var records = com.dwurdy.straja.bootstrap.StrajaRuntime.get()
                         .evidence().recordsForCase(gateway, values.get("caseId"));
-                if (records.isEmpty()) gateway.tell("Dosarul nu există sau nu are probe vizibile.");
+                if (records.isEmpty()) gateway.refuse("straja.form.dossier_evidence", "straja.remedy.archivist");
                 else for (var evidence : records) {
                     gateway.tell(evidence.id + " — " + evidence.itemId + " x" + evidence.amount
                             + " — " + evidence.status);
@@ -237,7 +238,7 @@ public final class FormSubmissionRouter {
             case REPUTATION_VIEW -> {
                 var history = expansion.reputationHistory(gateway, values.get("subject"));
                 if (history.isEmpty()) {
-                    gateway.tell("Nu există istoric sau subiectul nu este online.");
+                    gateway.refuse("straja.form.subject_history", "straja.remedy.retry");
                 } else {
                     for (var event : history) {
                         gateway.tell(event.id() + " " + event.source() + " delta=" + event.delta()
@@ -249,8 +250,7 @@ public final class FormSubmissionRouter {
             case REPUTATION_CORRECTION -> {
                 Integer delta = parseInt(values.get("delta"));
                 if (delta == null) {
-                    player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
-                            "Modificarea reputației trebuie să fie un număr."));
+                    player.sendSystemMessage(refusal("straja.form.reputation_not_number", "straja.remedy.fix_retry"));
                     return;
                 }
                 expansion.correctReputation(gateway, values.get("subject"), delta, values.get("reason"));
