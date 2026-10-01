@@ -58,12 +58,12 @@ public final class EvidenceService {
     public synchronized RoleplayExpansionUseCase.SearchView beginSearch(
             PlayerGateway guard, PlayerGateway target) {
         purgeExpiredSessions();
-        if (!eligibleGuard(guard) || target == null || !target.isOnline()) return null;
         SearchDenial failure = eligibilityFailure(guard, target);
         if (failure != null) {
             guard.refuse(failure.key(), failure.remedy());
             audit.record("search_started", guard.name(), uuid(guard),
-                    target.name(), uuid(target), "REFUSED", failure.key());
+                    target != null ? target.name() : "", target != null ? uuid(target) : "",
+                    "REFUSED", failure.key());
             return null;
         }
         String token = ctx.ids().token();

@@ -123,8 +123,6 @@ MAP.update({
         "straja.remedy.fix_retry", "The limit of %s checkpoints was reached."),
     "Folosește un checkpoint valid și un timp întreg între %s și %s minute.": ("straja.duty.checkpoint_invalid",
         "straja.remedy.fix_retry", "Use a valid checkpoint and a whole time between %s and %s minutes."),
-    "Demisie în așteptare. Semnarea este disponibilă peste %s.": ("straja.duty.resign_wait",
-        "straja.remedy.wait", "Resignation pending. Signing is available in %s."),
     # --- IdentityCardService ------------------------------------------------------
     "Jucătorul are deja buletinul activ %s.": ("straja.idcard.already_active",
         "straja.remedy.fix_retry", "The player already has active ID card %s."),
