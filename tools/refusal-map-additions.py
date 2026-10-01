@@ -91,10 +91,6 @@ MAP.update({
         "straja.remedy.instructor", "You already have the Commissioner's invitation — go straight to the Instructor for the exam."),
     "Cererea ta este deja înregistrată. Prezintă-te la Instructor pentru examen.": ("straja.duty.request_pending",
         "straja.remedy.instructor", "Your application is already registered. Go to the Instructor for the exam."),
-    "Ai terminat instruirea disponibilă pentru rangul tău.": ("straja.duty.training_done",
-        "straja.remedy.instructor", "You finished the training available for your rank."),
-    "Instruirea disponibilă pentru rangul tău este finalizată.": ("straja.duty.training_finalized",
-        "straja.remedy.instructor", "The training available for your rank is finished."),
     "Răspuns greșit. Modulul rămâne disponibil după cooldown.": ("straja.duty.quiz_wrong",
         "straja.remedy.wait", "Wrong answer. The module stays available after the cooldown."),
     "Ai deja Manualul de instruire în inventar.": ("straja.duty.manual_owned",
@@ -117,8 +113,6 @@ MAP.update({
         "straja.remedy.ask_comisar", "Removal from Straja is the Commissioner's call."),
     "Revenirea este disponibilă peste %s.": ("straja.duty.return_cooldown",
         "straja.remedy.wait", "Return is available in %s."),
-    "Plata nu a putut fi pregătită. Soldul a fost păstrat.": ("straja.duty.salary_failed",
-        "straja.remedy.retry", "The payment could not be prepared. Your balance was kept."),
     "Hrana de serviciu este disponibilă de la Stagiar.": ("straja.duty.food_rank",
         "straja.remedy.instructor", "Duty food is available from Stagiar up."),
     "Kitul este disponibil de la Stagiar.": ("straja.duty.kit_rank",
@@ -147,8 +141,6 @@ MAP.update({
         "straja.remedy.wait", "The whistle is recharging. Wait %s more seconds."),
     "Incidentul este deja preluat de %s.": ("straja.incident.already_taken",
         "straja.remedy.retry", "The incident is already handled by %s."),
-    "Incidentul are deja numărul maxim de sprijinitori.": ("straja.incident.max_helpers",
-        "straja.remedy.wait", "The incident already has the maximum number of helpers."),
     # --- MissionService direct gates -------------------------------------------------
     "Scrie obiectivul misiunii după timpul de început.": ("straja.mission.objective_after_start",
         "straja.remedy.fix_retry", "Write the mission objective after the start time."),
@@ -182,8 +174,6 @@ MAP.update({
         "straja.remedy.fix_retry", "Write the mission report."),
     "Cota ta din recompensa misiunii a fost deja plătită.": ("straja.mission.share_paid",
         "straja.remedy.retry", "Your share of the mission reward was already paid."),
-    "Cota ta nu a putut fi livrată; soldul rămâne în așteptare.": ("straja.mission.share_failed",
-        "straja.remedy.wait", "Your share could not be delivered; the balance stays pending."),
     "Misiunea poate fi acceptată de la: %s.": ("straja.mission.accept_from",
         "straja.remedy.fix_retry", "The mission can be accepted from: %s."),
     # --- MissionService helper returns (start parse / template validation) ----------
@@ -242,19 +232,13 @@ MAP.update({
     "Niciun șablon de șters.": ("straja.admintool.nothing_to_clear",
         "straja.remedy.fix_retry", "No template to delete."),
     # --- NpcCommands ------------------------------------------------------------------
-    "Unknown provider. Valid values: customnpcs, debug-text.": ("straja.npc.provider_unknown",
+    "Provider necunoscut. Valori valide: customnpcs, debug-text.": ("straja.npc.provider_unknown",
         "straja.remedy.fix_retry", "Unknown provider. Valid values: customnpcs, debug-text."),
-    "CustomNPCs binding failed: %s": ("straja.npc.binding_failed",
+    "Legarea CustomNPCs a eșuat: %s": ("straja.npc.binding_failed",
         "straja.remedy.retry", "CustomNPCs binding failed: %s"),
     "Toate NPC-urile Straja sunt deja înregistrate.": ("straja.npc.all_registered",
         "straja.remedy.fix_retry", "All Straja NPCs are already registered."),
     # --- StrajaCommands parse helpers ----------------------------------------------------
-    "career grade invalid": ("straja.cmd.career_invalid",
-        "straja.remedy.fix_retry", "career grade invalid"),
-    "document type invalid": ("straja.cmd.doctype_invalid",
-        "straja.remedy.fix_retry", "document type invalid"),
-    "appointment type invalid": ("straja.cmd.appt_invalid",
-        "straja.remedy.fix_retry", "appointment type invalid"),
 })
 '''
 

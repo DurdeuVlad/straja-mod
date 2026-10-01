@@ -32,7 +32,7 @@ public class EmergencyService implements EmergencyUseCase {
     public void alert(PlayerGateway actor, String message) {
         if (!authorized(actor)) return;
         if (message == null || message.isBlank()) {
-            actor.tell("Folosire: /straja emergency alert <mesaj>.");
+            actor.refuse("straja.emergency.alert_usage", "straja.remedy.fix_retry");
             return;
         }
         EmergencyState state = ctx.emergency().read();
@@ -128,7 +128,7 @@ public class EmergencyService implements EmergencyUseCase {
                     + ", " + state.requiredRounds + " runde/patrulă"
                     + (state.reason != null ? ", motiv: " + state.reason : "") + ".");
         } else {
-            actor.refuse("straja.emergency.inactive_tagged", "straja.remedy.ask_comisar");
+            actor.tell("[Straja] Starea de urgență nu este activă.");
         }
     }
 

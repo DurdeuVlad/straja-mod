@@ -331,7 +331,8 @@ public class MissionService implements MissionRoleplayUseCase {
         draft.signedAt = null;
         draft.packagedAt = null;
         ctx.missions().write(store);
-        player.refuse("straja.mission.scope_range", "straja.remedy.fix_retry", ctx.policies().rankName(minimumRank), maxAssignees);
+        player.tell("Sfera ordinului: minim " + ctx.policies().rankName(minimumRank) + ", maximum "
+                + maxAssignees + " participanți. Semnează și sigilează din nou.");
     }
 
     private int rankValue(String name) {

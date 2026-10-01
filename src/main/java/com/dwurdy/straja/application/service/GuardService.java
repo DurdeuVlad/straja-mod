@@ -848,8 +848,8 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             return;
         }
         if (!pendingModules(state).isEmpty()) {
-            player.tell("Mai întâi finalizează instruirea: " + pendingModules(state).size()
-                    + " module rămase.");
+            player.refuse("straja.duty.finish_training", "straja.remedy.instructor",
+                    pendingModules(state).size());
             return;
         }
         try {
@@ -1569,7 +1569,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             return;
         }
         if (state.foodReadyAt != null && state.foodReadyAt > now()) {
-            player.tell("Hrana poate fi ridicată peste " + prettyTime(state.foodReadyAt) + ".");
+            player.refuse("straja.duty.food_cooldown", "straja.remedy.wait", prettyTime(state.foodReadyAt));
             return;
         }
         if (!player.giveVerified(ItemSpec.of(ctx.policies().foodItem, ctx.policies().foodAmount))) {
@@ -1983,7 +1983,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             player.tell("Funcții: " + String.join(", ", state.specializations) + ".");
         }
         if (state.resignationPending) {
-            player.refuse("straja.duty.resign_wait", "straja.remedy.wait", prettyTime(state.resignationDeadlineAt));
+            player.tell("Demisie în așteptare. Semnarea este disponibilă peste " + prettyTime(state.resignationDeadlineAt) + ".");
         }
         if (state.resigned) {
             player.tell("Demisie semnată. Reîncadrarea este disponibilă " + prettyTime(state.rejoinAvailableAt)

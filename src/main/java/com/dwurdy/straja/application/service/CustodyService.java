@@ -2221,7 +2221,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
             return new DamageDecision(DamageAction.CANCEL, "issuer_rank_not_authorized");
         }
         if (isCuffed(target)) {
-            issuer.refuse("straja.custody.already_cuffed", "straja.remedy.fix_retry", target.name());
+            issuer.refuse("straja.custody.already_cuffed_flow", "straja.remedy.fix_retry", target.name(), weaponLower);
             return new DamageDecision(DamageAction.CANCEL, "already_cuffed");
         }
         if (isBound(target)) {

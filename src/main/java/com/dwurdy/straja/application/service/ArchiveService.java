@@ -401,7 +401,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
             unique.add(recipient);
         }
         if (unique.size() > p().archiveMaxRecipients) {
-            player.tell("Prea mulți destinatari.");
+            player.refuse("straja.archive.too_many_recipients", "straja.remedy.fix_retry");
             return false;
         }
         sheet.recipients = unique;
@@ -480,7 +480,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
             return false;
         }
         if (player.inventory().countOf("straja:archive_stamp") < 1) {
-            player.tell("Ai nevoie de Ștampila Arhivei pentru a semna actul.");
+            player.refuse("straja.archive.need_stamp", "straja.remedy.fix_retry");
             return false;
         }
         if (reason != null && reason.length() > 240) {
@@ -550,7 +550,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
             return false;
         }
         if (targets.isEmpty()) {
-            player.tell("Indică cel puțin un destinatar sau adaugă destinatari pe foaie.");
+            player.refuse("straja.archive.need_recipient", "straja.remedy.fix_retry");
             return false;
         }
         while (targets.size() < requested) targets.add(targets.get(targets.size() % Math.max(1, targets.size())));
@@ -658,12 +658,12 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
             return false;
         }
         if (targetName == null || targetName.isBlank()) {
-            player.tell("Indică destinatarul.");
+            player.refuse("straja.archive.name_recipient", "straja.remedy.fix_retry");
             return false;
         }
         String envelopeId = "straja:official_envelope";
         if (player.inventory().countOf(envelopeId) < 1) {
-            player.tell("Ai nevoie de un Plic Oficial.");
+            player.refuse("straja.archive.need_envelope", "straja.remedy.fix_retry");
             return false;
         }
         PlayerGateway target = ctx.server().findPlayer(targetName);

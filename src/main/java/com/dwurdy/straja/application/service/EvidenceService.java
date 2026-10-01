@@ -59,11 +59,11 @@ public final class EvidenceService {
             PlayerGateway guard, PlayerGateway target) {
         purgeExpiredSessions();
         if (!eligibleGuard(guard) || target == null || !target.isOnline()) return null;
-        String failure = eligibilityFailure(guard, target);
+        SearchDenial failure = eligibilityFailure(guard, target);
         if (failure != null) {
-            guard.tell(failure);
+            guard.refuse(failure.key(), failure.remedy());
             audit.record("search_started", guard.name(), uuid(guard),
-                    target.name(), uuid(target), "REFUSED", failure);
+                    target.name(), uuid(target), "REFUSED", failure.key());
             return null;
         }
         String token = ctx.ids().token();
@@ -352,18 +352,20 @@ public final class EvidenceService {
                 && guard.health() > 0;
     }
 
-    private String eligibilityFailure(PlayerGateway guard, PlayerGateway target) {
-        if (!eligibleGuard(guard)) return "Doar un Străjer activ și operațional poate percheziționa.";
-        if (target == null || !target.isOnline()) return "Ținta nu este disponibilă.";
-        if (!guard.dimension().equals(target.dimension())) return "Ținta este în altă dimensiune.";
+    private record SearchDenial(String key, String remedy) {}
+
+    private SearchDenial eligibilityFailure(PlayerGateway guard, PlayerGateway target) {
+        if (!eligibleGuard(guard)) return new SearchDenial("straja.evidence.search_guard", "straja.remedy.duty");
+        if (target == null || !target.isOnline()) return new SearchDenial("straja.evidence.target_unavailable", "straja.remedy.retry");
+        if (!guard.dimension().equals(target.dimension())) return new SearchDenial("straja.evidence.other_dimension", "straja.remedy.retry");
         double dx = guard.x() - target.x();
         double dy = guard.y() - target.y();
         double dz = guard.z() - target.z();
         double range = ctx.policies().searchRangeBlocks;
-        if (dx * dx + dy * dy + dz * dz > range * range) return "Ținta este prea departe.";
+        if (dx * dx + dy * dy + dz * dz > range * range) return new SearchDenial("straja.evidence.too_far", "straja.remedy.retry");
         CustodyState state = ctx.custody().read().states.get(uuid(target));
         if (state == null || !searchable(state)) {
-            return "Nu există un context valid de percheziție.";
+            return new SearchDenial("straja.evidence.no_context", "straja.remedy.retry");
         }
         return null;
     }

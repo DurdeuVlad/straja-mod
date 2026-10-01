@@ -1536,12 +1536,14 @@ public final class StrajaCommands {
 
     private static com.dwurdy.straja.domain.model.CareerGrade parseGrade(CommandContext<CommandSourceStack> c, String name) {
         try { return com.dwurdy.straja.domain.model.CareerGrade.valueOf(StringArgumentType.getString(c, name).toUpperCase(java.util.Locale.ROOT)); }
-        catch (IllegalArgumentException error) { throw new IllegalArgumentException("career grade invalid"); }
+        catch (IllegalArgumentException error) { throw new IllegalArgumentException(
+                refusal("straja.parse.grade_invalid", "straja.remedy.fix_retry").getString()); }
     }
 
     private static com.dwurdy.straja.domain.model.DocumentType parseDocumentType(CommandContext<CommandSourceStack> c, String name) {
         try { return com.dwurdy.straja.domain.model.DocumentType.valueOf(StringArgumentType.getString(c, name).toUpperCase(java.util.Locale.ROOT)); }
-        catch (IllegalArgumentException error) { throw new IllegalArgumentException("document type invalid"); }
+        catch (IllegalArgumentException error) { throw new IllegalArgumentException(
+                refusal("straja.parse.doc_type_invalid", "straja.remedy.fix_retry").getString()); }
     }
 
     private static com.dwurdy.straja.domain.model.AppointmentType parseAppointmentType(
@@ -1550,7 +1552,8 @@ public final class StrajaCommands {
             return com.dwurdy.straja.domain.model.AppointmentType.valueOf(
                     StringArgumentType.getString(c, name).toUpperCase(java.util.Locale.ROOT));
         } catch (IllegalArgumentException error) {
-            throw new IllegalArgumentException("appointment type invalid");
+            throw new IllegalArgumentException(
+                    refusal("straja.parse.appointment_type_invalid", "straja.remedy.fix_retry").getString());
         }
     }
 

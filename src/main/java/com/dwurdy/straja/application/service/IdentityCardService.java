@@ -113,7 +113,7 @@ public class IdentityCardService implements IdentityCardRoleplayUseCase {
         }
         if (!applicant.isOnline()) return false;
         if (!atReception(applicant)) {
-            applicant.tell("Buletinul se emite la Recepție.");
+            applicant.refuse("straja.idcard.at_reception", "straja.remedy.reception");
             return false;
         }
         return issueInternal(applicant, applicant, "Recepție", "");

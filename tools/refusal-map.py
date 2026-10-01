@@ -529,9 +529,6 @@ MAP = {
     "%s poate fi folosit doar de un străjer activ.":
         ("straja.custody.item_active_only", R + "duty",
          "%s can only be used by an active guard."),
-    "%s este deja încătușat; %s nu mai poate porni un al doilea flow.":
-        ("straja.custody.already_cuffed", R + "fix_retry",
-         "%s is already cuffed; %s cannot start a second flow."),
     "%s este deja legat; %s nu mai poate porni un al doilea flow.":
         ("straja.custody.already_tied", R + "fix_retry",
          "%s is already tied; %s cannot start a second flow."),
@@ -561,9 +558,6 @@ MAP = {
     "Starea de urgență nu este activă.":
         ("straja.emergency.inactive", R + "ask_comisar",
          "The emergency state is not active."),
-    "[Straja] Starea de urgență nu este activă.":
-        ("straja.emergency.inactive_tagged", R + "ask_comisar",
-         "[Straja] The emergency state is not active."),
     "Doar Comisarul sau un operator poate gestiona starea de urgență.":
         ("straja.emergency.comisar_only", R + "ask_comisar",
          "Only the Commissioner or an operator can manage the emergency state."),
@@ -810,9 +804,6 @@ MAP = {
     "Amenda nu are o contestație în așteptare.":
         ("straja.fine.no_appeal_pending", R + "retry",
          "The fine has no pending appeal."),
-    "Contestația %s nu a primit decizie în termen. Amenda %s a fost iertată automat.":
-        ("straja.fine.appeal_timeout", R + "faq",
-         "Appeal %s received no decision in time. Fine %s was forgiven automatically."),
 
     # ── application/service/GuardService.java ───────────────────────────
     "Demisia ta este pe rol sau în cooldown — cererea nu se depune la Recepție. Vorbește cu Comisaru'.":
@@ -1373,9 +1364,6 @@ MAP = {
     "Quiz-ul de rang se deschide după recrutarea ca Stagiar.":
         ("straja.duty.quiz_rank", R + "instructor",
          "The rank quiz opens after recruitment as Trainee."),
-    "Nu poți semna încă. Mai sunt %s.":
-        ("straja.duty.resignation_wait", R + "wait",
-         "You cannot sign yet. %s left."),
     "Alege un alt jucător online.":
         ("straja.custody.policy_self", R + "fix_retry",
          "Choose another online player."),
@@ -1438,9 +1426,9 @@ MAP = {
          "You are cuffed by %s. The key must be used by that guard."),
 
     # GuardService
-    "Mai întâi finalizează instruirea: %s module rămase. Întreabă Instructorul pentru următoarea întrebare.":
+    "Mai întâi finalizează instruirea: %s module rămase.":
         ("straja.duty.finish_training", R + "instructor",
-         "Finish your training first: %s modules left. Ask the Instructor for the next question."),
+         "Finish your training first: %s modules left."),
     "Raportul tău de activitate este restant. Depune-l la Secretariat înainte de a începe serviciul.":
         ("straja.duty.report_overdue", R + "secretary",
          "Your activity report is overdue. File it at the Secretariat before starting duty."),
@@ -1561,9 +1549,6 @@ MAP = {
          "Handing over to the Jailer requires an on-duty guard."),
 
     # MissionService
-    "Sfera ordinului: minim %s, maximum %s participanți. Semnează și sigilează din nou.":
-        ("straja.mission.scope_range", R + "fix_retry",
-         "Order scope: min %s, max %s participants. Sign and seal it again."),
     "Crearea rapidă de misiuni este dezactivată de configurația serverului.":
         ("straja.mission.quick_off", R + "ask_comisar",
          "Quick mission creation is disabled by the server configuration."),
@@ -1687,10 +1672,6 @@ MAP = {
     "Această acțiune necesită un jucător.":
         ("straja.cmd.action_player_only", R + "fix_retry",
          "This action requires a player."),
-    "Straja runtime is not running.":
-        ("straja.cmd.runtime_down", R + "wait",
-         "Straja runtime is not running."),
-
     "Niciun șablon capturat — copia nu a fost înregistrată.":
         ("straja.admintool.clone_fail", R + "retry",
          "No template captured — the copy was not registered."),
@@ -1920,9 +1901,9 @@ MAP = {
 MAP.update({
     # --- CustodyService state/item gates ---------------------------------------
     "%s este deja încătușat.": ("straja.custody.already_cuffed",
-        "straja.remedy.retry", "is already cuffed."),
+        "straja.remedy.retry", "%s is already cuffed."),
     "%s este deja legat.": ("straja.custody.already_bound",
-        "straja.remedy.retry", "is already bound."),
+        "straja.remedy.retry", "%s is already bound."),
     "Ținta are deja o cerere în așteptare.": ("straja.custody.request_pending",
         "straja.remedy.wait", "The target already has a pending request."),
     "Ești deja încătușat.": ("straja.custody.self_cuffed",
@@ -1940,11 +1921,11 @@ MAP.update({
     "Ține Sacul de Captiv în mâna principală.": ("straja.custody.hold_bag",
         "straja.remedy.fix_retry", "Hold the Captive Bag in your main hand."),
     "%s are deja sacul pe cap.": ("straja.custody.already_bagged",
-        "straja.remedy.retry", "already has the bag on their head."),
+        "straja.remedy.retry", "%s already has the bag on their head."),
     "Ținta este deja transportată.": ("straja.custody.already_carried",
         "straja.remedy.retry", "The target is already being carried."),
     "%s de Poliție se folosește de la rangul Străjer în sus.": ("straja.custody.weapon_rank",
-        "straja.remedy.instructor", "is used from Străjer rank up."),
+        "straja.remedy.instructor", "%s is used from Străjer rank up."),
     # --- ArchiveService limits --------------------------------------------------
     "Ai atins limita de dosare pentru acest proprietar.": ("straja.archive.owner_limit",
         "straja.remedy.wait", "You reached the dossier limit for this owner."),
@@ -1999,10 +1980,6 @@ MAP.update({
         "straja.remedy.instructor", "You already have the Commissioner's invitation — go straight to the Instructor for the exam."),
     "Cererea ta este deja înregistrată. Prezintă-te la Instructor pentru examen.": ("straja.duty.request_pending",
         "straja.remedy.instructor", "Your application is already registered. Go to the Instructor for the exam."),
-    "Ai terminat instruirea disponibilă pentru rangul tău.": ("straja.duty.training_done",
-        "straja.remedy.instructor", "You finished the training available for your rank."),
-    "Instruirea disponibilă pentru rangul tău este finalizată.": ("straja.duty.training_finalized",
-        "straja.remedy.instructor", "The training available for your rank is finished."),
     "Răspuns greșit. Modulul rămâne disponibil după cooldown.": ("straja.duty.quiz_wrong",
         "straja.remedy.wait", "Wrong answer. The module stays available after the cooldown."),
     "Ai deja Manualul de instruire în inventar.": ("straja.duty.manual_owned",
@@ -2025,8 +2002,6 @@ MAP.update({
         "straja.remedy.ask_comisar", "Removal from Straja is the Commissioner's call."),
     "Revenirea este disponibilă peste %s.": ("straja.duty.return_cooldown",
         "straja.remedy.wait", "Return is available in %s."),
-    "Plata nu a putut fi pregătită. Soldul a fost păstrat.": ("straja.duty.salary_failed",
-        "straja.remedy.retry", "The payment could not be prepared. Your balance was kept."),
     "Hrana de serviciu este disponibilă de la Stagiar.": ("straja.duty.food_rank",
         "straja.remedy.instructor", "Duty food is available from Stagiar up."),
     "Kitul este disponibil de la Stagiar.": ("straja.duty.kit_rank",
@@ -2037,8 +2012,6 @@ MAP.update({
         "straja.remedy.fix_retry", "The limit of %s checkpoints was reached."),
     "Folosește un checkpoint valid și un timp întreg între %s și %s minute.": ("straja.duty.checkpoint_invalid",
         "straja.remedy.fix_retry", "Use a valid checkpoint and a whole time between %s and %s minutes."),
-    "Demisie în așteptare. Semnarea este disponibilă peste %s.": ("straja.duty.resign_wait",
-        "straja.remedy.wait", "Resignation pending. Signing is available in %s."),
     # --- IdentityCardService ------------------------------------------------------
     "Jucătorul are deja buletinul activ %s.": ("straja.idcard.already_active",
         "straja.remedy.fix_retry", "The player already has active ID card %s."),
@@ -2055,8 +2028,6 @@ MAP.update({
         "straja.remedy.wait", "The whistle is recharging. Wait %s more seconds."),
     "Incidentul este deja preluat de %s.": ("straja.incident.already_taken",
         "straja.remedy.retry", "The incident is already handled by %s."),
-    "Incidentul are deja numărul maxim de sprijinitori.": ("straja.incident.max_helpers",
-        "straja.remedy.wait", "The incident already has the maximum number of helpers."),
     # --- MissionService direct gates -------------------------------------------------
     "Scrie obiectivul misiunii după timpul de început.": ("straja.mission.objective_after_start",
         "straja.remedy.fix_retry", "Write the mission objective after the start time."),
@@ -2090,8 +2061,6 @@ MAP.update({
         "straja.remedy.fix_retry", "Write the mission report."),
     "Cota ta din recompensa misiunii a fost deja plătită.": ("straja.mission.share_paid",
         "straja.remedy.retry", "Your share of the mission reward was already paid."),
-    "Cota ta nu a putut fi livrată; soldul rămâne în așteptare.": ("straja.mission.share_failed",
-        "straja.remedy.wait", "Your share could not be delivered; the balance stays pending."),
     "Misiunea poate fi acceptată de la: %s.": ("straja.mission.accept_from",
         "straja.remedy.fix_retry", "The mission can be accepted from: %s."),
     # --- MissionService helper returns (start parse / template validation) ----------
@@ -2150,19 +2119,13 @@ MAP.update({
     "Niciun șablon de șters.": ("straja.admintool.nothing_to_clear",
         "straja.remedy.fix_retry", "No template to delete."),
     # --- NpcCommands ------------------------------------------------------------------
-    "Unknown provider. Valid values: customnpcs, debug-text.": ("straja.npc.provider_unknown",
+    "Provider necunoscut. Valori valide: customnpcs, debug-text.": ("straja.npc.provider_unknown",
         "straja.remedy.fix_retry", "Unknown provider. Valid values: customnpcs, debug-text."),
-    "CustomNPCs binding failed: %s": ("straja.npc.binding_failed",
+    "Legarea CustomNPCs a eșuat: %s": ("straja.npc.binding_failed",
         "straja.remedy.retry", "CustomNPCs binding failed: %s"),
     "Toate NPC-urile Straja sunt deja înregistrate.": ("straja.npc.all_registered",
         "straja.remedy.fix_retry", "All Straja NPCs are already registered."),
     # --- StrajaCommands parse helpers ----------------------------------------------------
-    "career grade invalid": ("straja.cmd.career_invalid",
-        "straja.remedy.fix_retry", "career grade invalid"),
-    "document type invalid": ("straja.cmd.doctype_invalid",
-        "straja.remedy.fix_retry", "document type invalid"),
-    "appointment type invalid": ("straja.cmd.appt_invalid",
-        "straja.remedy.fix_retry", "appointment type invalid"),
 })
 
 MAP.update({
@@ -2182,9 +2145,9 @@ MAP.update({
     # --- Command/exception forwarders (computed reason args) ---------------------
     "Comanda a eșuat: %s": ("straja.cmd.failed",
         "straja.remedy.retry", "Command failed: %s"),
-    "debug-text is disabled by the explicit NPC and debug security gates.": ("straja.npc.debug_gated",
+    "debug-text este dezactivat de porțile explicite de securitate NPC și debug.": ("straja.npc.debug_gated",
         "straja.remedy.ask_comisar", "debug-text is disabled by the explicit NPC and debug security gates."),
-    "Migration required rollback; inspect provider status before retrying.": ("straja.npc.migration_rollback",
+    "Migrația a necesitat rollback; verifică starea providerului înainte de reîncercare.": ("straja.npc.migration_rollback",
         "straja.remedy.retry", "Migration required rollback; inspect provider status before retrying."),
     "Rascumpărarea a fost refuzată: %s": ("straja.v2.redeem_failed",
         "straja.remedy.fix_retry", "Redemption was refused: %s"),
@@ -2193,4 +2156,38 @@ MAP.update({
 MAP.update({
     "Celula nu poate traversa dimensiuni — selecția a fost resetată.": ("straja.admintool.cell_cross_dimension",
         "straja.remedy.fix_retry", "A cell cannot cross dimensions — the selection was reset."),
+})
+
+MAP.update({
+    # --- Round-3: missed denials + EvidenceService helper + key-collision fix ------
+    "Prea mulți destinatari.": ("straja.archive.too_many_recipients",
+        "straja.remedy.fix_retry", "Too many recipients."),
+    "Ai nevoie de Ștampila Arhivei pentru a semna actul.": ("straja.archive.need_stamp",
+        "straja.remedy.fix_retry", "You need the Archive Stamp to sign the document."),
+    "Indică cel puțin un destinatar sau adaugă destinatari pe foaie.": ("straja.archive.need_recipient",
+        "straja.remedy.fix_retry", "Provide at least one recipient or add recipients to the sheet."),
+    "Indică destinatarul.": ("straja.archive.name_recipient",
+        "straja.remedy.fix_retry", "Provide the recipient."),
+    "Ai nevoie de un Plic Oficial.": ("straja.archive.need_envelope",
+        "straja.remedy.fix_retry", "You need an Official Envelope."),
+    "Traseul traversează dimensiuni — finalizează din %s sau reînregistrează punctele.": ("straja.admintool.route_dimension",
+        "straja.remedy.fix_retry", "The route crosses dimensions — finish from %s or re-record the points."),
+    "Buletinul se emite la Recepție.": ("straja.idcard.at_reception",
+        "straja.remedy.reception", "ID cards are issued at Reception."),
+    "Folosire: /straja emergency alert <mesaj>.": ("straja.emergency.alert_usage",
+        "straja.remedy.fix_retry", "Usage: /straja emergency alert <message>."),
+    "Hrana poate fi ridicată peste %s.": ("straja.duty.food_cooldown",
+        "straja.remedy.wait", "Food can be claimed in %s."),
+    "%s este deja încătușat; %s nu mai poate porni un al doilea flow.": ("straja.custody.already_cuffed_flow",
+        "straja.remedy.fix_retry", "%s is already cuffed; %s cannot start a second flow."),
+    "Ținta este în altă dimensiune.": ("straja.evidence.other_dimension",
+        "straja.remedy.retry", "The target is in another dimension."),
+    "Ținta este prea departe.": ("straja.evidence.too_far",
+        "straja.remedy.retry", "The target is too far away."),
+})
+
+MAP.update({
+    "Grad de carieră invalid.": ("straja.parse.grade_invalid", "straja.remedy.fix_retry", "Invalid career grade."),
+    "Tip de document invalid.": ("straja.parse.doc_type_invalid", "straja.remedy.fix_retry", "Invalid document type."),
+    "Tip de programare invalid.": ("straja.parse.appointment_type_invalid", "straja.remedy.fix_retry", "Invalid appointment type."),
 })

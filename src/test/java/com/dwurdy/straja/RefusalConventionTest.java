@@ -118,6 +118,9 @@ class RefusalConventionTest {
             "Acumularea salariului",     // AFK salary pause notice
             "Nu ai buletine înregistrate",
             "registrul de buletine este gol",
+            "Starea de urgență nu este activă", // read-only emergency status line
+            "iertată automat",     // appeal auto-waive in applicant's favor
+            "Demisie în așteptare", // resignation-pending status line
             "Acceptă",             // incoming request prompts (Alege Acceptă / Refuză)
             "rămâne disponibil",   // post-hand-in ledger notice
             "fișierul nu s-a putut actualiza" // config-write caveat
@@ -354,6 +357,24 @@ class RefusalConventionTest {
         }
         assertTrue(violations.isEmpty(),
                 "refusal arg/placeholder mismatches:\n" + String.join("\n", violations));
+    }
+
+    /** ro_ro and en_us must agree on %s placeholder count for every shared key. */
+    @Test
+    void langPlaceholderParity() throws IOException {
+        JsonObject ro = lang("ro_ro");
+        JsonObject en = lang("en_us");
+        List<String> violations = new ArrayList<>();
+        for (String key : keySet(ro)) {
+            if (!en.has(key)) continue; // key-set parity is checked separately
+            long roCount = ro.get(key).getAsString().split("%s", -1).length - 1;
+            long enCount = en.get(key).getAsString().split("%s", -1).length - 1;
+            if (roCount != enCount) {
+                violations.add(key + " ro=" + roCount + " en=" + enCount);
+            }
+        }
+        assertTrue(violations.isEmpty(),
+                "ro/en placeholder mismatches:\n" + String.join("\n", violations));
     }
 
     /** Message channels that can carry a player-facing denial. */

@@ -248,8 +248,8 @@ final class NpcCommands {
         String actorId = NpcProvisioningActorIdentity.fromSource(source.getTextName(), playerUuid);
         var result = NpcPresentationRuntime.bindCustomNpc(host, role, station, actorId);
         if (result.status() != com.dwurdy.straja.domain.model.NpcProviderResult.Status.ACCEPTED) {
-            ctx.getSource().sendFailure(Component.literal(
-                    "CustomNPCs binding failed: " + result.code() + " — " + result.message()));
+            ctx.getSource().sendFailure(refusal("straja.npc.binding_failed",
+                    "straja.remedy.retry", result.code() + " — " + result.message()));
             return 0;
         }
         ctx.getSource().sendSystemMessage(Component.literal(

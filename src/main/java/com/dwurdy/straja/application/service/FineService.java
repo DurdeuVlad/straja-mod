@@ -1233,7 +1233,7 @@ public class FineService implements FineRoleplayUseCase {
                     persistNow = true;
                     changed = true;
                     PlayerGateway target = ctx.server().findPlayer(fine.target);
-                    if (target != null) target.refuse("straja.fine.appeal_timeout", "straja.remedy.faq", fine.appeal.id, fine.id);
+                    if (target != null) target.tell("Contestația " + fine.appeal.id + " nu a primit decizie în termen. Amenda " + fine.id + " a fost iertată automat.");
                     audit.record("fine_appeal_auto_waive", null, null, fine.target, fine.targetUuid, "SUCCESS", "review_timeout fineId=" + fine.id);
                 }
                 continue;

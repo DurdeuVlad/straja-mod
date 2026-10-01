@@ -232,8 +232,7 @@ public class AdminToolService implements AdminToolsUseCase {
         var holder = state(store, player);
         for (var point : holder.route) {
             if (!player.dimension().equals(point.dimension)) {
-                player.tell("Traseul traversează dimensiuni — finalizează din "
-                        + point.dimension + " sau reînregistrează punctele.");
+                player.refuse("straja.admintool.route_dimension", "straja.remedy.fix_retry", point.dimension);
                 return;
             }
         }
