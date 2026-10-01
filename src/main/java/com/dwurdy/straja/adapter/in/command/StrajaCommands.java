@@ -1201,7 +1201,8 @@ public final class StrajaCommands {
                     var result = StrajaRuntime.get().v2Documents().redeem(actor(c).uuid().toString(),
                             StringArgumentType.getString(c, "instrument"), IntegerArgumentType.getInteger(c, "quantity"),
                             "hq", "command:" + actor(c).uuid() + ":" + StringArgumentType.getString(c, "instrument"));
-                    if (!result.accepted()) { c.getSource().sendFailure(Component.literal(result.reason())); return 0; }
+                    if (!result.accepted()) { c.getSource().sendFailure(refusal(
+                            "straja.v2.redeem_failed", "straja.remedy.fix_retry", result.reason())); return 0; }
                     return 1;
                 }))));
         return node;

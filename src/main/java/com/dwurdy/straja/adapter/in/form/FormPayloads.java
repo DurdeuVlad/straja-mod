@@ -97,8 +97,8 @@ public final class FormPayloads {
             player.closeContainer();
         });
         if (submission.isEmpty()) {
-            player.sendSystemMessage(net.minecraft.network.chat.Component.translatable(
-                    "straja.form.invalid"));
+            player.sendSystemMessage(com.dwurdy.straja.adapter.in.StrajaText.refusal(
+                    "straja.form.invalid", "straja.remedy.retry"));
         }
     }
 

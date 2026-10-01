@@ -165,7 +165,8 @@ final class NpcCommands {
             }
             return 1;
         } catch (IllegalStateException error) {
-            ctx.getSource().sendFailure(Component.literal(error.getMessage()));
+            ctx.getSource().sendFailure(refusal(
+                    "straja.cmd.failed", "straja.remedy.retry", error.getMessage()));
             return 0;
         }
     }
@@ -183,7 +184,8 @@ final class NpcCommands {
             }
             return failures == 0 ? 1 : 0;
         } catch (IllegalStateException error) {
-            ctx.getSource().sendFailure(Component.literal(error.getMessage()));
+            ctx.getSource().sendFailure(refusal(
+                    "straja.cmd.failed", "straja.remedy.retry", error.getMessage()));
             return 0;
         }
     }
@@ -194,15 +196,14 @@ final class NpcCommands {
         try {
             target = NpcProviderId.of(rawProvider);
         } catch (IllegalArgumentException error) {
-            ctx.getSource().sendFailure(Component.literal(
-                    "Unknown provider. Valid values: customnpcs, debug-text."));
+            ctx.getSource().sendFailure(refusal("straja.npc.provider_unknown", "straja.remedy.fix_retry"));
             return 0;
         }
         try {
             var state = NpcPresentationRuntime.require();
             if (target.equals(NpcProviderId.DEBUG_TEXT) && !state.debugTextEnabled()) {
-                ctx.getSource().sendFailure(Component.literal(
-                        "debug-text is disabled by the explicit NPC and debug security gates."));
+                ctx.getSource().sendFailure(refusal(
+                        "straja.npc.debug_gated", "straja.remedy.ask_comisar"));
                 return 0;
             }
             var result = state.migration().migrate(target, ctx.getSource().getTextName());
@@ -210,13 +211,14 @@ final class NpcCommands {
                     "NPC provider migration: " + result.result().status()
                             + " — " + result.result().message()));
             if (!result.rollback().isEmpty()) {
-                ctx.getSource().sendFailure(Component.literal(
-                        "Migration required rollback; inspect provider status before retrying."));
+                ctx.getSource().sendFailure(refusal(
+                        "straja.npc.migration_rollback", "straja.remedy.retry"));
             }
             return result.result().status() == com.dwurdy.straja.domain.model.NpcProviderResult.Status.ACCEPTED
                     ? 1 : 0;
         } catch (IllegalStateException | IllegalArgumentException error) {
-            ctx.getSource().sendFailure(Component.literal(error.getMessage()));
+            ctx.getSource().sendFailure(refusal(
+                    "straja.cmd.failed", "straja.remedy.retry", error.getMessage()));
             return 0;
         }
     }
@@ -268,7 +270,7 @@ final class NpcCommands {
                 runtime.context().npcs().read(),
                 com.dwurdy.straja.application.service.NpcAdminService.ROLE_ORDER);
         if (missing.isEmpty()) {
-            ctx.getSource().sendSystemMessage(Component.literal("Toate NPC-urile Straja sunt deja înregistrate."));
+            ctx.getSource().sendSystemMessage(refusal("straja.npc.all_registered", "straja.remedy.fix_retry"));
             return 1;
         }
         var setup = runtime.context().setup().read();

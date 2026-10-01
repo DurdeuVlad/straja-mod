@@ -146,7 +146,7 @@ public class IdentityCardService implements IdentityCardRoleplayUseCase {
         IdentityCardStore store = normalized(ctx.identityCards().read());
         IdentityCard existing = currentFor(store, target);
         if (existing != null) {
-            auditActor.tell("Jucătorul are deja buletinul activ " + existing.id + ".");
+            auditActor.refuse("straja.idcard.already_active", "straja.remedy.fix_retry", existing.id);
             return false;
         }
 
@@ -154,7 +154,7 @@ public class IdentityCardService implements IdentityCardRoleplayUseCase {
         String id = "ID-" + number;
         while (store.cards.containsKey(id)) {
             if (number == Integer.MAX_VALUE) {
-                auditActor.tell("Registrul de buletine este epuizat.");
+                auditActor.refuse("straja.idcard.exhausted", "straja.remedy.wait");
                 return false;
             }
             number++;
@@ -216,7 +216,7 @@ public class IdentityCardService implements IdentityCardRoleplayUseCase {
         String id = "ID-" + number;
         while (store.cards.containsKey(id)) {
             if (number == Integer.MAX_VALUE) {
-                actor.tell("Registrul de buletine este epuizat.");
+                actor.refuse("straja.idcard.exhausted", "straja.remedy.wait");
                 return false;
             }
             number++;
@@ -346,7 +346,7 @@ public class IdentityCardService implements IdentityCardRoleplayUseCase {
             return false;
         }
         if (IdentityCardStatus.REVOKED.name().equals(card.status)) {
-            actor.tell("Buletinul " + id + " era deja revocat.");
+            actor.refuse("straja.idcard.already_revoked", "straja.remedy.fix_retry", id);
             return true;
         }
         card.status = IdentityCardStatus.REVOKED.name();

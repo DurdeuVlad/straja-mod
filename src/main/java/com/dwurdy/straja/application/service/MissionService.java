@@ -244,15 +244,15 @@ public class MissionService implements MissionRoleplayUseCase {
     }
 
     /** Parses "acum" or YYYY-MM-DDTHH:MM against the schedule window. */
-    public record StartParse(boolean ok, long at, String label, String error) {}
+    public record StartParse(boolean ok, long at, String label, String errorKey, Object[] errorArgs) {}
 
     public StartParse parseStart(String raw) {
         String value = raw == null ? "" : raw.trim();
         long referenceNow = now();
-        if ("acum".equalsIgnoreCase(value)) return new StartParse(true, referenceNow, "acum", null);
+        if ("acum".equalsIgnoreCase(value)) return new StartParse(true, referenceNow, "acum", null, new Object[0]);
         var match = java.util.regex.Pattern.compile("^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2})$").matcher(value);
         if (!match.matches()) {
-            return new StartParse(false, 0, "", "Folosește „acum” sau data în format YYYY-MM-DDTHH:MM.");
+            return new StartParse(false, 0, "", "straja.mission.start_format", new Object[0]);
         }
         java.time.LocalDateTime date;
         try {
@@ -261,18 +261,17 @@ public class MissionService implements MissionRoleplayUseCase {
                     Integer.parseInt(match.group(3)), Integer.parseInt(match.group(4)),
                     Integer.parseInt(match.group(5)));
         } catch (java.time.DateTimeException e) {
-            return new StartParse(false, 0, "", "Data de început nu este validă.");
+            return new StartParse(false, 0, "", "straja.mission.start_invalid", new Object[0]);
         }
         long at = date.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
         if (at < referenceNow - MINUTE_MS) {
-            return new StartParse(false, 0, "", "Data de început trebuie să fie acum sau în viitor.");
+            return new StartParse(false, 0, "", "straja.mission.start_past", new Object[0]);
         }
         long maxDays = Math.max(1, ctx.policies().missionMaxScheduleDays);
         if (at > referenceNow + maxDays * DAY_MS) {
-            return new StartParse(false, 0, "",
-                    "Data de început poate fi programată la maximum " + maxDays + " zile în viitor.");
+            return new StartParse(false, 0, "", "straja.mission.start_horizon", new Object[]{maxDays});
         }
-        return new StartParse(true, at, value, null);
+        return new StartParse(true, at, value, null, new Object[0]);
     }
 
     public void draftWrite(PlayerGateway player, int minutes, String startRaw, int reward, String objective) {
@@ -283,7 +282,7 @@ public class MissionService implements MissionRoleplayUseCase {
         }
         var start = parseStart(startRaw);
         if (!start.ok()) {
-            player.tell(start.error());
+            player.refuse(start.errorKey(), "straja.remedy.fix_retry", start.errorArgs());
             return;
         }
         if (!rewardValid(reward)) {
@@ -291,7 +290,7 @@ public class MissionService implements MissionRoleplayUseCase {
             return;
         }
         if (objective == null || objective.isBlank()) {
-            player.tell("Scrie obiectivul misiunii după timpul de început.");
+            player.refuse("straja.mission.objective_after_start", "straja.remedy.fix_retry");
             return;
         }
         var store = store();
@@ -320,7 +319,7 @@ public class MissionService implements MissionRoleplayUseCase {
         var store = store();
         var draft = draft(player, store);
         if (draft == null) {
-            player.tell("Scrie ordinul înainte să configurezi participanții.");
+            player.refuse("straja.mission.write_order_first", "straja.remedy.fix_retry");
             return;
         }
         int minimumRank = rankValue(rankName);
@@ -372,7 +371,7 @@ public class MissionService implements MissionRoleplayUseCase {
         var store = store();
         var draft = draft(player, store);
         if (draft == null || draft.signedBy.isEmpty()) {
-            player.tell("Semnează ordinul înainte să-l împachetezi.");
+            player.refuse("straja.mission.sign_first", "straja.remedy.fix_retry");
             return;
         }
         draft.packagedAt = now();
@@ -386,7 +385,7 @@ public class MissionService implements MissionRoleplayUseCase {
             return false;
         }
         if (!hasCarnet(player)) {
-            player.tell("Ține Carnetul de Misiuni în mâna principală.");
+            player.refuse("straja.mission.hold_ledger", "straja.remedy.fix_retry");
             return false;
         }
         return true;
@@ -598,9 +597,9 @@ public class MissionService implements MissionRoleplayUseCase {
                                double risk, int maxPaid, int deadlineMinutes, String objective,
                                boolean supersedesPatrol) {
         if (!templateAuthority(player)) return;
-        String problem = templateProblem(name, minRank, hours, risk, maxPaid, deadlineMinutes, objective);
+        Denied problem = templateProblem(name, minRank, hours, risk, maxPaid, deadlineMinutes, objective);
         if (problem != null) {
-            player.tell(problem);
+            player.refuse(problem.key(), "straja.remedy.fix_retry", problem.args());
             return;
         }
         var store = templateStore();
@@ -738,19 +737,25 @@ public class MissionService implements MissionRoleplayUseCase {
         player.tell(t.id + " „" + t.name + "” " + (enabled ? "activat" : "dezactivat") + ".");
     }
 
-    private String templateProblem(String name, int minRank, double hours, double risk,
+    private record Denied(String key, Object[] args) {}
+
+    private Denied templateProblem(String name, int minRank, double hours, double risk,
                                    int maxPaid, int deadlineMinutes, String objective) {
-        if (name == null || name.isBlank() || name.length() > 60) return "Numele trebuie să aibă 1-60 caractere.";
-        if (minRank < 1 || minRank > 4) return "Rangul minim trebuie să fie 1-4.";
-        if (hours <= 0 || hours > 24) return "Orele estimate trebuie să fie între 0 și 24.";
-        if (risk <= 0 || risk > 10) return "Riscul trebuie să fie între 0 și 10.";
+        if (name == null || name.isBlank() || name.length() > 60)
+            return new Denied("straja.mission.tpl_name", new Object[0]);
+        if (minRank < 1 || minRank > 4)
+            return new Denied("straja.mission.tpl_rank", new Object[0]);
+        if (hours <= 0 || hours > 24)
+            return new Denied("straja.mission.tpl_hours", new Object[0]);
+        if (risk <= 0 || risk > 10)
+            return new Denied("straja.mission.tpl_risk", new Object[0]);
         if (maxPaid < 1 || maxPaid > ctx.policies().missionMaxAssignees)
-            return "Participanții plătiți trebuie să fie între 1 și " + ctx.policies().missionMaxAssignees + ".";
+            return new Denied("straja.mission.tpl_max_paid", new Object[]{ctx.policies().missionMaxAssignees});
         if (!timeValid(deadlineMinutes))
-            return "Termenul trebuie să fie între " + ctx.policies().missionMinMinutes
-                    + " și " + ctx.policies().missionMaxMinutes + " minute.";
+            return new Denied("straja.mission.tpl_deadline",
+                    new Object[]{ctx.policies().missionMinMinutes, ctx.policies().missionMaxMinutes});
         if (objective == null || objective.isBlank() || objective.length() > ctx.policies().envelopeMaxBodyLength)
-            return "Obiectivul trebuie să aibă 1-" + ctx.policies().envelopeMaxBodyLength + " caractere.";
+            return new Denied("straja.mission.tpl_objective", new Object[]{ctx.policies().envelopeMaxBodyLength});
         return null;
     }
 
@@ -785,8 +790,7 @@ public class MissionService implements MissionRoleplayUseCase {
             return;
         }
         if (!timeValid(minutes) || objective == null || objective.isBlank()) {
-            issuer.tell("Folosește timpul între " + ctx.policies().missionMinMinutes + " și "
-                    + ctx.policies().missionMaxMinutes + " minute și descrie obiectivul.");
+            issuer.refuse("straja.mission.time_range", "straja.remedy.fix_retry", ctx.policies().missionMinMinutes, ctx.policies().missionMaxMinutes);
             return;
         }
         if (!rewardValid(reward)) {
@@ -795,13 +799,12 @@ public class MissionService implements MissionRoleplayUseCase {
         }
         var store = store();
         if (openCountFor(target, store) >= ctx.policies().missionMaxActivePerPlayer) {
-            issuer.tell("Ținta are deja prea multe misiuni active.");
+            issuer.refuse("straja.mission.target_busy", "straja.remedy.wait");
             return;
         }
         var budget = reserveIssuerBudget(store, issuer, reward);
         if (!budget.ok()) {
-            issuer.tell("Bugetul zilnic de recompense al emitentului este epuizat ("
-                    + budget.used() + "/" + budget.limit() + " monede).");
+            issuer.refuse("straja.mission.budget_exhausted", "straja.remedy.wait", budget.used(), budget.limit());
             ctx.missions().write(store);
             return;
         }
@@ -865,7 +868,7 @@ public class MissionService implements MissionRoleplayUseCase {
             return false;
         }
         if (!hasCarnet(issuer)) {
-            issuer.tell("Ține Carnetul de Misiuni în mâna principală.");
+            issuer.refuse("straja.mission.hold_ledger", "straja.remedy.fix_retry");
             return false;
         }
         if (!atSecretary(issuer)) {
@@ -895,24 +898,21 @@ public class MissionService implements MissionRoleplayUseCase {
             return false;
         }
         if (openCountFor(target, store) >= ctx.policies().missionMaxActivePerPlayer) {
-            issuer.tell("Ținta are deja prea multe misiuni active.");
+            issuer.refuse("straja.mission.target_busy", "straja.remedy.wait");
             return false;
         }
         if (draft.issuedCount >= draft.maxCopies) {
-            issuer.tell("Acest ordin a atins limita de " + draft.maxCopies
-                    + " copii. Scrie un ordin nou pentru alte predări.");
+            issuer.refuse("straja.mission.order_copies", "straja.remedy.fix_retry", draft.maxCopies);
             return false;
         }
         if (draft.reward > 0 && draft.remainingRewardPool < draft.reward) {
-            issuer.tell("Fondul ordinului este epuizat: mai sunt " + draft.remainingRewardPool
-                    + " monede disponibile.");
+            issuer.refuse("straja.mission.order_funds", "straja.remedy.wait", draft.remainingRewardPool);
             return false;
         }
 
         var budget = reserveIssuerBudget(store, issuer, draft.reward);
         if (!budget.ok()) {
-            issuer.tell("Bugetul zilnic de recompense al emitentului este epuizat ("
-                    + budget.used() + "/" + budget.limit() + " monede).");
+            issuer.refuse("straja.mission.budget_exhausted", "straja.remedy.wait", budget.used(), budget.limit());
             ctx.missions().write(store);
             return false;
         }
@@ -1232,7 +1232,7 @@ public class MissionService implements MissionRoleplayUseCase {
             return false;
         }
         if (mission.assignees.size() >= mission.maxAssignees) {
-            issuer.tell("Misiunea a atins limita de " + mission.maxAssignees + " participanți.");
+            issuer.refuse("straja.mission.limit_arg", "straja.remedy.wait", mission.maxAssignees);
             return false;
         }
         if (target == null || PlayerService.canon(target.name()).equals(PlayerService.canon(issuer.name()))) {
@@ -1245,7 +1245,7 @@ public class MissionService implements MissionRoleplayUseCase {
             return false;
         }
         if (targetMatches(target, mission) || invitedMatches(target, mission)) {
-            issuer.tell("Jucătorul este deja invitat sau participant.");
+            issuer.refuse("straja.mission.already_invited", "straja.remedy.retry");
             return false;
         }
         if (declinedMatches(target, mission)) {
@@ -1253,7 +1253,7 @@ public class MissionService implements MissionRoleplayUseCase {
             return false;
         }
         if (openCountFor(target, store) >= ctx.policies().missionMaxActivePerPlayer) {
-            issuer.tell("Participantul are deja prea multe misiuni active.");
+            issuer.refuse("straja.mission.participant_busy", "straja.remedy.wait");
             return false;
         }
         mission.invited.add(new Mission.Identity(
@@ -1280,7 +1280,7 @@ public class MissionService implements MissionRoleplayUseCase {
             return false;
         }
         if (targetMatches(player, mission)) {
-            player.tell("Ești deja participant în misiunea #" + mission.id + ".");
+            player.refuse("straja.mission.already_member", "straja.remedy.retry", mission.id);
             return false;
         }
         if (!"ISSUED".equals(mission.status) && !"ACCEPTED".equals(mission.status)) {
@@ -1288,7 +1288,7 @@ public class MissionService implements MissionRoleplayUseCase {
             return false;
         }
         if (mission.assignees.size() >= mission.maxAssignees) {
-            player.tell("Misiunea a atins limita de participanți.");
+            player.refuse("straja.mission.full", "straja.remedy.wait");
             return false;
         }
         var state = players.state(player.uuid());
@@ -1321,7 +1321,7 @@ public class MissionService implements MissionRoleplayUseCase {
             return;
         }
         if (mission.startAt > now()) {
-            player.tell("Misiunea poate fi acceptată de la: " + mission.startLabel + ".");
+            player.refuse("straja.mission.accept_from", "straja.remedy.fix_retry", mission.startLabel);
             return;
         }
         if (mission.dueAt <= now()) {
@@ -1397,7 +1397,7 @@ public class MissionService implements MissionRoleplayUseCase {
             return false;
         }
         if (report == null || report.isBlank()) {
-            player.tell("Scrie raportul misiunii.");
+            player.refuse("straja.mission.write_report", "straja.remedy.fix_retry");
             return false;
         }
         mission.status = "REPORTED";
@@ -1566,7 +1566,7 @@ public class MissionService implements MissionRoleplayUseCase {
             return false;
         }
         if ("PAID".equals(claim.status) || "NONE".equals(claim.status)) {
-            player.tell("Cota ta din recompensa misiunii a fost deja plătită.");
+            player.refuse("straja.mission.share_paid", "straja.remedy.retry");
             return false;
         }
         if ("PAYMENT_REVIEW".equals(claim.status) || "PAYMENT_IN_PROGRESS".equals(claim.status)) {

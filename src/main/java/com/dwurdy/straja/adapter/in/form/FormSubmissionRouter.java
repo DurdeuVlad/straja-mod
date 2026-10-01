@@ -188,8 +188,8 @@ public final class FormSubmissionRouter {
             }
             case GIVE_UP -> {
                 if (!custody.giveUp(gateway, true)) {
-                    player.sendSystemMessage(net.minecraft.network.chat.Component.translatable(
-                            "straja.give_up.stale"));
+                    player.sendSystemMessage(refusal(
+                            "straja.give_up.stale", "straja.remedy.retry"));
                 }
             }
             case INCIDENT_REPORT ->

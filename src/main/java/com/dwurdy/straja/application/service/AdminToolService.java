@@ -210,8 +210,7 @@ public class AdminToolService implements AdminToolsUseCase {
             }
         }
         if (holder.route.size() >= max) {
-            player.tell("Traseul a atins limita de " + max
-                    + " puncte. Sneak + click pe aer pentru finalizare.");
+            player.refuse("straja.admintool.route_limit", "straja.remedy.fix_retry", max);
             return;
         }
         var point = new AdminToolStore.Waypoint();
@@ -304,7 +303,7 @@ public class AdminToolService implements AdminToolsUseCase {
         }
         var missing = SetupChecklist.missingLocations(ctx.setup().read());
         if (missing.isEmpty()) {
-            player.tell("Toate locațiile administrative sunt deja configurate.");
+            player.refuse("straja.admintool.locations_done", "straja.remedy.fix_retry");
             return;
         }
         for (String locationKey : missing) {
@@ -324,11 +323,11 @@ public class AdminToolService implements AdminToolsUseCase {
         var holder = ctx.adminTools().read().holders.get(key(player));
         var target = holder == null ? null : holder.surveyTarget;
         if (target == null) {
-            player.tell("Nicio poziție de măsurare — click un bloc cu jalonul mai întâi.");
+            player.refuse("straja.admintool.no_survey", "straja.remedy.fix_retry");
             return null;
         }
         if (!player.dimension().equals(target.dimension)) {
-            player.tell("Poziția măsurată este în altă dimensiune (" + target.dimension + ").");
+            player.refuse("straja.admintool.survey_dimension", "straja.remedy.fix_retry", target.dimension);
             return null;
         }
         return target;
@@ -355,9 +354,10 @@ public class AdminToolService implements AdminToolsUseCase {
             return false;
         }
         if (!dimension.equals(holder.cellCornerA.dimension)) {
+            String cellDimension = holder.cellCornerA.dimension;
             holder.cellCornerA = null;
             ctx.adminTools().write(store);
-            player.refuse("straja.admintool.cell_dimension", "straja.remedy.fix_retry");
+            player.refuse("straja.admintool.cell_cross_dimension", "straja.remedy.fix_retry");
             return false;
         }
         var corner = new AdminToolStore.Waypoint();
@@ -378,13 +378,13 @@ public class AdminToolService implements AdminToolsUseCase {
         AdminToolStore store = ctx.adminTools().read();
         var holder = store.holders.get(key(player));
         if (holder == null || holder.cellCornerA == null || holder.cellCornerB == null) {
-            player.tell("Selectează întâi cele două colțuri ale celulei cu marcajul.");
+            player.refuse("straja.admintool.select_corners", "straja.remedy.fix_retry");
             return;
         }
         var a = holder.cellCornerA;
         var b = holder.cellCornerB;
         if (!player.dimension().equals(a.dimension)) {
-            player.tell("Celula selectată este în altă dimensiune (" + a.dimension + ").");
+            player.refuse("straja.admintool.cell_dimension", "straja.remedy.fix_retry", a.dimension);
             return;
         }
         holder.cellCornerA = null;
@@ -438,11 +438,11 @@ public class AdminToolService implements AdminToolsUseCase {
         var holder = ctx.adminTools().read().holders.get(key(player));
         var template = holder == null ? null : holder.cloneTemplate;
         if (template == null || template.role == null) {
-            player.tell("Niciun șablon capturat — click un NPC Straja mai întâi.");
+            player.refuse("straja.admintool.no_template", "straja.remedy.fix_retry");
             return null;
         }
         if (dimension != null && !dimension.equals(player.dimension())) {
-            player.tell("Poziția de clonare este în altă dimensiune (" + dimension + ").");
+            player.refuse("straja.admintool.clone_dimension", "straja.remedy.fix_retry", dimension);
             return null;
         }
         return new CloneTemplate(template.role, template.name, template.skin);
@@ -470,7 +470,7 @@ public class AdminToolService implements AdminToolsUseCase {
         AdminToolStore store = ctx.adminTools().read();
         var holder = store.holders.get(key(player));
         if (holder == null || holder.cloneTemplate == null) {
-            player.tell("Niciun șablon de șters.");
+            player.refuse("straja.admintool.nothing_to_clear", "straja.remedy.fix_retry");
             return;
         }
         holder.cloneTemplate = null;

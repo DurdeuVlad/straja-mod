@@ -67,8 +67,7 @@ public class EmergencyService implements EmergencyUseCase {
         if (!authorized(actor)) return;
         EmergencyState state = ctx.emergency().read();
         if (state.active) {
-            actor.tell("Starea de urgență este deja activă (×" + state.payMultiplier
-                    + " plată, " + state.requiredRounds + " runde obligatorii).");
+            actor.refuse("straja.emergency.already_active", "straja.remedy.fix_retry", state.payMultiplier, state.requiredRounds);
             return;
         }
         var policies = ctx.policies();

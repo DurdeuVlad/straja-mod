@@ -35,11 +35,16 @@ class RefusalConventionTest {
     private static final Path LANG = Path.of("src/main/resources/assets/straja/lang");
 
     private static final Pattern CALL = Pattern.compile(
-            "\\b(tell|tellKey|sendFailure|sendSystemMessage|refuse|refusal)\\s*\\(");
+            "\\b(tell|tellKey|sendFailure|sendSystemMessage|sendSuccess|"
+            + "displayClientMessage|sendToolPrompt|sendToolMenu|notify|"
+            + "openButtonGui|toolButton|refuse|refusal)\\s*\\(");
     private static final Pattern STRING_LIT = Pattern.compile("\"(?:[^\"\\\\]|\\\\.)*\"");
     private static final Pattern DENIAL_RE = Pattern.compile(
             "(?i)(?:^|[\\s.\"])(?:nu |doar |numai |trebuie |insuficient|dezactivat|"
-            + "rezervat|interzis|necesită|necesita|cere |offline|necunoscut)"
+            + "rezervat|interzis|necesită|necesita|cere |offline|necunoscut|"
+            + "deja|limita|epuizat|disponibil|blocat|invalid|eșuat|depășit|"
+            + "obligatoriu|decizia|expirat|niciun|nicio|prea mult|prea mic|"
+            + "alege |scrie |ține |folosește )"
             + "|maximum \\d*\\s*caractere|numărul maxim|not running");
 
     /** Post-event notifications and guidance that intentionally stay literal. */
@@ -53,7 +58,6 @@ class RefusalConventionTest {
             "poate fi tăiată doar de alt jucător",
             "nu mai există; ai rămas fără echipă",
             "nu emit",   // role-description text in the rank help block
-            "nu se plătește", // failure notification
             "Nu ai fost trimis la pușcărie", // status after hearing
             "Nu ai acte V2 emise",
             "Nu ai obligații în registrul de echipament V2",
@@ -61,20 +65,16 @@ class RefusalConventionTest {
             "nu este autoritate de arest",
             "Detașarea retrage doar rolul",
             "Mail offline",
-            "Arhivista",
             "Dosarul nu are foi",
             "au fost returnate",
             "îți cere predarea",
             "vrea să te încătușeze",
             "va fi livrată când revine",
-            "nu mai este ",
             "Ți s-a pus Sacul",
             "nu mai sunt posibile",
             "Nu te mișca",
             "doar pentru citire",
             "debitare estimată",
-            "refuzul explicit al cetățeanului",
-            "are funcția",
             "preaviz pentru",
             "Demisia este în așteptare",
             "livrat parțial",
@@ -83,13 +83,44 @@ class RefusalConventionTest {
             "s-a putut salva",
             "Instalarea NU este gata",
             "suspendă temporar",
-            "buletine",
             "h × risc",
             "activat\"\"dezactivat",
             "până la reconectare",
-            "nu s-a putut actualiza",
             "Ai fost arestat pentru",
-            "această tură cere"
+            "această tură cere",
+            // post-event notices allowed by the widened vocabulary
+            "a expirat",          // expiry notices (transport/inconștiență/resuscitare/predare)
+            "refuz",              // notices that a refusal happened (post-event, both sides)
+            "Ești încătușat de",  // status notice naming the cuffer
+            "Ești transportat de",
+            "Cheia trebuie folosită de acel gardian",
+            "Checkpoint disponibil",
+            "devine disponibil",
+            "Reîncadrarea este disponibilă",
+            "a eșuat",            // mission/payment failure notices
+            "așteaptă decizia Comisarului",
+            " rezervat.",         // issue/ledger confirmation
+            "a fost emis pentru", // warrant/BOLO issued notice
+            "a fost înregistrată", // post-action confirmations
+            "Niciun NPC Straja",  // npc list empty status
+            "acțiunile apar în funcție", // held-item usage hint
+            "Arhivista",          // archivist availability status line
+            "Destinatari salvați",
+            "eliberat complet",   // release status ternaries
+            "Nicio urgență activă",
+            "a primit decizia",   // appeal outcome notice
+            "funcția",            // capability status ternary
+            "Răspuns corect",
+            "Demisie semnată",
+            "verificarea Comisarului", // salary payout REVIEW status
+            "Semnarea demisiei se face", // info-block guidance line
+            "Instruire disponibilă",     // training status block
+            "Acumularea salariului",     // AFK salary pause notice
+            "Nu ai buletine înregistrate",
+            "registrul de buletine este gol",
+            "Acceptă",             // incoming request prompts (Alege Acceptă / Refuză)
+            "rămâne disponibil",   // post-hand-in ledger notice
+            "fișierul nu s-a putut actualiza" // config-write caveat
     );
 
     private record Call(Path file, int line, String method, List<String> args) {
@@ -325,14 +356,19 @@ class RefusalConventionTest {
                 "refusal arg/placeholder mismatches:\n" + String.join("\n", violations));
     }
 
+    /** Message channels that can carry a player-facing denial. */
+    private static final Set<String> MESSAGE_METHODS = Set.of(
+            "tell", "tellKey", "sendFailure", "sendSystemMessage", "sendSuccess",
+            "displayClientMessage", "sendToolPrompt", "sendToolMenu", "notify",
+            "openButtonGui", "toolButton");
+
     /** No bare denial text may reach players outside refuse()/refusal(). */
     @Test
     void noBareDenialText() throws IOException {
         List<String> violations = new ArrayList<>();
         JsonObject ro = lang("ro_ro");
         for (Call c : calls()) {
-            if (!List.of("tell", "tellKey", "sendFailure", "sendSystemMessage")
-                    .contains(c.method())) continue;
+            if (!MESSAGE_METHODS.contains(c.method())) continue;
             String text;
             if (c.method().equals("tellKey") && !c.args().isEmpty()) {
                 String key = literalOf(c.args().get(0));
@@ -355,6 +391,46 @@ class RefusalConventionTest {
         }
         assertTrue(violations.isEmpty(),
                 "bare denial messages:\n" + String.join("\n", violations));
+    }
+
+    /** Computed error helpers must flow through refuse(), not tell()/sendFailure(). */
+    private static final Pattern ERROR_VALUE = Pattern.compile(
+            "(?i)^\\s*[\\w$]+(?:\\.[\\w$]+)*\\s*(?:\\(\\s*\\))?\\s*$");
+    private static final Pattern ERROR_IDENT = Pattern.compile(
+            "(?i)(error|problem|denial|reason)");
+
+    private static String innerLiteral(String arg) {
+        Matcher m = Pattern.compile("Component\\s*\\.\\s*literal\\s*\\(").matcher(arg);
+        if (!m.find()) return arg;
+        int open = arg.indexOf('(', m.end() - 1);
+        int end = callEnd(arg, open);
+        return end > open ? arg.substring(open + 1, end) : arg;
+    }
+
+    @Test
+    void noComputedErrorBypass() throws IOException {
+        List<String> violations = new ArrayList<>();
+        for (Call c : calls()) {
+            if (!MESSAGE_METHODS.contains(c.method())) continue;
+            String joined = String.join(" ", c.args());
+            if (joined.contains("refusal(") || joined.contains(".refuse(")) continue;
+            for (String arg : c.args()) {
+                String inner = innerLiteral(arg).trim();
+                // flag only when the message IS the error value:
+                // a bare identifier chain (optionally a no-arg call) whose
+                // name says error/problem/denial/reason
+                if (ERROR_VALUE.matcher(inner).matches()
+                        && ERROR_IDENT.matcher(inner).find()) {
+                    String trimmed = joined.trim().replaceAll("\\s+", " ");
+                    violations.add(c.file().getFileName() + ":" + c.line()
+                            + " -> computed error value bypasses refusal convention: "
+                            + trimmed.substring(0, Math.min(90, trimmed.length())));
+                }
+            }
+        }
+        assertTrue(violations.isEmpty(),
+                "computed denial values sent via tell():\n"
+                        + String.join("\n", violations));
     }
 
     @Test

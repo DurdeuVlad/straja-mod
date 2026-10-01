@@ -92,9 +92,9 @@ public class PrisonService implements PrisonRoleplayUseCase {
         cell.maxX = Math.max(minX, maxX);
         cell.maxY = Math.max(minY, maxY);
         cell.maxZ = Math.max(minZ, maxZ);
-        var geometryError = validateCellGeometry(cell);
-        if (geometryError != null) {
-            actor.tell(geometryError);
+        var geometryErrorKey = validateCellGeometry(cell);
+        if (geometryErrorKey != null) {
+            actor.refuse(geometryErrorKey, "straja.remedy.fix_retry");
             audit.record("prison_cell_create", actor.name(), uuidOf(actor), id, "", "REFUSED", "invalid_geometry");
             return false;
         }
@@ -117,7 +117,7 @@ public class PrisonService implements PrisonRoleplayUseCase {
         if (interiorX < ctx.policies().roomMinInteriorX
                 || interiorY < ctx.policies().roomMinInteriorY
                 || interiorZ < ctx.policies().roomMinInteriorZ) {
-            return "Interiorul celulei este prea mic pentru o celulă sigură.";
+            return "straja.prison.cell_too_small";
         }
         int minX = cell.minX - 1, minY = cell.minY - 1, minZ = cell.minZ - 1;
         int maxX = cell.maxX + 1, maxY = cell.maxY + 1, maxZ = cell.maxZ + 1;
@@ -128,7 +128,7 @@ public class PrisonService implements PrisonRoleplayUseCase {
                 || maxY - minY + 1 > ctx.policies().roomMaxDimension
                 || maxZ - minZ + 1 > ctx.policies().roomMaxDimension
                 || volume > ctx.policies().roomMaxBlocks) {
-            return "Celula depășește limitele sigure de dimensiune sau volum.";
+            return "straja.prison.cell_too_large";
         }
         List<int[]> doors = new ArrayList<>();
         for (int x = minX; x <= maxX; x++) {
@@ -137,13 +137,13 @@ public class PrisonService implements PrisonRoleplayUseCase {
                     boolean boundary = x == minX || x == maxX || y == minY || y == maxY || z == minZ || z == maxZ;
                     if (!boundary) continue;
                     var block = ctx.world().blockAt(cell.dimension, x, y, z);
-                    if (block == null) return "Un bloc din zona celulei nu poate fi citit; celula nu a fost creată.";
+                    if (block == null) return "straja.prison.cell_unreadable";
                     if (block.solid()) continue;
                     if (block.door()) {
                         doors.add(new int[]{x, y, z});
                         continue;
                     }
-                    return "Pereții celulei nu sunt închiși complet.";
+                    return "straja.prison.cell_open_wall";
                 }
             }
         }
@@ -151,10 +151,10 @@ public class PrisonService implements PrisonRoleplayUseCase {
             if (doors.size() != 2 || doors.get(0)[0] != doors.get(1)[0]
                     || doors.get(0)[2] != doors.get(1)[2]
                     || Math.abs(doors.get(0)[1] - doors.get(1)[1]) != 1) {
-                return "Celula trebuie să aibă exact o ușă standard de două blocuri.";
+                return "straja.prison.cell_door";
             }
         } else if (doors.isEmpty()) {
-            return "Celula trebuie să aibă o ușă.";
+            return "straja.prison.cell_door_missing";
         }
         int[] door = doors.stream().min(Comparator.comparingInt(d -> d[1])).orElse(null);
         if (door != null) {

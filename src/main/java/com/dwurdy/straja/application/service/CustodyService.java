@@ -306,16 +306,16 @@ public class CustodyService implements CustodyRoleplayUseCase {
         }
         String targetKey = key(target);
         if (store.cuffed.containsKey(targetKey)) {
-            issuer.tell(target.name() + " este deja încătușat.");
+            issuer.refuse("straja.custody.already_cuffed", "straja.remedy.retry", target.name());
             return false;
         }
         if (store.bound.containsKey(targetKey)) {
-            issuer.tell(target.name() + " este deja legat.");
+            issuer.refuse("straja.custody.already_bound", "straja.remedy.retry", target.name());
             return false;
         }
         pruneRequests(store);
         if (hasPendingFor(store, targetKey)) {
-            issuer.tell("Ținta are deja o cerere în așteptare.");
+            issuer.refuse("straja.custody.request_pending", "straja.remedy.wait");
             return false;
         }
         var request = new CustodyStore.CuffRequest();
@@ -421,7 +421,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
         if (store.cuffed.containsKey(key(player))) {
             store.cuffRequests.remove(request.id);
             ctx.custody().write(store);
-            player.tell("Ești deja încătușat.");
+            player.refuse("straja.custody.self_cuffed", "straja.remedy.retry");
             return false;
         }
         if (!applyRecord(store, player, request.issuer, request.issuerUuid, "accepted")) {
@@ -511,7 +511,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
         }
         var store = store();
         if (store.cuffed.containsKey(key(target))) {
-            issuer.tell(target.name() + " este deja încătușat.");
+            issuer.refuse("straja.custody.already_cuffed", "straja.remedy.retry", target.name());
             return new ApplyResult(true, "already_cuffed");
         }
         if (!applyRecord(store, target, issuer.name(), uuidOf(issuer),
@@ -1228,12 +1228,12 @@ public class CustodyService implements CustodyRoleplayUseCase {
 
     public boolean releaseById(PlayerGateway issuer, String targetId) {
         if (targetId == null || targetId.isBlank()) {
-            issuer.tell("Alege persoana încătușată online.");
+            issuer.refuse("straja.custody.pick_cuffed_online", "straja.remedy.fix_retry");
             return false;
         }
         var target = ctx.server().findPlayer(targetId);
         if (target == null) {
-            issuer.tell("Alege persoana încătușată online.");
+            issuer.refuse("straja.custody.pick_cuffed_online", "straja.remedy.fix_retry");
             return false;
         }
         return release(issuer, target);
@@ -1280,7 +1280,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
 
     public boolean release(PlayerGateway issuer, PlayerGateway target) {
         if (target == null) {
-            issuer.tell("Alege persoana încătușată.");
+            issuer.refuse("straja.custody.pick_cuffed", "straja.remedy.fix_retry");
             return false;
         }
         if (sameIdentity(issuer, target)) {
@@ -1349,7 +1349,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
             return false;
         }
         if (sameIdentity(issuer, target)) {
-            issuer.tell("Alege un alt jucător.");
+            issuer.refuse("straja.custody.pick_other", "straja.remedy.fix_retry");
             return false;
         }
         double dx = issuer.x() - target.x(), dy = issuer.y() - target.y(), dz = issuer.z() - target.z();
@@ -1388,7 +1388,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
             return false;
         }
         if (target == null) {
-            actor.tell("Alege persoana încătușată.");
+            actor.refuse("straja.custody.pick_cuffed", "straja.remedy.fix_retry");
             return false;
         }
         var store = store();
@@ -1419,7 +1419,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
 
     public boolean giveCuffs(PlayerGateway player) {
         if (!canIssueCuffs(player)) {
-            player.tell("Cătușele sunt disponibile de la rangul Străjer în sus.");
+            player.refuse("straja.custody.cuffs_rank", "straja.remedy.instructor");
             return false;
         }
         if (!player.giveVerified(ItemSpec.of(CUFFS, 1))) {
@@ -1447,7 +1447,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
             return false;
         }
         if (!issuer.mainHand().id().equals(ROPE)) {
-            issuer.tell("Ține Frânghia în mâna principală.");
+            issuer.refuse("straja.custody.hold_rope", "straja.remedy.fix_retry");
             return false;
         }
         var store = store();
@@ -1455,7 +1455,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
         String targetKey = key(target);
         CustodyState state = store.states.get(targetKey);
         if (store.bound.containsKey(targetKey)) {
-            issuer.tell(target.name() + " este deja legat.");
+            issuer.refuse("straja.custody.already_bound", "straja.remedy.retry", target.name());
             return true;
         }
         if (state == null) state = newCanonicalState(target);
@@ -1534,12 +1534,12 @@ public class CustodyService implements CustodyRoleplayUseCase {
             return false;
         }
         if (!issuer.mainHand().id().equals(HEAD_SACK)) {
-            issuer.tell("Ține Sacul de Captiv în mâna principală.");
+            issuer.refuse("straja.custody.hold_bag", "straja.remedy.fix_retry");
             return false;
         }
         if (store.headSacks.containsKey(targetKey)
                 && state.vision == VisionStatus.BLINDFOLDED) {
-            issuer.tell(target.name() + " are deja sacul pe cap.");
+            issuer.refuse("straja.custody.already_bagged", "straja.remedy.retry", target.name());
             return true;
         }
         long at = now();
@@ -1934,7 +1934,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
             return false;
         }
         if (state.transport != TransportStatus.NONE) {
-            carrier.tell("Ținta este deja transportată.");
+            carrier.refuse("straja.custody.already_carried", "straja.remedy.retry");
             return false;
         }
 
@@ -2217,11 +2217,11 @@ public class CustodyService implements CustodyRoleplayUseCase {
             return new DamageDecision(DamageAction.CANCEL, "issuer_not_active_guard");
         }
         if (!players.hasCapability(issuer, Capability.USE_BATON)) {
-            issuer.tell(weapon + " de Poliție se folosește de la rangul Străjer în sus.");
+            issuer.refuse("straja.custody.weapon_rank", "straja.remedy.instructor", weapon);
             return new DamageDecision(DamageAction.CANCEL, "issuer_rank_not_authorized");
         }
         if (isCuffed(target)) {
-            issuer.refuse("straja.custody.already_cuffed", "straja.remedy.fix_retry", target.name(), weaponLower);
+            issuer.refuse("straja.custody.already_cuffed", "straja.remedy.fix_retry", target.name());
             return new DamageDecision(DamageAction.CANCEL, "already_cuffed");
         }
         if (isBound(target)) {

@@ -88,9 +88,9 @@ public class ArmoryService implements com.dwurdy.straja.application.port.in.Armo
                     player.name(), player.uuid().toString(),
                     refund.ok() ? "REFUNDED" : "FAILED",
                     key + ",delivery_failed,refund=" + (refund.ok() ? "ok" : "failed"));
-            player.tell(refund.ok()
-                    ? "Articolul nu a putut fi predat; monedele au fost returnate."
-                    : "Articolul nu a putut fi predat și returnarea monedelor a eșuat — anunță Comisaru'.");
+            player.refuse(refund.ok()
+                    ? "straja.armory.delivery_failed_refunded"
+                    : "straja.armory.delivery_failed", "straja.remedy.ask_comisar");
             return false;
         }
         audit.record("armory_buy", player.name(), player.uuid().toString(),

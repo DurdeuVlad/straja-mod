@@ -188,7 +188,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
         ArchiveStore store = ctx.archive().read();
         long owned = store.folders.values().stream().filter(f -> player.uuid().toString().equals(f.ownerUuid)).count();
         if (owned >= p().archiveMaxFoldersPerOwner) {
-            player.tell("Ai atins limita de dosare pentru acest proprietar.");
+            player.refuse("straja.archive.owner_limit", "straja.remedy.wait");
             return false;
         }
         ArchiveStore.Folder folder = new ArchiveStore.Folder();
@@ -317,7 +317,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
         }
         long count = store.sheets.values().stream().filter(s -> folder.id.equals(s.folderId) && s.originId == null).count();
         if (count >= p().archiveMaxSheetsPerFolder) {
-            player.tell("Dosarul a atins limita de foi.");
+            player.refuse("straja.archive.sheets_limit", "straja.remedy.wait");
             return false;
         }
         ArchiveStore.Sheet sheet = new ArchiveStore.Sheet();
@@ -425,7 +425,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
             return false;
         }
         if (sheet.content == null || sheet.content.isEmpty()) {
-            player.tell("Scrie conținutul înainte de semnare.");
+            player.refuse("straja.archive.write_first", "straja.remedy.fix_retry");
             return false;
         }
         sheet.status = "PENDING_SIGNATURE";
@@ -752,7 +752,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
             if (copy != null && "DOCUMENT".equals(copy.kind) && "DELIVERED".equals(copy.status)
                     && sheet.id.equals(copy.originalId)
                     && PlayerService.identityMatches(target, copy.recipientUuid, copy.recipientName)) {
-                player.tell("Documentul " + sheet.id + " i-a fost deja emis lui " + target.name() + ".");
+                player.refuse("straja.archive.already_issued", "straja.remedy.fix_retry", sheet.id, target.name());
                 return false;
             }
         }
@@ -873,7 +873,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
             return false;
         }
         if (folder.catalogIds.size() >= p().archiveMaxCatalogEntriesPerFolder) {
-            player.tell("Dosarul a atins limita de înregistrări de catalog.");
+            player.refuse("straja.archive.catalog_limit", "straja.remedy.wait");
             return false;
         }
         var entry = new ArchiveStore.CatalogEntry();

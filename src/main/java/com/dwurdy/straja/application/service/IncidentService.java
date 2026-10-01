@@ -66,7 +66,7 @@ public final class IncidentService {
         String key = uuid(citizen);
         long last = data.lastCitizenReportAt.getOrDefault(key, 0L);
         if (last > 0 && now() - last < ctx.policies().incidentCitizenReportCooldownSeconds * SECOND) {
-            citizen.tell("Ai raportat deja un incident recent. Așteaptă înainte de a trimite altul.");
+            citizen.refuse("straja.incident.rate_limited", "straja.remedy.wait");
             audit.record("incident_create", citizen.name(), key, "", "", "REFUSED", "cooldown");
             return null;
         }
@@ -76,7 +76,7 @@ public final class IncidentService {
                         && isActive(i.status))
                 .count();
         if (active >= ctx.policies().incidentMaxActiveCitizenReports) {
-            citizen.tell("Ai atins limita de incidente active raportate de tine.");
+            citizen.refuse("straja.incident.active_limit", "straja.remedy.wait");
             audit.record("incident_create", citizen.name(), key, "", "", "REFUSED", "active_limit");
             return null;
         }
@@ -101,8 +101,7 @@ public final class IncidentService {
         long last = data.lastWhistleAt.getOrDefault(key, 0L);
         long cooldown = ctx.policies().whistleCooldownSeconds * SECOND;
         if (last > 0 && now() - last < cooldown) {
-            guard.tell("Fluierul se reîncarcă. Mai așteaptă "
-                    + Math.max(1, (cooldown - (now() - last)) / SECOND) + " secunde.");
+            guard.refuse("straja.incident.whistle_cooldown", "straja.remedy.wait", Math.max(1, (cooldown - (now() - last)) / SECOND));
             audit.record("whistle", guard.name(), key, "", "", "REFUSED", "cooldown");
             return null;
         }
@@ -292,7 +291,7 @@ public final class IncidentService {
             return false;
         }
         if (!incident.leadGuardUuid.isBlank()) {
-            guard.tell("Incidentul este deja preluat de " + incident.leadGuardName + ".");
+            guard.refuse("straja.incident.already_taken", "straja.remedy.retry", incident.leadGuardName);
             return false;
         }
         incident.leadGuardUuid = uuid(guard);

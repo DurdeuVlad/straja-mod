@@ -53,7 +53,7 @@ public final class BoloService {
         }
         if (reason == null || reason.isBlank()
                 || reason.trim().length() > ctx.policies().boloMaxReasonLength) {
-            issuer.tell("Motivul BOLO este obligatoriu și are o lungime limitată.");
+            issuer.refuse("straja.bolo.reason_required", "straja.remedy.fix_retry");
             return null;
         }
         BoloAuthority requested = authority == null ? BoloAuthority.INFORMATION_ONLY : authority;
@@ -70,7 +70,7 @@ public final class BoloService {
                         && uuid(subject).equals(r.subjectUuid))
                 .count();
         if (activeForSubject >= ctx.policies().boloMaxActivePerSubject) {
-            issuer.tell("Subiectul are deja prea multe BOLO-uri active.");
+            issuer.refuse("straja.bolo.too_many", "straja.remedy.wait");
             return null;
         }
         BoloRecord record = new BoloRecord();
