@@ -187,6 +187,7 @@ jobs:
             python3 tools/ci/publish.py github --repo "$GITHUB_REPOSITORY" \
               --tag "$TAG" --name "Straja ${TAG#v}" --notes "$NOTES" \
               --commit "${{ steps.tag.outputs.commit }}" --latest \
+              --generate-notes \
               --files straja-*.jar promoted/*.sha256 promoted/*.sha512 \
                 promoted/release-manifest.json promoted/sbom.json \
                 promoted/publication-ledger.json publication-ledger.json \
