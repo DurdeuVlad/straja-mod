@@ -36,6 +36,10 @@ public class ConsolePlayerGateway implements PlayerGateway {
     @Override public double absorption() { return 0; }
     @Override public void setHealth(double value) {}
     @Override public void tell(String text) { source.sendSystemMessage(Component.literal(text)); }
+    @Override public void refuse(String reasonKey, String remedyKey, Object... reasonArgs) {
+        source.sendSystemMessage(com.dwurdy.straja.adapter.in.StrajaText
+                .refusal(reasonKey, remedyKey, reasonArgs));
+    }
     @Override public boolean give(ItemSpec item) { return false; }
     @Override public boolean giveVerified(ItemSpec item) { return false; }
 
