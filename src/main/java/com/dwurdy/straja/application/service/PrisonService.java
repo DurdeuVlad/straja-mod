@@ -981,10 +981,14 @@ public class PrisonService implements PrisonRoleplayUseCase {
                 continue;
             }
             // LAW-006: camp prisoners enforce the camp perimeter instead of a
-            // cell box — same breach semantics, a different box.
-            var camp = rec != null && rec.status == PrisonerStatus.IN_CAMP
-                    && rec.assignedCampId != null && !rec.assignedCampId.isBlank()
-                    && camps != null ? camps.camp(rec.assignedCampId) : null;
+            // cell box — same breach semantics, a different box. ESCORTED is
+            // included: a camp prisoner whose escorting officer vanished is
+            // loose outside the wire, which is an escape, not a free pass.
+            var camp = rec != null && rec.assignedCampId != null
+                    && !rec.assignedCampId.isBlank() && camps != null
+                    && (rec.status == PrisonerStatus.IN_CAMP
+                            || rec.status == PrisonerStatus.ESCORTED)
+                    ? camps.camp(rec.assignedCampId) : null;
             boolean insideBounds;
             if (camp != null && camp.boundary != null) {
                 var b = camp.boundary;
