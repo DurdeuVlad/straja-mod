@@ -160,7 +160,7 @@
   "straja.cmd.runtime_down": "Straja nu este pornită.",
   "straja.cmd.settlement_unknown": "Decontare necunoscută.",
   "straja.cmd.unknown_target": "Jucător offline sau necunoscut.",
-  "straja.checkpoint.arrest_sub": "Marfa ilegală a fost confiscată; ești dus la celulă.",
+  "straja.checkpoint.arrest_sub": "Ești dus la celulă; bagajul rămâne dovedit în registrul de control.",
   "straja.checkpoint.arrest_title": "EȘTI SUB AREST",
   "straja.checkpoint.banned_sub": "Ești interzis la acest punct de control.",
   "straja.checkpoint.board_ok": "Îmbarcare verificată — control curat. Valabil %s minute la punctul de frontieră legat.",

@@ -160,7 +160,7 @@
   "straja.cmd.runtime_down": "Straja is not running.",
   "straja.cmd.settlement_unknown": "Unknown settlement.",
   "straja.cmd.unknown_target": "Player offline or unknown.",
-  "straja.checkpoint.arrest_sub": "Illegal goods were confiscated; you are being taken to a cell.",
+  "straja.checkpoint.arrest_sub": "You are being taken to a cell; your luggage is evidenced in the inspection ledger.",
   "straja.checkpoint.arrest_title": "UNDER ARREST",
   "straja.checkpoint.banned_sub": "You are banned at this checkpoint.",
   "straja.checkpoint.board_ok": "Boarding verified — clean check. Valid %s minutes at the linked frontier post.",

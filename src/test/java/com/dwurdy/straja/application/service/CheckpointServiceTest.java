@@ -362,10 +362,29 @@ class CheckpointServiceTest {
 
         move(5, 60, -20); // 15 blocks — step over the guard, position seeds anyway
         move(500, 60, 500); // teleport — not a walking crossing
-        move(5, 60, 5);   // teleports straight into stage1 — step > 14 also ignored
+        move(5, 60, -20); // teleport back outside — lands outside any box, ignored
 
         assertTrue(ledger().isEmpty());
         assertFalse(inCell());
+    }
+
+    @Test
+    void teleportIntoArrestZoneIsContained() {
+        // Edge-triggered entry treats teleporting into stage2 as an entry —
+        // pearl/jump exploits can't bypass the arrest line.
+        var site = site("border", CheckpointMode.ARREST);
+        site.stage2 = LawBounds.of(DIM, 0, 55, 0, 10, 65, 10);
+        save(site);
+        globalBan("minecraft:tnt");
+        carry("minecraft:tnt", 1);
+
+        move(500, 60, 500); // teleport far away — prev seeds there
+        move(5, 60, 5);     // teleport straight into the arrest box
+
+        var entry = lastEntry();
+        assertNotNull(entry);
+        assertEquals(CrossingOutcome.ARREST, entry.outcome);
+        assertTrue(inCell());
     }
 
     // ------------------------------------------------------------ boarding
@@ -423,16 +442,52 @@ class CheckpointServiceTest {
         globalBan("minecraft:tnt");
         carry("minecraft:tnt", 1);
 
+        // Ops are NOT exempt — the prototype scanned survival ops too.
         player.op = true;
         move(5, 60, 5);
-        assertTrue(ledger().isEmpty());
+        assertEquals(1, ledger().size());
+        assertEquals(CrossingOutcome.WARN, lastEntry().outcome);
 
+        // Site-local exemption (by name) skips evaluation.
+        var exempt = server.add("vip");
+        var store = ctx.lawCheckpoints().read();
+        store.checkpoint("border").exemptions.add(exempt.name);
+        ctx.lawCheckpoints().write(store);
+        scan();
+        exempt.x = 5; exempt.y = 60; exempt.z = -5;
+        deepScan.inventories.put(exempt.uuid,
+                List.of(new SnapshotItem("main:0", "minecraft:tnt", 1, "", "")));
+        scan(); // seeds prev
+        exempt.z = 5;
+        scan();
+        assertEquals(1, ledger().size()); // still only the op's WARN
+
+        // Creative is never policed.
         player.op = false;
         player.gameMode = "creative";
         player.x = 5; player.y = 60; player.z = -5;
-        scan(); // new prev
+        scan();
         move(5, 60, 5);
-        assertTrue(ledger().isEmpty());
+        assertEquals(1, ledger().size());
+    }
+
+    @Test
+    void prisonDisabledRepelsInsteadOfPhantomCustody() {
+        var site = site("border", CheckpointMode.ARREST);
+        site.stage2 = LawBounds.of(DIM, 0, 55, 0, 10, 65, 10);
+        save(site);
+        globalBan("minecraft:tnt");
+        carry("minecraft:tnt", 1);
+        ctx.policies().prisonEnabled = false;
+
+        move(5, 60, 5);
+
+        var entry = lastEntry();
+        assertEquals(CrossingOutcome.DENY, entry.outcome);
+        assertEquals("arest indisponibil — prison oprit", entry.detail);
+        assertFalse(inCell()); // no phantom IN_CELL booking
+        assertNull(prison.activeSentence(player));
+        assertEquals(-10, player.z, 1e-6); // repelled to the deny point
     }
 
     @Test

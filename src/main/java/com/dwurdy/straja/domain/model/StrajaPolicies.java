@@ -369,7 +369,7 @@ public class StrajaPolicies {
     public double laborFreedomFineMultiplier = 2.0;
 
     // inspection ledger retention (oldest trimmed; 0 = keep all).
-    public int inspectionLedgerLimit = 20000;
+    public int inspectionLedgerLimit = 2000; // prototype parity — entries embed full SNBT snapshots
 
     // Straja Storage — protected-zone watch + deposit routing. Watched items
     // are valued in abstract units; the defaults mirror the legacy gold table

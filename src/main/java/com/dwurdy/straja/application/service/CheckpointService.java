@@ -39,6 +39,9 @@ public final class CheckpointService {
     private final BoloService bolos;
 
     private final Map<UUID, PrevPos> prevPositions = new ConcurrentHashMap<>();
+    // Deliberate deviation: stamps are session-scoped, not persisted like the
+    // prototype's cpBoard persistentData — a relog forces a fresh dock check
+    // rather than trusting a 20-minute window across disconnects.
     private final Map<UUID, BoardingStamp> boardStamps = new ConcurrentHashMap<>();
 
     private record PrevPos(String dim, double x, double y, double z) {}
@@ -78,62 +81,85 @@ public final class CheckpointService {
     private void scanPlayer(PlayerGateway p, LawCheckpointStore store) {
         String dim = p.dimension();
         double x = p.x(), y = p.y(), z = p.z();
-        PrevPos prev = prevPositions.put(p.uuid(), new PrevPos(dim, x, y, z));
+        PrevPos prev = prevPositions.get(p.uuid());
+
+        // Boarding is position-state, not a crossing: a rider inside the dock
+        // zone is checked even on first sighting (prototype cpBoardScan had no
+        // prev dependency). An arrest here mutates position — stop scanning.
+        for (var site : store.checkpoints().values()) {
+            if (site == null || !site.active || isExempt(p, site, store)) continue;
+            if (site.boardZone != null && p.ridingBoatLike()
+                    && site.boardZone.contains(dim, x, y, z)
+                    && boardCheck(p, site, store)) {
+                reseed(p);
+                return;
+            }
+        }
+
+        prevPositions.put(p.uuid(), new PrevPos(dim, x, y, z));
         if (prev == null || !prev.dim().equals(dim)) return;
         String gm = p.gameModeName();
         if (!"survival".equals(gm) && !"adventure".equals(gm)) return;
 
+        double mx = x - prev.x(), mz = z - prev.z();
+        if (mx == 0 && mz == 0 && y == prev.y()) return;            // no movement
+        boolean bigStep = mx * mx + mz * mz > MAX_STEP * MAX_STEP;  // teleport jump
+
         for (var site : store.checkpoints().values()) {
             if (site == null || !site.active || isExempt(p, site, store)) continue;
 
-            // Boarding: a rider inside the dock zone is checked on the spot so
-            // they can't skip the land-side checkpoint mid-route.
-            if (site.boardZone != null && p.ridingBoatLike()
-                    && site.boardZone.contains(dim, x, y, z)) {
-                boardCheck(p, site, store);
-            }
-
-            double mx = x - prev.x(), mz = z - prev.z();
-            if (mx == 0 && mz == 0 && y == prev.y()) continue;      // no movement
-            if (mx * mx + mz * mz > MAX_STEP * MAX_STEP) continue;  // teleport — not a walking crossing
-
-            boolean hit = false;
-            for (GateLane lane : site.gates) {
-                if (!lane.dimension().equals(dim)) continue;
-                if (!lane.near(prev.x(), prev.z(), x, z, GATE_MARGIN)
-                        || !lane.crosses(prev.x(), prev.z(), x, z)) continue;
-                hit = true;
-                if (lane.wrongWay(prev.x(), prev.z())) {
-                    gateDeny(p, site, prev);
-                } else if (site.linkedCheckpointId != null && !site.linkedCheckpointId.isBlank()) {
-                    rightWayArrival(p, site, store);
+            // Gate lanes only evaluate walking crossings — a teleport step is
+            // not a "walked through the gate" event. Stage boxes still run:
+            // entering an arrest box by teleport is still an entry.
+            if (!bigStep) {
+                for (GateLane lane : site.gates) {
+                    if (!lane.dimension().equals(dim)) continue;
+                    if (!lane.near(prev.x(), prev.z(), x, z, GATE_MARGIN)
+                            || !lane.crosses(prev.x(), prev.z(), x, z)) continue;
+                    if (lane.sideOf(prev.x(), prev.z()) == 0) break; // ambiguous origin — ignore
+                    if (lane.wrongWay(prev.x(), prev.z())) {
+                        gateDeny(p, site, prev);
+                        reseed(p);
+                        return;
+                    }
+                    if (site.linkedCheckpointId != null && !site.linkedCheckpointId.isBlank()
+                            && rightWayArrival(p, site, store)) {
+                        reseed(p);
+                        return;
+                    }
+                    break;
                 }
-                break;
             }
-            if (hit) break;
-            handleStages(p, site, store, prev, x, y, z);
+            if (handleStages(p, site, store, prev, x, y, z)) {
+                reseed(p); // arrested/pushed back — re-seed at the post-effect position
+                return;
+            }
         }
+    }
+
+    /** Re-seeds prev-position at the player's actual (post-teleport) spot. */
+    private void reseed(PlayerGateway p) {
+        prevPositions.put(p.uuid(), new PrevPos(p.dimension(), p.x(), p.y(), p.z()));
     }
 
     // ------------------------------------------------------------ stages
 
-    private void handleStages(PlayerGateway p, LawCheckpointRecord site,
-                              LawCheckpointStore store, PrevPos prev, double x, double y, double z) {
+    /** Returns true when the stage pipeline arrested or pushed the player back. */
+    private boolean handleStages(PlayerGateway p, LawCheckpointRecord site,
+                                 LawCheckpointStore store, PrevPos prev, double x, double y, double z) {
         String dim = p.dimension();
         if (site.direction != CrossingDirection.BIDIRECTIONAL) {
             CrossingDirection dir = directionOf(site, prev, dim);
-            if (dir != null && dir != site.direction) return; // unpoliced direction
+            if (dir != null && dir != site.direction) return false; // unpoliced direction
         }
         boolean entered1 = entered(site.stage1, dim, prev, x, y, z);
         boolean entered2 = entered(site.stage2, dim, prev, x, y, z);
-        if (!entered1 && !entered2) return;
+        if (!entered1 && !entered2) return false;
         if (site.mode == com.dwurdy.straja.domain.model.CheckpointMode.DENY) {
-            denyStage(p, site, store, dir(site, prev, dim));
-        } else if (entered2) {
-            arrestStage2(p, site, store, dir(site, prev, dim));
-        } else {
-            inspect(p, site, store, dir(site, prev, dim));
+            return denyStage(p, site, store, dir(site, prev, dim));
         }
+        return entered2 ? arrestStage2(p, site, store, dir(site, prev, dim))
+                        : inspect(p, site, store, dir(site, prev, dim));
     }
 
     private static boolean entered(com.dwurdy.straja.domain.model.LawBounds bounds,
@@ -162,29 +188,29 @@ public final class CheckpointService {
     // ------------------------------------------------------------ pipelines (prototype order preserved)
 
     /** Stage 1 — banned push back, custody/hunted arrest on sight, contraband warns, clean pass. */
-    private void inspect(PlayerGateway p, LawCheckpointRecord site,
-                         LawCheckpointStore store, CrossingDirection dir) {
+    private boolean inspect(PlayerGateway p, LawCheckpointRecord site,
+                            LawCheckpointStore store, CrossingDirection dir) {
         List<SnapshotItem> snapshot = ctx.deepScan().deepScan(p.uuid());
         List<String> found = contraband(snapshot, site, store);
         if (isBanned(p, site, store)) {
             p.title("straja.checkpoint.deny_title", "straja.checkpoint.banned_sub");
             pushback(p, site);
             ledger(site, p, dir, CrossingOutcome.DENY, snapshot, found, "interzis (ban)");
-            return;
+            return true;
         }
         if (inCustody(p)) {
-            arrest(p, site, "fugitiv prins la punctul de control", snapshot, found);
-            return;
+            arrest(p, site, "fugitiv prins la punctul de control", snapshot, found, dir);
+            return true;
         }
         if (isHunted(p)) {
             // AT6: wanted on-sight at ANY arresting gate — clean pockets don't protect.
-            arrest(p, site, "vânat de Straja prins la frontieră", snapshot, found);
-            return;
+            arrest(p, site, "vânat de Straja prins la frontieră", snapshot, found, dir);
+            return true;
         }
         if (found.isEmpty()) {
             ledger(site, p, dir, CrossingOutcome.PASS, snapshot, found, "curat");
             p.tellKey("straja.checkpoint.clean");
-            return;
+            return false;
         }
         ledger(site, p, dir, CrossingOutcome.WARN, snapshot, found, "contraband la etapa 1");
         p.title("straja.checkpoint.warn_title", "straja.checkpoint.warn_sub");
@@ -192,11 +218,12 @@ public final class CheckpointService {
         p.tellKey("straja.checkpoint.contraband_header");
         for (String line : found) p.tell("§7- §f" + line);
         p.tellKey("straja.checkpoint.contraband_footer");
+        return false;
     }
 
     /** Stage 2 — arrest assessment: custody > hunted > banned > contraband; clean logs 'out'. */
-    private void arrestStage2(PlayerGateway p, LawCheckpointRecord site,
-                              LawCheckpointStore store, CrossingDirection dir) {
+    private boolean arrestStage2(PlayerGateway p, LawCheckpointRecord site,
+                                 LawCheckpointStore store, CrossingDirection dir) {
         List<SnapshotItem> snapshot = ctx.deepScan().deepScan(p.uuid());
         List<String> found = contraband(snapshot, site, store);
         boolean banned = isBanned(p, site, store);
@@ -204,18 +231,18 @@ public final class CheckpointService {
         boolean hunted = isHunted(p);
         if (!banned && !jailed && !hunted && found.isEmpty()) {
             ledger(site, p, dir, CrossingOutcome.PASS, snapshot, found, "curat — a trecut frontiera");
-            return;
+            return false;
         }
         String reason = jailed ? "fugitiv prins la punctul de control"
                 : hunted ? "vânat de Straja prins la frontieră"
                 : banned ? "interdicție la punctul de control (ban activ)"
                 : "marfă interzisă la frontieră";
-        arrest(p, site, reason, snapshot, found);
+        return arrest(p, site, reason, snapshot, found, dir);
     }
 
     /** DENY-mode stage entry — violators repelled (wanted logged as sighting), clean pass. */
-    private void denyStage(PlayerGateway p, LawCheckpointRecord site,
-                           LawCheckpointStore store, CrossingDirection dir) {
+    private boolean denyStage(PlayerGateway p, LawCheckpointRecord site,
+                              LawCheckpointStore store, CrossingDirection dir) {
         List<SnapshotItem> snapshot = ctx.deepScan().deepScan(p.uuid());
         List<String> found = contraband(snapshot, site, store);
         String violation = null;
@@ -225,16 +252,17 @@ public final class CheckpointService {
         else if (isHunted(p)) violation = "vânat reperat la poartă";
         if (violation == null) {
             ledger(site, p, dir, CrossingOutcome.PASS, snapshot, found, "curat");
-            return;
+            return false;
         }
         p.title("straja.checkpoint.deny_title", "straja.checkpoint.deny_sub");
         pushback(p, site);
         ledger(site, p, dir, CrossingOutcome.DENY, snapshot, found, violation);
+        return true;
     }
 
     /** Wrong-way lane crossing — back to the position they crossed FROM, never to 'from'. */
     private void gateDeny(PlayerGateway p, LawCheckpointRecord site, PrevPos prev) {
-        p.teleport(site.dimension, prev.x(), prev.y(), prev.z());
+        p.teleport(prev.dim(), prev.x(), prev.y(), prev.z());
         closeDoors(site);
         p.tellKey("straja.checkpoint.wrongway");
         playSound(p, DENY_SOUND);
@@ -245,7 +273,7 @@ public final class CheckpointService {
     }
 
     /** Right-way arrival at a linked gate: boarding stamp consumed, else full assessment. */
-    private void rightWayArrival(PlayerGateway p, LawCheckpointRecord site, LawCheckpointStore store) {
+    private boolean rightWayArrival(PlayerGateway p, LawCheckpointRecord site, LawCheckpointStore store) {
         BoardingStamp stamp = boardStamps.get(p.uuid());
         long now = ctx.clock().nowMillis();
         if (stamp != null && stamp.expiresAt() > now && stamp.siteId().equals(site.linkedCheckpointId)) {
@@ -254,72 +282,80 @@ public final class CheckpointService {
                     ctx.deepScan().deepScan(p.uuid()), List.of(),
                     "controlat la îmbarcare (" + stamp.siteId() + ")");
             p.tellKey("straja.checkpoint.stamp_ok", site.linkedCheckpointId);
-            return;
+            return false;
         }
-        gateArrive(p, site, store);
+        return gateArrive(p, site, store);
     }
 
     /** Arrival without a stamp: banned pushed back, custody/hunted/contraband arrested. */
-    private void gateArrive(PlayerGateway p, LawCheckpointRecord site, LawCheckpointStore store) {
+    private boolean gateArrive(PlayerGateway p, LawCheckpointRecord site, LawCheckpointStore store) {
         List<SnapshotItem> snapshot = ctx.deepScan().deepScan(p.uuid());
-        List<SnapshotItem> dummy = snapshot;
-        List<String> found = contraband(dummy, site, store);
+        List<String> found = contraband(snapshot, site, store);
         if (isBanned(p, site, store)) {
             p.title("straja.checkpoint.deny_title", "straja.checkpoint.banned_sub");
             pushback(p, site);
             ledger(site, p, CrossingDirection.OUTGOING, CrossingOutcome.DENY,
                     snapshot, found, "interzis (ban)");
-            return;
+            return true;
         }
         if (inCustody(p)) {
-            arrest(p, site, "fugitiv prins la punctul de control", snapshot, found);
-            return;
+            return arrest(p, site, "fugitiv prins la punctul de control",
+                    snapshot, found, CrossingDirection.OUTGOING);
         }
         if (isHunted(p)) {
-            arrest(p, site, "vânat de Straja prins la frontieră", snapshot, found);
-            return;
+            return arrest(p, site, "vânat de Straja prins la frontieră",
+                    snapshot, found, CrossingDirection.OUTGOING);
         }
         if (!found.isEmpty()) {
-            arrest(p, site, "marfă interzisă — control ocolit la îmbarcare", snapshot, found);
-            return;
+            return arrest(p, site, "marfă interzisă — control ocolit la îmbarcare",
+                    snapshot, found, CrossingDirection.OUTGOING);
         }
         ledger(site, p, CrossingDirection.OUTGOING, CrossingOutcome.PASS,
                 snapshot, found, "curat — trecere fără îmbarcare");
+        return false;
     }
 
-    /** Dock-side check for boat/raft riders inside a boarding zone. */
-    private void boardCheck(PlayerGateway p, LawCheckpointRecord site, LawCheckpointStore store) {
+    /** Dock-side check for boat/raft riders. Returns true when it arrested the rider. */
+    private boolean boardCheck(PlayerGateway p, LawCheckpointRecord site, LawCheckpointStore store) {
         BoardingStamp stamp = boardStamps.get(p.uuid());
-        if (stamp != null && stamp.expiresAt() > ctx.clock().nowMillis()) return;
+        if (stamp != null && stamp.expiresAt() > ctx.clock().nowMillis()) return false;
         List<SnapshotItem> snapshot = ctx.deepScan().deepScan(p.uuid());
         List<String> found = contraband(snapshot, site, store);
-        if (!found.isEmpty() || isBanned(p, site, store) || inCustody(p) || isHunted(p)) {
-            String reason = inCustody(p) ? "fugitiv la îmbarcare"
-                    : isBanned(p, site, store) ? "interzis la îmbarcare (ban activ)"
-                    : isHunted(p) ? "vânat la îmbarcare"
+        boolean jailed = inCustody(p);
+        boolean banned = isBanned(p, site, store);
+        boolean hunted = isHunted(p);
+        if (!found.isEmpty() || banned || jailed || hunted) {
+            String reason = jailed ? "fugitiv la îmbarcare"
+                    : banned ? "interzis la îmbarcare (ban activ)"
+                    : hunted ? "vânat la îmbarcare"
                     : "marfă interzisă la îmbarcare";
-            arrest(p, site, reason, snapshot, found);
-            return;
+            return arrest(p, site, reason, snapshot, found, CrossingDirection.INCOMING);
         }
         boardStamps.put(p.uuid(), new BoardingStamp(site.id, ctx.clock().nowMillis() + BOARD_STAMP_MS));
         p.tellKey("straja.checkpoint.board_ok", BOARD_STAMP_MS / 60000);
         ledger(site, p, CrossingDirection.INCOMING, CrossingOutcome.PASS,
                 snapshot, found, "boarded curat");
+        return false;
     }
 
     // ------------------------------------------------------------ decisions
 
+    /** Exempt lists hold names or UUIDs (prototype parity: ops are scanned like anyone). */
     private boolean isExempt(PlayerGateway p, LawCheckpointRecord site, LawCheckpointStore store) {
         String name = p.name();
-        return p.isOp()
-                || containsIgnoreCase(site.exemptions, name)
-                || containsIgnoreCase(store.globalExemptions(), name);
+        String uuid = p.uuid().toString();
+        return containsIgnoreCase(site.exemptions, name)
+                || containsIgnoreCase(site.exemptions, uuid)
+                || containsIgnoreCase(store.globalExemptions(), name)
+                || containsIgnoreCase(store.globalExemptions(), uuid);
     }
 
+    /** Ban lists hold names or UUIDs; legacy name-only bans still apply. */
     private boolean isBanned(PlayerGateway p, LawCheckpointRecord site, LawCheckpointStore store) {
         String name = p.name();
         String uuid = p.uuid().toString();
         return containsIgnoreCase(store.globalBans(), name)
+                || containsIgnoreCase(store.globalBans(), uuid)
                 || containsIgnoreCase(site.bannedPlayerUuids, name)
                 || containsIgnoreCase(site.bannedPlayerUuids, uuid)
                 || containsIgnoreCase(site.legacyBannedNames, name);
@@ -366,8 +402,24 @@ public final class CheckpointService {
 
     // ------------------------------------------------------------ arrest & deny effects
 
-    private void arrest(PlayerGateway p, LawCheckpointRecord site, String reason,
-                        List<SnapshotItem> snapshot, List<String> found) {
+    /**
+     * Arrest pipeline: the prison sentence is the custody source of truth —
+     * when custody is unavailable ({@code prisonEnabled} off) the player is
+     * repelled instead of booked, so the register never claims IN_CELL for
+     * someone still walking free. The ledger snapshot was captured before
+     * any mutation by the caller.
+     */
+    private boolean arrest(PlayerGateway p, LawCheckpointRecord site, String reason,
+                           List<SnapshotItem> snapshot, List<String> found,
+                           CrossingDirection dir) {
+        var sentence = prison.arrest(p, null, 0, null, "checkpoint:" + site.id);
+        if (sentence == null) {
+            p.title("straja.checkpoint.deny_title", "straja.checkpoint.deny_sub");
+            pushback(p, site);
+            ledger(site, p, dir, CrossingOutcome.DENY, snapshot, found,
+                    "arest indisponibil — prison oprit");
+            return true;
+        }
         String uuid = p.uuid().toString();
         long now = ctx.clock().nowMillis();
         var reg = ctx.prisonerRegister().read();
@@ -389,13 +441,12 @@ public final class CheckpointService {
         // Custody consumes the hunt: thief flag + active BOLOs clear (AT6).
         storage.onArrested(p.uuid());
         bolos.clearFor(p.uuid());
-        prison.arrest(p, null, 0, null, "checkpoint:" + site.id);
 
-        ledger(site, p, CrossingDirection.INCOMING, CrossingOutcome.ARREST,
-                snapshot, found, reason);
+        ledger(site, p, dir, CrossingOutcome.ARREST, snapshot, found, reason);
         audit.record("checkpoint_arrest", "checkpoint", "", p.name(), uuid, "ARREST", reason);
         p.title("straja.checkpoint.arrest_title", "straja.checkpoint.arrest_sub");
         playSound(p, DENY_SOUND);
+        return true;
     }
 
     private void pushback(PlayerGateway p, LawCheckpointRecord site) {

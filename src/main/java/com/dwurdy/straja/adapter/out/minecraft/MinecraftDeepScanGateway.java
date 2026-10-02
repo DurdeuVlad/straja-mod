@@ -47,7 +47,33 @@ public final class MinecraftDeepScanGateway implements DeepScanGateway {
         for (int i = 0; i < inv.getContainerSize(); i++) {
             scan(inv.getItem(i), slotLabel(i), 0, out);
         }
+        scanCurios(player, out);
         return out;
+    }
+
+    /**
+     * Optional Curios support (prototype cpScanContraband scanned equipped
+     * Curios slots). Purely reflective — Curios is not a compile dependency;
+     * any failure just means "no extra slots".
+     */
+    private void scanCurios(ServerPlayer player, List<SnapshotItem> out) {
+        try {
+            if (!net.neoforged.fml.ModList.get().isLoaded("curios")) return;
+            var api = Class.forName("top.theillusivec4.curios.api.CuriosApi");
+            Object opt = api.getMethod("getCuriosInventory",
+                    net.minecraft.world.entity.LivingEntity.class).invoke(null, player);
+            if (!(opt instanceof java.util.Optional<?> present) || present.isEmpty()) return;
+            Object equipped = present.get().getClass()
+                    .getMethod("getEquippedCurios").invoke(present.get());
+            int slots = (int) equipped.getClass().getMethod("getSlots").invoke(equipped);
+            for (int i = 0; i < slots; i++) {
+                Object stack = equipped.getClass()
+                        .getMethod("getStackInSlot", int.class).invoke(equipped, i);
+                if (stack instanceof ItemStack s) scan(s, "curios:" + i, 0, out);
+            }
+        } catch (Throwable ignored) {
+            // Curios absent or API drift — vanilla scan already covered the player
+        }
     }
 
     private static String slotLabel(int index) {

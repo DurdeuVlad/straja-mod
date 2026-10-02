@@ -24,8 +24,8 @@ public class PrisonService implements PrisonRoleplayUseCase {
     private final PlayerService players;
     private final AuditService audit;
     private final CustodyRoleplayUseCase custody;
-    private Consumer<Sentence> arrestHook = sentence -> {};
-    private BiConsumer<Sentence, String> sentenceCompletedHook = (sentence, reason) -> {};
+    private final java.util.List<Consumer<Sentence>> arrestHooks = new java.util.ArrayList<>();
+    private final java.util.List<BiConsumer<Sentence, String>> sentenceCompletedHooks = new java.util.ArrayList<>();
     private long lastTickMs;
 
     public PrisonService(StrajaContext ctx, PlayerService players, AuditService audit,
@@ -37,11 +37,11 @@ public class PrisonService implements PrisonRoleplayUseCase {
     }
 
     public void onArrest(Consumer<Sentence> hook) {
-        this.arrestHook = hook == null ? sentence -> {} : hook;
+        if (hook != null) arrestHooks.add(hook);
     }
 
     public void onSentenceCompleted(BiConsumer<Sentence, String> hook) {
-        this.sentenceCompletedHook = hook == null ? (sentence, reason) -> {} : hook;
+        if (hook != null) sentenceCompletedHooks.add(hook);
     }
 
     private long now() { return ctx.clock().nowMillis(); }
@@ -294,7 +294,7 @@ public class PrisonService implements PrisonRoleplayUseCase {
             data.waitlist.add(entry);
         }
         ctx.prison().write(data);
-        arrestHook.accept(sentence);
+        for (var hook : arrestHooks) hook.accept(sentence);
         var online = findFor(sentence);
         if (online != null && !sentence.cellId.isEmpty()) {
             if (custody.enterJail(online, "prison")) {
@@ -350,7 +350,9 @@ public class PrisonService implements PrisonRoleplayUseCase {
         sentence.status = "FORCED_RELEASE".equals(reason) ? "FORCED_RELEASE" : "SERVED";
         sentence.servedAt = now();
         sentence.releaseReason = reason == null ? "SERVED" : reason;
-        if ("SERVED".equals(sentence.status)) sentenceCompletedHook.accept(sentence, sentence.releaseReason);
+        if ("SERVED".equals(sentence.status)) {
+            for (var hook : sentenceCompletedHooks) hook.accept(sentence, sentence.releaseReason);
+        }
         if (!sentence.cellId.isEmpty()) data.assignments.remove(sentence.cellId);
         if (target != null) {
             teleportToRelease(target);

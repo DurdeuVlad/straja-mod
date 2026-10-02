@@ -268,6 +268,15 @@ public final class StrajaEvents {
     }
 
     @SubscribeEvent
+    public void onRespawn(PlayerEvent.PlayerRespawnEvent event) {
+        StrajaRuntime runtime = StrajaRuntime.get();
+        if (runtime == null || !(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) return;
+        // Respawn moves the player without a walking crossing — stale prev
+        // position would otherwise evaluate the death→spawn jump.
+        runtime.checkpoints().clearPlayer(player.getUUID());
+    }
+
+    @SubscribeEvent
     public void onChangedDimension(PlayerEvent.PlayerChangedDimensionEvent event) {
         StrajaRuntime runtime = StrajaRuntime.get();
         if (runtime == null || !(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) return;
