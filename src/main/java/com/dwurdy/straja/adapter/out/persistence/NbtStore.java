@@ -11,7 +11,10 @@ public final class NbtStore implements KeyValueStore {
     }
 
     @Override public String get(String key) {
-        return store.data().getString(key);
+        // CompoundTag.getString returns "" for absent keys; the chunked
+        // payload contract (getChunked) requires null to fall through to
+        // the part-list read, so presence must be checked explicitly.
+        return store.data().contains(key) ? store.data().getString(key) : null;
     }
 
     @Override public void put(String key, String value) {

@@ -173,6 +173,11 @@ public final class StrajaRuntime {
                 new SavedStores.ArrestRecords(stores),
                 new SavedStores.Reputation(stores),
                 new SavedStores.Storage(stores),
+                new SavedStores.LawCheckpoints(stores),
+                new SavedStores.InspectionLedger(stores),
+                new SavedStores.PrisonerRegister(stores),
+                new SavedStores.LaborCamps(stores),
+                new SavedStores.MerchantDesks(stores),
                 new com.dwurdy.straja.adapter.out.minecraft.MinecraftContainerGateway(server),
                 com.dwurdy.straja.adapter.out.npc.customnpcs.CustomNpcsGuardGateway.create(server));
 

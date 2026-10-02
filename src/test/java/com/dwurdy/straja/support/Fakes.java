@@ -520,6 +520,11 @@ public final class Fakes {
                 new SavedStores.ArrestRecords(access),
                 new SavedStores.Reputation(access),
                 new SavedStores.Storage(access),
+                new SavedStores.LawCheckpoints(access),
+                new SavedStores.InspectionLedger(access),
+                new SavedStores.PrisonerRegister(access),
+                new SavedStores.LaborCamps(access),
+                new SavedStores.MerchantDesks(access),
                 new TestContainers(),
                 new TestNpcGuards());
     }

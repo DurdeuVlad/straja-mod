@@ -337,13 +337,39 @@ public class StrajaPolicies {
     // trainer
     public String trainingManualItem = "straja:training_manual";
 
-    // coins — 64:1 ladder per docs/gameplay-decisions.md §10:
-    // Bronze → Brass → Silver → Gold. Values are Bronze-equivalents.
+    // coins — tierRatio ladder (default 64:1 per docs/gameplay-decisions.md §10).
+    // Bronze → Brass → Silver → Gold. Values are Bronze-equivalents; a custom
+    // tierRatio shifts every denomination's key.
+    public int coinTierRatio = 64;
     public Map<Integer, String> coinItemIds = new LinkedHashMap<>(Map.of(
             1, "adys_decorations:bronze_coin",
             64, "adys_decorations:brass_coin",
             4096, "adys_decorations:silver_coin",
             262144, "adys_decorations:gold_coin"));
+
+    /**
+     * Resolves the four coin-tier base-unit values (bronze..gold): bronze is
+     * always 1; each higher tier derives from {@code tierRatio} unless an
+     * explicit positive override is configured.
+     */
+    public static int[] coinTierValues(int tierRatio, int brassOverride, int silverOverride, int goldOverride) {
+        int brass = brassOverride > 0 ? brassOverride : tierRatio;
+        int silver = silverOverride > 0 ? silverOverride : coinClamped((long) brass * tierRatio);
+        int gold = goldOverride > 0 ? goldOverride : coinClamped((long) silver * tierRatio);
+        return new int[]{1, brass, silver, gold};
+    }
+
+    private static int coinClamped(long v) {
+        return (int) Math.min(v, Integer.MAX_VALUE - 1);
+    }
+
+    // labor camps (LAW-001) — freedom price defaults; per-camp overrides on the record.
+    public String laborFreedomPriceMode = "flat"; // "flat" | "fines_multiplier"
+    public int laborFreedomFlatPrice = 4096;
+    public double laborFreedomFineMultiplier = 2.0;
+
+    // inspection ledger retention (oldest trimmed; 0 = keep all).
+    public int inspectionLedgerLimit = 20000;
 
     // Straja Storage — protected-zone watch + deposit routing. Watched items
     // are valued in abstract units; the defaults mirror the legacy gold table
