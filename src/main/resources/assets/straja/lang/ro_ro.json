@@ -786,6 +786,7 @@
   "straja.storage.status_zone": "Zonă protejată: %s",
   "straja.storage.theft_subtitle": "Anunță Străjerii!",
   "straja.storage.theft_title": "%s fură din depozit!",
+  "straja.storage.thief_arrested": "%s a fost arestat pentru furtul din depozit.",
   "straja.storage.thief_cleared": "%s a achitat bunurile furate din depozit.",
   "straja.storage.thief_died": "%s a murit marcat ca hoț; bunurile furate sunt raportate Străjii.",
   "straja.storage.zone_dim_mismatch": "Colțurile zonei trebuie să fie în aceeași dimensiune.",

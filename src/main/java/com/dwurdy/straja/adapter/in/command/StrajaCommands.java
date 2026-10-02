@@ -1057,28 +1057,48 @@ public final class StrajaCommands {
      * prototype strajastorage command): in-game pickers, merchant deposit
      * bridge for NPC quest commands, and the thief ledger.
      */
-    /** /strajastorage — permission-2 root hosting the same subtree for NPC/command-block callers. */
+    /**
+     * /strajastorage — permission-2 bridge root for NPC quest commands and
+     * command blocks. Deliberately exposes only {@code deposit} and
+     * {@code help}: the pick/report admin surface stays on /straja storage
+     * at level 3, so a level-2 player cannot leak thief positions or rewrite
+     * the picked configuration through the alias.
+     */
     private static LiteralArgumentBuilder<CommandSourceStack> storageAlias() {
         return storageTree(Commands.literal("strajastorage")
-                .requires(source -> source.hasPermission(2)));
+                .requires(source -> source.hasPermission(2)), false);
     }
 
     private static LiteralArgumentBuilder<CommandSourceStack> storageCommands() {
-        return storageTree(adminOnly(Commands.literal("storage")));
+        return storageTree(adminOnly(Commands.literal("storage")), true);
     }
 
     private static LiteralArgumentBuilder<CommandSourceStack> storageTree(
-            LiteralArgumentBuilder<CommandSourceStack> node) {
-        var pick = Commands.literal("pick");
-        for (String mode : List.of("dest", "zone", "chest", "off")) {
-            pick.then(Commands.literal(mode).executes(c -> player(c, p -> {
-                if (StrajaRuntime.get().storage().setPickMode(p, mode)) {
-                    p.tellKey("off".equals(mode)
-                            ? "straja.storage.pick_off" : "straja.storage.pick_armed", mode);
-                }
-            })));
+            LiteralArgumentBuilder<CommandSourceStack> node, boolean adminSurface) {
+        if (adminSurface) {
+            var pick = Commands.literal("pick");
+            for (String mode : List.of("dest", "zone", "chest", "off")) {
+                pick.then(Commands.literal(mode).executes(c -> player(c, p -> {
+                    if (StrajaRuntime.get().storage().setPickMode(p, mode)) {
+                        p.tellKey("off".equals(mode)
+                                ? "straja.storage.pick_off" : "straja.storage.pick_armed", mode);
+                    }
+                })));
+            }
+            node.then(pick);
+            node.then(Commands.literal("resetcfg")
+                    .executes(c -> player(c, StrajaRuntime.get().storage()::resetConfig)));
+            node.then(Commands.literal("status")
+                    .executes(c -> player(c, StrajaRuntime.get().storage()::status)));
+            node.then(Commands.literal("hunted")
+                    .executes(c -> player(c, StrajaRuntime.get().storage()::hunted)));
         }
-        node.then(pick);
+        attachStorageBridge(node);
+        return node;
+    }
+
+    /** The deposit bridge + help — shared by the admin subtree and the perm-2 alias. */
+    private static void attachStorageBridge(LiteralArgumentBuilder<CommandSourceStack> node) {
         node.then(Commands.literal("deposit")
                 .then(Commands.argument("player", EntityArgument.player())
                 .then(Commands.argument("item", StringArgumentType.word())
@@ -1110,12 +1130,6 @@ public final class StrajaCommands {
                             "straja.storage.deposit_failed", "straja.remedy.fix_retry"));
                     return 0;
                 })))));
-        node.then(Commands.literal("resetcfg")
-                .executes(c -> player(c, StrajaRuntime.get().storage()::resetConfig)));
-        node.then(Commands.literal("status")
-                .executes(c -> player(c, StrajaRuntime.get().storage()::status)));
-        node.then(Commands.literal("hunted")
-                .executes(c -> player(c, StrajaRuntime.get().storage()::hunted)));
         node.then(Commands.literal("help").executes(c -> {
             for (String line : List.of(
                     "/straja storage pick dest|zone|chest — arm the in-game pickers",
@@ -1128,7 +1142,6 @@ public final class StrajaCommands {
             }
             return 1;
         }));
-        return node;
     }
 
     private static LiteralArgumentBuilder<CommandSourceStack> v2PersonnelCommands() {

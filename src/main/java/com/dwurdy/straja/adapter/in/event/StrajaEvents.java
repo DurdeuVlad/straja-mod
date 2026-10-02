@@ -250,6 +250,10 @@ public final class StrajaEvents {
         StrajaRuntime runtime = StrajaRuntime.get();
         if (runtime == null || !(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) return;
         clearGiveUpOffer(player);
+        // Disarm any storage pick — a relogged admin's next click shouldn't
+        // silently overwrite the picked configuration.
+        runtime.storage().setPickMode(
+                new MinecraftPlayerGateway(player.getServer(), player.getUUID()), "off");
         var gateway = new MinecraftPlayerGateway(event.getEntity().getServer(), player.getUUID());
         runtime.custodyRoleplay().recoverOnLogout(gateway);
         // Pending admin-tool state (routes, corners, templates) never survives logout.

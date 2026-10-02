@@ -33,7 +33,14 @@ public final class MinecraftContainerGateway implements WorldContainerGateway {
     private Container containerAt(String dimension, int x, int y, int z) {
         ServerLevel level = level(dimension);
         if (level == null) return null;
-        BlockEntity be = level.getBlockEntity(new BlockPos(x, y, z));
+        var pos = new BlockPos(x, y, z);
+        var state = level.getBlockState(pos);
+        // ChestBlock.getContainer resolves the CompoundContainer so a double
+        // chest is watched/deposited as one unit, not a silent half.
+        if (state.getBlock() instanceof net.minecraft.world.level.block.ChestBlock chest) {
+            return net.minecraft.world.level.block.ChestBlock.getContainer(chest, state, level, pos, false);
+        }
+        BlockEntity be = level.getBlockEntity(pos);
         return be instanceof Container c ? c : null;
     }
 

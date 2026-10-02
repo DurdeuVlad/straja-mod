@@ -786,6 +786,7 @@
   "straja.storage.status_zone": "Protected zone: %s",
   "straja.storage.theft_subtitle": "Alert the Straja!",
   "straja.storage.theft_title": "%s is stealing from the storage!",
+  "straja.storage.thief_arrested": "%s was arrested for stealing from the storage.",
   "straja.storage.thief_cleared": "%s repaid the stolen storage goods.",
   "straja.storage.thief_died": "%s died flagged as a thief; the stolen goods are reported to Straja.",
   "straja.storage.zone_dim_mismatch": "Zone corners must be in the same dimension.",

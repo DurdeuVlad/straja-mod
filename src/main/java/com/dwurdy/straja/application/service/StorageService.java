@@ -91,16 +91,25 @@ public final class StorageService {
      */
     public void onArrested(UUID uuid) {
         var store = store();
+        String key = uuid.toString();
+        if (store.thief(key) == null) return;
         var player = ctx.server().findPlayer(uuid);
-        if (player == null) return;
-        clearThief(store, player, false);
+        if (player != null) {
+            clearThief(store, player, Release.ARRESTED);
+        } else {
+            // Offline target: drop the flag so the hunt stops; rep restore is a
+            // no-op while offline and the ledger still records the release.
+            store.clearThief(key);
+            audit.record("storage_thief_cleared", "storage", "", key, key, "ARRESTED", "offline");
+        }
         save(store);
     }
 
     /** A flagged thief dying (the hunt's resolution) clears the debt flag. */
     public void onPlayerDeath(PlayerGateway player) {
         var store = store();
-        clearThief(store, player, true);
+        if (store.thief(player.uuid().toString()) == null) return;
+        clearThief(store, player, Release.DIED);
         save(store);
     }
 
@@ -161,18 +170,20 @@ public final class StorageService {
         store.markThief(key, rec.addOwed(units));
     }
 
+    private enum Release { REPAID, DIED, ARRESTED }
+
     private void creditThief(StorageWatchStore store, PlayerGateway player, long units) {
         ThiefRecord rec = store.thief(player.uuid().toString());
         if (rec == null) return;
         rec = rec.reducedBy(units);
         if (rec.owed() <= 0) {
-            clearThief(store, player, false);
+            clearThief(store, player, Release.REPAID);
         } else {
             store.markThief(player.uuid().toString(), rec);
         }
     }
 
-    private void clearThief(StorageWatchStore store, PlayerGateway player, boolean died) {
+    private void clearThief(StorageWatchStore store, PlayerGateway player, Release release) {
         String key = player.uuid().toString();
         ThiefRecord rec = store.thief(key);
         if (rec == null) return;
@@ -183,10 +194,14 @@ public final class StorageService {
         if (!store.thieves().isEmpty()) {
             ctx.npcGuards().startQuestForTeam(ctx.policies().storageHuntTeam, ctx.policies().storageHuntQuestId);
         }
-        String msgKey = died ? "straja.storage.thief_died" : "straja.storage.thief_cleared";
+        String msgKey = switch (release) {
+            case DIED -> "straja.storage.thief_died";
+            case ARRESTED -> "straja.storage.thief_arrested";
+            default -> "straja.storage.thief_cleared";
+        };
         for (var p : ctx.server().onlinePlayers()) p.tellKey(msgKey, player.name());
         audit.record("storage_thief_cleared", "storage", "", player.name(), key,
-                died ? "DIED" : "REPAID", "rep=" + rep);
+                release.name(), "rep=" + rep);
     }
 
     private void announceTheft(String thiefName) {
@@ -276,14 +291,14 @@ public final class StorageService {
             int delta = count - prev - pending;
             if (delta == 0) continue;
             if (delta < 0) {
-                var suspect = nearestPlayer(chest, ctx.policies().storageSuspectRange, false);
+                var suspect = nearestPlayer(store, chest, ctx.policies().storageSuspectRange, false);
                 var ally = nearestAlly(chest, ctx.policies().storageSuspectRange);
                 if (suspect.player != null && (ally.player == null || suspect.dist <= ally.dist)) {
                     markThief(store, suspect.player, -delta);
                     changed = true;
                 }
             } else {
-                var payer = nearestPlayer(chest, ctx.policies().storageSuspectRange, true);
+                var payer = nearestPlayer(store, chest, ctx.policies().storageSuspectRange, true);
                 if (payer.player != null) {
                     creditThief(store, payer.player, delta);
                     changed = true;
@@ -295,14 +310,15 @@ public final class StorageService {
 
     private record Nearest(PlayerGateway player, double dist) {}
 
-    private Nearest nearestPlayer(StoragePoint at, double range, boolean flaggedOnly) {
+    /** Reads the in-flight store so same-tick marks/clears from other chests are visible. */
+    private Nearest nearestPlayer(StorageWatchStore store, StoragePoint at, double range, boolean flaggedOnly) {
         PlayerGateway best = null;
         double bestDist = Double.MAX_VALUE;
         for (var p : ctx.server().onlinePlayers()) {
             if (!at.dimension().equals(p.dimension())) continue;
             if (!isSurvivalOrAdventure(p) || isExempt(p)) continue;
             if (flaggedOnly) {
-                if (!isThief(p.uuid())) continue;
+                if (!store.isThief(p.uuid().toString())) continue;
             } else if (ctx.policies().storageAlliesHandleGoods && isAllied(p)) {
                 continue;
             }
@@ -397,7 +413,9 @@ public final class StorageService {
         int leftover = ctx.containers().insert(dest.dimension(), dest.x(), dest.y(), dest.z(), itemId, count);
         if (leftover < 0) return new DepositResult(false, 0, count); // item id does not resolve
         int inserted = count - leftover;
-        if (inserted > 0) {
+        if (inserted > 0 && isWatched(store, dest)) {
+            // Only a watched chest needs the netting entry — unwatched dests
+            // would accumulate the map forever for no benefit.
             pendingDeposits.merge(dest.key(), inserted * value, Integer::sum);
         }
         if (leftover > 0) {
@@ -406,6 +424,10 @@ public final class StorageService {
         audit.record("storage_deposit", "storage", "", playerName, "", "OK",
                 count + "x " + itemId + " (leftover " + leftover + ")");
         return new DepositResult(true, inserted, leftover);
+    }
+
+    private static boolean isWatched(StorageWatchStore store, StoragePoint point) {
+        return store.setup().chests().stream().anyMatch(c -> c.key().equals(point.key()));
     }
 
     // --------------------------------------------------------------- picking
@@ -460,6 +482,7 @@ public final class StorageService {
                     return true;
                 }
                 zoneCorners.remove(admin.uuid());
+                pickModes.remove(admin.uuid());
                 store.setup(store.setup().withZone(new StorageZone(
                         dimension, corner.x(), corner.y(), corner.z(), x, y, z)));
                 admin.tellKey("straja.storage.pick_zone_2", corner.key(), point.key());
@@ -515,6 +538,7 @@ public final class StorageService {
         }
         admin.tellKey("straja.storage.hunted_header", store.thieves().size());
         for (var e : store.thieves().entrySet()) {
+            if (e.getValue() == null) continue; // partial JSON can leave null records
             var target = ctx.server().findPlayer(e.getKey());
             String name = target != null ? target.name() : e.getKey();
             String where = target != null && target.isOnline()
