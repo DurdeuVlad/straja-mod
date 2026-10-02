@@ -10,6 +10,7 @@ import com.dwurdy.straja.domain.model.FineTask;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
 
 /** Informational watch notices; an authoritative warrant remains separate. */
 public final class BoloService {
@@ -120,6 +121,29 @@ public final class BoloService {
                 record.subjectUuid, "SUCCESS", "");
         actor.tell("BOLO " + record.id + " a fost anulat.");
         return true;
+    }
+
+    /**
+     * System-side clear on arrest — custody consumes the hunt, bypassing the
+     * issuer/superior gate on {@link #cancel} (checkpoints have no issuer).
+     * Returns the number of active BOLOs cancelled.
+     */
+    public synchronized int clearFor(UUID subjectUuid) {
+        String key = subjectUuid == null ? "" : subjectUuid.toString();
+        if (key.isEmpty()) return 0;
+        BoloStore data = store();
+        int cleared = 0;
+        for (BoloRecord record : data.records) {
+            if (record != null && record.status == BoloStatus.ACTIVE
+                    && key.equals(record.subjectUuid)) {
+                record.status = BoloStatus.CANCELLED;
+                cleared++;
+                audit.record("bolo_cancel", "system", "", record.id,
+                        record.subjectUuid, "SUCCESS", "arrest_clear");
+            }
+        }
+        if (cleared > 0) ctx.bolos().write(data);
+        return cleared;
     }
 
     public synchronized List<BoloRecord> active() {

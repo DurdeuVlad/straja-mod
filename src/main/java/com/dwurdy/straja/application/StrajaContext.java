@@ -48,4 +48,5 @@ public record StrajaContext(
         LaborCampRepository laborCamps,
         MerchantDeskRepository merchantDesks,
         WorldContainerGateway containers,
-        NpcGuardGateway npcGuards) {}
+        NpcGuardGateway npcGuards,
+        DeepScanGateway deepScan) {}

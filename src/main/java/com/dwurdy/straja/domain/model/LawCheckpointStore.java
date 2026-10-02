@@ -27,6 +27,7 @@ public final class LawCheckpointStore {
     public Map<String, LawCheckpointRecord> checkpoints() {
         if (checkpoints == null) checkpoints = new LinkedHashMap<>();
         checkpoints.values().removeIf(java.util.Objects::isNull);
+        checkpoints.values().forEach(LawCheckpointRecord::normalize);
         return checkpoints;
     }
 

@@ -56,4 +56,20 @@ public class LawCheckpointRecord {
 
     /** Legacy banned names that could not be resolved to UUIDs on import. */
     public List<String> legacyBannedNames = new ArrayList<>();
+
+    /** Self-heals explicit {@code null}s a Gson payload may carry. */
+    public void normalize() {
+        if (doors == null) doors = new ArrayList<>();
+        if (evidenceChests == null) evidenceChests = new ArrayList<>();
+        if (gates == null) gates = new ArrayList<>();
+        if (localIllegalItems == null) localIllegalItems = new ArrayList<>();
+        if (localAllowedItems == null) localAllowedItems = new ArrayList<>();
+        if (bannedPlayerUuids == null) bannedPlayerUuids = new ArrayList<>();
+        if (roleBans == null) roleBans = new ArrayList<>();
+        if (roleCarryBans == null) roleCarryBans = new LinkedHashMap<>();
+        if (exemptions == null) exemptions = new ArrayList<>();
+        if (legacyBannedNames == null) legacyBannedNames = new ArrayList<>();
+        if (mode == null) mode = CheckpointMode.DENY;
+        if (direction == null) direction = CrossingDirection.BIDIRECTIONAL;
+    }
 }
