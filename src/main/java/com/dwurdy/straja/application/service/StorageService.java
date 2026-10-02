@@ -73,10 +73,15 @@ public final class StorageService {
                 : wantedUuids().contains(uuid.toString());
     }
 
+    /** Wanted uuid set for a scan pass — parsed once, not per player. */
+    private Set<String> wantedSnapshot() {
+        return wantedService != null ? wantedService.wantedUuids() : wantedUuids();
+    }
+
     private boolean underEscort(PlayerGateway p) {
         if (wantedService != null) return wantedService.isUnderEscort(p);
         return custody != null && custody.escortOfficerWithin(
-                p, ctx.policies().escortGateBypassRadius) != null;
+                p, ctx.policies().escortTetherRadius) != null;
     }
 
     private StorageWatchStore store() {
@@ -384,10 +389,11 @@ public final class StorageService {
     private void aggroScan() {
         var guards = ctx.npcGuards();
         if (!guards.available()) return;
+        var wanted = wantedSnapshot();
         var watchStore = store();
         for (var p : ctx.server().onlinePlayers()) {
             boolean hostile = (watchStore.isThief(p.uuid().toString())
-                    || isWantedPlayer(p.uuid()))
+                    || wanted.contains(p.uuid().toString()))
                     && !underEscort(p) && !jailed(p) && isSurvivalOrAdventure(p) && !isExempt(p);
             if (!hostile && !aggroMarked.contains(p.uuid())) continue;
             var near = guards.guardsNear(p.dimension(), p.x(), p.y(), p.z(),

@@ -191,12 +191,44 @@ class WantedServiceTest {
     void releaseClearsResidualMarks() {
         boloOn(inmate);
         markFugitiveReg(inmate);
-        wanted.resolveReleased(inmate.uuid());
+        bolos.resolveFor(inmate.uuid(), BoloStatus.RESOLVED, "released");
         var bs = ctx.bolos().read();
         assertEquals(BoloStatus.RESOLVED, bs.records.get(0).status);
         // The register FUGITIVE still counts as wanted — releaseSentence owns
         // the register transition; resolveReleased clears the marks layer.
         assertTrue(wanted.isWanted(inmate.uuid()));
+    }
+
+    // --------------------------------------------------- guard damage wall
+
+    @Test
+    void guardDamageBlockedForEscortedSuspect() {
+        cuffInmate();
+        var guardId = npcGuards.addGuard(52, 60, 52, 12);
+        assertTrue(wanted.guardDamageBlocked(guardId, null, inmate));
+        // A cuffed suspect beside the officer is untouchable — wanted or not.
+    }
+
+    @Test
+    void guardDamageBlockedCoversNativeLawRoles() {
+        cuffInmate();
+        // Foreign entity id (not a faction NPC) but a bound law role.
+        assertTrue(wanted.guardDamageBlocked(java.util.UUID.randomUUID(), "jailer", inmate));
+        assertTrue(wanted.guardDamageBlocked(java.util.UUID.randomUUID(), "guard", inmate));
+    }
+
+    @Test
+    void nonGuardAttackerIsNotBlocked() {
+        cuffInmate();
+        assertFalse(wanted.guardDamageBlocked(java.util.UUID.randomUUID(), null, inmate));
+        assertFalse(wanted.guardDamageBlocked(java.util.UUID.randomUUID(), "merchant", inmate));
+    }
+
+    @Test
+    void unescortedSuspectGetsNoProtection() {
+        var guardId = npcGuards.addGuard(52, 60, 52, 12);
+        // No cuffs — a wanted-free player under no escort is a valid target.
+        assertFalse(wanted.guardDamageBlocked(guardId, null, inmate));
     }
 
     private PrisonerRegisterRecord reg(TestPlayer p) {

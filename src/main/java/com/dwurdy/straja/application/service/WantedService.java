@@ -57,6 +57,26 @@ public final class WantedService
     }
 
     /**
+     * Snapshot of every wanted uuid for a scan pass — reads the register and
+     * the BOLO store once instead of per-player JSON parses inside a loop.
+     */
+    public java.util.Set<String> wantedUuids() {
+        var out = new java.util.HashSet<String>();
+        var reg = ctx.prisonerRegister().read();
+        reg.prisoners().forEach((key, rec) -> {
+            if (rec != null && rec.status == PrisonerStatus.FUGITIVE) out.add(key);
+        });
+        long now = ctx.clock().nowMillis();
+        reg.legacyWantedUntil().forEach((uuid, until) -> {
+            if (until != null && until > now) out.add(uuid);
+        });
+        for (var bolo : bolos.active()) {
+            if (bolo != null && bolo.subjectUuid != null) out.add(bolo.subjectUuid);
+        }
+        return out;
+    }
+
+    /**
      * Cuffed and the cuffing officer is within the tether radius — the
      * suspect is already caught, so the hunt holds fire. The tether radius
      * (not the tighter gate bypass) is the escort definition.
@@ -85,34 +105,23 @@ public final class WantedService
         if (target == null || target.uuid() == null) return;
         var guards = ctx.npcGuards();
         if (!guards.available()) return;
+        // CustomNPCs aggroRange can exceed the scan radius — sweep twice as
+        // far so a guard that locked on from a distance is still cleared.
+        double radius = Math.max(ctx.policies().storageAggroRange * 2.0, 32);
         for (var guard : guards.guardsNear(target.dimension(), target.x(), target.y(),
-                target.z(), ctx.policies().storageAggroRange,
-                ctx.policies().storageFactionId)) {
+                target.z(), radius, ctx.policies().storageFactionId)) {
             guards.clearTargetIfTargeting(guard.id(), target.uuid());
         }
     }
 
     /** Restraint-applied hook: the hunt is called off the instant cuffs land. */
     public void onCuffed(PlayerGateway officer, PlayerGateway target) {
-        if (target == null || !isWanted(target.uuid())) return;
-        dropAggroAround(target);
+        if (target == null) return;
+        dropAggroAround(target); // thief-flagged too — escort suspends all aggro
+        if (!isWanted(target.uuid())) return;
         audit.record("wanted_escort", officer == null ? "" : officer.name(),
                 officer == null ? "" : String.valueOf(officer.uuid()),
                 target.name(), String.valueOf(target.uuid()),
                 "SUCCESS", "aggro_suspended");
-    }
-
-    /** Arrest resolves the hunt on the books — RESOLVED, not cancelled. */
-    public void resolveArrested(UUID uuid) {
-        if (uuid == null) return;
-        bolos.resolveFor(uuid, com.dwurdy.straja.domain.model.BoloStatus.RESOLVED,
-                "arrested");
-    }
-
-    /** Formal release clears any residual marks the same way. */
-    public void resolveReleased(UUID uuid) {
-        if (uuid == null) return;
-        bolos.resolveFor(uuid, com.dwurdy.straja.domain.model.BoloStatus.RESOLVED,
-                "released");
     }
 }

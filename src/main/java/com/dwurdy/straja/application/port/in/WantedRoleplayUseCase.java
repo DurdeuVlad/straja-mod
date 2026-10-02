@@ -20,8 +20,9 @@ public interface WantedRoleplayUseCase {
     /**
      * Guard-side damage hold: true when the attacker is a guard entity
      * (CustomNPCs faction member or a native guard/jailer role) AND the
-     * target is a wanted suspect under live escort. Event handlers cancel
-     * the hit when this returns true.
+     * target is any suspect under live escort — wanted or not, a cuffed
+     * prisoner beside their officer is never a lawful target. Event handlers
+     * cancel the hit when this returns true.
      *
      * @param attackerEntityId the damage source entity's UUID
      * @param attackerRole     the resolved NPC role id, or null when foreign

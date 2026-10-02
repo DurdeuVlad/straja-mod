@@ -139,7 +139,7 @@ class ArchitectureBoundaryTest {
                 "runtime.complaints()", "runtime.custody()", "runtime.prison()",
                 "runtime.rooms()", "runtime.archive()", "runtime.players()",
                 "runtime.npcs()", "runtime.audit()", "runtime.equipment()",
-                "runtime.migration()", "runtime.context()");
+                "runtime.migration()", "runtime.context()", "runtime.wanted()");
         List<Path> surfaces = List.of(
                 SRC.resolve("adapter/in/event/StrajaEvents.java"),
                 SRC.resolve("adapter/in/npc/NpcRoles.java"),

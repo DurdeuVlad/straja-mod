@@ -670,9 +670,10 @@ public final class CheckpointService {
             ctx.prisonerRegister().write(reg);
         }
 
-        // Custody consumes the hunt: thief flag + active BOLOs clear (AT6).
+        // Custody consumes the hunt: thief flag + active BOLOs resolve (AT6).
         storage.onArrested(p.uuid());
-        bolos.clearFor(p.uuid());
+        bolos.resolveFor(p.uuid(), com.dwurdy.straja.domain.model.BoloStatus.RESOLVED,
+                "arrested");
 
         ledger(site, p, dir, CrossingOutcome.ARREST, snapshot, found, reason);
         audit.record("checkpoint_arrest", "checkpoint", "", p.name(), uuid, "ARREST", reason);
