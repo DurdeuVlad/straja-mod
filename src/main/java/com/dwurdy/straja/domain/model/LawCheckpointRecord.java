@@ -57,6 +57,13 @@ public class LawCheckpointRecord {
     /** Legacy banned names that could not be resolved to UUIDs on import. */
     public List<String> legacyBannedNames = new ArrayList<>();
 
+    /**
+     * Where this site's arrests deliver the prisoner: empty = the prison
+     * cells; {@code "CAMP:<campId>"} routes them into a labor camp instead
+     * (LAW-006). Normalized to upper case on write.
+     */
+    public String arrestDestination = "";
+
     /** Self-heals explicit {@code null}s a Gson payload may carry. */
     public void normalize() {
         if (doors == null) doors = new ArrayList<>();
@@ -69,6 +76,8 @@ public class LawCheckpointRecord {
         if (roleCarryBans == null) roleCarryBans = new LinkedHashMap<>();
         if (exemptions == null) exemptions = new ArrayList<>();
         if (legacyBannedNames == null) legacyBannedNames = new ArrayList<>();
+        if (arrestDestination == null) arrestDestination = "";
+        else arrestDestination = arrestDestination.trim();
         if (mode == null) mode = CheckpointMode.DENY;
         if (direction == null) direction = CrossingDirection.BIDIRECTIONAL;
     }

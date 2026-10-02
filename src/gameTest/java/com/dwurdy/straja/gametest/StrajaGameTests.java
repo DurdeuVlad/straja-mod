@@ -877,4 +877,89 @@ public final class StrajaGameTests {
         }
         helper.succeed();
     }
+
+    /**
+     * LAW-006 live custody: a cell arrest transfers into camp custody at the
+     * intake spawn, death respawns at the dormitory, and reaching the freedom
+     * price releases the prisoner at the camp's release point.
+     */
+    @GameTest(template = "empty")
+    public static void laborCampCustody(GameTestHelper helper) {
+        var runtime = runtime(helper);
+        ServerLevel level = helper.getLevel();
+        String dim = level.dimension().location().toString();
+
+        var commissioner = new VirtualPlayerGateway("dwurdy");
+        commissioner.setOp(true);
+        commissioner.setDimension(dim);
+
+        var min = helper.absolutePos(new BlockPos(0, -60, 0));
+        var max = helper.absolutePos(new BlockPos(10, 10, 10));
+        helper.assertTrue(runtime.laborCamps().register(commissioner, "gt_mine", "Test Camp",
+                min.getX() + "," + min.getY() + "," + min.getZ(),
+                max.getX() + "," + max.getY() + "," + max.getZ()),
+                "camp registration must succeed: " + commissioner.messageLog());
+        var campStore = runtime.context().laborCamps().read();
+        var camp = campStore.camp("gt_mine");
+        var intake = helper.absolutePos(new BlockPos(3, 1, 3));
+        var dorm = helper.absolutePos(new BlockPos(5, 1, 5));
+        var release = helper.absolutePos(new BlockPos(12, 1, 12));
+        camp.intakeSpawn = new com.dwurdy.straja.domain.model.StoragePoint(
+                dim, intake.getX(), intake.getY(), intake.getZ());
+        camp.dormitorySpawn = new com.dwurdy.straja.domain.model.StoragePoint(
+                dim, dorm.getX(), dorm.getY(), dorm.getZ());
+        camp.releaseSpawn = new com.dwurdy.straja.domain.model.StoragePoint(
+                dim, release.getX(), release.getY(), release.getZ());
+        camp.freedomFlatPrice = 64;
+        campStore.put(camp);
+        runtime.context().laborCamps().write(campStore);
+
+        try {
+            var prisoner = mockPlayer(helper);
+            var pg = gateway(prisoner);
+            prisoner.teleportTo(min.getX() + 2, min.getY() + 61, min.getZ() + 2);
+
+            runtime.prison().arrest(pg, null, 1, commissioner, "gt-arrest");
+            helper.assertTrue(runtime.prison().transferToCamp(commissioner, pg, "gt_mine"),
+                    "the camp transfer must succeed");
+
+            var rec = runtime.context().prisonerRegister().read()
+                    .prisoner(prisoner.getUUID().toString());
+            helper.assertTrue(rec != null
+                            && rec.status == com.dwurdy.straja.domain.model.PrisonerStatus.IN_CAMP
+                            && "gt_mine".equals(rec.assignedCampId),
+                    "transfer must register IN_CAMP custody");
+            helper.assertTrue(Math.abs(prisoner.getX() - (intake.getX() + 0.5)) < 0.01,
+                    "transfer must deliver at the intake spawn");
+
+            // Death inside the camp respawns at the dormitory, custody intact.
+            runtime.prisonRoleplay().onRespawn(pg);
+            helper.assertTrue(Math.abs(prisoner.getX() - (dorm.getX() + 0.5)) < 0.01,
+                    "respawn must land on the dormitory spawn");
+            rec = runtime.context().prisonerRegister().read()
+                    .prisoner(prisoner.getUUID().toString());
+            helper.assertTrue(rec.status == com.dwurdy.straja.domain.model.PrisonerStatus.IN_CAMP,
+                    "respawn must keep camp custody");
+
+            // Reaching the freedom price releases at the camp release point.
+            var reg = runtime.context().prisonerRegister().read();
+            rec = reg.prisoner(prisoner.getUUID().toString());
+            rec.laborAccount = 64;
+            runtime.context().prisonerRegister().write(reg);
+            helper.assertTrue(runtime.prison().checkLaborRelease(prisoner.getUUID().toString()),
+                    "the labor buy-out must release the prisoner");
+            rec = runtime.context().prisonerRegister().read()
+                    .prisoner(prisoner.getUUID().toString());
+            helper.assertTrue(rec.status
+                            == com.dwurdy.straja.domain.model.PrisonerStatus.SERVED_LABOR,
+                    "freedom price must mark the record SERVED_LABOR");
+            helper.assertTrue(Math.abs(prisoner.getX() - (release.getX() + 0.5)) < 0.01,
+                    "release must land at the camp release point");
+        } finally {
+            var cleanup = runtime.context().laborCamps().read();
+            cleanup.remove("gt_mine");
+            runtime.context().laborCamps().write(cleanup);
+        }
+        helper.succeed();
+    }
 }

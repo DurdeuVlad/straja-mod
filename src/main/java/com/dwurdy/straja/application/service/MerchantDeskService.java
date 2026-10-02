@@ -36,6 +36,9 @@ public final class MerchantDeskService {
     private final StrajaContext ctx;
     private final PlayerService players;
     private final AuditService audit;
+    /** LAW-006: labor-credit notification + auto-release trigger. */
+    private LaborCampService camps;
+    private PrisonService prison;
     /** Armed chest picks: admin uuid -> desk id waiting for a click. */
     private final Map<UUID, String> picks = new HashMap<>();
 
@@ -43,6 +46,12 @@ public final class MerchantDeskService {
         this.ctx = ctx;
         this.players = players;
         this.audit = audit;
+    }
+
+    /** LAW-006: late-bound (camps/prison are built after desks). */
+    public void useLabor(LaborCampService camps, PrisonService prison) {
+        this.camps = camps;
+        this.prison = prison;
     }
 
     private MerchantDeskStore store() {
@@ -478,8 +487,15 @@ public final class MerchantDeskService {
                 "SUCCESS", "items=" + placed + " base=" + baseUnits
                         + (laborCredit ? " labor" : " cash")
                         + (returned > 0 ? " returned=" + returned : ""));
-        seller.tellKey(laborCredit ? "straja.desk.sold_labor" : "straja.desk.sold",
-                desk.id, baseUnits);
+        if (laborCredit) {
+            if (camps != null) camps.notifyLaborSale(seller, rec, baseUnits);
+            else seller.tellKey("straja.desk.sold_labor", desk.id, baseUnits);
+            // A sale can cross the freedom price — check immediately rather
+            // than waiting a full prison tick.
+            if (prison != null) prison.checkLaborRelease(rec.detaineeUuid);
+        } else {
+            seller.tellKey("straja.desk.sold", desk.id, baseUnits);
+        }
         return true;
     }
 

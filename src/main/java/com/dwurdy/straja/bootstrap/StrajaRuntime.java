@@ -64,6 +64,7 @@ public final class StrajaRuntime {
     private final com.dwurdy.straja.application.service.StorageService storage;
     private final com.dwurdy.straja.application.service.CheckpointService checkpoints;
     private final com.dwurdy.straja.application.service.MerchantDeskService desks;
+    private final com.dwurdy.straja.application.service.LaborCampService laborCamps;
     private final com.dwurdy.straja.application.service.EvidenceService evidence;
     private final com.dwurdy.straja.application.service.ArrestRecordService arrestRecords;
     private final com.dwurdy.straja.application.service.ReputationService reputation;
@@ -352,8 +353,14 @@ public final class StrajaRuntime {
         this.prison.useBolos(bolos);
         this.checkpoints = new com.dwurdy.straja.application.service.CheckpointService(
                 ctx, audit, prison, storage, bolos, v2Personnel, custody);
+        // LAW-006: camp exits confiscate repelled prisoners' banned cargo.
+        this.checkpoints.useSeizure(seizure);
         this.desks = new com.dwurdy.straja.application.service.MerchantDeskService(
                 ctx, players, audit);
+        this.laborCamps = new com.dwurdy.straja.application.service.LaborCampService(
+                ctx, players, audit);
+        this.prison.useCamps(this.laborCamps);
+        this.desks.useLabor(this.laborCamps, this.prison);
         this.prison.onArrest(sentence -> {
             try {
                 storage.onArrested(UUID.fromString(sentence.targetUuid));
@@ -524,6 +531,7 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.service.StorageService storage() { return storage; }
     public com.dwurdy.straja.application.service.CheckpointService checkpoints() { return checkpoints; }
     public com.dwurdy.straja.application.service.MerchantDeskService desks() { return desks; }
+    public com.dwurdy.straja.application.service.LaborCampService laborCamps() { return laborCamps; }
     public com.dwurdy.straja.application.service.EvidenceService evidence() { return evidence; }
     public com.dwurdy.straja.application.service.ArrestRecordService arrestRecords() { return arrestRecords; }
     public com.dwurdy.straja.application.service.ReputationService reputation() { return reputation; }

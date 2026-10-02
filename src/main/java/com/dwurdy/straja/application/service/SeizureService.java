@@ -189,6 +189,54 @@ public final class SeizureService {
         }
     }
 
+    /**
+     * LAW-006 exit-gate confiscation: pulls every inventory stack whose item
+     * id is on {@code itemIds} (the checkpoint's ban/illegal hit-list) out of
+     * the prisoner's hands and into the site's evidence chain. Leftovers and
+     * failures drop at the player — confiscation never voids items.
+     * Returns the count actually removed from the inventory.
+     */
+    public int confiscateItems(PlayerGateway target, LawCheckpointRecord site,
+                               java.util.Collection<String> itemIds) {
+        if (target == null || !target.isOnline()
+                || itemIds == null || itemIds.isEmpty()) return 0;
+        var inv = target.inventory();
+        if (inv == null) return 0;
+        var checkpoints = ctx.lawCheckpoints().read();
+        var wanted = new java.util.HashSet<String>(itemIds);
+        int seized = 0, dropped = 0;
+        for (int slot = 0; slot < inv.slots(); slot++) {
+            var stack = inv.stackAt(slot);
+            if (stack == null || stack.count() <= 0
+                    || stack.id() == null || !wanted.contains(stack.id())) continue;
+            String snbt = inv.snbtAt(slot);
+            var taken = inv.extract(slot, stack.count());
+            if (taken == null || taken.count() <= 0) continue;
+            seized += taken.count();
+            var seized_ = new SeizedStack("inv/" + slot, taken.id(), taken.count(),
+                    snbt, List.of());
+            int leftover;
+            try {
+                leftover = routeEvidence(site, checkpoints, seized_);
+            } catch (RuntimeException ex) {
+                leftover = taken.count();
+            }
+            if (leftover > 0) {
+                dropped += leftover;
+                try {
+                    dropAtEvidenceOrPlayer(target, site, checkpoints, taken.id(), leftover);
+                } catch (RuntimeException ignored) {}
+            }
+        }
+        if (seized > 0) {
+            audit.record("camp_exit_seizure", "system", "", target.name(),
+                    uuidOf(target), "SUCCESS",
+                    "site=" + (site == null ? "" : site.id)
+                            + " seized=" + seized + " dropped=" + dropped);
+        }
+        return seized;
+    }
+
     // ------------------------------------------------------------ routing
 
     private boolean containsContraband(SeizedStack stack, LawCheckpointRecord site,

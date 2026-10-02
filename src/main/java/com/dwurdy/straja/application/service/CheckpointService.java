@@ -43,6 +43,8 @@ public final class CheckpointService {
     private final BoloService bolos;
     private final PersonnelService personnel;
     private final CustodyService custody; // nullable — escort bypass off when absent
+    /** LAW-006: camp exit confiscation routes banned stacks to evidence. */
+    private SeizureService seizure;
 
     private final Map<UUID, PrevPos> prevPositions = new ConcurrentHashMap<>();
     // Deliberate deviation: stamps are session-scoped, not persisted like the
@@ -66,6 +68,11 @@ public final class CheckpointService {
         this.bolos = bolos;
         this.personnel = personnel;
         this.custody = custody;
+    }
+
+    /** LAW-006: late-bound (seizure is built after the checkpoint service). */
+    public void useSeizure(SeizureService service) {
+        this.seizure = service;
     }
 
     /** Server-tick entry: prototype cadence is every 5 ticks. */
@@ -301,8 +308,55 @@ public final class CheckpointService {
                 roleBan != null ? "straja.checkpoint.role_ban_sub" : "straja.checkpoint.deny_sub");
         pushback(p, site);
         if (!carry.isEmpty()) p.tellKey("straja.checkpoint.quartermaster");
+        confiscateAtCampExit(p, site, bannedItemIds(snapshot, site, store, roles));
         ledger(site, p, dir, CrossingOutcome.DENY, snapshot, found, violation);
         return true;
+    }
+
+    /**
+     * LAW-006: a camp prisoner repelled at their camp's exit gate loses the
+     * banned commodities they tried to carry out — confiscated stacks route
+     * into the site's evidence chain via the seizure engine.
+     */
+    /** Raw item ids the site bans for this carrier — global/site-illegal plus role carry bans. */
+    private Set<String> bannedItemIds(List<SnapshotItem> snapshot, LawCheckpointRecord site,
+                                      LawCheckpointStore store, Set<String> roles) {
+        Set<String> ids = new HashSet<>();
+        for (SnapshotItem item : snapshot) {
+            if (item != null && item.itemId != null && store.isIllegal(site, item.itemId)) {
+                ids.add(item.itemId);
+            }
+        }
+        for (var e : site.roleCarryBans.entrySet()) {
+            if (e.getValue() == null) continue;
+            boolean hasRole = roles.stream().anyMatch(r -> r.equalsIgnoreCase(e.getKey()));
+            if (!hasRole) continue;
+            for (SnapshotItem item : snapshot) {
+                if (item != null && item.itemId != null
+                        && e.getValue().stream().anyMatch(id -> item.itemId.equalsIgnoreCase(id))) {
+                    ids.add(item.itemId);
+                }
+            }
+        }
+        return ids;
+    }
+
+    private void confiscateAtCampExit(PlayerGateway p, LawCheckpointRecord site,
+                                      Set<String> found) {
+        if (seizure == null || site == null || found == null || found.isEmpty()) return;
+        boolean campExit = false;
+        for (var camp : ctx.laborCamps().read().camps().values()) {
+            if (camp != null && site.id.equals(camp.exitCheckpointId)) {
+                campExit = true;
+                break;
+            }
+        }
+        if (!campExit) return;
+        String uuid = p.uuid() == null ? "" : p.uuid().toString();
+        var rec = ctx.prisonerRegister().read().prisoner(uuid);
+        if (rec == null || rec.status != PrisonerStatus.IN_CAMP) return;
+        int n = seizure.confiscateItems(p, site, found);
+        if (n > 0) p.tellKey("straja.camp.confiscated", n);
     }
 
     /** Wrong-way lane crossing — back to the position they crossed FROM, never to 'from'. */
@@ -776,6 +830,37 @@ public final class CheckpointService {
         }
         ctx.lawCheckpoints().write(store);
         policy(admin, scopeName(targets), (add ? "+carryban " : "-carryban ") + normalized + " " + itemId);
+    }
+
+    /**
+     * `arrestdest <site> <CAMP:<id>|CELL>` — where this site's arrests
+     * deliver the prisoner. Camp ids resolve against the labor-camp store;
+     * unknown ids refuse rather than silently degrading to cells.
+     */
+    public void setArrestDestination(PlayerGateway admin, String siteId, String destination) {
+        var store = ctx.lawCheckpoints().read();
+        var site = store.checkpoint(siteId);
+        if (site == null) {
+            admin.tellKey("straja.checkpoint.no_site", siteId);
+            return;
+        }
+        String dest = destination == null ? "" : destination.trim();
+        if (dest.isEmpty() || "CELL".equalsIgnoreCase(dest) || "CELLS".equalsIgnoreCase(dest)) {
+            site.arrestDestination = "";
+        } else if (dest.toUpperCase(Locale.ROOT).startsWith("CAMP:")) {
+            String campId = dest.substring(5).trim();
+            if (ctx.laborCamps().read().camp(campId) == null) {
+                admin.refuse("straja.camp.unknown", "straja.remedy.fix_retry", campId);
+                return;
+            }
+            site.arrestDestination = "CAMP:" + campId;
+        } else {
+            admin.refuse("straja.camp.bad_dest", "straja.remedy.fix_retry", destination);
+            return;
+        }
+        ctx.lawCheckpoints().write(store);
+        policy(admin, site.id, "arrestdest "
+                + (site.arrestDestination.isEmpty() ? "CELL" : site.arrestDestination));
     }
 
     /** `exempt add|remove <site|global> <player|role>` — subject matched against name, uuid or role. */
