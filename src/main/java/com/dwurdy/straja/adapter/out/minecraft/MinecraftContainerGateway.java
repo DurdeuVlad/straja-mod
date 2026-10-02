@@ -135,6 +135,51 @@ public final class MinecraftContainerGateway implements WorldContainerGateway {
         return remaining;
     }
 
+    /** {@inheritDoc} Counts vacant slots and per-item merge headroom. */
+    @Override public ContainerCapacity capacity(String dimension, int x, int y, int z) {
+        Container container = containerAt(dimension, x, y, z);
+        if (container == null) return null;
+        int empty = 0;
+        Map<String, Integer> mergeRoom = new java.util.HashMap<>();
+        for (int i = 0; i < container.getContainerSize(); i++) {
+            ItemStack stack = container.getItem(i);
+            if (stack == null || stack.isEmpty()) {
+                empty++;
+                continue;
+            }
+            int room = stack.getMaxStackSize() - stack.getCount();
+            if (room > 0) {
+                mergeRoom.merge(BuiltInRegistries.ITEM.getKey(stack.getItem())
+                        .toString(), room, Integer::sum);
+            }
+        }
+        return new ContainerCapacity(empty, mergeRoom);
+    }
+
+    @Override public int stackLimit(String itemId) {
+        var item = BuiltInRegistries.ITEM.getOptional(ResourceLocation.tryParse(itemId));
+        if (item.isEmpty() || item.get() == net.minecraft.world.item.Items.AIR) return -1;
+        return item.get().getDefaultMaxStackSize();
+    }
+
+    /** {@inheritDoc} Pulls matching stacks out of the resolved container. */
+    @Override public int remove(String dimension, int x, int y, int z, String itemId, int count) {
+        Container container = containerAt(dimension, x, y, z);
+        if (container == null || count <= 0) return 0;
+        var item = BuiltInRegistries.ITEM.getOptional(ResourceLocation.tryParse(itemId));
+        if (item.isEmpty()) return 0;
+        int removed = 0;
+        for (int i = 0; i < container.getContainerSize() && removed < count; i++) {
+            ItemStack stack = container.getItem(i);
+            if (stack == null || stack.isEmpty() || stack.getItem() != item.get()) continue;
+            int take = Math.min(stack.getCount(), count - removed);
+            container.removeItem(i, take);
+            removed += take;
+        }
+        container.setChanged();
+        return removed;
+    }
+
     /** {@inheritDoc} Empties the container; each stack keeps its full SNBT. */
     @Override public java.util.List<com.dwurdy.straja.domain.model.SeizedStack> drain(
             String dimension, int x, int y, int z) {

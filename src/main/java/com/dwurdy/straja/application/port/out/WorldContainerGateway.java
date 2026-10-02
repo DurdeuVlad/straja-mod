@@ -53,4 +53,29 @@ public interface WorldContainerGateway {
     default String canonicalKey(String dimension, int x, int y, int z) {
         return dimension + "|" + x + "," + y + "," + z;
     }
+
+    /**
+     * Capacity snapshot for atomic-insertion preflight (AT5 merchant desks):
+     * {@code emptySlots} counts vacant positions shared by any item, while
+     * {@code mergeRoom} is per-item headroom in existing partial stacks —
+     * both in item units. Returns {@code null} when the position holds no
+     * readable container.
+     */
+    default ContainerCapacity capacity(String dimension, int x, int y, int z) {
+        return null;
+    }
+
+    /** Stack limit for a registry item (64 when unknown to the implementation). */
+    default int stackLimit(String itemId) { return 64; }
+
+    /**
+     * Removes up to {@code count} units of {@code itemId} from the container;
+     * returns the removed count. Compensation hook for atomic merchant-desk
+     * rollback when payment fails after goods were committed.
+     */
+    default int remove(String dimension, int x, int y, int z, String itemId, int count) {
+        return 0;
+    }
+
+    record ContainerCapacity(int emptySlots, Map<String, Integer> mergeRoom) {}
 }

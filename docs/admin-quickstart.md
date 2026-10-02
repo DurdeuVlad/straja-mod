@@ -58,6 +58,29 @@ pas**. Ordinea verificărilor:
 patrulare, jalonul de măsurare, clonatorul, marcajele de celulă/cameră) —
 itemii re-verifică autoritatea Comisarului/op la fiecare folosire.
 
+### 3.1 Birouri de negustor (LAW-005)
+
+Biroul de negustor e un tejghea de cumpărare: jucătorii vând bunurile listate,
+marfa intră fizic în cuferele legate (primul se umple, restul curge în
+următorul), iar plata se face în monedele din `[economy]` sau în contul de
+muncă al deținuților.
+
+```
+/straja desk create <id> <npcName|npcUuid>   # creează biroul la poziția ta
+/straja desk add-chest <id>                  # apoi click dreapta pe cufere, în ordinea de umplere
+/straja desk set-price <id> <mod:item> <unități bază>   # preț 0 = scoate din listă
+/straja desk labor <id> on|off               # deținuții primesc credit de muncă, nu monede
+/straja desk quartermaster <campId> <id> <preț>  # profil de intendent: preia interdicțiile porții taberei
+/straja desk ledger <id> [vânzător]          # registrul de vânzări
+/straja desk remove <id> | /straja desk list
+```
+
+Jucătorii vând cu `/straja desk sell <id> [item] [cantitate]` stând lângă
+birou — leagă comanda la un dialog CustomNPCs (opțiunea „rulează comandă") sau
+la un buton de suprafață nativă. Fiecare vânzare e atomică: cuferele pline
+refuză fără să atingă inventarul sau banii, iar fiecare tranzacție scrie un
+rând imuabil în registrul de vânzări.
+
 ## 4. Verificare finală
 
 ```

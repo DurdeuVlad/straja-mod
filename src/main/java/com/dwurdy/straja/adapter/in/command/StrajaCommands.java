@@ -298,6 +298,7 @@ public final class StrajaCommands {
 
         // prison
         root.then(prisonNode());
+        root.then(deskNode());
 
         // civic: fines, complaints, rooms, archive
         root.then(fineNode());
@@ -703,6 +704,81 @@ public final class StrajaCommands {
                                 .setPickMode(p, "off")))));
         node.then(Commands.literal("lockers")
                 .executes(c -> player(c, p -> StrajaRuntime.get().prison().listLockers(p))));
+        return node;
+    }
+
+    /**
+     * LAW-005 merchant desks. Not adminOnly-wrapped: {@code sell} is the
+     * player-facing trade surface (NPC buttons route here), while the setup
+     * verbs authorize inside the service.
+     */
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> deskNode() {
+        var node = Commands.literal("desk");
+        node.then(Commands.literal("create")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("npc", StringArgumentType.word())
+                                .executes(c -> StrajaRuntime.get().desks().createDesk(actor(c),
+                                        StringArgumentType.getString(c, "id"),
+                                        StringArgumentType.getString(c, "npc")) ? 1 : 0))));
+        node.then(Commands.literal("remove")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(c -> StrajaRuntime.get().desks().removeDesk(actor(c),
+                                StringArgumentType.getString(c, "id")) ? 1 : 0)));
+        node.then(Commands.literal("add-chest")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(c -> StrajaRuntime.get().desks().setPickMode(actor(c),
+                                StringArgumentType.getString(c, "id")) ? 1 : 0)));
+        node.then(Commands.literal("pick")
+                .then(Commands.literal("off")
+                        .executes(c -> StrajaRuntime.get().desks().setPickMode(actor(c), "off") ? 1 : 0)));
+        node.then(Commands.literal("set-price")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("item", StringArgumentType.word())
+                                .then(Commands.argument("price", IntegerArgumentType.integer(0))
+                                        .executes(c -> StrajaRuntime.get().desks().setPrice(actor(c),
+                                                StringArgumentType.getString(c, "id"),
+                                                StringArgumentType.getString(c, "item"),
+                                                IntegerArgumentType.getInteger(c, "price")) ? 1 : 0)))));
+        node.then(Commands.literal("labor")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.literal("on")
+                                .executes(c -> StrajaRuntime.get().desks()
+                                        .setCreditsLabor(actor(c), StringArgumentType.getString(c, "id"), true) ? 1 : 0))
+                        .then(Commands.literal("off")
+                                .executes(c -> StrajaRuntime.get().desks()
+                                        .setCreditsLabor(actor(c), StringArgumentType.getString(c, "id"), false) ? 1 : 0))));
+        node.then(Commands.literal("sell")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(c -> player(c, p -> StrajaRuntime.get().desks()
+                                .sell(p, StringArgumentType.getString(c, "id"), null, 0)))
+                        .then(Commands.argument("item", StringArgumentType.word())
+                                .executes(c -> player(c, p -> StrajaRuntime.get().desks()
+                                        .sell(p, StringArgumentType.getString(c, "id"),
+                                                StringArgumentType.getString(c, "item"), 0)))
+                                .then(Commands.argument("count", IntegerArgumentType.integer(1))
+                                        .executes(c -> player(c, p -> StrajaRuntime.get().desks()
+                                                .sell(p, StringArgumentType.getString(c, "id"),
+                                                        StringArgumentType.getString(c, "item"),
+                                                        IntegerArgumentType.getInteger(c, "count"))))))));
+        node.then(Commands.literal("ledger")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(c -> player(c, p -> StrajaRuntime.get().desks()
+                                .showLedger(p, StringArgumentType.getString(c, "id"), null)))
+                        .then(Commands.argument("seller", StringArgumentType.word())
+                                .executes(c -> player(c, p -> StrajaRuntime.get().desks()
+                                        .showLedger(p, StringArgumentType.getString(c, "id"),
+                                                StringArgumentType.getString(c, "seller")))))));
+        node.then(Commands.literal("list").executes(c -> player(c, StrajaRuntime.get().desks()::listDesks)));
+        // AT5 mine-camp profile: seeds the sell table from the camp's exit-gate
+        // carry bans and flags the desk for penal labor credit.
+        node.then(Commands.literal("quartermaster")
+                .then(Commands.argument("campId", StringArgumentType.word())
+                        .then(Commands.argument("id", StringArgumentType.word())
+                                .then(Commands.argument("price", IntegerArgumentType.integer(1))
+                                        .executes(c -> StrajaRuntime.get().desks().setupQuartermaster(actor(c),
+                                                StringArgumentType.getString(c, "campId"),
+                                                StringArgumentType.getString(c, "id"),
+                                                IntegerArgumentType.getInteger(c, "price")) ? 1 : 0)))));
         return node;
     }
 

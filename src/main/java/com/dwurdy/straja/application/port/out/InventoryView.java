@@ -12,6 +12,12 @@ public interface InventoryView {
     /** Removes up to {@code amount} from the slot; returns what was removed. */
     ItemView extract(int slot, int amount);
 
+    /**
+     * Serialized component data (SNBT) of the slot's stack, for component-
+     * preserving re-insertion elsewhere. Null when unsupported or empty.
+     */
+    default String snbtAt(int slot) { return null; }
+
     /** True when the whole batch fits without dropping anything. */
     boolean canReceive(List<ItemSpec> items);
 

@@ -261,6 +261,7 @@ public final class StrajaEvents {
                 new MinecraftPlayerGateway(player.getServer(), player.getUUID()), "off");
         runtime.checkpoints().setPickMode(
                 new MinecraftPlayerGateway(player.getServer(), player.getUUID()), null, "off");
+        runtime.desks().disarmPick(player.getUUID());
         var gateway = new MinecraftPlayerGateway(event.getEntity().getServer(), player.getUUID());
         runtime.checkpoints().clearPlayer(gateway.uuid());
         runtime.custodyRoleplay().recoverOnLogout(gateway);
@@ -615,7 +616,8 @@ public final class StrajaEvents {
         if (event.getHand() == net.minecraft.world.InteractionHand.MAIN_HAND
                 && (runtime.storage().onPickClick(gateway, dimension, pos.getX(), pos.getY(), pos.getZ())
                 || runtime.prisonRoleplay().onPickClick(gateway, dimension, pos.getX(), pos.getY(), pos.getZ())
-                || runtime.checkpoints().onPickClick(gateway, dimension, pos.getX(), pos.getY(), pos.getZ()))) {
+                || runtime.checkpoints().onPickClick(gateway, dimension, pos.getX(), pos.getY(), pos.getZ())
+                || runtime.desks().onPickClick(gateway, dimension, pos.getX(), pos.getY(), pos.getZ()))) {
             event.setCanceled(true);
             return;
         }

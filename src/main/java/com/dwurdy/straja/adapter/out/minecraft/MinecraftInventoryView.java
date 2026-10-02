@@ -70,6 +70,18 @@ public class MinecraftInventoryView implements InventoryView {
         return view(inventory.removeItem(slot, amount));
     }
 
+    @Override public String snbtAt(int slot) {
+        if (slot < 0 || slot >= slots()) return null;
+        ItemStack stack = inventory.getItem(slot);
+        if (stack == null || stack.isEmpty()) return null;
+        try {
+            Tag saved = stack.save(inventory.player.registryAccess());
+            return saved instanceof CompoundTag tag ? tag.toString() : null;
+        } catch (RuntimeException ex) {
+            return null;
+        }
+    }
+
     /**
      * Simulated capacity check: merges into same-item slots first, then free
      * slots. Mirrors the reference inventoryCanReceiveBatch semantics. Only the
