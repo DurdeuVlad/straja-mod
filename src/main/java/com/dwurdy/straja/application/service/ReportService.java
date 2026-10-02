@@ -78,11 +78,11 @@ public class ReportService implements ReportUseCase {
     public boolean submit(PlayerGateway player, String activity, String missions,
                           String incidents, String notes) {
         if (!isMember(player)) {
-            player.tell("Doar membrii Străjii depun rapoarte de activitate.");
+            player.refuse("straja.report.members_only", "straja.remedy.reception");
             return false;
         }
         if (activity == null || activity.isBlank()) {
-            player.tell("Raportul trebuie să descrie activitatea din perioada raportată.");
+            player.refuse("straja.report.content_required", "straja.remedy.fix_retry");
             return false;
         }
         long now = now();
@@ -92,7 +92,7 @@ public class ReportService implements ReportUseCase {
         ActivityReport report = store.openFor(uuid);
         boolean resubmission;
         if (report != null && ActivityReport.COMISAR_REVIEW.equals(report.status)) {
-            player.tell("Raportul " + report.id + " te așteaptă la Comisar; nu poți depune altul acum.");
+            player.refuse("straja.report.pending", "straja.remedy.ask_comisar", report.id);
             return false;
         }
         if (report == null) {
@@ -132,7 +132,7 @@ public class ReportService implements ReportUseCase {
     @Override
     public void status(PlayerGateway player) {
         if (!isMember(player)) {
-            player.tell("Doar membrii Străjii au rapoarte de activitate.");
+            player.refuse("straja.report.list_members", "straja.remedy.reception");
             return;
         }
         String uuid = player.uuid().toString();
@@ -141,7 +141,7 @@ public class ReportService implements ReportUseCase {
         ctx.reports().write(store);
         ActivityReport latest = store.latestFor(uuid);
         if (latest == null) {
-            player.tell("Nu ai depus încă niciun raport de activitate.");
+            player.refuse("straja.report.none_mine", "straja.remedy.secretary");
         } else {
             player.tell("Ultimul raport: " + latest.id + " (revizia " + latest.revision
                     + ") — " + describeStatus(latest) + ".");
@@ -161,12 +161,12 @@ public class ReportService implements ReportUseCase {
     @Override
     public void listForReview(PlayerGateway player) {
         if (!players.isCommissioner(player)) {
-            player.tell("Doar Comisaru' verifică rapoartele de activitate.");
+            player.refuse("straja.report.verify_comisar", "straja.remedy.ask_comisar");
             return;
         }
         var pending = ctx.reports().read().pendingReview();
         if (pending.isEmpty()) {
-            player.tell("Nu există rapoarte în așteptare.");
+            player.refuse("straja.report.none_pending", "straja.remedy.wait");
             return;
         }
         player.tell("Rapoarte în așteptare: " + pending.size());
@@ -178,13 +178,13 @@ public class ReportService implements ReportUseCase {
     @Override
     public boolean review(PlayerGateway player, String id, String decision, String note) {
         if (!players.isCommissioner(player)) {
-            player.tell("Doar Comisaru' verifică rapoartele de activitate.");
+            player.refuse("straja.report.verify_comisar", "straja.remedy.ask_comisar");
             return false;
         }
         ActivityReportStore store = ctx.reports().read();
         ActivityReport report = id == null ? null : store.reports.get(id.trim());
         if (report == null || !ActivityReport.SUBMITTED.equals(report.status)) {
-            player.tell("Raportul " + id + " nu așteaptă o decizie.");
+            player.refuse("straja.report.not_pending", "straja.remedy.retry", id);
             return false;
         }
         String normalized = decision == null ? "" : decision.trim().toLowerCase();
@@ -195,11 +195,11 @@ public class ReportService implements ReportUseCase {
             default -> null;
         };
         if (status == null) {
-            player.tell("Decizie necunoscută — folosește accept, return sau call.");
+            player.refuse("straja.report.bad_decision", "straja.remedy.fix_retry");
             return false;
         }
         if (ActivityReport.RETURNED.equals(status) && (note == null || note.isBlank())) {
-            player.tell("Un raport returnat are nevoie de o notă pentru autor.");
+            player.refuse("straja.report.return_note", "straja.remedy.fix_retry");
             return false;
         }
         report.status = status;

@@ -6,13 +6,17 @@ Native NeoForge 1.21.1 implementation of the Straja police system, replacing the
 legacy KubeJS runtime (`Politie Rustic Craft`). Romanian in-game text, English
 canonical commands with Romanian aliases.
 
-- **Minecraft** 1.21.1 · **NeoForge** 21.1.248 · **Java** 21
-- **Mod version** `0.1.0` · **Mod ID** `straja` · **Package** `com.dwurdy.straja` · **License** LGPL-3.0
+- **Minecraft** 1.21.1 · **NeoForge** 21.1.252 · **Java** 21
+- **Mod version** `0.2.0` · **Mod ID** `straja` · **Package** `com.dwurdy.straja` · **License** LGPL-3.0
 - **Required:** NeoForge, [Envelope](https://modrinth.com/mod/envelope) 0.6.2+
 - **Optional:** any coin items for the physical economy — defaults are
   Ady's Decorations coins; configure other item IDs under `[economy]` in
-  `config/straja-server.toml`.
+  `world/serverconfig/straja-server.toml`.
   No KubeJS, no CustomNPCs, no scripting runtime.
+
+**Quick starts:** [ghid pentru jucători](docs/player-quickstart.md) ·
+[ghid pentru administratori](docs/admin-quickstart.md) ·
+[manualul complet](docs/guard-manual.md)
 
 ## Architecture (hexagonal)
 

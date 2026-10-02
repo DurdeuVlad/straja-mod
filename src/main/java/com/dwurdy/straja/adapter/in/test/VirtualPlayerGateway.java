@@ -61,6 +61,9 @@ public final class VirtualPlayerGateway implements PlayerGateway {
     public void setAbsorption(double value) { this.absorption = value; }
 
     @Override public void tell(String text) { messageLog.add(text); }
+    @Override public void refuse(String reasonKey, String remedyKey, Object... reasonArgs) {
+        messageLog.add(VirtualLang.refusal(reasonKey, remedyKey, reasonArgs));
+    }
     public List<String> messageLog() { return List.copyOf(messageLog); }
     public void clearLog() { messageLog.clear(); }
 

@@ -1,5 +1,7 @@
 package com.dwurdy.straja.adapter.in.command;
 
+import static com.dwurdy.straja.adapter.in.StrajaText.refusal;
+
 import com.dwurdy.straja.adapter.in.npc.StrajaNpcEntity;
 import com.dwurdy.straja.bootstrap.StrajaRuntime;
 import com.dwurdy.straja.bootstrap.NpcPresentationRuntime;
@@ -75,7 +77,7 @@ final class NpcCommands {
                                     if (record == null) return 0;
                                     var result = runtime.npcs().assignRole(record.entityUuid, role);
                                     if (!result.ok()) {
-                                        ctx.getSource().sendFailure(Component.literal("Rol necunoscut: " + role));
+                                        ctx.getSource().sendFailure(refusal("straja.npc.role_unknown", "straja.remedy.fix_retry", role));
                                         return 0;
                                     }
                                     var entity = loaded(ctx, record.entityUuid);
@@ -163,7 +165,8 @@ final class NpcCommands {
             }
             return 1;
         } catch (IllegalStateException error) {
-            ctx.getSource().sendFailure(Component.literal(error.getMessage()));
+            ctx.getSource().sendFailure(refusal(
+                    "straja.cmd.failed", "straja.remedy.retry", error.getMessage()));
             return 0;
         }
     }
@@ -181,7 +184,8 @@ final class NpcCommands {
             }
             return failures == 0 ? 1 : 0;
         } catch (IllegalStateException error) {
-            ctx.getSource().sendFailure(Component.literal(error.getMessage()));
+            ctx.getSource().sendFailure(refusal(
+                    "straja.cmd.failed", "straja.remedy.retry", error.getMessage()));
             return 0;
         }
     }
@@ -192,15 +196,14 @@ final class NpcCommands {
         try {
             target = NpcProviderId.of(rawProvider);
         } catch (IllegalArgumentException error) {
-            ctx.getSource().sendFailure(Component.literal(
-                    "Unknown provider. Valid values: customnpcs, debug-text."));
+            ctx.getSource().sendFailure(refusal("straja.npc.provider_unknown", "straja.remedy.fix_retry"));
             return 0;
         }
         try {
             var state = NpcPresentationRuntime.require();
             if (target.equals(NpcProviderId.DEBUG_TEXT) && !state.debugTextEnabled()) {
-                ctx.getSource().sendFailure(Component.literal(
-                        "debug-text is disabled by the explicit NPC and debug security gates."));
+                ctx.getSource().sendFailure(refusal(
+                        "straja.npc.debug_gated", "straja.remedy.ask_comisar"));
                 return 0;
             }
             var result = state.migration().migrate(target, ctx.getSource().getTextName());
@@ -208,13 +211,14 @@ final class NpcCommands {
                     "NPC provider migration: " + result.result().status()
                             + " — " + result.result().message()));
             if (!result.rollback().isEmpty()) {
-                ctx.getSource().sendFailure(Component.literal(
-                        "Migration required rollback; inspect provider status before retrying."));
+                ctx.getSource().sendFailure(refusal(
+                        "straja.npc.migration_rollback", "straja.remedy.retry"));
             }
             return result.result().status() == com.dwurdy.straja.domain.model.NpcProviderResult.Status.ACCEPTED
                     ? 1 : 0;
         } catch (IllegalStateException | IllegalArgumentException error) {
-            ctx.getSource().sendFailure(Component.literal(error.getMessage()));
+            ctx.getSource().sendFailure(refusal(
+                    "straja.cmd.failed", "straja.remedy.retry", error.getMessage()));
             return 0;
         }
     }
@@ -224,9 +228,7 @@ final class NpcCommands {
         var runtime = StrajaRuntime.get();
         if (runtime == null) return 0;
         if (!com.dwurdy.straja.application.service.NpcAdminService.KNOWN_ROLES.contains(role)) {
-            ctx.getSource().sendFailure(Component.literal(
-                    "Rol necunoscut: " + role + ". Valide: "
-                            + com.dwurdy.straja.application.service.NpcAdminService.KNOWN_ROLES));
+            ctx.getSource().sendFailure(refusal("straja.npc.role_unknown_valid", "straja.remedy.fix_retry", role, com.dwurdy.straja.application.service.NpcAdminService.KNOWN_ROLES));
             return 0;
         }
         var level = ctx.getSource().getLevel();
@@ -246,8 +248,8 @@ final class NpcCommands {
         String actorId = NpcProvisioningActorIdentity.fromSource(source.getTextName(), playerUuid);
         var result = NpcPresentationRuntime.bindCustomNpc(host, role, station, actorId);
         if (result.status() != com.dwurdy.straja.domain.model.NpcProviderResult.Status.ACCEPTED) {
-            ctx.getSource().sendFailure(Component.literal(
-                    "CustomNPCs binding failed: " + result.code() + " — " + result.message()));
+            ctx.getSource().sendFailure(refusal("straja.npc.binding_failed",
+                    "straja.remedy.retry", result.code() + " — " + result.message()));
             return 0;
         }
         ctx.getSource().sendSystemMessage(Component.literal(
@@ -268,7 +270,7 @@ final class NpcCommands {
                 runtime.context().npcs().read(),
                 com.dwurdy.straja.application.service.NpcAdminService.ROLE_ORDER);
         if (missing.isEmpty()) {
-            ctx.getSource().sendSystemMessage(Component.literal("Toate NPC-urile Straja sunt deja înregistrate."));
+            ctx.getSource().sendSystemMessage(refusal("straja.npc.all_registered", "straja.remedy.fix_retry"));
             return 1;
         }
         var setup = runtime.context().setup().read();
@@ -299,9 +301,7 @@ final class NpcCommands {
             }
         }
         if (!missingLocations.isEmpty()) {
-            ctx.getSource().sendFailure(Component.literal(
-                    "Lipsesc locațiile NPC-urilor: " + String.join(", ", missingLocations)
-                            + ". Folosește /straja set-location <nume> înainte de setup npcs."));
+            ctx.getSource().sendFailure(refusal("straja.npc.locations_missing", "straja.remedy.fix_retry", String.join(", ", missingLocations)));
             return 0;
         }
         for (String role : missing) {
@@ -339,7 +339,7 @@ final class NpcCommands {
             }
         }
         if (record == null) {
-            ctx.getSource().sendFailure(Component.literal("NPC necunoscut: " + key));
+            ctx.getSource().sendFailure(refusal("straja.npc.npc_unknown", "straja.remedy.fix_retry", key));
         }
         return record;
     }

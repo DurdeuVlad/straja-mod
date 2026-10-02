@@ -65,22 +65,22 @@ public class PrisonService implements PrisonRoleplayUseCase {
                               String dimension, int minX, int minY, int minZ,
                               int maxX, int maxY, int maxZ) {
         if (!players.isCommissioner(actor)) {
-            actor.tell("Doar Comisaru' poate configura celule.");
+            actor.refuse("straja.prison.cells_comisar", "straja.remedy.ask_comisar");
             return false;
         }
         var data = store();
         String id = (requestedId == null || requestedId.isBlank()
                 ? nextCellId(data) : requestedId).toLowerCase();
         if (!id.matches("[a-z0-9_-]{1,32}")) {
-            actor.tell("ID de celulă invalid.");
+            actor.refuse("straja.prison.cell_invalid", "straja.remedy.fix_retry");
             return false;
         }
         if (data.assignments.containsKey(id)) {
-            actor.tell("Celula este ocupată și nu poate fi recreată până la eliberare.");
+            actor.refuse("straja.prison.cell_occupied", "straja.remedy.wait");
             return false;
         }
         if (data.cells.size() >= ctx.policies().prisonMaxCells && data.cell(id) == null) {
-            actor.tell("Numărul maxim de celule a fost atins.");
+            actor.refuse("straja.prison.max_cells", "straja.remedy.ask_comisar");
             return false;
         }
         var cell = new Cell();
@@ -92,9 +92,9 @@ public class PrisonService implements PrisonRoleplayUseCase {
         cell.maxX = Math.max(minX, maxX);
         cell.maxY = Math.max(minY, maxY);
         cell.maxZ = Math.max(minZ, maxZ);
-        var geometryError = validateCellGeometry(cell);
-        if (geometryError != null) {
-            actor.tell(geometryError);
+        var geometryErrorKey = validateCellGeometry(cell);
+        if (geometryErrorKey != null) {
+            actor.refuse(geometryErrorKey, "straja.remedy.fix_retry");
             audit.record("prison_cell_create", actor.name(), uuidOf(actor), id, "", "REFUSED", "invalid_geometry");
             return false;
         }
@@ -117,7 +117,7 @@ public class PrisonService implements PrisonRoleplayUseCase {
         if (interiorX < ctx.policies().roomMinInteriorX
                 || interiorY < ctx.policies().roomMinInteriorY
                 || interiorZ < ctx.policies().roomMinInteriorZ) {
-            return "Interiorul celulei este prea mic pentru o celulă sigură.";
+            return "straja.prison.cell_too_small";
         }
         int minX = cell.minX - 1, minY = cell.minY - 1, minZ = cell.minZ - 1;
         int maxX = cell.maxX + 1, maxY = cell.maxY + 1, maxZ = cell.maxZ + 1;
@@ -128,7 +128,7 @@ public class PrisonService implements PrisonRoleplayUseCase {
                 || maxY - minY + 1 > ctx.policies().roomMaxDimension
                 || maxZ - minZ + 1 > ctx.policies().roomMaxDimension
                 || volume > ctx.policies().roomMaxBlocks) {
-            return "Celula depășește limitele sigure de dimensiune sau volum.";
+            return "straja.prison.cell_too_large";
         }
         List<int[]> doors = new ArrayList<>();
         for (int x = minX; x <= maxX; x++) {
@@ -137,13 +137,13 @@ public class PrisonService implements PrisonRoleplayUseCase {
                     boolean boundary = x == minX || x == maxX || y == minY || y == maxY || z == minZ || z == maxZ;
                     if (!boundary) continue;
                     var block = ctx.world().blockAt(cell.dimension, x, y, z);
-                    if (block == null) return "Un bloc din zona celulei nu poate fi citit; celula nu a fost creată.";
+                    if (block == null) return "straja.prison.cell_unreadable";
                     if (block.solid()) continue;
                     if (block.door()) {
                         doors.add(new int[]{x, y, z});
                         continue;
                     }
-                    return "Pereții celulei nu sunt închiși complet.";
+                    return "straja.prison.cell_open_wall";
                 }
             }
         }
@@ -151,10 +151,10 @@ public class PrisonService implements PrisonRoleplayUseCase {
             if (doors.size() != 2 || doors.get(0)[0] != doors.get(1)[0]
                     || doors.get(0)[2] != doors.get(1)[2]
                     || Math.abs(doors.get(0)[1] - doors.get(1)[1]) != 1) {
-                return "Celula trebuie să aibă exact o ușă standard de două blocuri.";
+                return "straja.prison.cell_door";
             }
         } else if (doors.isEmpty()) {
-            return "Celula trebuie să aibă o ușă.";
+            return "straja.prison.cell_door_missing";
         }
         int[] door = doors.stream().min(Comparator.comparingInt(d -> d[1])).orElse(null);
         if (door != null) {
@@ -166,7 +166,7 @@ public class PrisonService implements PrisonRoleplayUseCase {
     public void listCells(PlayerGateway actor) {
         var data = store();
         if (data.cells.isEmpty()) {
-            actor.tell("Nu există celule configurate.");
+            actor.refuse("straja.prison.no_cells", "straja.remedy.ask_comisar");
             return;
         }
         for (Cell c : data.cells) {
@@ -254,7 +254,7 @@ public class PrisonService implements PrisonRoleplayUseCase {
     public Sentence arrest(PlayerGateway target, String fineId, int days,
                            PlayerGateway actor, String missionId) {
         if (!ctx.policies().prisonEnabled) {
-            if (actor != null) actor.tell("Sistemul de detenție este dezactivat.");
+            if (actor != null) actor.refuse("straja.prison.disabled", "straja.remedy.ask_comisar");
             audit.record("prison_arrest", actor == null ? "" : actor.name(),
                     actor == null ? "" : uuidOf(actor), target.name(), uuidOf(target),
                     "REFUSED", "prison_disabled");
@@ -300,7 +300,7 @@ public class PrisonService implements PrisonRoleplayUseCase {
             if (custody.enterJail(online, "prison")) {
                 teleportToCell(online, cell);
             } else {
-                online.tell("Arestarea a fost înregistrată, dar predarea la închisoare trebuie repetată.");
+                online.refuse("straja.prison.handover_retry", "straja.remedy.jailer");
             }
         }
         if (online != null) {
@@ -319,11 +319,11 @@ public class PrisonService implements PrisonRoleplayUseCase {
 
     public boolean release(PlayerGateway actor, PlayerGateway target, String reason) {
         if (target == null) {
-            actor.tell("Jucătorul țintă trebuie să fie online.");
+            actor.refuse("straja.common.target_offline", "straja.remedy.wait");
             return false;
         }
         if (!players.hasCapability(actor, Capability.EXECUTE_ARRESTS)) {
-            actor.tell("Doar un Străjer sau Comisaru' poate elibera un deținut.");
+            actor.refuse("straja.prison.release_rank", "straja.remedy.jailer");
             audit.record("prison_release", actor.name(), uuidOf(actor),
                     target.name(), uuidOf(target),
                     "REFUSED", "missing_authority");
@@ -332,7 +332,7 @@ public class PrisonService implements PrisonRoleplayUseCase {
         var data = store();
         var sentence = activeSentenceFrom(data, target);
         if (sentence == null) {
-            actor.tell(target.name() + " nu are o sentință activă.");
+            actor.refuse("straja.prison.no_sentence", "straja.remedy.jailer", target.name());
             return false;
         }
         if (!releaseSentence(data, sentence, target, "FORCED_RELEASE")) return false;
@@ -369,7 +369,7 @@ public class PrisonService implements PrisonRoleplayUseCase {
     public void status(PlayerGateway player) {
         var sentence = activeSentence(player);
         if (sentence == null) {
-            player.tell("Nu ai o sentință activă.");
+            player.refuse("straja.prison.self_no_sentence", "straja.remedy.jailer");
             return;
         }
         player.tell("Detenție: " + sentence.status + " | celulă: "

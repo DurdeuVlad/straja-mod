@@ -1,6 +1,8 @@
 package com.dwurdy.straja.adapter.in.form;
 
 import com.dwurdy.straja.adapter.out.minecraft.MinecraftPlayerGateway;
+
+import static com.dwurdy.straja.adapter.in.StrajaText.refusal;
 import com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase;
 import com.dwurdy.straja.application.port.in.ComplaintRoleplayUseCase;
 import com.dwurdy.straja.application.port.in.FineRoleplayUseCase;
@@ -66,8 +68,7 @@ public final class FormSubmissionRouter {
                 Integer minutes = parseInt(values.get("minutes"));
                 Integer reward = parseInt(values.get("reward"));
                 if (minutes == null || reward == null) {
-                    player.sendSystemMessage(net.minecraft.network.chat.Component
-                            .literal("Datele ordinului nu sunt valide."));
+                    player.sendSystemMessage(refusal("straja.form.order_invalid", "straja.remedy.fix_retry"));
                     return;
                 }
                 missions.draftWrite(gateway, minutes, values.get("start"), reward, values.get("objective"));
@@ -75,8 +76,7 @@ public final class FormSubmissionRouter {
             case MISSION_DRAFT_SCOPE -> {
                 Integer maxAssignees = parseInt(firstValue(values, "max-assignees", "maxAssignees"));
                 if (maxAssignees == null) {
-                    player.sendSystemMessage(net.minecraft.network.chat.Component
-                            .literal("Datele ordinului nu sunt valide."));
+                    player.sendSystemMessage(refusal("straja.form.order_invalid", "straja.remedy.fix_retry"));
                     return;
                 }
                 missions.draftScope(gateway, firstValue(values, "minimum-rank", "minimumRank"), maxAssignees);
@@ -94,8 +94,7 @@ public final class FormSubmissionRouter {
             case COMPLAINT_REVIEW -> {
                 Integer reward = parseInt(values.get("reward"));
                 if (reward == null) {
-                    player.sendSystemMessage(net.minecraft.network.chat.Component
-                            .literal("Datele verificării nu sunt valide."));
+                    player.sendSystemMessage(refusal("straja.form.verify_invalid", "straja.remedy.fix_retry"));
                     return;
                 }
                 complaints.review(gateway, submission.recordId(), values.get("decision"), reward);
@@ -103,8 +102,7 @@ public final class FormSubmissionRouter {
             case FINE_DRAFT -> {
                 Integer amount = parseInt(values.get("amount"));
                 if (amount == null) {
-                    player.sendSystemMessage(net.minecraft.network.chat.Component
-                            .literal("Datele amenzii nu sunt valide."));
+                    player.sendSystemMessage(refusal("straja.form.fine_invalid", "straja.remedy.fix_retry"));
                     return;
                 }
                 fines.writeDraft(gateway, values.get("target"), amount,
@@ -119,8 +117,7 @@ public final class FormSubmissionRouter {
                         "reduce", "redu", "micsoreaza", "micșorează")
                         .contains(decision.toLowerCase());
                 if (reduce && reduced == null) {
-                    player.sendSystemMessage(net.minecraft.network.chat.Component
-                            .literal("Datele contestației nu sunt valide."));
+                    player.sendSystemMessage(refusal("straja.form.appeal_invalid", "straja.remedy.fix_retry"));
                     return;
                 }
                 fines.reviewAppeal(gateway, submission.recordId(), decision,
@@ -144,8 +141,7 @@ public final class FormSubmissionRouter {
             case ARCHIVE_COPY -> {
                 Integer count = parseInt(values.get("count"));
                 if (count == null) {
-                    player.sendSystemMessage(net.minecraft.network.chat.Component
-                            .literal("Datele copierii nu sunt valide."));
+                    player.sendSystemMessage(refusal("straja.form.copy_invalid", "straja.remedy.fix_retry"));
                     return;
                 }
                 archive.copySheet(gateway, submission.recordId(), count, values.get("targets"));
@@ -168,8 +164,7 @@ public final class FormSubmissionRouter {
             case ADMIN_AUTHORIZE -> {
                 String rankOrGrade = values.get("rank");
                 if (rankOrGrade == null || rankOrGrade.isBlank()) {
-                    player.sendSystemMessage(net.minecraft.network.chat.Component
-                            .literal("Rangul sau gradul lipsește."));
+                    player.sendSystemMessage(refusal("straja.form.rank_missing", "straja.remedy.fix_retry"));
                     return;
                 }
                 admin.authorize(gateway, values.get("name"), rankOrGrade);
@@ -193,8 +188,8 @@ public final class FormSubmissionRouter {
             }
             case GIVE_UP -> {
                 if (!custody.giveUp(gateway, true)) {
-                    player.sendSystemMessage(net.minecraft.network.chat.Component.translatable(
-                            "straja.give_up.stale"));
+                    player.sendSystemMessage(refusal(
+                            "straja.give_up.stale", "straja.remedy.retry"));
                 }
             }
             case INCIDENT_REPORT ->
@@ -210,8 +205,7 @@ public final class FormSubmissionRouter {
                 Integer slot = parseInt(values.get("slot"));
                 Integer amount = parseInt(values.get("amount"));
                 if (slot == null || amount == null) {
-                    player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
-                            "Slotul și cantitatea probei trebuie să fie numere."));
+                    player.sendSystemMessage(refusal("straja.form.slot_not_numbers", "straja.remedy.fix_retry"));
                     return;
                 }
                 expansion.confiscate(gateway, submission.recordId(), slot, amount,
@@ -225,7 +219,7 @@ public final class FormSubmissionRouter {
             case EVIDENCE_CASE_VIEW -> {
                 var records = com.dwurdy.straja.bootstrap.StrajaRuntime.get()
                         .evidence().recordsForCase(gateway, values.get("caseId"));
-                if (records.isEmpty()) gateway.tell("Dosarul nu există sau nu are probe vizibile.");
+                if (records.isEmpty()) gateway.refuse("straja.form.dossier_evidence", "straja.remedy.archivist");
                 else for (var evidence : records) {
                     gateway.tell(evidence.id + " — " + evidence.itemId + " x" + evidence.amount
                             + " — " + evidence.status);
@@ -237,7 +231,7 @@ public final class FormSubmissionRouter {
             case REPUTATION_VIEW -> {
                 var history = expansion.reputationHistory(gateway, values.get("subject"));
                 if (history.isEmpty()) {
-                    gateway.tell("Nu există istoric sau subiectul nu este online.");
+                    gateway.refuse("straja.form.subject_history", "straja.remedy.retry");
                 } else {
                     for (var event : history) {
                         gateway.tell(event.id() + " " + event.source() + " delta=" + event.delta()
@@ -249,8 +243,7 @@ public final class FormSubmissionRouter {
             case REPUTATION_CORRECTION -> {
                 Integer delta = parseInt(values.get("delta"));
                 if (delta == null) {
-                    player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
-                            "Modificarea reputației trebuie să fie un număr."));
+                    player.sendSystemMessage(refusal("straja.form.reputation_not_number", "straja.remedy.fix_retry"));
                     return;
                 }
                 expansion.correctReputation(gateway, values.get("subject"), delta, values.get("reason"));

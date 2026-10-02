@@ -32,7 +32,7 @@ public class EmergencyService implements EmergencyUseCase {
     public void alert(PlayerGateway actor, String message) {
         if (!authorized(actor)) return;
         if (message == null || message.isBlank()) {
-            actor.tell("Folosire: /straja emergency alert <mesaj>.");
+            actor.refuse("straja.emergency.alert_usage", "straja.remedy.fix_retry");
             return;
         }
         EmergencyState state = ctx.emergency().read();
@@ -52,7 +52,7 @@ public class EmergencyService implements EmergencyUseCase {
         if (!authorized(actor)) return;
         EmergencyState state = ctx.emergency().read();
         if (!state.urgencyLive(now(), ctx.policies().emergencyUrgencyTtlMinutes)) {
-            actor.tell("Nu există o urgență activă.");
+            actor.refuse("straja.emergency.none", "straja.remedy.ask_comisar");
             return;
         }
         state.clearUrgency();
@@ -67,8 +67,7 @@ public class EmergencyService implements EmergencyUseCase {
         if (!authorized(actor)) return;
         EmergencyState state = ctx.emergency().read();
         if (state.active) {
-            actor.tell("Starea de urgență este deja activă (×" + state.payMultiplier
-                    + " plată, " + state.requiredRounds + " runde obligatorii).");
+            actor.refuse("straja.emergency.already_active", "straja.remedy.fix_retry", state.payMultiplier, state.requiredRounds);
             return;
         }
         var policies = ctx.policies();
@@ -102,7 +101,7 @@ public class EmergencyService implements EmergencyUseCase {
         if (!authorized(actor)) return;
         EmergencyState state = ctx.emergency().read();
         if (!state.active) {
-            actor.tell("Starea de urgență nu este activă.");
+            actor.refuse("straja.emergency.inactive", "straja.remedy.ask_comisar");
             return;
         }
         state.clearEmergency();
@@ -148,7 +147,7 @@ public class EmergencyService implements EmergencyUseCase {
 
     private boolean authorized(PlayerGateway actor) {
         if (players.isCommissioner(actor) || actor.isOp()) return true;
-        actor.tell("Doar Comisarul sau un operator poate gestiona starea de urgență.");
+        actor.refuse("straja.emergency.comisar_only", "straja.remedy.ask_comisar");
         return false;
     }
 

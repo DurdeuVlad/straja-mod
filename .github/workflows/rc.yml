@@ -725,7 +725,7 @@ jobs:
           --repo "$GITHUB_REPOSITORY" --tag "$GITHUB_REF_NAME"
           --name "Straja $GITHUB_REF_NAME (release candidate)"
           --notes "Release candidate. Blocking gates green; advisory client verdict recorded in release-manifest.json. Promote by pushing the matching stable tag."
-          --commit "$GITHUB_SHA" --prerelease
+          --commit "$GITHUB_SHA" --prerelease --generate-notes
           --files "$JAR" straja-*.sha256 straja-*.sha512 release-manifest.json sbom.json publication-ledger.json
           --ledger github-ledger.json
 

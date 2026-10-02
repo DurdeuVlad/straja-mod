@@ -665,7 +665,7 @@ public final class StrajaEvents {
                 String documentId = PhysicalItemSurface.firstValidRecordId(
                         item.data("ArchiveDocumentId"), item.data("ArchiveCopyOf"));
                 if (documentId == null) {
-                    player.tell("Documentul arhivei nu are o referință validă.");
+                    player.refuse("straja.item.archive_ref", "straja.remedy.archivist");
                 } else {
                     runtime.archiveRoleplay().readSheet(player, documentId);
                 }
@@ -682,7 +682,7 @@ public final class StrajaEvents {
                 if (runtime.playerQueries().hasCapability(player, Capability.ISSUE_FINES)) {
                     player.tell(runtime.fineRoleplay().draftText(player));
                 } else {
-                    player.tell("Registrul de Amenzi este rezervat Străjii active.");
+                    player.refuse("straja.item.fine_book_reserved", "straja.remedy.duty");
                 }
                 return true;
             }
@@ -708,7 +708,7 @@ public final class StrajaEvents {
             case IDENTITY_CARD -> {
                 String cardId = PhysicalItemSurface.validRecordId(item.data("IdentityCardId"));
                 if (cardId == null || !cardId.startsWith("ID-")) {
-                    player.tell("Buletinul nu are o referință validă.");
+                    player.refuse("straja.item.id_ref", "straja.remedy.archivist");
                 } else {
                     runtime.identityCards().read(player, cardId,
                             item.data("IdentityCardHolder"), item.data("IdentityCardAuthenticity"));
@@ -718,7 +718,7 @@ public final class StrajaEvents {
             case OFFICIAL_DOCUMENT -> {
                 String documentId = PhysicalItemSurface.validRecordId(item.data("DocumentId"));
                 var document = documentId == null ? null : runtime.v2Documents().inspect(documentId);
-                if (document == null) player.tell("Documentul oficial nu are o referință validă.");
+                if (document == null) player.refuse("straja.item.doc_ref", "straja.remedy.archivist");
                 else player.tell("Document oficial " + document.documentId + " | " + document.type
                         + " | " + document.status);
                 return true;
@@ -730,7 +730,7 @@ public final class StrajaEvents {
                         .findFirst().orElse(null);
                 if (instrument == null || (!player.uuid().toString().equals(instrument.holder)
                         && !runtime.playerQueries().isCommissioner(player))) {
-                    player.tell("Instrumentul nu are o referință validă sau nu îți aparține.");
+                    player.refuse("straja.item.tool_ref", "straja.remedy.retry");
                 } else {
                     player.tell("Instrument " + instrument.instrumentId + " | " + instrument.instrumentType
                             + " | cantitate " + instrument.remainingQuantity + "/" + instrument.initialQuantity);
@@ -780,7 +780,7 @@ public final class StrajaEvents {
         String dimension = player.level().dimension().location().toString();
         if (runtime.prisonRoleplay().insideCell(dimension, pos.getX(), pos.getY(), pos.getZ())) {
             event.setCanceled(true);
-            gateway.tell("Celula este protejată. Doar adminii o pot modifica sau deschide.");
+            gateway.refuse("straja.cell.protected", "straja.remedy.ask_comisar");
             return;
         }
         if (runtime.roomRoleplay().protectBlock(gateway, dimension, pos.getX(), pos.getY(), pos.getZ())) {

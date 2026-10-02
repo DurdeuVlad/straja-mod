@@ -1,5 +1,7 @@
 package com.dwurdy.straja.adapter.in.command;
 
+import static com.dwurdy.straja.adapter.in.StrajaText.refusal;
+
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.tree.ArgumentCommandNode;
@@ -343,13 +345,13 @@ final class AdminCommandHelp {
             return sendRoot(source);
         }
         if (!source.hasPermission(ADMIN_PERMISSION)) {
-            source.sendFailure(Component.literal("Ajutorul Straja cere OP 3."));
+            source.sendFailure(refusal("straja.cmd.help_op", "straja.remedy.ask_comisar"));
             return 0;
         }
 
         int permission = permissionLevel(commandKey);
         if (permission > effectivePermission(source)) {
-            source.sendFailure(Component.literal("Comanda cere OP " + permission + "."));
+            source.sendFailure(refusal("straja.cmd.command_op", "straja.remedy.ask_comisar", permission));
             return 0;
         }
         HelpSpec spec = STRUCTURED_SPECS.get(commandKey);

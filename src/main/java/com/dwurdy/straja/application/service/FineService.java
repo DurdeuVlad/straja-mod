@@ -228,34 +228,34 @@ public class FineService implements FineRoleplayUseCase {
 
     public boolean writeDraft(PlayerGateway issuer, PlayerGateway target, int amount, String law, String description) {
         if (!p().finesEnabled) {
-            issuer.tell("Sistemul de amenzi este dezactivat.");
+            issuer.refuse("straja.fine.disabled", "straja.remedy.ask_comisar");
             return false;
         }
         if (!players.hasCapability(issuer, Capability.ISSUE_FINES) || !issuer.inventory().contains(itemId("fine_book"))) {
-            issuer.tell("Ține Registrul de Amenzi în inventar și fii în serviciu.");
+            issuer.refuse("straja.fine.hold_ledger", "straja.remedy.duty");
             return false;
         }
         if (target == null) {
-            issuer.tell("Cetățeanul trebuie să fie online pentru întocmirea amenzii.");
+            issuer.refuse("straja.fine.citizen_offline", "straja.remedy.wait");
             return false;
         }
         if (players.isCommissioner(target)
                 || (!players.isCommissioner(issuer)
                         && players.state(target).rank >= players.state(issuer).rank)) {
-            issuer.tell("Nu poți amenda Comisaru' sau un gardian de același rang/superior.");
+            issuer.refuse("straja.fine.protected_target", "straja.remedy.fix_retry");
             return false;
         }
         List<Integer> allowed = p().fineAllowedAmounts.stream().sorted().toList();
         if (!allowed.contains(amount)) {
-            issuer.tell("Suma trebuie să fie una standard: " + joinInts(allowed) + " monede.");
+            issuer.refuse("straja.fine.amount_standard", "straja.remedy.fix_retry", joinInts(allowed));
             return false;
         }
         if (law == null || law.isBlank() || law.length() > p().fineMaxLawLength) {
-            issuer.tell("Legea trebuie completată și să aibă maximum " + p().fineMaxLawLength + " caractere.");
+            issuer.refuse("straja.fine.law_required", "straja.remedy.fix_retry", p().fineMaxLawLength);
             return false;
         }
         if (description == null || description.isBlank() || description.length() > p().fineMaxDescriptionLength) {
-            issuer.tell("Descrierea trebuie completată și să aibă maximum " + p().fineMaxDescriptionLength + " caractere.");
+            issuer.refuse("straja.fine.desc_required", "straja.remedy.fix_retry", p().fineMaxDescriptionLength);
             return false;
         }
         FineStore data = ctx.fines().read();
@@ -280,24 +280,24 @@ public class FineService implements FineRoleplayUseCase {
 
     public boolean issueFromDraft(PlayerGateway issuer, PlayerGateway target) {
         if (!p().finesEnabled) {
-            issuer.tell("Sistemul de amenzi este dezactivat.");
+            issuer.refuse("straja.fine.disabled", "straja.remedy.ask_comisar");
             return false;
         }
         FineStore data = ctx.fines().read();
         FineStore.FineDraft draft = data.drafts.get(issuer.uuid().toString());
         if (draft == null) {
-            issuer.tell("Nu ai un formular de amendă scris. Completează Registrul de Amenzi înainte să-l prezinți țintei.");
+            issuer.refuse("straja.fine.no_form", "straja.remedy.fix_retry");
             return false;
         }
         if (target == null || !target.uuid().toString().equals(draft.targetUuid)) {
-            issuer.tell("Aceasta nu este ținta înscrisă în formular.");
+            issuer.refuse("straja.fine.wrong_target", "straja.remedy.fix_retry");
             return false;
         }
         if (!players.hasCapability(issuer, Capability.ISSUE_FINES)
                 || players.isCommissioner(target)
                 || (!players.isCommissioner(issuer)
                         && players.state(target).rank >= players.state(issuer).rank)) {
-            issuer.tell("Amenda este refuzată de matricea de autoritate.");
+            issuer.refuse("straja.fine.auth_matrix", "straja.remedy.ask_comisar");
             return false;
         }
         for (Fine existing : data.fines) {
@@ -310,14 +310,14 @@ public class FineService implements FineRoleplayUseCase {
                     || !("ISSUED".equals(existing.status) || "DELIVERY_FAILED".equals(existing.status))) continue;
             if ("DELIVERY_FAILED".equals(existing.status)) {
                 if (!target.giveVerified(noticeStack(existing))) {
-                    issuer.tell("Înștiințarea existentă încă nu poate fi predată.");
+                    issuer.refuse("straja.fine.notice_pending", "straja.remedy.wait");
                     return false;
                 }
                 existing.status = "ISSUED";
             }
             data.drafts.remove(issuer.uuid().toString());
             ctx.fines().write(data);
-            issuer.tell("Amenda " + existing.id + " există deja; nu a fost creat un duplicat.");
+            issuer.refuse("straja.fine.duplicate", "straja.remedy.fix_retry", existing.id);
             return true;
         }
         long issuedAt = now();
@@ -342,7 +342,7 @@ public class FineService implements FineRoleplayUseCase {
             fine.status = "DELIVERY_FAILED";
             ctx.fines().write(data);
             audit.record("fine_issue", issuer.name(), issuer.uuid().toString(), target.name(), target.uuid().toString(), "FAILED", "inventory_delivery_failed fineId=" + fine.id);
-            issuer.tell("Înștiințarea nu a putut fi predată; amenda a fost blocată pentru verificare.");
+            issuer.refuse("straja.fine.notice_fail", "straja.remedy.ask_comisar");
             return false;
         }
         data.drafts.remove(issuer.uuid().toString());
@@ -366,25 +366,25 @@ public class FineService implements FineRoleplayUseCase {
 
     public boolean pay(PlayerGateway player, String id) {
         if (!p().finesEnabled) {
-            player.tell("Sistemul de amenzi este dezactivat.");
+            player.refuse("straja.fine.disabled", "straja.remedy.ask_comisar");
             return false;
         }
         FineStore data = ctx.fines().read();
         Fine fine = data.find(id);
         if (fine == null || !List.of("ISSUED", "ESCALATED", "ARREST_PENDING", "IN_SENTENCE", "GRACE_AFTER_SENTENCE").contains(fine.status)) {
-            player.tell("Amenda nu există sau este deja închisă.");
+            player.refuse("straja.fine.missing", "straja.remedy.reception");
             return false;
         }
         if (!PlayerService.identityMatches(player, fine.targetUuid, fine.target)) {
-            player.tell("Această amendă nu îți aparține.");
+            player.refuse("straja.fine.not_yours", "straja.remedy.reception");
             return false;
         }
         if (p().finePaymentRequiresReception && !near(player, location("receptionist"), 6)) {
-            player.tell("Plata se face la recepționistă. Mergi la locația configurată de Comisaru'.");
+            player.refuse("straja.fine.pay_reception", "straja.remedy.reception");
             return false;
         }
         if (ctx.currency().balanceOf(player) < fine.amount) {
-            player.tell("Nu ai combinația exactă de monede pentru această amendă.");
+            player.refuse("straja.fine.exact_coins", "straja.remedy.reception");
             return false;
         }
         String previousStatus = fine.status;
@@ -410,9 +410,11 @@ public class FineService implements FineRoleplayUseCase {
             ctx.fines().write(data);
             audit.record("fine_pay", player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), "FAILED",
                     (fine.paymentAttempt != null ? "payment_review" : "no_debit") + " fineId=" + fine.id + " removedValue=" + withdrawal.removed());
-            player.tell(fine.paymentAttempt != null
-                    ? "Plata a eșuat după o modificare posibilă a inventarului. Amenda este blocată pentru verificarea Comisarului; nu încerca din nou."
-                    : "Plata nu a putut fi efectuată; monedele nu au fost debitate.");
+            if (fine.paymentAttempt != null) {
+                player.refuse("straja.fine.pay_failed_review", "straja.remedy.wait");
+            } else {
+                player.refuse("straja.fine.pay_failed", "straja.remedy.retry");
+            }
             return false;
         }
         fine.status = "PAID";
@@ -433,20 +435,20 @@ public class FineService implements FineRoleplayUseCase {
 
     public boolean recoverPayment(PlayerGateway player, String id, String decision) {
         if (!players.isCommissioner(player)) {
-            player.tell("Doar Comisaru' poate recupera o plată aflată în verificare.");
+            player.refuse("straja.fine.recover_comisar", "straja.remedy.ask_comisar");
             return false;
         }
         FineStore data = ctx.fines().read();
         Fine fine = data.find(id);
         if (fine == null || !"PAYMENT_REVIEW".equals(fine.status) || fine.paymentAttempt == null) {
-            player.tell("Nu există o plată de amendă în verificare pentru acest ID.");
+            player.refuse("straja.fine.no_pending_payment", "straja.remedy.retry");
             return false;
         }
         Fine.PaymentAttempt attempt = fine.paymentAttempt;
         String action = decision == null ? "" : decision.toLowerCase();
         if ("retry".equals(action) || "reincearca".equals(action)) {
             if (attempt.removedValue > 0 || attempt.sideEffectUnknown) {
-                player.tell("Retry este blocat: inventarul poate fi modificat parțial. Verifică tranzacția și folosește recover paid dacă plata a fost încasată.");
+                player.refuse("straja.fine.retry_blocked", "straja.remedy.fix_retry");
                 return false;
             }
             fine.status = attempt.previousStatus;
@@ -484,36 +486,36 @@ public class FineService implements FineRoleplayUseCase {
 
     public boolean appeal(PlayerGateway player, String id, String reason) {
         if (!p().appealsEnabled) {
-            player.tell("Contestațiile sunt dezactivate.");
+            player.refuse("straja.fine.appeals_off", "straja.remedy.ask_comisar");
             return false;
         }
         if (!near(player, location("receptionist"), 6)) {
-            player.tell("Contestația se depune la recepționistă.");
+            player.refuse("straja.fine.appeal_reception", "straja.remedy.reception");
             return false;
         }
         FineStore data = ctx.fines().read();
         String key = player.uuid().toString();
         FineStore.AppealAbuse abuse = data.appealAbuse.get(key);
         if (abuse != null && abuse.blockedUntil > now()) {
-            player.tell("Contestațiile tale sunt blocate temporar pentru depuneri repetate.");
+            player.refuse("straja.fine.appeals_blocked_self", "straja.remedy.wait");
             return false;
         }
         Fine fine = data.find(id);
         if (fine == null || !List.of("ISSUED", "GRACE_AFTER_SENTENCE").contains(fine.status)) {
-            player.tell("Amenda nu mai poate fi contestată: trebuie să fie neachitată și neescaladată.");
+            player.refuse("straja.fine.appeal_state", "straja.remedy.reception");
             return false;
         }
         if (!PlayerService.identityMatches(player, fine.targetUuid, fine.target)) {
-            player.tell("Doar cetățeanul amendat poate depune contestația.");
+            player.refuse("straja.fine.appeal_owner", "straja.remedy.reception");
             return false;
         }
         if (fine.appeal != null && List.of("PENDING", "UPHELD", "REDUCED", "VOID", "AUTO_WAIVED").contains(fine.appeal.status)) {
-            player.tell("Amenda are deja o contestație înregistrată.");
+            player.refuse("straja.fine.appeal_exists", "straja.remedy.retry");
             return false;
         }
         String text = reason == null ? "" : reason.trim();
         if (text.isEmpty() || text.length() > p().appealMaxReasonLength) {
-            player.tell("Scrie motivul contestației, maximum " + p().appealMaxReasonLength + " caractere.");
+            player.refuse("straja.fine.appeal_reason", "straja.remedy.fix_retry", p().appealMaxReasonLength);
             return false;
         }
         long windowMs = Math.max(1, p().appealAbuseWindowRealDays) * DAY_MS;
@@ -526,7 +528,7 @@ public class FineService implements FineRoleplayUseCase {
             abuse.blockedUntil = now() + Math.max(1, p().appealAbuseBlockRealDays) * DAY_MS;
             ctx.fines().write(data);
             audit.record("fine_appeal_block", player.name(), key, player.name(), key, "SUCCESS", "appeal_spam attempts=" + abuse.attempts.size());
-            player.tell("Contestațiile au fost blocate temporar pentru depuneri repetate.");
+            player.refuse("straja.fine.appeals_blocked", "straja.remedy.wait");
             return false;
         }
         long filedAt = now();
@@ -553,26 +555,26 @@ public class FineService implements FineRoleplayUseCase {
 
     public boolean reviewAppeal(PlayerGateway player, String id, String decision, Integer reducedAmount, String reason) {
         if (!players.hasCapability(player, Capability.REVIEW_APPEALS) && !players.isCommissioner(player)) {
-            player.tell("Doar Inspectorul sau Comisaru' poate decide contestații.");
+            player.refuse("straja.fine.appeal_judge", "straja.remedy.ask_comisar");
             return false;
         }
         FineStore data = ctx.fines().read();
         Fine fine = data.find(id);
         if (fine == null || !"APPEAL_PENDING".equals(fine.status) || fine.appeal == null) {
-            player.tell("Contestația nu există sau nu mai este în așteptare.");
+            player.refuse("straja.fine.appeal_gone", "straja.remedy.retry");
             return false;
         }
         if (player.uuid().toString().equals(fine.issuerUuid)) {
-            player.tell("Nu îți poți judeca propria amendă.");
+            player.refuse("straja.fine.appeal_self", "straja.remedy.fix_retry");
             return false;
         }
         String trimmedReason = reason == null ? "" : reason.trim();
         if (trimmedReason.length() > REVIEW_REASON_LIMIT) {
-            player.tell("Motivul deciziei trebuie să aibă maximum " + REVIEW_REASON_LIMIT + " caractere.");
+            player.refuse("straja.fine.reason_length", "straja.remedy.fix_retry", REVIEW_REASON_LIMIT);
             return false;
         }
         if (!near(player, location("receptionist"), 6)) {
-            player.tell("Decizia contestației se dă la recepționistă.");
+            player.refuse("straja.fine.appeal_decision_reception", "straja.remedy.reception");
             return false;
         }
         String action = decision == null ? "" : decision.toLowerCase();
@@ -585,7 +587,7 @@ public class FineService implements FineRoleplayUseCase {
             appeal.decision = "UPHELD";
         } else if (List.of("reduce", "redu", "micsoreaza", "micșorează").contains(action)) {
             if (reducedAmount == null || !p().fineAllowedAmounts.contains(reducedAmount) || reducedAmount >= appeal.previousAmount) {
-                player.tell("Reducerea trebuie să fie un tarif standard mai mic decât amenda inițială.");
+                player.refuse("straja.fine.reduction_invalid", "straja.remedy.fix_retry");
                 return false;
             }
             fine.amount = reducedAmount;
@@ -599,7 +601,7 @@ public class FineService implements FineRoleplayUseCase {
             appeal.decision = "VOID";
             voided = true;
         } else {
-            player.tell("Folosește uphold, reduce <tarif-standard> sau void.");
+            player.refuse("straja.fine.decision_invalid", "straja.remedy.fix_retry");
             return false;
         }
         appeal.status = appeal.decision;
@@ -622,7 +624,7 @@ public class FineService implements FineRoleplayUseCase {
 
     public void listTasks(PlayerGateway player) {
         if (!onDutyGuard(player) && !players.isCommissioner(player)) {
-            player.tell("Doar Straja poate vedea misiunile de amenzi.");
+            player.refuse("straja.fine.tasks_rank", "straja.remedy.reception");
             return;
         }
         FineStore data = ctx.fines().read();
@@ -635,31 +637,31 @@ public class FineService implements FineRoleplayUseCase {
             player.tell(task.id + " | țintă: " + task.target + " | tip: " + task.kind + " | " + value + " | gărzi: " + task.assignees.size() + "/" + Math.max(1, task.maxAssignees));
             any = true;
         }
-        if (!any) player.tell("Nu există misiuni de amenzi deschise.");
+        if (!any) player.refuse("straja.fine.no_tasks", "straja.remedy.wait");
     }
 
     public boolean acceptTask(PlayerGateway player, String id) {
         if (!onDutyGuard(player)) {
-            player.tell("Doar un Străjer activ poate prelua misiunea.");
+            player.refuse("straja.fine.task_claim_rank", "straja.remedy.duty");
             return false;
         }
         FineStore data = ctx.fines().read();
         FineTask task = data.findTask(id);
         if (task == null || !"OPEN".equals(task.status)) {
-            player.tell("Misiunea nu există sau este deja închisă.");
+            player.refuse("straja.fine.task_missing", "straja.remedy.retry");
             return false;
         }
         if ("JAILER_ASSAULT".equals(task.kind) && !players.hasCapability(player, Capability.EXECUTE_ARRESTS)) {
-            player.tell("Misiunile de arestare sunt disponibile de la rangul Străjer în sus.");
+            player.refuse("straja.fine.arrest_rank", "straja.remedy.instructor");
             return false;
         }
         String key = player.uuid().toString();
         if (task.assignees.contains(key)) {
-            player.tell("Ești deja în echipa acestei misiuni.");
+            player.refuse("straja.fine.already_in_mission", "straja.remedy.retry");
             return false;
         }
         if (task.assignees.size() >= Math.max(1, task.maxAssignees)) {
-            player.tell("Misiunea are deja numărul maxim de gărzi.");
+            player.refuse("straja.fine.mission_full", "straja.remedy.wait");
             return false;
         }
         task.assignees.add(key);
@@ -675,35 +677,35 @@ public class FineService implements FineRoleplayUseCase {
 
     public boolean completeTask(PlayerGateway player, String id) {
         if (!onDutyGuard(player)) {
-            player.tell("Doar un Străjer activ poate închide misiunea.");
+            player.refuse("straja.fine.task_close_rank", "straja.remedy.duty");
             return false;
         }
         FineStore data = ctx.fines().read();
         FineTask task = data.findTask(id);
         if (task == null || !"OPEN".equals(task.status)
                 || (!task.assignees.contains(player.uuid().toString()) && !players.isCommissioner(player))) {
-            player.tell("Misiunea nu există sau nu îți este atribuită.");
+            player.refuse("straja.fine.task_not_assigned", "straja.remedy.retry");
             return false;
         }
         if ("HEARING_WARRANT".equals(task.kind)) return completeHearingWarrant(player, data, task);
         if ("JAILER_ASSAULT".equals(task.kind)) return completeJailerAssault(player, data, task);
         PlayerGateway target = ctx.server().findPlayer(task.target);
         if (target == null) {
-            player.tell("Ținta trebuie să fie online și adusă la recepționistă.");
+            player.refuse("straja.fine.target_not_present", "straja.remedy.retry");
             return false;
         }
         var reception = location("receptionist");
         if (reception != null && !near(target, reception, 6)) {
-            player.tell("Ținta trebuie adusă la recepționistă.");
+            player.refuse("straja.fine.target_away", "straja.remedy.retry");
             return false;
         }
         Fine fine = data.find(task.fineId);
         if (fine == null) {
-            player.tell("Amenda asociată lipsește.");
+            player.refuse("straja.fine.linked_missing", "straja.remedy.ask_comisar");
             return false;
         }
         if (!List.of("ESCALATED", "ARREST_PENDING").contains(fine.status)) {
-            player.tell("Amenda nu mai este eligibilă pentru recuperare.");
+            player.refuse("straja.fine.not_recoverable", "straja.remedy.retry");
             return false;
         }
         task.status = "PRESENTED";
@@ -720,7 +722,7 @@ public class FineService implements FineRoleplayUseCase {
 
     private boolean completeHearingWarrant(PlayerGateway player, FineStore data, FineTask task) {
         if (!players.hasCapability(player, Capability.EXECUTE_ARRESTS)) {
-            player.tell("Doar Străjerul sau un rang superior poate executa mandatul de audiere.");
+            player.refuse("straja.fine.warrant_rank", "straja.remedy.duty");
             return false;
         }
         PlayerGateway target = ctx.server().findPlayer(task.target);
@@ -731,7 +733,7 @@ public class FineService implements FineRoleplayUseCase {
         }
         if (target == null || office == null || commissioner == null
                 || !near(player, office, 6) || !near(target, office, 6)) {
-            player.tell("Audierea cere ținta, executantul și Comisaru' prezenți la biroul configurat.");
+            player.refuse("straja.fine.hearing_office", "straja.remedy.fix_retry");
             return false;
         }
         task.status = "PRESENTED";
@@ -747,30 +749,30 @@ public class FineService implements FineRoleplayUseCase {
 
     private boolean completeJailerAssault(PlayerGateway player, FineStore data, FineTask task) {
         if (!players.hasCapability(player, Capability.EXECUTE_ARRESTS)) {
-            player.tell("Doar Străjerul sau un rang superior poate executa această arestare.");
+            player.refuse("straja.fine.arrest_rank", "straja.remedy.duty");
             return false;
         }
         if (!players.isCommissioner(player) && !task.assignees.contains(player.uuid().toString())) {
-            player.tell("Misiunea nu îți este atribuită.");
+            player.refuse("straja.fine.mission_not_yours", "straja.remedy.retry");
             return false;
         }
         PlayerGateway target = ctx.server().findPlayer(task.target);
         if (target == null) {
-            player.tell("Ținta trebuie să fie online pentru arestare.");
+            player.refuse("straja.fine.arrest_offline", "straja.remedy.wait");
             return false;
         }
         if (!near(player, target, p().prisonArrestRadius)) {
-            player.tell("Trebuie să fii lângă țintă pentru arestare.");
+            player.refuse("straja.fine.arrest_far", "straja.remedy.retry");
             return false;
         }
         if (prison.activeSentence(target) != null) {
-            player.tell("Ținta are deja o sentință activă.");
+            player.refuse("straja.fine.sentence_active", "straja.remedy.fix_retry");
             return false;
         }
         int days = Math.max(1, task.suggestedSentenceDays > 0 ? task.suggestedSentenceDays : p().prisonDefaultSentenceDays);
         var sentence = prison.arrest(target, task.id, days, player, task.id);
         if (sentence == null) {
-            player.tell("Arestarea nu a putut fi înregistrată.");
+            player.refuse("straja.fine.arrest_fail", "straja.remedy.ask_comisar");
             return false;
         }
         task.status = "ARRESTED";
@@ -789,20 +791,20 @@ public class FineService implements FineRoleplayUseCase {
         FineStore data = ctx.fines().read();
         FineTask task = data.findTask(taskId);
         if (task == null || !"PRESENTED".equals(task.status)) {
-            player.tell("Nu există o solicitare de plată activă pentru acest ID.");
+            player.refuse("straja.fine.no_payment_request", "straja.remedy.reception");
             return false;
         }
         if (!PlayerService.identityMatches(player, task.targetUuid, task.target)) {
-            player.tell("Doar cetățeanul vizat poate refuza plata.");
+            player.refuse("straja.fine.refuse_owner", "straja.remedy.reception");
             return false;
         }
         Fine fine = data.find(task.fineId);
         if (fine == null || !"ARREST_PENDING".equals(fine.status)) {
-            player.tell("Amenda nu mai este în așteptarea unei decizii.");
+            player.refuse("straja.fine.no_decision_pending", "straja.remedy.retry");
             return false;
         }
         if (!near(player, location("receptionist"), 6)) {
-            player.tell("Refuzul plății se declară la recepționistă.");
+            player.refuse("straja.fine.refuse_location", "straja.remedy.reception");
             return false;
         }
         task.status = "REFUSED";
@@ -823,7 +825,7 @@ public class FineService implements FineRoleplayUseCase {
 
     public boolean arrest(PlayerGateway player, String taskId, Integer commissionerDays) {
         if (!players.hasCapability(player, Capability.EXECUTE_ARRESTS)) {
-            player.tell("Doar Străjerul sau un rang superior poate executa arestarea.");
+            player.refuse("straja.fine.execute_rank", "straja.remedy.duty");
             return false;
         }
         FineStore data = ctx.fines().read();
@@ -831,42 +833,41 @@ public class FineService implements FineRoleplayUseCase {
         if (task == null || !List.of("PRESENTED", "REFUSED").contains(task.status)
                 || "HEARING_WARRANT".equals(task.kind)
                 || (!players.isCommissioner(player) && !task.assignees.contains(player.uuid().toString()))) {
-            player.tell("Misiunea nu există sau nu îți este atribuită.");
+            player.refuse("straja.fine.task_not_assigned", "straja.remedy.retry");
             return false;
         }
         if (!"REFUSED".equals(task.status)) {
-            player.tell("Arestarea este permisă doar după refuzul explicit al cetățeanului la recepționistă "
-                    + "(dosar " + task.id + ").");
+            player.refuse("straja.fine.arrest_needs_refusal", "straja.remedy.reception", task.id);
             return false;
         }
         PlayerGateway target = ctx.server().findPlayer(task.target);
         if (target == null) {
-            player.tell("Arestarea pentru refuz se execută doar cât timp ținta este online.");
+            player.refuse("straja.fine.arrest_online_only", "straja.remedy.wait");
             return false;
         }
         Fine fine = data.find(task.fineId);
         if (fine == null || !"ARREST_PENDING".equals(fine.status)) {
-            player.tell("Amenda nu mai este eligibilă pentru arest.");
+            player.refuse("straja.fine.arrest_ineligible", "straja.remedy.retry");
             return false;
         }
         var existing = prison.activeSentence(target);
         if (existing != null && !String.valueOf(task.fineId).equals(existing.fineId)) {
-            player.tell("Ținta are deja o sentință activă. Nu se pot suprapune sentințele.");
+            player.refuse("straja.fine.sentence_overlap", "straja.remedy.ask_comisar");
             return false;
         }
         if (!near(player, target, p().prisonArrestRadius)) {
-            player.tell("Trebuie să fii lângă țintă pentru a executa arestarea.");
+            player.refuse("straja.fine.execute_far", "straja.remedy.retry");
             return false;
         }
         boolean override = players.isCommissioner(player) && commissionerDays != null;
         if (override && commissionerDays < 1) {
-            player.tell("Durata Comisarului trebuie să fie un număr întreg pozitiv.");
+            player.refuse("straja.fine.duration_invalid", "straja.remedy.fix_retry");
             return false;
         }
         int days = override ? Math.min(p().prisonMaxSentenceDays, commissionerDays) : sentenceDays(fine.amount);
         var sentence = prison.arrest(target, task.fineId, days, player, task.id);
         if (sentence == null) {
-            player.tell("Arestarea nu a putut fi înregistrată.");
+            player.refuse("straja.fine.arrest_fail", "straja.remedy.ask_comisar");
             return false;
         }
         task.status = "ARRESTED";
@@ -916,7 +917,7 @@ public class FineService implements FineRoleplayUseCase {
     private boolean payArrestReward(PlayerGateway officer, FineTask task, Fine fine, boolean alive) {
         String payoutId = "arrest:" + task.id + ":" + officer.uuid();
         if (ctx.currency().hasReceipt(officer, payoutId)) {
-            officer.tell("Recompensa pentru dosarul " + task.id + " a fost deja plătită.");
+            officer.refuse("straja.fine.reward_paid", "straja.remedy.retry", task.id);
             return true;
         }
         int reward = arrestRewardAmount(task, fine, alive);
@@ -930,13 +931,13 @@ public class FineService implements FineRoleplayUseCase {
         if (payable <= 0) {
             audit.record("arrest_reward", officer.name(), officer.uuid().toString(),
                     task.target, task.targetUuid, "FAILED", "daily_cap taskId=" + task.id);
-            officer.tell("Ai atins limita zilnică de recompense pentru arestări.");
+            officer.refuse("straja.fine.daily_reward_cap", "straja.remedy.wait");
             return false;
         }
         if (!ctx.currency().available()) {
             audit.record("arrest_reward", officer.name(), officer.uuid().toString(),
                     task.target, task.targetUuid, "FAILED", "currency_unavailable taskId=" + task.id);
-            officer.tell("Recompensa nu a putut fi livrată acum; dosarul rămâne revendicabil.");
+            officer.refuse("straja.fine.reward_fail", "straja.remedy.retry");
             return false;
         }
         var payout = ctx.currency().deposit(officer, payable, payoutId);
@@ -945,7 +946,7 @@ public class FineService implements FineRoleplayUseCase {
                     task.target, task.targetUuid, "FAILED",
                     "taskId=" + task.id + " delivered=" + payout.delivered()
                             + " error=" + payout.error());
-            officer.tell("Recompensa nu a putut fi livrată acum; dosarul rămâne revendicabil.");
+            officer.refuse("straja.fine.reward_fail", "straja.remedy.retry");
             return false;
         }
         state.arrestRewardDayTotal += payable;
@@ -969,14 +970,14 @@ public class FineService implements FineRoleplayUseCase {
         FineStore data = ctx.fines().read();
         FineTask task = data.findTask(id);
         if (task == null || !List.of("ARRESTED", "SUSPECT_KILLED").contains(task.status)) {
-            player.tell("Nu există o recompensă de arestare pentru acest dosar.");
+            player.refuse("straja.fine.no_reward", "straja.remedy.faq");
             return false;
         }
         String key = player.uuid() == null ? "" : player.uuid().toString();
         boolean assignee = task.assignees != null && task.assignees.contains(key);
         boolean recorded = task.arrestedByUuid != null && task.arrestedByUuid.equals(key);
         if (!assignee && !recorded) {
-            player.tell("Doar garda însărcinată cu dosarul poate ridica recompensa.");
+            player.refuse("straja.fine.reward_owner", "straja.remedy.fix_retry");
             return false;
         }
         Fine fine = task.fineId != null ? data.find(task.fineId) : null;
@@ -1051,22 +1052,22 @@ public class FineService implements FineRoleplayUseCase {
     public boolean issueHearingWarrant(PlayerGateway player, PlayerGateway target, String details) {
         if (!players.isCommissioner(player)
                 && (!onDutyGuard(player) || players.state(player).rank < 4)) {
-            player.tell("Doar Inspectorul activ sau Comisaru' poate emite mandat de audiere.");
+            player.refuse("straja.fine.warrant_issue_rank", "straja.remedy.ask_comisar");
             return false;
         }
         if (target == null) {
-            player.tell("Ținta mandatului trebuie să fie online.");
+            player.refuse("straja.fine.warrant_offline", "straja.remedy.wait");
             return false;
         }
         if (players.isCommissioner(target)) {
-            player.tell("Comisaru' nu poate fi ținta propriului mandat.");
+            player.refuse("straja.fine.warrant_self", "straja.remedy.fix_retry");
             return false;
         }
         FineStore data = ctx.fines().read();
         for (FineTask task : data.tasks) {
             if ("HEARING_WARRANT".equals(task.kind) && List.of("OPEN", "PRESENTED").contains(task.status)
                     && target.uuid().toString().equals(task.targetUuid)) {
-                player.tell("Există deja un mandat de audiere activ pentru această țintă.");
+                player.refuse("straja.fine.warrant_exists", "straja.remedy.retry");
                 return false;
             }
         }
@@ -1145,13 +1146,13 @@ public class FineService implements FineRoleplayUseCase {
 
     public boolean cancelFine(PlayerGateway player, String id) {
         if (!players.isCommissioner(player)) {
-            player.tell("Doar Comisaru' poate anula amenzi.");
+            player.refuse("straja.fine.cancel_comisar", "straja.remedy.ask_comisar");
             return false;
         }
         FineStore data = ctx.fines().read();
         Fine fine = data.find(id);
         if (fine == null) {
-            player.tell("Amenda nu există.");
+            player.refuse("straja.fine.gone", "straja.remedy.retry");
             return false;
         }
         fine.status = "CANCELLED";
@@ -1176,7 +1177,7 @@ public class FineService implements FineRoleplayUseCase {
 
     public void listAppeals(PlayerGateway player) {
         if (!players.hasCapability(player, Capability.REVIEW_APPEALS) && !players.isCommissioner(player)) {
-            player.tell("Doar Inspectorul sau Comisaru' poate vedea contestațiile.");
+            player.refuse("straja.fine.appeals_view_rank", "straja.remedy.ask_comisar");
             return;
         }
         FineStore data = ctx.fines().read();
@@ -1192,13 +1193,13 @@ public class FineService implements FineRoleplayUseCase {
     /** Debug-only: force an appeal past its decision deadline and re-tick. */
     public boolean debugAppealTimeout(PlayerGateway player, String id) {
         if (!players.isCommissioner(player) || !p().debugEnabled) {
-            player.tell("Testul de timeout pentru contestații este disponibil doar Comisarului în debug local.");
+            player.refuse("straja.fine.timeout_debug", "straja.remedy.ask_comisar");
             return false;
         }
         FineStore data = ctx.fines().read();
         Fine fine = data.find(id);
         if (fine == null || !"APPEAL_PENDING".equals(fine.status) || fine.appeal == null) {
-            player.tell("Amenda nu are o contestație în așteptare.");
+            player.refuse("straja.fine.no_appeal_pending", "straja.remedy.retry");
             return false;
         }
         fine.appeal.deadlineAt = now() - 1;

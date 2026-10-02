@@ -71,9 +71,17 @@ public class MinecraftPlayerGateway implements PlayerGateway {
         if (p != null) p.sendSystemMessage(Component.literal(text));
     }
 
-    @Override public void tellKey(String translationKey) {
+    @Override public void tellKey(String translationKey, Object... args) {
         ServerPlayer p = entity();
-        if (p != null) p.sendSystemMessage(Component.translatable(translationKey));
+        if (p != null) p.sendSystemMessage(Component.translatable(translationKey, args));
+    }
+
+    @Override public void refuse(String reasonKey, String remedyKey, Object... reasonArgs) {
+        ServerPlayer p = entity();
+        if (p == null) return;
+        p.sendSystemMessage(Component.translatable("straja.refusal.format",
+                Component.translatable(reasonKey, reasonArgs),
+                Component.translatable(remedyKey)));
     }
 
     @Override public void actionbar(String text) {

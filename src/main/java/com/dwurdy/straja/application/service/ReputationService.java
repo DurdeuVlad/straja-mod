@@ -293,7 +293,7 @@ public final class ReputationService {
     public synchronized ReputationEvent commend(PlayerGateway actor, PlayerGateway subject,
                                                 int delta, String reason) {
         if (actor == null || !players.isCommissioner(actor) || reason == null || reason.isBlank()) {
-            if (actor != null) actor.tell("Comanda trebuie să fie Comisar și să aibă motiv.");
+            if (actor != null) actor.refuse("straja.reputation.comisar_reason", "straja.remedy.ask_comisar");
             return null;
         }
         int bounded = Math.max(-ctx.policies().reputationMaxScore,
@@ -306,7 +306,7 @@ public final class ReputationService {
                                                        String sourceId) {
         ReputationStore data = store();
         if (actor == null || !players.isCommissioner(actor)) {
-            if (actor != null) actor.tell("Doar Comisaru' poate inversa un eveniment de reputație.");
+            if (actor != null) actor.refuse("straja.reputation.reverse_comisar", "straja.remedy.ask_comisar");
             return null;
         }
         String requestedSourceType = sourceType == null ? "" : sourceType;

@@ -236,7 +236,7 @@ def gh_release_for_tag(repo: str, tag: str, token: str = None) -> dict:
 def gh_create_release(repo: str, tag: str, name: str, notes: str,
                       files: list, prerelease: bool, latest: bool,
                       commit: str, dry_run: bool,
-                      ledger: Ledger) -> LedgerEntry:
+                      ledger: Ledger, generate_notes: bool = False) -> LedgerEntry:
     """Idempotent release create: an existing release for the tag gets its
     missing assets uploaded and is never recreated."""
     entry = ledger.add(LedgerEntry(platform="github"))
@@ -260,6 +260,8 @@ def gh_create_release(repo: str, tag: str, name: str, notes: str,
         return entry
     args = ["release", "create", tag, "--repo", repo, "--title", name,
             "--notes", notes, "--target", commit]
+    if generate_notes:
+        args.append("--generate-notes")
     if prerelease:
         args.append("--prerelease")
     if latest:
@@ -613,7 +615,8 @@ def _cmd_github(args):
     ledger = Ledger()
     entry = gh_create_release(
         args.repo, args.tag, args.name, args.notes, args.files,
-        args.prerelease, args.latest, args.commit, args.dry_run, ledger)
+        args.prerelease, args.latest, args.commit, args.dry_run, ledger,
+        generate_notes=args.generate_notes)
     ledger.write(args.ledger)
     print(f"github: {entry.state} {entry.url or entry.detail}")
 
@@ -703,6 +706,7 @@ def main(argv=None) -> int:
     gh.add_argument("--prerelease", action="store_true")
     gh.add_argument("--latest", action="store_true")
     gh.add_argument("--commit", required=True)
+    gh.add_argument("--generate-notes", action="store_true")
     gh.add_argument("--dry-run", action="store_true")
     gh.add_argument("--ledger", required=True)
     gh.set_defaults(fn=_cmd_github)

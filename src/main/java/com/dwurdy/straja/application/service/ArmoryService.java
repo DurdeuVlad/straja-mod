@@ -65,20 +65,20 @@ public class ArmoryService implements com.dwurdy.straja.application.port.in.Armo
         GuardState state = players.state(player);
         StrajaPolicies.ArmoryItem item = find(ctx.policies().armoryStock, key);
         if (!eligible(state)) {
-            player.tell("Armurierul deservește doar străjeri activi.");
+            player.refuse("straja.armory.active_only", "straja.remedy.duty");
             return refused("armory_buy", player, key, "not_eligible");
         }
         if (item == null || state.rank < item.minRank()) {
-            player.tell("Armurierul nu are acest articol pentru rangul tău.");
+            player.refuse("straja.armory.item_rank", "straja.remedy.faq");
             return refused("armory_buy", player, key, "unavailable");
         }
         if (!ctx.currency().available()) {
-            player.tell("Moneda externă nu este configurată; armurierul nu poate încasa.");
+            player.refuse("straja.armory.no_currency", "straja.remedy.ask_comisar");
             return refused("armory_buy", player, key, "currency_unavailable");
         }
         CurrencyProvider.Withdrawal withdrawal = ctx.currency().withdraw(player, item.cost());
         if (!withdrawal.ok()) {
-            player.tell("Fonduri insuficiente. Preț: " + item.cost() + " monede.");
+            player.refuse("straja.armory.no_funds", "straja.remedy.secretary", item.cost());
             return refused("armory_buy", player, key, "insufficient_funds");
         }
         if (!player.giveVerified(ItemSpec.of(item.itemId(), item.count()))) {
@@ -88,9 +88,9 @@ public class ArmoryService implements com.dwurdy.straja.application.port.in.Armo
                     player.name(), player.uuid().toString(),
                     refund.ok() ? "REFUNDED" : "FAILED",
                     key + ",delivery_failed,refund=" + (refund.ok() ? "ok" : "failed"));
-            player.tell(refund.ok()
-                    ? "Articolul nu a putut fi predat; monedele au fost returnate."
-                    : "Articolul nu a putut fi predat și returnarea monedelor a eșuat — anunță Comisaru'.");
+            player.refuse(refund.ok()
+                    ? "straja.armory.delivery_failed_refunded"
+                    : "straja.armory.delivery_failed", "straja.remedy.ask_comisar");
             return false;
         }
         audit.record("armory_buy", player.name(), player.uuid().toString(),
@@ -107,20 +107,19 @@ public class ArmoryService implements com.dwurdy.straja.application.port.in.Armo
         GuardState state = players.state(player);
         StrajaPolicies.ArmoryItem item = find(ctx.policies().armoryReserves, key);
         if (!eligible(state)) {
-            player.tell("Armurierul deservește doar străjeri activi.");
+            player.refuse("straja.armory.active_only", "straja.remedy.duty");
             return refused("armory_reserve", player, key, "not_eligible");
         }
         if (item == null || state.rank < item.minRank()) {
-            player.tell("Armurierul nu are această rezervă pentru rangul tău.");
+            player.refuse("straja.armory.stock_rank", "straja.remedy.faq");
             return refused("armory_reserve", player, key, "unavailable");
         }
         if (state.requisitionPoints < item.cost()) {
-            player.tell("Puncte de rechiziție insuficiente. Ai " + state.requisitionPoints
-                    + ", cost: " + item.cost() + ".");
+            player.refuse("straja.armory.no_points", "straja.remedy.secretary", state.requisitionPoints, item.cost());
             return refused("armory_reserve", player, key, "insufficient_points");
         }
         if (!player.inventory().canReceive(List.of(ItemSpec.of(item.itemId(), item.count())))) {
-            player.tell("Inventarul este plin; punctele nu au fost cheltuite.");
+            player.refuse("straja.armory.inv_full", "straja.remedy.retry");
             return refused("armory_reserve", player, key, "inventory_full");
         }
         state.requisitionPoints -= item.cost();
@@ -131,7 +130,7 @@ public class ArmoryService implements com.dwurdy.straja.application.port.in.Armo
             audit.record("armory_reserve", player.name(), player.uuid().toString(),
                     player.name(), player.uuid().toString(), "FAILED",
                     key + ",delivery_failed,points_restored");
-            player.tell("Articolul nu a putut fi predat; punctele au fost restituite.");
+            player.refuse("straja.armory.delivery_fail", "straja.remedy.retry");
             return false;
         }
         audit.record("armory_reserve", player.name(), player.uuid().toString(),

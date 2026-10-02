@@ -30,6 +30,7 @@ import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -521,6 +522,52 @@ public final class StrajaGameTests {
         } catch (CommandSyntaxException e) {
             helper.fail("admin help must keep working: " + e.getMessage());
         }
+        helper.succeed();
+    }
+
+    /**
+     * #204 spot check on a real server: a civilian actor trying the member-only
+     * duty action must receive a structured refusal — translatable
+     * {@code straja.refusal.format} carrying a reason key and a
+     * {@code straja.remedy.*} next step — and stay off duty.
+     */
+    @GameTest(template = "empty")
+    public static void refusalCarriesReasonAndRemedy(GameTestHelper helper) {
+        var runtime = runtime(helper);
+        List<Component> captured = new ArrayList<>();
+        CommandSource capture = new CommandSource() {
+            @Override public void sendSystemMessage(Component component) {
+                captured.add(component);
+            }
+            @Override public boolean acceptsSuccess() { return true; }
+            @Override public boolean acceptsFailure() { return true; }
+            @Override public boolean shouldInformAdmins() { return false; }
+        };
+        var source = new CommandSourceStack(capture, Vec3.ZERO, Vec2.ZERO,
+                helper.getLevel(), 4, "gametest", Component.literal("gametest"),
+                helper.getLevel().getServer(), null);
+        var civilian = new com.dwurdy.straja.adapter.in.command.ConsolePlayerGateway(source);
+
+        runtime.guardDuty().startDuty(civilian);
+
+        Component refusal = captured.stream()
+                .filter(c -> c.getContents() instanceof TranslatableContents t
+                        && "straja.refusal.format".equals(t.getKey()))
+                .findFirst().orElse(null);
+        helper.assertTrue(refusal != null,
+                "a denied member-only action must answer with the refusal format, got: "
+                        + captured);
+        var args = ((TranslatableContents) refusal.getContents()).getArgs();
+        helper.assertTrue(args.length >= 2
+                        && args[0] instanceof Component reason
+                        && reason.getContents() instanceof TranslatableContents reasonT
+                        && reasonT.getKey().startsWith("straja.")
+                        && args[1] instanceof Component remedy
+                        && remedy.getContents() instanceof TranslatableContents remedyT
+                        && remedyT.getKey().startsWith("straja.remedy."),
+                "the refusal must carry a reason key and a straja.remedy.* next step");
+        helper.assertTrue(!runtime.playerQueries().isOnDutyGuard(civilian),
+                "a refused duty start must leave the civilian off duty");
         helper.succeed();
     }
 
