@@ -384,6 +384,18 @@ public class PrisonService implements PrisonRoleplayUseCase {
      * waitlist entry.
      */
     public void recoverOnLogin(PlayerGateway player) {
+        // LAW-001: reconcile name-anchored legacy prisoner records and
+        // pending locker reservations to the real online UUID.
+        String name = player.name();
+        String uuid = player.uuid().toString();
+        if (name != null && !name.isBlank()) {
+            var register = ctx.prisonerRegister().read();
+            String legacyId = com.dwurdy.straja.domain.model.PrisonerRegisterStore.legacyUuid(name);
+            boolean adopted = register.prisonerByName(name) != null;
+            if (adopted) register.adoptByName(name, uuid);
+            boolean lockersMoved = register.rekeyPendingLockers(legacyId, uuid);
+            if (adopted || lockersMoved) ctx.prisonerRegister().write(register);
+        }
         var data = store();
         var sentence = activeSentenceFrom(data, player);
         if (sentence == null || !"WAITING_CELL".equals(sentence.status)

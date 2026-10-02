@@ -3,7 +3,6 @@ package com.dwurdy.straja.application.service;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.dwurdy.straja.application.StrajaContext;
-import com.dwurdy.straja.domain.model.CheckpointMode;
 import com.dwurdy.straja.domain.model.PrisonerStatus;
 import com.dwurdy.straja.support.Fakes;
 import java.util.LinkedHashMap;

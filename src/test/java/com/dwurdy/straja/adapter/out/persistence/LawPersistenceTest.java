@@ -244,6 +244,41 @@ class LawPersistenceTest {
     }
 
     @Test
+    void adoptByNameMergesThinRecordAndMovesLockers() {
+        var store = new PrisonerRegisterStore();
+        // Rich name-anchored record (from strajaPrisonJail import)
+        String legacyId = PrisonerRegisterStore.legacyUuid("Smuggler");
+        var rich = new PrisonerRegisterRecord(legacyId, "Smuggler", "contraband");
+        rich.arrestCount = 2;
+        rich.outstandingFines = 128;
+        rich.personalLocker.add(new StoragePoint("minecraft:overworld", 1, 60, 1));
+        store.put(rich);
+        // Thin flag-imported record under the real uuid (from cpJailed)
+        var thin = new PrisonerRegisterRecord("real-uuid", "real-uuid", "legacy jailed flag");
+        thin.arrestCount = 1;
+        store.put(thin);
+        store.reserveLockers(legacyId, List.of("minecraft:overworld|10,60,10"));
+
+        store.adoptByName("Smuggler", "real-uuid");
+
+        assertNull(store.prisoner(legacyId), "legacy key gone");
+        var merged = store.prisoner("real-uuid");
+        assertNotNull(merged);
+        assertEquals("Smuggler", merged.detaineeName);
+        assertEquals(3, merged.arrestCount, "thin + rich arrests merge");
+        assertEquals(128, merged.outstandingFines);
+        assertEquals(1, merged.personalLocker.size(), "rich locker coords kept");
+        assertEquals(List.of("minecraft:overworld|10,60,10"), store.drainPendingLockers("real-uuid"),
+                "pending lockers follow the new key");
+
+        // Lockers without a record (released-offline) still re-key
+        var store2 = new PrisonerRegisterStore();
+        store2.reserveLockers(legacyId, List.of("minecraft:overworld|11,60,10"));
+        assertTrue(store2.rekeyPendingLockers(legacyId, "real-uuid2"));
+        assertEquals(List.of("minecraft:overworld|11,60,10"), store2.drainPendingLockers("real-uuid2"));
+    }
+
+    @Test
     void lawBoundsNormalizesCorners() {
         var b = LawBounds.of("minecraft:overworld", 10, 64, 5, 0, 60, 0);
         assertTrue(b.contains("minecraft:overworld", 5, 62, 3));

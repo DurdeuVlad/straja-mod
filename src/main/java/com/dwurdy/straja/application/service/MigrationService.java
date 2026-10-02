@@ -556,46 +556,54 @@ public final class MigrationService {
             int added = 0;
             JsonObject jailed = obj(jail, "jailed");
             JsonObject fines = obj(jail, "fines");
+            int skipped = 0;
             if (jailed != null) {
                 for (var e : jailed.entrySet()) {
                     if (!e.getValue().isJsonObject()) continue;
                     String name = e.getKey();
-                    JsonObject entry = e.getValue().getAsJsonObject();
-                    String uuid = com.dwurdy.straja.domain.model.PrisonerRegisterStore.legacyUuid(name);
-                    if (reg.prisoner(uuid) != null) continue;
-                    if (reg.prisonerByName(name) != null) continue;
-                    var rec = new com.dwurdy.straja.domain.model.PrisonerRegisterRecord(uuid, name, str(entry, "reason"));
-                    rec.status = "fugitive".equals(str(entry, "status"))
-                            ? com.dwurdy.straja.domain.model.PrisonerStatus.FUGITIVE
-                            : com.dwurdy.straja.domain.model.PrisonerStatus.IN_CELL;
-                    rec.bookedAt = (long) num(entry, "t");
-                    rec.arrestCount = (int) num(entry, "arrests");
-                    rec.confiscatedFully = entry.has("confiscated") && entry.get("confiscated").getAsBoolean();
-                    rec.arrestSite = str(entry, "site");
-                    if (fines != null && fines.has(name)) rec.outstandingFines = (int) num(fines, name);
-                    int jcell = entry.has("jcell") ? (int) num(entry, "jcell") : -1;
-                    if (jcell >= 0) rec.assignedCellId = "jcell:" + jcell;
-                    int pc = entry.has("pchest") ? (int) num(entry, "pchest") : -1;
-                    if (pc >= 0 && pcells != null && pc < pcells.size() && pcells.get(pc).isJsonObject()) {
-                        JsonObject pair = pcells.get(pc).getAsJsonObject();
-                        JsonObject a = obj(pair, "a"), b = obj(pair, "b");
-                        if (a != null) rec.personalLocker.add(pointFrom(a));
-                        if (b != null) rec.personalLocker.add(pointFrom(b));
-                    }
-                    JsonObject items = obj(entry, "items");
-                    if (items != null) {
-                        for (var it : items.entrySet()) {
-                            if (it.getValue().isJsonObject()) {
-                                JsonObject io = it.getValue().getAsJsonObject();
-                                int count = (int) num(io, "count");
-                                rec.confiscatedSummary.add(count + " x " + it.getKey());
-                                rec.arrestSnapshot.add(new com.dwurdy.straja.domain.model.SnapshotItem(
-                                        "legacy", it.getKey(), count, null, str(io, "name")));
+                    try {
+                        JsonObject entry = e.getValue().getAsJsonObject();
+                        String uuid = com.dwurdy.straja.domain.model.PrisonerRegisterStore.legacyUuid(name);
+                        if (reg.prisoner(uuid) != null) continue;
+                        if (reg.prisonerByName(name) != null) continue;
+                        var rec = new com.dwurdy.straja.domain.model.PrisonerRegisterRecord(uuid, name, str(entry, "reason"));
+                        rec.status = "fugitive".equals(str(entry, "status"))
+                                ? com.dwurdy.straja.domain.model.PrisonerStatus.FUGITIVE
+                                : com.dwurdy.straja.domain.model.PrisonerStatus.IN_CELL;
+                        rec.bookedAt = (long) num(entry, "t");
+                        rec.arrestCount = (int) num(entry, "arrests");
+                        rec.confiscatedFully = entry.has("confiscated")
+                                && entry.get("confiscated").isJsonPrimitive()
+                                && entry.get("confiscated").getAsBoolean();
+                        rec.arrestSite = str(entry, "site");
+                        if (fines != null && fines.has(name)) rec.outstandingFines = (int) num(fines, name);
+                        int jcell = numField(entry, "jcell");
+                        if (jcell >= 0) rec.assignedCellId = "jcell:" + jcell;
+                        int pc = numField(entry, "pchest");
+                        if (pc >= 0 && pcells != null && pc < pcells.size() && pcells.get(pc).isJsonObject()) {
+                            JsonObject pair = pcells.get(pc).getAsJsonObject();
+                            JsonObject a = obj(pair, "a"), b = obj(pair, "b");
+                            if (a != null) rec.personalLocker.add(pointFrom(a));
+                            if (b != null) rec.personalLocker.add(pointFrom(b));
+                        }
+                        JsonObject items = obj(entry, "items");
+                        if (items != null) {
+                            for (var it : items.entrySet()) {
+                                if (it.getValue().isJsonObject()) {
+                                    JsonObject io = it.getValue().getAsJsonObject();
+                                    int count = (int) num(io, "count");
+                                    rec.confiscatedSummary.add(count + " x " + it.getKey());
+                                    rec.arrestSnapshot.add(new com.dwurdy.straja.domain.model.SnapshotItem(
+                                            "legacy", it.getKey(), count, null, str(io, "name")));
+                                }
                             }
                         }
+                        reg.put(rec);
+                        added++;
+                    } catch (Exception entryError) {
+                        skipped++;
+                        lines.add("jailed[" + name + "] skipped: " + entryError.getMessage());
                     }
-                    reg.put(rec);
-                    added++;
                 }
             }
             JsonObject pending = obj(jail, "pendingChest");
@@ -604,41 +612,53 @@ public final class MigrationService {
                 // through pcells[pcIdx] = {a,b} into coordinate locker keys.
                 for (var e : pending.entrySet()) {
                     String name = e.getKey();
-                    String uuid = com.dwurdy.straja.domain.model.PrisonerRegisterStore.legacyUuid(name);
-                    List<String> keys = new ArrayList<>();
-                    if (e.getValue().isJsonPrimitive()) {
-                        int pc = e.getValue().getAsInt();
-                        if (pc >= 0 && pcells != null && pc < pcells.size() && pcells.get(pc).isJsonObject()) {
-                            JsonObject pair = pcells.get(pc).getAsJsonObject();
-                            JsonObject a = obj(pair, "a"), b = obj(pair, "b");
-                            if (a != null) keys.add(pointFrom(a).key());
-                            if (b != null) keys.add(pointFrom(b).key());
-                        }
-                    } else if (e.getValue().isJsonArray()) {
-                        // Defensive: accept a list of indices too.
-                        for (var el : e.getValue().getAsJsonArray()) {
-                            int pc = el.getAsInt();
+                    try {
+                        String uuid = com.dwurdy.straja.domain.model.PrisonerRegisterStore.legacyUuid(name);
+                        List<String> keys = new ArrayList<>();
+                        if (e.getValue().isJsonPrimitive() && e.getValue().getAsJsonPrimitive().isNumber()) {
+                            int pc = e.getValue().getAsInt();
                             if (pc >= 0 && pcells != null && pc < pcells.size() && pcells.get(pc).isJsonObject()) {
                                 JsonObject pair = pcells.get(pc).getAsJsonObject();
                                 JsonObject a = obj(pair, "a"), b = obj(pair, "b");
                                 if (a != null) keys.add(pointFrom(a).key());
                                 if (b != null) keys.add(pointFrom(b).key());
                             }
+                        } else if (e.getValue().isJsonArray()) {
+                            // Defensive: accept a list of indices too.
+                            for (var el : e.getValue().getAsJsonArray()) {
+                                if (!el.isJsonPrimitive() || !el.getAsJsonPrimitive().isNumber()) continue;
+                                int pc = el.getAsInt();
+                                if (pc >= 0 && pcells != null && pc < pcells.size() && pcells.get(pc).isJsonObject()) {
+                                    JsonObject pair = pcells.get(pc).getAsJsonObject();
+                                    JsonObject a = obj(pair, "a"), b = obj(pair, "b");
+                                    if (a != null) keys.add(pointFrom(a).key());
+                                    if (b != null) keys.add(pointFrom(b).key());
+                                }
+                            }
                         }
+                        if (!keys.isEmpty()) reg.reserveLockers(uuid, keys);
+                    } catch (Exception entryError) {
+                        skipped++;
+                        lines.add("pendingChest[" + name + "] skipped: " + entryError.getMessage());
                     }
-                    if (!keys.isEmpty()) reg.reserveLockers(uuid, keys);
                 }
             }
             if (fines != null) {
                 // Fines accrue on release too — keep them for names never booked.
                 for (var e : fines.entrySet()) {
                     if (jailed == null || !jailed.has(e.getKey())) {
-                        reg.legacyFines().put(e.getKey(), e.getValue().getAsInt());
+                        try {
+                            reg.legacyFines().put(e.getKey(), e.getValue().getAsInt());
+                        } catch (Exception entryError) {
+                            skipped++;
+                            lines.add("fines[" + e.getKey() + "] skipped: " + entryError.getMessage());
+                        }
                     }
                 }
             }
             ctx.prisonerRegister().write(reg);
-            lines.add("prisoner register: " + added + " imported, " + reg.pendingLockers().size() + " pending lockers");
+            lines.add("prisoner register: " + added + " imported, " + reg.pendingLockers().size()
+                    + " pending lockers" + (skipped > 0 ? ", " + skipped + " skipped malformed" : ""));
             return 0;
         } catch (Exception e) {
             lines.add("prisoner register FAILED: " + e.getMessage());
@@ -707,7 +727,16 @@ public final class MigrationService {
     }
 
     private static double num(JsonObject o, String key) {
-        return o != null && o.has(key) && o.get(key).isJsonPrimitive() ? o.get(key).getAsDouble() : 0.0;
+        return o != null && o.has(key) && o.get(key).isJsonPrimitive()
+                && o.get(key).getAsJsonPrimitive().isNumber()
+                ? o.get(key).getAsDouble() : 0.0;
+    }
+
+    /** Index fields: present-and-numeric -> value; absent or non-numeric -> -1. */
+    private static int numField(JsonObject o, String key) {
+        return o != null && o.has(key) && o.get(key).isJsonPrimitive()
+                && o.get(key).getAsJsonPrimitive().isNumber()
+                ? o.get(key).getAsInt() : -1;
     }
 
     private static com.dwurdy.straja.domain.model.StoragePoint pointFrom(JsonObject o) {

@@ -71,7 +71,7 @@ public final class PrisonerRegisterStore {
     /** Re-keys a record under its real UUID once the named player is known online. */
     public void adoptByName(String name, String realUuid) {
         PrisonerRegisterRecord rec = prisonerByName(name);
-        if (rec == null || rec.detaineeUuid.equals(realUuid)) return;
+        if (rec == null || realUuid.equals(rec.detaineeUuid)) return;
         String oldUuid = rec.detaineeUuid;
         prisoners().remove(oldUuid);
         PrisonerRegisterRecord existing = prisoners().get(realUuid);
@@ -82,8 +82,15 @@ public final class PrisonerRegisterStore {
         }
         rec.detaineeUuid = realUuid;
         prisoners().put(realUuid, rec);
+        rekeyPendingLockers(oldUuid, realUuid);
+    }
+
+    /** Moves pending-locker reservations between uuid keys; true when anything moved. */
+    public boolean rekeyPendingLockers(String oldUuid, String realUuid) {
         List<String> pending = pendingLockers().remove(oldUuid);
-        if (pending != null) reserveLockers(realUuid, pending);
+        if (pending == null) return false;
+        reserveLockers(realUuid, pending);
+        return true;
     }
 
     /** Reserves locker keys for an offline release (idempotent merge). */
