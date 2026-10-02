@@ -29,6 +29,8 @@ public class PrisonService implements PrisonRoleplayUseCase {
     private final java.util.List<BiConsumer<Sentence, String>> sentenceCompletedHooks = new java.util.ArrayList<>();
     private SeizureService seizure;
     private BoloService bolos;
+    /** LAW-006 camp custody queries (late-bound like useSeizure). */
+    private LaborCampService camps;
     private long lastTickMs;
     /** Armed admin picks for the locker pool (admin uuid → mode). */
     private final java.util.Map<java.util.UUID, String> pickModes = new java.util.HashMap<>();
@@ -49,6 +51,11 @@ public class PrisonService implements PrisonRoleplayUseCase {
     /** M4: fugitive marking writes system BOLOs (late-bound like useSeizure). */
     public void useBolos(BoloService service) {
         this.bolos = service;
+    }
+
+    /** LAW-006: labor-camp destinations, bounds, spawns and freedom prices. */
+    public void useCamps(LaborCampService service) {
+        this.camps = service;
     }
 
     public void onArrest(Consumer<Sentence> hook) {
@@ -234,8 +241,20 @@ public class PrisonService implements PrisonRoleplayUseCase {
                 if (s != null && entry.sentenceId.equals(s.id)) found = s;
             }
             final Sentence sentence = found;
+            if (sentence == null || !"WAITING_CELL".equals(sentence.status)) continue;
+            // LAW-006: a camp-assigned prisoner holds no cell bunk — heal the
+            // stale waitlist state rather than dragging them into jail.
+            var rr = ctx.prisonerRegister().read().prisoner(sentence.targetUuid);
+            if (rr != null && rr.status == PrisonerStatus.IN_CAMP
+                    && rr.assignedCampId != null && !rr.assignedCampId.isBlank()) {
+                sentence.status = "ACTIVE";
+                data.waitlist.removeIf(e -> e != null
+                        && entry.sentenceId.equals(e.sentenceId));
+                changed = true;
+                continue;
+            }
             Cell cell = firstFree(data);
-            if (sentence == null || !"WAITING_CELL".equals(sentence.status) || cell == null) continue;
+            if (cell == null) continue;
             assignCell(data, sentence, cell);
             data.waitlist.removeIf(e -> e != null && entry.sentenceId.equals(e.sentenceId));
             changed = true;
@@ -293,6 +312,11 @@ public class PrisonService implements PrisonRoleplayUseCase {
             recapture(target, existing);
             return existing;
         }
+        // LAW-006: the arrest site's destination decides where the prisoner
+        // lands — "CAMP:<id>" delivers to a labor camp, anything else is the
+        // normal cell/waitlist path.
+        var site = siteFor(siteId, missionId);
+        var camp = campDestination(site);
         int max = Math.max(1, ctx.policies().prisonMaxSentenceDays);
         int fallback = Math.max(1, ctx.policies().prisonDefaultSentenceDays);
         int sentenceDays = days > 0 ? Math.min(max, days) : fallback;
@@ -313,7 +337,11 @@ public class PrisonService implements PrisonRoleplayUseCase {
         sentence.lastActivityAt = now();
         data.sentences.add(sentence);
         var cell = firstFree(data);
-        if (cell != null) {
+        if (camp != null) {
+            // Camp sentences are ACTIVE without a bunk — camp bounds replace
+            // the cell box and camp prisoners never sit on the waitlist.
+            sentence.status = "ACTIVE";
+        } else if (cell != null) {
             assignCell(data, sentence, cell);
         } else {
             var entry = new PrisonStore.WaitlistEntry();
@@ -332,7 +360,7 @@ public class PrisonService implements PrisonRoleplayUseCase {
         // Waitlisted prisoners (no cell yet) are still seized — they are
         // booked even though the body waits for a bunk.
         boolean jailed = false;
-        if (online != null && !sentence.cellId.isEmpty()) {
+        if (online != null && (!sentence.cellId.isEmpty() || camp != null)) {
             if (custody.enterJail(online, "prison")) {
                 jailed = true;
             } else {
@@ -342,10 +370,28 @@ public class PrisonService implements PrisonRoleplayUseCase {
         if (online != null && seizure != null && (jailed || sentence.cellId.isEmpty())) {
             // Custody consumes the person AND the inventory: seize at the
             // arrest position before the handover moves the body into a cell.
-            seizure.onArrest(online, siteFor(siteId, missionId),
-                    blank(reason) ? missionId : reason);
+            seizure.onArrest(online, site, blank(reason) ? missionId : reason);
         }
-        if (jailed) {
+        if (camp != null) {
+            // Camp intake: the register claims IN_CAMP, the body lands at the
+            // intake spawn, and mining requires survival — no adventure mode.
+            // The camp link is written even when the custody handover was
+            // refused, so a later arrest/recapture re-delivers to the camp
+            // instead of stranding the sentence with no destination.
+            var reg = ctx.prisonerRegister().read();
+            var rec = reg.prisoner(sentence.targetUuid);
+            if (rec == null) {
+                rec = new com.dwurdy.straja.domain.model.PrisonerRegisterRecord(
+                        sentence.targetUuid, sentence.target,
+                        blank(reason) ? missionId : reason);
+                reg.put(rec);
+            }
+            rec.assignedCampId = camp.id;
+            if (site != null) rec.arrestSite = site.id;
+            if (jailed) rec.status = PrisonerStatus.IN_CAMP;
+            ctx.prisonerRegister().write(reg);
+            if (jailed) deliverToCamp(online, camp, true);
+        } else if (jailed) {
             teleportToCell(online, cell);
             online.setGameMode("adventure");
         }
@@ -370,15 +416,22 @@ public class PrisonService implements PrisonRoleplayUseCase {
         var rec = reg.prisoner(uuid);
         boolean wasHunted = rec != null && (rec.status == PrisonerStatus.FUGITIVE
                 || rec.status == PrisonerStatus.ESCORTED);
-        if (rec != null && rec.status != PrisonerStatus.RELEASED) {
-            rec.status = PrisonerStatus.IN_CELL;
+        // LAW-006: a camp prisoner stays camp-bound through recapture — the
+        // intake spawn is their delivery point, not a cell bunk.
+        var camp = rec != null && rec.assignedCampId != null
+                && !rec.assignedCampId.isBlank() && camps != null
+                ? camps.camp(rec.assignedCampId) : null;
+        if (rec != null && !rec.status.isReleased()) {
+            rec.status = camp != null ? PrisonerStatus.IN_CAMP : PrisonerStatus.IN_CELL;
             ctx.prisonerRegister().write(reg);
         }
         if (wasHunted && bolos != null && target.uuid() != null) {
             bolos.clearFor(target.uuid());
         }
         var cell = blank(sentence.cellId) ? null : store().cell(sentence.cellId);
-        if (cell != null && custody.enterJail(target, "prison")) {
+        if (camp != null && custody.enterJail(target, "prison")) {
+            deliverToCamp(target, camp, true);
+        } else if (cell != null && custody.enterJail(target, "prison")) {
             teleportToCell(target, cell);
             target.setGameMode("adventure");
         }
@@ -430,6 +483,18 @@ public class PrisonService implements PrisonRoleplayUseCase {
     }
 
     private boolean releaseSentence(PrisonStore data, Sentence sentence, PlayerGateway target, String reason) {
+        return releaseSentence(data, sentence, target, reason, null);
+    }
+
+    /**
+     * Core release path. {@code laborCamp} overrides the exit point (the
+     * camp's release spawn) and — when the reason is {@code SERVED_LABOR} —
+     * the terminal register status. Locker restore, game-mode restore, BOLO
+     * clear and audit hooks are identical to a cell release.
+     */
+    private boolean releaseSentence(PrisonStore data, Sentence sentence, PlayerGateway target,
+                                    String reason,
+                                    com.dwurdy.straja.domain.model.LaborCampRecord laborCamp) {
         if (sentence == null || java.util.Set.of("SERVED", "FORCED_RELEASE", "CANCELLED")
                 .contains(sentence.status)) return false;
         if (target != null && !custody.releaseFromJail(target)) return false;
@@ -443,9 +508,17 @@ public class PrisonService implements PrisonRoleplayUseCase {
         // M4: an official release restores belongings, game mode and status.
         var reg = ctx.prisonerRegister().read();
         var rec = reg.prisoner(sentence.targetUuid);
-        if (rec != null && rec.status != PrisonerStatus.RELEASED) {
-            rec.status = PrisonerStatus.RELEASED;
+        if (laborCamp == null && rec != null && rec.assignedCampId != null
+                && !rec.assignedCampId.isBlank() && camps != null) {
+            // Any release path for a camp-assigned prisoner (manual jailer
+            // release included) exits at the camp's release point.
+            laborCamp = camps.camp(rec.assignedCampId);
+        }
+        if (rec != null && !rec.status.isReleased()) {
+            rec.status = "SERVED_LABOR".equals(sentence.releaseReason)
+                    ? PrisonerStatus.SERVED_LABOR : PrisonerStatus.RELEASED;
             rec.releasedAt = now();
+            rec.assignedCampId = "";
             if (seizure != null) seizure.releaseLocker(reg, target, rec);
             ctx.prisonerRegister().write(reg);
         }
@@ -457,10 +530,19 @@ public class PrisonService implements PrisonRoleplayUseCase {
         if (target != null) {
             target.setGameMode(rec == null || blank(rec.priorGameMode)
                     ? "survival" : rec.priorGameMode);
-            teleportToRelease(target);
-            target.tell("FORCED_RELEASE".equals(sentence.status)
-                    ? "Ai fost eliberat administrativ din celulă."
-                    : "Ți-ai executat sentința. Ești eliberat din celulă.");
+            if (laborCamp != null && laborCamp.releaseSpawn != null) {
+                var p = laborCamp.releaseSpawn;
+                target.teleport(p.dimension(), p.x() + 0.5, p.y(), p.z() + 0.5);
+            } else {
+                teleportToRelease(target);
+            }
+            if (laborCamp != null) {
+                target.tell("Ți-ai plătit libertatea prin muncă. Ești eliberat din lagăr.");
+            } else {
+                target.tell("FORCED_RELEASE".equals(sentence.status)
+                        ? "Ai fost eliberat administrativ din celulă."
+                        : "Ți-ai executat sentința. Ești eliberat din celulă.");
+            }
         }
         return true;
     }
@@ -468,6 +550,166 @@ public class PrisonService implements PrisonRoleplayUseCase {
     private void teleportToRelease(PlayerGateway player) {
         SetupData.Location point = ctx.setup().read().location("prisonRelease");
         if (point != null) player.teleport(point.dimension, point.x + 0.5, point.y, point.z + 0.5);
+    }
+
+    // ---------------------------------------------------- LAW-006 camps
+
+    /**
+     * Resolves an arrest site's {@code CAMP:<id>} destination. Unknown or
+     * dangling camp ids degrade to the normal cell flow — an unlinked
+     * destination must not strand a prisoner outside custody bookkeeping.
+     */
+    private com.dwurdy.straja.domain.model.LaborCampRecord campDestination(
+            com.dwurdy.straja.domain.model.LawCheckpointRecord site) {
+        if (site == null || site.arrestDestination == null || camps == null) return null;
+        String dest = site.arrestDestination.trim();
+        if (!dest.toUpperCase(java.util.Locale.ROOT).startsWith("CAMP:")) return null;
+        return camps.camp(dest.substring(5).trim());
+    }
+
+    /**
+     * Lands a prisoner inside the camp — the intake spawn when present,
+     * the boundary centre otherwise. Falls back to no teleport when the camp
+     * carries no usable geometry (bounds checks still apply).
+     */
+    /**
+     * Camp delivery: teleport to the camp spawn AND restore survival — cell
+     * custody runs in adventure mode, but a laborer who cannot swing a pick
+     * can never earn the freedom price. {@code releaseSentence} restores
+     * {@code priorGameMode} afterwards.
+     */
+    private void deliverToCamp(PlayerGateway player,
+                               com.dwurdy.straja.domain.model.LaborCampRecord camp,
+                               boolean intake) {
+        teleportToCampSpawn(player, camp, intake);
+        if (!"survival".equalsIgnoreCase(player.gameModeName())) {
+            player.setGameMode("survival");
+        }
+    }
+
+    private void teleportToCampSpawn(PlayerGateway player,
+                                     com.dwurdy.straja.domain.model.LaborCampRecord camp,
+                                     boolean intake) {
+        com.dwurdy.straja.domain.model.StoragePoint point = intake
+                ? (camp.intakeSpawn != null ? camp.intakeSpawn : camp.dormitorySpawn)
+                : (camp.dormitorySpawn != null ? camp.dormitorySpawn : camp.intakeSpawn);
+        if (point != null) {
+            player.teleport(point.dimension(), point.x() + 0.5, point.y(), point.z() + 0.5);
+            return;
+        }
+        var b = camp.boundary;
+        if (b != null) {
+            player.teleport(b.dimension(),
+                    (b.minX() + b.maxX()) / 2.0 + 0.5, b.maxY(),
+                    (b.minZ() + b.maxZ()) / 2.0 + 0.5);
+        }
+    }
+
+    /**
+     * {@code /straja camp transfer <player> <camp>} — moves an active
+     * prisoner into camp custody: frees any assigned cell bunk, flips the
+     * register to IN_CAMP, and delivers the body at the camp intake. No
+     * fugitive alert fires — this is an official move, not a breach.
+     */
+    public boolean transferToCamp(PlayerGateway actor, PlayerGateway target, String campId) {
+        if (!players.hasCapability(actor, Capability.EXECUTE_ARRESTS)) {
+            actor.refuse("straja.prison.release_rank", "straja.remedy.jailer");
+            audit.record("camp_transfer", actor.name(), uuidOf(actor),
+                    target == null ? campId : target.name(), "",
+                    "REFUSED", "missing_authority");
+            return false;
+        }
+        if (target == null || !target.isOnline()) {
+            actor.refuse("straja.common.target_offline", "straja.remedy.wait");
+            return false;
+        }
+        var camp = camps == null ? null : camps.camp(campId);
+        if (camp == null) {
+            actor.refuse("straja.camp.unknown", "straja.remedy.fix_retry", campId);
+            return false;
+        }
+        var data = store();
+        var sentence = activeSentenceFrom(data, target);
+        if (sentence == null) {
+            actor.refuse("straja.prison.no_sentence", "straja.remedy.jailer", target.name());
+            return false;
+        }
+        var reg = ctx.prisonerRegister().read();
+        var rec = reg.prisoner(sentence.targetUuid);
+        if (rec != null && rec.status == PrisonerStatus.IN_CAMP
+                && camp.id.equals(rec.assignedCampId)) {
+            // Idempotent: already assigned to this camp — nothing to move.
+            actor.tellKey("straja.camp.already_there", target.name(), camp.id);
+            return false;
+        }
+        if (custody.enterJail(target, "prison")) {
+            if (rec != null && rec.status == PrisonerStatus.FUGITIVE && bolos != null
+                    && target.uuid() != null) {
+                bolos.clearFor(target.uuid());
+            }
+            if (rec == null) {
+                rec = new com.dwurdy.straja.domain.model.PrisonerRegisterRecord(
+                        sentence.targetUuid, sentence.target, "labor transfer");
+                reg.put(rec);
+            }
+            rec.status = PrisonerStatus.IN_CAMP;
+            rec.assignedCampId = camp.id;
+            ctx.prisonerRegister().write(reg);
+            // Free the bunk — a camp-bound prisoner holds no cell.
+            if (!sentence.cellId.isEmpty()) {
+                data.assignments.remove(sentence.cellId);
+                sentence.cellId = "";
+            }
+            if ("WAITING_CELL".equals(sentence.status)) {
+                sentence.status = "ACTIVE";
+                data.waitlist.removeIf(e -> e != null
+                        && sentence.id.equals(e.sentenceId));
+            }
+            ctx.prison().write(data);
+            deliverToCamp(target, camp, true);
+            target.tellKey("straja.camp.transferred", camp.name.isBlank() ? camp.id : camp.name);
+            actor.tellKey("straja.camp.transfer_done", target.name(), camp.id);
+            audit.record("camp_transfer", actor.name(), uuidOf(actor),
+                    target.name(), sentence.targetUuid, "SUCCESS", "camp=" + camp.id);
+            return true;
+        }
+        actor.refuse("straja.prison.handover_retry", "straja.remedy.jailer");
+        return false;
+    }
+
+    /**
+     * Automatic labor release: when a camp prisoner's labor account reaches
+     * the freedom price the sentence closes as served, the register marks
+     * SERVED_LABOR, belongings come back and the body exits at the camp's
+     * release point. Runs every tick for camp prisoners and directly after
+     * each quartermaster credit — idempotent once terminal.
+     */
+    public boolean checkLaborRelease(String targetUuid) {
+        if (camps == null || targetUuid == null || targetUuid.isBlank()) return false;
+        var reg = ctx.prisonerRegister().read();
+        var rec = reg.prisoner(targetUuid);
+        if (rec == null || rec.status != PrisonerStatus.IN_CAMP
+                || rec.assignedCampId == null || rec.assignedCampId.isBlank()) return false;
+        var camp = camps.camp(rec.assignedCampId);
+        if (camp == null) return false;
+        long price = camps.freedomPrice(camp, rec);
+        if (price <= 0 || rec.laborAccount < price) return false;
+        var data = store();
+        for (var sentence : data.sentences) {
+            if (sentence == null || !"ACTIVE".equals(sentence.status)
+                    || !targetUuid.equals(sentence.targetUuid)) continue;
+            var target = findFor(sentence);
+            if (releaseSentence(data, sentence, target, "SERVED_LABOR", camp)) {
+                ctx.prison().write(data);
+                audit.record("camp_labor_release", "system", "",
+                        sentence.target, targetUuid, "SUCCESS",
+                        "camp=" + camp.id + " paid=" + rec.laborAccount
+                                + " price=" + price);
+                return true;
+            }
+            return false;
+        }
+        return false;
     }
 
     /**
@@ -518,7 +760,21 @@ public class PrisonService implements PrisonRoleplayUseCase {
         if (sentence == null || !"ACTIVE".equals(sentence.status)) return;
         var rec = ctx.prisonerRegister().read().prisoner(sentence.targetUuid);
         if (rec != null && (rec.status == PrisonerStatus.FUGITIVE
-                || rec.status == PrisonerStatus.RELEASED)) return;
+                || rec.status.isReleased())) return;
+        // LAW-006: a camp prisoner respawns at the camp dormitory — death
+        // inside the perimeter never drops custody or releases them.
+        if (rec != null && rec.status == PrisonerStatus.IN_CAMP
+                && rec.assignedCampId != null && !rec.assignedCampId.isBlank()
+                && camps != null) {
+            var camp = camps.camp(rec.assignedCampId);
+            if (camp != null) {
+                if (custody.enterJail(player, "prison")) {
+                    deliverToCamp(player, camp, false);
+                    player.tell("Te-ai trezit în lagăr — detenția continuă.");
+                }
+                return;
+            }
+        }
         var cell = blank(sentence.cellId) ? null : data.cell(sentence.cellId);
         if (cell == null) return;
         if (custody.enterJail(player, "prison")) {
@@ -536,7 +792,7 @@ public class PrisonService implements PrisonRoleplayUseCase {
     private void finishReleaseRecovery(PlayerGateway player) {
         var reg = ctx.prisonerRegister().read();
         var rec = reg.prisoner(player.uuid().toString());
-        if (rec != null && rec.status == PrisonerStatus.RELEASED
+        if (rec != null && rec.status.isReleased()
                 && !blank(rec.priorGameMode) && "adventure".equals(player.gameModeName())) {
             player.setGameMode(rec.priorGameMode);
             rec.priorGameMode = "";
@@ -610,6 +866,25 @@ public class PrisonService implements PrisonRoleplayUseCase {
         var regRecord = ctx.prisonerRegister().read().prisoner(sentence.targetUuid);
         if (regRecord != null && (regRecord.status == PrisonerStatus.FUGITIVE
                 || regRecord.status == PrisonerStatus.ESCORTED)) return;
+        // LAW-006: a camp prisoner relogs back into camp custody — intake
+        // delivery closes any "logged out past the wire" escape vector. A
+        // dangling bunk claim (from pre-transfer data) is freed, never
+        // requeued to a cell.
+        if (regRecord != null && regRecord.status == PrisonerStatus.IN_CAMP
+                && !blank(regRecord.assignedCampId) && camps != null) {
+            var camp = camps.camp(regRecord.assignedCampId);
+            if (camp != null) {
+                if (!sentence.cellId.isEmpty()) {
+                    data.assignments.remove(sentence.cellId);
+                    sentence.cellId = "";
+                    ctx.prison().write(data);
+                }
+                if (custody.enterJail(player, "prison")) {
+                    deliverToCamp(player, camp, true);
+                }
+                return;
+            }
+        }
         var cell = blank(sentence.cellId) ? null : data.cell(sentence.cellId);
         var assignment = cell == null || blank(cell.id) ? null : data.assignments.get(cell.id);
         if (cell != null && !blank(cell.dimension) && assignment != null
@@ -702,16 +977,27 @@ public class PrisonService implements PrisonRoleplayUseCase {
                     && !"WAITING_CELL".equals(sentence.status)) continue;
             var target = findFor(sentence);
             if ("WAITING_CELL".equals(sentence.status)) {
-                var cell = firstFree(data);
-                if (cell == null) continue;
-                assignCell(data, sentence, cell);
-                data.waitlist.removeIf(e -> e != null
-                        && sentence.id != null && sentence.id.equals(e.sentenceId));
-                changed = true;
-                if (target != null) {
-                    if (custody.enterJail(target, "prison")) {
-                        teleportToCell(target, cell);
-                        target.setGameMode("adventure");
+                // LAW-006: a camp-assigned prisoner must never be promoted
+                // into a cell bunk — heal the stale waitlist state instead.
+                var rr = ctx.prisonerRegister().read().prisoner(sentence.targetUuid);
+                if (rr != null && rr.status == PrisonerStatus.IN_CAMP
+                        && rr.assignedCampId != null && !rr.assignedCampId.isBlank()) {
+                    sentence.status = "ACTIVE";
+                    data.waitlist.removeIf(e -> e != null
+                            && sentence.id != null && sentence.id.equals(e.sentenceId));
+                    changed = true;
+                } else {
+                    var cell = firstFree(data);
+                    if (cell == null) continue;
+                    assignCell(data, sentence, cell);
+                    data.waitlist.removeIf(e -> e != null
+                            && sentence.id != null && sentence.id.equals(e.sentenceId));
+                    changed = true;
+                    if (target != null) {
+                        if (custody.enterJail(target, "prison")) {
+                            teleportToCell(target, cell);
+                            target.setGameMode("adventure");
+                        }
                     }
                 }
             }
@@ -725,15 +1011,60 @@ public class PrisonService implements PrisonRoleplayUseCase {
                 changed = true;
                 continue;
             }
+            // LAW-006: camp prisoners enforce the camp perimeter instead of a
+            // cell box — same breach semantics, a different box. ESCORTED is
+            // included: a camp prisoner whose escorting officer vanished is
+            // loose outside the wire, which is an escape, not a free pass.
+            var camp = rec != null && rec.assignedCampId != null
+                    && !rec.assignedCampId.isBlank() && camps != null
+                    && (rec.status == PrisonerStatus.IN_CAMP
+                            || rec.status == PrisonerStatus.ESCORTED)
+                    ? camps.camp(rec.assignedCampId) : null;
+            if (rec != null && rec.status == PrisonerStatus.IN_CAMP
+                    && rec.assignedCampId != null && !rec.assignedCampId.isBlank()
+                    && camp == null) {
+                // The camp record vanished (store reset, hand edit): requeue
+                // to the cell path instead of leaving a box-less custody
+                // where every bounds check trivially passes.
+                var reg = ctx.prisonerRegister().read();
+                var rr = reg.prisoner(sentence.targetUuid);
+                if (rr != null) {
+                    rr.status = PrisonerStatus.IN_CELL;
+                    rr.assignedCampId = "";
+                    ctx.prisonerRegister().write(reg);
+                }
+                sentence.status = "WAITING_CELL";
+                sentence.cellId = "";
+                var entry = new PrisonStore.WaitlistEntry();
+                entry.sentenceId = sentence.id;
+                entry.target = sentence.target;
+                entry.targetUuid = sentence.targetUuid;
+                entry.requestedAt = now();
+                data.waitlist.add(entry);
+                changed = true;
+                continue;
+            }
+            boolean insideBounds;
+            if (camp != null && camp.boundary != null) {
+                var b = camp.boundary;
+                insideBounds = b.dimension().equals(target.dimension())
+                        && target.x() >= b.minX() && target.x() <= b.maxX() + 1
+                        && target.y() >= b.minY() && target.y() <= b.maxY() + 1
+                        && target.z() >= b.minZ() && target.z() <= b.maxZ() + 1;
+            } else if (cell != null) {
+                insideBounds = cell.dimension.equals(target.dimension())
+                        && target.x() >= cell.minX && target.x() <= cell.maxX
+                        && target.y() >= cell.minY && target.y() <= cell.maxY
+                        && target.z() >= cell.minZ && target.z() <= cell.maxZ;
+            } else {
+                insideBounds = true; // no box configured — nothing to breach
+            }
             // The bounds check runs whether or not the canonical jail
             // transition can be re-asserted this tick — a prisoner under a
             // foreign custody state (roped, provider-owned) can still breach
             // the cell and must still flag FUGITIVE.
             boolean jailed = custody.enterJail(target, "prison");
-            if (cell != null && !(cell.dimension.equals(target.dimension())
-                    && target.x() >= cell.minX && target.x() <= cell.maxX
-                    && target.y() >= cell.minY && target.y() <= cell.maxY
-                    && target.z() >= cell.minZ && target.z() <= cell.maxZ)
+            if (!insideBounds
                     && custody.escortOfficerWithin(target,
                             ctx.policies().escortTetherRadius) == null) {
                 // M4: leaving custody bounds without a release — and without
@@ -743,6 +1074,15 @@ public class PrisonService implements PrisonRoleplayUseCase {
                 continue;
             }
             if (!jailed) continue;
+            if (camp != null) {
+                // The freedom price is a release valve independent of the
+                // sentence clock: reaching it ends custody on the spot.
+                long price = camps.freedomPrice(camp, rec);
+                if (price > 0 && rec.laborAccount >= price) {
+                    changed |= releaseSentence(data, sentence, target, "SERVED_LABOR", camp);
+                    continue;
+                }
+            }
             long elapsed = Math.max(0, Math.min(now() - sentence.lastTickAt, 5000));
             sentence.lastTickAt = now();
             double x = target.x(), y = target.y(), z = target.z();
@@ -765,7 +1105,9 @@ public class PrisonService implements PrisonRoleplayUseCase {
             }
             changed = true;
             if (sentence.remainingActiveMs <= 0) {
-                changed |= releaseSentence(data, sentence, target, "SERVED");
+                // Camp prisoners exit at the camp release point even when
+                // the sentence clock, not the labor account, ends custody.
+                changed |= releaseSentence(data, sentence, target, "SERVED", camp);
             }
         }
         changed |= pruneClosedSentences(data);
@@ -840,7 +1182,35 @@ public class PrisonService implements PrisonRoleplayUseCase {
         if (sentence == null) return;
         var reg = ctx.prisonerRegister().read();
         var rec = reg.prisoner(sentence.targetUuid);
-        if (rec == null || rec.status == PrisonerStatus.RELEASED) return;
+        if (rec == null || rec.status.isReleased()) return;
+        // LAW-006: camp custody uses the camp perimeter as its inside box —
+        // an escorted prisoner (status ESCORTED, camp still assigned) uncuffed
+        // inside the wire returns to IN_CAMP, not to freedom or a manhunt.
+        if (rec.status != PrisonerStatus.IN_CELL && rec.status != PrisonerStatus.FUGITIVE
+                && rec.assignedCampId != null && !rec.assignedCampId.isBlank()
+                && camps != null) {
+            var camp = camps.camp(rec.assignedCampId);
+            if (camp == null) {
+                // Stale link to a deleted camp — clear it and let the normal
+                // cell-bounds logic below decide custody.
+                rec.assignedCampId = "";
+                ctx.prisonerRegister().write(reg);
+            } else {
+            var b = camp.boundary;
+            if (b != null && b.dimension().equals(target.dimension())
+                    && target.x() >= b.minX() && target.x() <= b.maxX() + 1
+                    && target.y() >= b.minY() && target.y() <= b.maxY() + 1
+                    && target.z() >= b.minZ() && target.z() <= b.maxZ() + 1) {
+                if (rec.status != PrisonerStatus.IN_CAMP) {
+                    rec.status = PrisonerStatus.IN_CAMP;
+                    ctx.prisonerRegister().write(reg);
+                }
+                return; // uncuffed inside the camp — still camp custody
+            }
+            markFugitive(sentence, target);
+            return;
+            }
+        }
         var cell = blank(sentence.cellId) ? null : data.cell(sentence.cellId);
         boolean inside = cell != null && cell.dimension.equals(target.dimension())
                 && target.x() >= cell.minX && target.x() <= cell.maxX
@@ -868,7 +1238,9 @@ public class PrisonService implements PrisonRoleplayUseCase {
         if (sentence == null) return;
         var reg = ctx.prisonerRegister().read();
         var rec = reg.prisoner(sentence.targetUuid);
-        if (rec == null || rec.status != PrisonerStatus.IN_CELL) return;
+        // Cell and camp prisoners are both escortable detainees.
+        if (rec == null || (rec.status != PrisonerStatus.IN_CELL
+                && rec.status != PrisonerStatus.IN_CAMP)) return;
         rec.status = PrisonerStatus.ESCORTED;
         ctx.prisonerRegister().write(reg);
         audit.record("prison_escort", officer == null ? "system" : officer.name(),

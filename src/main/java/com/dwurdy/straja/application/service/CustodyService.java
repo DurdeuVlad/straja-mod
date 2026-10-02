@@ -2520,14 +2520,15 @@ public class CustodyService implements CustodyRoleplayUseCase {
             }
             if (target == null) continue;
             var issuer = findStored(record.issuerUuid, record.issuer);
-            // A prisoner registered IN_CELL is detained, not escorted: the
-            // tether must not drag them out of the cell toward the cuffing
-            // officer (detention outranks the restraint).
+            // A prisoner registered IN_CELL or IN_CAMP is detained, not
+            // escorted: the tether must not drag them out of custody toward
+            // the cuffing officer (detention outranks the restraint).
             var inmate = registerView == null
                     || record.targetUuid == null || record.targetUuid.isEmpty()
                     ? null : registerView.prisoner(record.targetUuid);
             boolean detained = inmate != null
-                    && inmate.status == com.dwurdy.straja.domain.model.PrisonerStatus.IN_CELL;
+                    && (inmate.status == com.dwurdy.straja.domain.model.PrisonerStatus.IN_CELL
+                            || inmate.status == com.dwurdy.straja.domain.model.PrisonerStatus.IN_CAMP);
             // Cuffed suspects cannot sprint, escorted or not.
             target.setSprinting(false);
             if (issuer == null || !issuer.dimension().equals(target.dimension())) {

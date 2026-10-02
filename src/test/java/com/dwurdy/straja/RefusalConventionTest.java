@@ -78,6 +78,9 @@ class RefusalConventionTest {
             "debitare estimată",
             "preaviz pentru",
             "Demisia este în așteptare",
+            "mărfuri interzise au fost confiscate", // camp-exit confiscation notice, follows the repel title
+            "Nu există lagăre de muncă",            // admin listing of an empty registry
+            "este deja repartizat în lagărul",      // idempotent-transfer notice
             "livrat parțial",
             "nu ai nimic ilegal", // checkpoint pass notice — no remedy applies
             "Lasă marfa interzisă", // warn-stage guidance inside a WARN, not a refusal

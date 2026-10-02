@@ -228,6 +228,15 @@ public final class StrajaCommands {
                 .then(Commands.literal("off")
                         .executes(c -> player(c, p -> StrajaRuntime.get().checkpoints()
                                 .setPickMode(p, null, "off")))));
+        // LAW-006: route this site's arrests to a labor camp (CAMP:<id>) or
+        // back to the prison cells (CELL / empty).
+        checkpoint.then(Commands.literal("arrestdest")
+                .then(Commands.argument("site", StringArgumentType.word())
+                        .then(Commands.argument("destination", StringArgumentType.word())
+                                .executes(c -> player(c, p -> StrajaRuntime.get().checkpoints()
+                                        .setArrestDestination(p,
+                                                StringArgumentType.getString(c, "site"),
+                                                StringArgumentType.getString(c, "destination")))))));
         root.then(adminOnly(checkpoint));
         var setMissionTime = Commands.literal("set-mission-time")
                 .then(Commands.argument("id", StringArgumentType.word())
@@ -299,6 +308,7 @@ public final class StrajaCommands {
         // prison
         root.then(prisonNode());
         root.then(deskNode());
+        root.then(campNode());
 
         // civic: fines, complaints, rooms, archive
         root.then(fineNode());
@@ -779,6 +789,80 @@ public final class StrajaCommands {
                                                 StringArgumentType.getString(c, "campId"),
                                                 StringArgumentType.getString(c, "id"),
                                                 IntegerArgumentType.getInteger(c, "price")) ? 1 : 0)))));
+        return node;
+    }
+
+    /**
+     * LAW-006 labor camps. Not adminOnly-wrapped: {@code status} is the
+     * player-facing labor-account readout; setup verbs authorize inside the
+     * service (commissioner) and {@code transfer} needs EXECUTE_ARRESTS.
+     */
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> campNode() {
+        var node = Commands.literal("camp");
+        node.executes(c -> player(c, p -> StrajaRuntime.get().laborCamps().status(p, "")));
+        node.then(Commands.literal("register")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("name", StringArgumentType.word())
+                                .then(Commands.argument("min", StringArgumentType.word())
+                                        .then(Commands.argument("max", StringArgumentType.word())
+                                                .executes(c -> StrajaRuntime.get().laborCamps().register(actor(c),
+                                                        StringArgumentType.getString(c, "id"),
+                                                        StringArgumentType.getString(c, "name"),
+                                                        StringArgumentType.getString(c, "min"),
+                                                        StringArgumentType.getString(c, "max")) ? 1 : 0))))));
+        node.then(Commands.literal("link-desk")
+                .then(Commands.argument("camp", StringArgumentType.word())
+                        .then(Commands.argument("desk", StringArgumentType.word())
+                                .executes(c -> StrajaRuntime.get().laborCamps().linkDesk(actor(c),
+                                        StringArgumentType.getString(c, "camp"),
+                                        StringArgumentType.getString(c, "desk")) ? 1 : 0))));
+        node.then(Commands.literal("link-exit")
+                .then(Commands.argument("camp", StringArgumentType.word())
+                        .then(Commands.argument("site", StringArgumentType.word())
+                                .executes(c -> StrajaRuntime.get().laborCamps().linkExit(actor(c),
+                                        StringArgumentType.getString(c, "camp"),
+                                        StringArgumentType.getString(c, "site")) ? 1 : 0))));
+        node.then(Commands.literal("set-freedom-price")
+                .then(Commands.argument("camp", StringArgumentType.word())
+                        .then(Commands.argument("mode", StringArgumentType.word())
+                                .executes(c -> StrajaRuntime.get().laborCamps().setFreedomPrice(actor(c),
+                                        StringArgumentType.getString(c, "camp"),
+                                        StringArgumentType.getString(c, "mode"), null) ? 1 : 0)
+                                .then(Commands.argument("value", StringArgumentType.greedyString())
+                                        .executes(c -> StrajaRuntime.get().laborCamps().setFreedomPrice(actor(c),
+                                                StringArgumentType.getString(c, "camp"),
+                                                StringArgumentType.getString(c, "mode"),
+                                                StringArgumentType.getString(c, "value")) ? 1 : 0)))));
+        node.then(Commands.literal("spawn")
+                .then(Commands.argument("camp", StringArgumentType.word())
+                        .then(Commands.argument("kind", StringArgumentType.word())
+                                .executes(c -> StrajaRuntime.get().laborCamps().setSpawn(actor(c),
+                                        StringArgumentType.getString(c, "camp"),
+                                        StringArgumentType.getString(c, "kind")) ? 1 : 0))));
+        node.then(Commands.literal("unregister")
+                .then(Commands.argument("camp", StringArgumentType.word())
+                        .executes(c -> StrajaRuntime.get().laborCamps().unregister(actor(c),
+                                StringArgumentType.getString(c, "camp")) ? 1 : 0)));
+        node.then(Commands.literal("transfer")
+                .then(Commands.argument("player", EntityArgument.player())
+                        .then(Commands.argument("camp", StringArgumentType.word())
+                                .executes(c -> {
+                                    var t = target(c, "player");
+                                    if (t == null) {
+                                        c.getSource().sendFailure(refusal("straja.cmd.offline",
+                                                "straja.remedy.retry"));
+                                        return 0;
+                                    }
+                                    return StrajaRuntime.get().prison().transferToCamp(actor(c), t,
+                                            StringArgumentType.getString(c, "camp")) ? 1 : 0;
+                                }))));
+        node.then(Commands.literal("status")
+                .executes(c -> player(c, p -> StrajaRuntime.get().laborCamps().status(p, "")))
+                .then(Commands.argument("player", StringArgumentType.word())
+                        .executes(c -> player(c, p -> StrajaRuntime.get().laborCamps()
+                                .status(p, StringArgumentType.getString(c, "player"))))));
+        node.then(Commands.literal("list")
+                .executes(c -> player(c, StrajaRuntime.get().laborCamps()::listCamps)));
         return node;
     }
 

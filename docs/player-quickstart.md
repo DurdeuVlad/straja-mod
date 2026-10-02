@@ -31,6 +31,14 @@ clickabile în chat), **obiecte fizice** și **formulare native**.
 4. Treci examenul → devii **Stagiar** și începi cariera: serviciu la
    Secretară, patrule, avansare.
 
+## Dacă ești trimis la lagărul de muncă
+
+Un deținut în lagăr minesz și vinde minereul la intendent — încasările nu vin
+în mână, ci în **contul de muncă**. Când contul atinge prețul libertății
+(`flat` sau un multiplicator al amenzilor tale), ești eliberat automat și îți
+recuperezi lucrurile. `/straja camp status` îți arată progresul. Nu ieși din
+perimetru fără escortă — devii fugitiv căutat.
+
 ## Dacă ceva nu merge
 
 - Orice refuz îți spune **de ce** și **unde să mergi** — mesajele roșii se

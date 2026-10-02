@@ -81,6 +81,40 @@ la un buton de suprafață nativă. Fiecare vânzare e atomică: cuferele pline
 refuză fără să atingă inventarul sau banii, iar fiecare tranzacție scrie un
 rând imuabil în registrul de vânzări.
 
+### 3.2 Lagăre de muncă (LAW-006)
+
+Un lagăr de muncă e o custodie pe perimetru: deținuții minesz, vând la
+intendent, iar vânzările le creditează contul de muncă până la prețul
+libertății — atunci eliberarea e automată.
+
+```
+/straja camp register <id> <nume> <minX,minY,minZ> <maxX,maxY,maxZ>
+/straja camp spawn <id> intake|release|dormitory   # spawn-uri la poziția ta
+/straja camp link-exit <id> <checkpointId>          # poarta care respinge deținuții
+/straja camp link-desk <id> <deskId>                # intendentul din lagăr
+/straja camp set-freedom-price <id> flat "1g 32s"   # sau fines_multiplier <x>
+/straja checkpoint arrestdest <site> CAMP:<id>      # arestările site-ului ajung în lagăr
+/straja camp transfer <jucător> <id>                # mută un deținut din celulă
+/straja camp status [jucător] | /straja camp list | /straja camp unregister <id>
+```
+
+Ordine recomandată: înregistrează lagărul → setează spawn-urile → creează
+checkpoint-ul de ieșire cu carry-ban pe minereuri → `link-exit` → creează
+biroul intendentului și `link-desk` (sau `desk quartermaster` care leagă și
+prețuiește din interdicții) → opțional `arrestdest CAMP:` pe checkpoint-urile
+de frontieră.
+
+Detalii de comportament: deținutul care trece firul fără escortă devine
+FUGITIVE cu BOLO; moartea îl întoarce la dormitor fără să ridice custodia;
+poarta de ieșire respinge deținuții și le confiscă mărfurile interzise spre
+cuferele de probatoriu; civililor li se plătește în monede chiar la același
+birou. Comisarul poate elibera manual oricând — balanța nu e o condiție pentru
+`/straja prison release`.
+
+Configurare TOML (`straja-server.toml`): `[economy].tierRatio` (implicit 64),
+coinItemIds pentru cele patru monede, `[labor_camp].freedomPriceMode` /
+`freedomFlatPrice` / `freedomFineMultiplier` ca fallbackuri per-lagăr.
+
 ## 4. Verificare finală
 
 ```
