@@ -844,7 +844,11 @@ public class PrisonService implements PrisonRoleplayUseCase {
         if (name != null && !name.isBlank()) {
             var register = ctx.prisonerRegister().read();
             String legacyId = com.dwurdy.straja.domain.model.PrisonerRegisterStore.legacyUuid(name);
-            boolean adopted = register.prisonerByName(name) != null;
+            // Adoption reconciles legacy name-anchored rows only: a record
+            // already keyed to a real uuid belongs to that account/session and
+            // must never be re-keyed by a same-named joiner.
+            var nameMatch = register.prisonerByName(name);
+            boolean adopted = nameMatch != null && legacyId.equals(nameMatch.detaineeUuid);
             if (adopted) register.adoptByName(name, uuid);
             boolean lockersMoved = register.rekeyPendingLockers(legacyId, uuid);
             if (adopted || lockersMoved) ctx.prisonerRegister().write(register);

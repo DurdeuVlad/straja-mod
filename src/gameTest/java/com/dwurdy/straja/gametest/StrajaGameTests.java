@@ -356,6 +356,15 @@ public final class StrajaGameTests {
         NeoForge.EVENT_BUS.post(breakOutside);
         helper.assertFalse(breakOutside.isCanceled(),
                 "blocks outside protected areas must stay mutable");
+
+        // The GameTest world persists across runs — the confirmed cell must
+        // not leak into the shared cell pool or it eventually hits maxCells.
+        var prison = runtime.context().prison().read();
+        prison.cells.removeIf(c -> c != null && dimension.equals(c.dimension)
+                && inside.getX() >= c.minX && inside.getX() <= c.maxX
+                && inside.getY() >= c.minY && inside.getY() <= c.maxY
+                && inside.getZ() >= c.minZ && inside.getZ() <= c.maxZ);
+        runtime.context().prison().write(prison);
         helper.succeed();
     }
 
@@ -991,7 +1000,9 @@ public final class StrajaGameTests {
         runtime.prison().arrest(pg, null, 1, commissioner, "gt-wanted");
 
         bs = runtime.context().bolos().read();
-        helper.assertTrue(bs.records.get(0).status
+        var own = bs.records.stream()
+                .filter(r -> "b-gt-1".equals(r.id)).findFirst().orElse(null);
+        helper.assertTrue(own != null && own.status
                         == com.dwurdy.straja.domain.model.BoloStatus.RESOLVED,
                 "arrest must resolve the bolo as RESOLVED");
         helper.assertTrue(!runtime.wanted().isWanted(prisoner.getUUID()),
