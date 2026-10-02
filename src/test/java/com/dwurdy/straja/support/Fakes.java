@@ -316,6 +316,38 @@ public final class Fakes {
             drops.add(key(dim, x, y, z) + " " + itemId + " x" + count);
         }
 
+        @Override public ContainerCapacity capacity(String dim, int x, int y, int z) {
+            List<ItemView> c = slots.get(key(dim, x, y, z));
+            if (c == null) return null;
+            int empty = 0;
+            Map<String, Integer> room = new HashMap<>();
+            for (ItemView v : c) {
+                if (v.isEmpty()) { empty++; continue; }
+                int head = Math.max(0, v.maxStackSize() - v.count());
+                // Component-free stacks only — mirrors the adapter's rule.
+                if (head > 0 && (v.customData() == null || v.customData().isEmpty())) {
+                    room.merge(v.id(), head, Integer::sum);
+                }
+            }
+            return new ContainerCapacity(empty, room);
+        }
+
+        @Override public int stackLimit(String itemId) { return maxStack; }
+
+        @Override public int remove(String dim, int x, int y, int z, String itemId, int count) {
+            List<ItemView> c = slots.get(key(dim, x, y, z));
+            if (c == null || count <= 0) return 0;
+            int removed = 0;
+            for (int i = 0; i < c.size() && removed < count; i++) {
+                ItemView cur = c.get(i);
+                if (cur.isEmpty() || !cur.id().equals(itemId)) continue;
+                int take = Math.min(cur.count(), count - removed);
+                c.set(i, take == cur.count() ? ItemView.EMPTY : cur.withCount(cur.count() - take));
+                removed += take;
+            }
+            return removed;
+        }
+
         /** SNBT survives the trip: slots carry it in customData so drain returns it. */
         @Override public int insertStack(String dim, int x, int y, int z,
                                          String itemId, int count, String snbt) {

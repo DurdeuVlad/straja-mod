@@ -808,4 +808,73 @@ public final class StrajaGameTests {
                 "upper half must close too");
         helper.succeed();
     }
+
+    /**
+     * LAW-005 / AT5: a real end-to-end desk sale — coal leaves the seller's
+     * inventory, lands in the placed chest through the real container gateway,
+     * pays physical coins, and appends one immutable ledger row.
+     */
+    @GameTest(template = "empty")
+    public static void merchantDeskTrade(GameTestHelper helper) {
+        var runtime = runtime(helper);
+        var level = helper.getLevel();
+        var dim = level.dimension().location().toString();
+
+        // Vanilla stand-in coins — Ady's Decorations is not on the test server.
+        var policies = runtime.context().policies();
+        var originalCoins = new java.util.LinkedHashMap<>(policies.coinItemIds);
+        policies.coinItemIds.clear();
+        policies.coinItemIds.put(1, "minecraft:iron_nugget");
+        policies.coinItemIds.put(64, "minecraft:gold_nugget");
+        try {
+            var chestPos = helper.absolutePos(new BlockPos(2, 1, 2));
+            level.setBlock(chestPos, Blocks.CHEST.defaultBlockState(), 3);
+            var deskPos = helper.absolutePos(new BlockPos(1, 1, 1));
+
+            var desks = runtime.context().merchantDesks().read();
+            var desk = new com.dwurdy.straja.domain.model.MerchantDeskRecord();
+            desk.id = "gt_qm";
+            desk.dimension = dim;
+            desk.deskPos = new com.dwurdy.straja.domain.model.StoragePoint(
+                    dim, deskPos.getX(), deskPos.getY(), deskPos.getZ());
+            desk.chests.add(new com.dwurdy.straja.domain.model.StoragePoint(
+                    dim, chestPos.getX(), chestPos.getY(), chestPos.getZ()));
+            desk.sellTable.put("minecraft:coal", 2);
+            desks.put(desk);
+            runtime.context().merchantDesks().write(desks);
+
+            var seller = new VirtualPlayerGateway("desk_seller");
+            seller.moveTo(deskPos.getX(), deskPos.getY(), deskPos.getZ());
+            seller.giveVerified(ItemSpec.of("minecraft:coal", 10));
+
+            helper.assertTrue(runtime.desks().sell(seller, "gt_qm", null, 0),
+                    "the sale must complete: " + seller.messageLog());
+
+            var chest = (net.minecraft.world.Container) level.getBlockEntity(chestPos);
+            helper.assertTrue(chest != null, "the placed chest must resolve");
+            int coal = 0;
+            for (int i = 0; i < chest.getContainerSize(); i++) {
+                var s = chest.getItem(i);
+                if (s.is(Items.COAL)) coal += s.getCount();
+            }
+            helper.assertTrue(coal == 10, "all 10 coal must land in the chest — got " + coal);
+            helper.assertTrue(seller.inventory().countOf("minecraft:coal") == 0,
+                    "sold coal must leave the seller inventory");
+            helper.assertTrue(seller.inventory().countOf("minecraft:iron_nugget") == 20,
+                    "20 base units pay as 20 iron nuggets");
+
+            var trades = runtime.context().merchantDesks().read().trades();
+            helper.assertTrue(trades.stream().anyMatch(e -> "gt_qm".equals(e.deskId)
+                    && e.baseUnits == 20 && e.itemsSold.getOrDefault("minecraft:coal", 0) == 10),
+                    "the ledger must hold one immutable row for the sale");
+        } finally {
+            policies.coinItemIds.clear();
+            policies.coinItemIds.putAll(originalCoins);
+            var cleanup = runtime.context().merchantDesks().read();
+            cleanup.remove("gt_qm");
+            cleanup.trades().removeIf(e -> "gt_qm".equals(e.deskId));
+            runtime.context().merchantDesks().write(cleanup);
+        }
+        helper.succeed();
+    }
 }

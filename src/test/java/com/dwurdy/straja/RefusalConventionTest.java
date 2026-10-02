@@ -96,6 +96,9 @@ class RefusalConventionTest {
             "alege colțul opus",   // storage pick instruction, not a denial
             "vinde-le la Intendent", // carry-ban remedy accompanying a titled repel
             "Nu există punctul de control", // admin config feedback, not a refusal
+            "Nu există birouri de negustor", // desk list status line
+            "Nicio tranzacție înregistrată", // desk ledger empty status
+            "intendentul taberei",           // quartermaster setup confirmation
             "este deja supravegheat",
             "alege din nou sau editează",
             "Niciun hoț de depozit nu este marcat",

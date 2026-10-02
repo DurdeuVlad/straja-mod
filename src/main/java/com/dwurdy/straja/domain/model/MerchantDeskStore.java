@@ -19,6 +19,9 @@ public final class MerchantDeskStore {
     public Map<String, MerchantDeskRecord> desks() {
         if (desks == null) desks = new LinkedHashMap<>();
         desks.values().removeIf(java.util.Objects::isNull);
+        // A hand-edited or truncated JSON can carry explicit nulls — normalize
+        // so every service sees collections/strings, never null fields.
+        desks.values().forEach(MerchantDeskRecord::normalize);
         return desks;
     }
 

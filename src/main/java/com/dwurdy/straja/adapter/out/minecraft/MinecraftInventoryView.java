@@ -60,6 +60,10 @@ public class MinecraftInventoryView implements InventoryView {
         return inventory.getContainerSize();
     }
 
+    @Override public int mainSlots() {
+        return inventory.items.size();
+    }
+
     @Override public ItemView stackAt(int slot) {
         if (slot < 0 || slot >= slots()) return ItemView.EMPTY;
         return view(inventory.getItem(slot));
@@ -68,6 +72,18 @@ public class MinecraftInventoryView implements InventoryView {
     @Override public ItemView extract(int slot, int amount) {
         if (slot < 0 || slot >= slots() || amount <= 0) return ItemView.EMPTY;
         return view(inventory.removeItem(slot, amount));
+    }
+
+    @Override public String snbtAt(int slot) {
+        if (slot < 0 || slot >= slots()) return null;
+        ItemStack stack = inventory.getItem(slot);
+        if (stack == null || stack.isEmpty()) return null;
+        try {
+            Tag saved = stack.save(inventory.player.registryAccess());
+            return saved instanceof CompoundTag tag ? tag.toString() : null;
+        } catch (RuntimeException ex) {
+            return null;
+        }
     }
 
     /**
