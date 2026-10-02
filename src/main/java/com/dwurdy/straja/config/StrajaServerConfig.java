@@ -128,6 +128,14 @@ public final class StrajaServerConfig {
 
     public static final ModConfigSpec.ConfigValue<String> COIN_BRONZE_ITEM;
     public static final ModConfigSpec.ConfigValue<String> COIN_BRASS_ITEM;
+    public static final ModConfigSpec.IntValue COIN_TIER_RATIO;
+    public static final ModConfigSpec.IntValue COIN_BRASS_VALUE;
+    public static final ModConfigSpec.IntValue COIN_SILVER_VALUE;
+    public static final ModConfigSpec.IntValue COIN_GOLD_VALUE;
+    public static final ModConfigSpec.ConfigValue<String> LABOR_FREEDOM_MODE;
+    public static final ModConfigSpec.IntValue LABOR_FREEDOM_FLAT_PRICE;
+    public static final ModConfigSpec.DoubleValue LABOR_FREEDOM_FINE_MULTIPLIER;
+    public static final ModConfigSpec.IntValue INSPECTION_LEDGER_LIMIT;
     public static final ModConfigSpec.ConfigValue<String> COIN_SILVER_ITEM;
     public static final ModConfigSpec.ConfigValue<String> COIN_GOLD_ITEM;
 
@@ -524,6 +532,38 @@ public final class StrajaServerConfig {
         COIN_BRASS_ITEM = B.define("brassCoin", "adys_decorations:brass_coin", StrajaServerConfig::isItemId);
         COIN_SILVER_ITEM = B.define("silverCoin", "adys_decorations:silver_coin", StrajaServerConfig::isItemId);
         COIN_GOLD_ITEM = B.define("goldCoin", "adys_decorations:gold_coin", StrajaServerConfig::isItemId);
+        COIN_TIER_RATIO = B.comment(
+                        "Value multiplier between consecutive coin tiers (default 64 —",
+                        "bronze=1, brass=64, silver=4096, gold=262144).")
+                .defineInRange("tierRatio", 64, 2, 256);
+        COIN_BRASS_VALUE = B.comment(
+                        "Explicit base-unit values per tier; 0 = derive from tierRatio.")
+                .defineInRange("brassValue", 0, 0, Integer.MAX_VALUE);
+        COIN_SILVER_VALUE = B.defineInRange("silverValue", 0, 0, Integer.MAX_VALUE);
+        COIN_GOLD_VALUE = B.defineInRange("goldValue", 0, 0, Integer.MAX_VALUE);
+        B.pop();
+
+        B.push("labor_camp");
+        LABOR_FREEDOM_MODE = B.comment(
+                        "How penal freedom prices compute: \"flat\" (fixed base-coin price)",
+                        "or \"fines_multiplier\" (outstanding fines x multiplier).",
+                        "Per-camp overrides live on the camp record.")
+                .define("freedomPriceMode", "flat", StrajaServerConfig::isFreedomPriceMode);
+        LABOR_FREEDOM_FLAT_PRICE = B.comment(
+                        "Default flat buyout price in base units (bronze = 1).",
+                        "Default 4096 = one Silver Coin.")
+                .defineInRange("freedomFlatPrice", 4096, 0, Integer.MAX_VALUE);
+        LABOR_FREEDOM_FINE_MULTIPLIER = B.comment(
+                        "Multiplier over outstanding fines when freedomPriceMode is fines_multiplier.")
+                .defineInRange("freedomFineMultiplier", 2.0, 0.0, 1000.0);
+        B.pop();
+
+        B.push("inspection");
+        INSPECTION_LEDGER_LIMIT = B.comment(
+                        "Maximum retained crossing-ledger entries (oldest trimmed).",
+                        "Snapshots are heavy; the prototype capped at 2000.",
+                        "0 keeps everything (not recommended on busy gates).")
+                .defineInRange("ledgerRetentionLimit", 20000, 0, 1_000_000);
         B.pop();
 
         B.push("storage");
@@ -1055,11 +1095,21 @@ public final class StrajaServerConfig {
         p.arrestAliveMultiplier = ARREST_ALIVE_MULTIPLIER.get();
         p.arrestDeathMultiplier = ARREST_DEATH_MULTIPLIER.get();
 
+        int[] tiers = StrajaPolicies.coinTierValues(COIN_TIER_RATIO.get(),
+                COIN_BRASS_VALUE.get(), COIN_SILVER_VALUE.get(), COIN_GOLD_VALUE.get());
+        p.coinTierRatio = COIN_TIER_RATIO.get();
+        // putIfAbsent: on colliding tier values the lower denomination keeps
+        // the slot, so a misconfigured upper tier is unvalued rather than
+        // silently re-pricing a lower tier's coin.
         p.coinItemIds = new java.util.LinkedHashMap<>();
-        p.coinItemIds.put(1, COIN_BRONZE_ITEM.get());
-        p.coinItemIds.put(64, COIN_BRASS_ITEM.get());
-        p.coinItemIds.put(4096, COIN_SILVER_ITEM.get());
-        p.coinItemIds.put(262144, COIN_GOLD_ITEM.get());
+        p.coinItemIds.putIfAbsent(tiers[0], COIN_BRONZE_ITEM.get());
+        p.coinItemIds.putIfAbsent(tiers[1], COIN_BRASS_ITEM.get());
+        p.coinItemIds.putIfAbsent(tiers[2], COIN_SILVER_ITEM.get());
+        p.coinItemIds.putIfAbsent(tiers[3], COIN_GOLD_ITEM.get());
+        p.laborFreedomPriceMode = LABOR_FREEDOM_MODE.get();
+        p.laborFreedomFlatPrice = LABOR_FREEDOM_FLAT_PRICE.get();
+        p.laborFreedomFineMultiplier = LABOR_FREEDOM_FINE_MULTIPLIER.get();
+        p.inspectionLedgerLimit = INSPECTION_LEDGER_LIMIT.get();
 
         var watchedItems = StrajaPolicies.parseStringIntMap(STORAGE_WATCHED_ITEMS.get());
         if (!watchedItems.isEmpty()) p.storageWatchedItemUnits = watchedItems;
@@ -1257,6 +1307,11 @@ public final class StrajaServerConfig {
         return o instanceof String s
                 && ("customnpcs".equalsIgnoreCase(s.trim())
                         || "debug-text".equalsIgnoreCase(s.trim()));
+    }
+
+    private static boolean isFreedomPriceMode(Object o) {
+        return o instanceof String s
+                && ("flat".equalsIgnoreCase(s.trim()) || "fines_multiplier".equalsIgnoreCase(s.trim()));
     }
 
     private static boolean isDamageBehavior(Object o) {

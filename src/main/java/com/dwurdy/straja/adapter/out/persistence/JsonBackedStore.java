@@ -79,7 +79,10 @@ public abstract class JsonBackedStore {
     /** Reads a possibly-chunked value; absent keys and single-key values behave as before. */
     private String getChunked(String key) {
         String single = store().get(key);
-        if (single != null) return single;
+        // "" is never a valid JSON payload — treat as absent so a store impl
+        // that returns empty strings for missing keys (NbtStore did pre-fix)
+        // still falls through to the chunked read.
+        if (single != null && !single.isEmpty()) return single;
         String count = store().get(key + "_parts");
         if (count == null) return null;
         int n;

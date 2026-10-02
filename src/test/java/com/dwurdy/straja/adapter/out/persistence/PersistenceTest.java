@@ -145,6 +145,36 @@ class PersistenceTest {
     }
 
     @Test
+    void chunkedReadSurvivesEmptyStringAbsentContract() {
+        // Regression: CompoundTag.getString returns "" for absent keys, so a
+        // KeyValueStore that surfaces "" (old NbtStore) must not short-circuit
+        // the chunked read path.
+        var emptyStringStore = new com.dwurdy.straja.adapter.out.persistence.KeyValueStore() {
+            private final MemoryStore inner = new MemoryStore();
+            @Override public String get(String key) {
+                String v = inner.get(key);
+                return v == null ? "" : v;
+            }
+            @Override public void put(String key, String value) { inner.put(key, value); }
+            @Override public void remove(String key) { inner.remove(key); }
+            @Override public java.util.Set<String> keys() { return inner.keys(); }
+        };
+        StoreAccess emptyAccess = name -> emptyStringStore;
+        var repo = new SavedStores.Setup(emptyAccess);
+        SetupData data = SetupData.defaults();
+        for (int i = 0; i < 400; i++) {
+            var loc = new SetupData.Location();
+            loc.x = i; loc.y = 64; loc.z = -i;
+            data.locations.put("room_" + i + "_" + "x".repeat(200), loc);
+        }
+        repo.write(data);
+
+        SetupData loaded = repo.read();
+        assertEquals(data.locations.size(), loaded.locations.size(),
+                "chunked payload must load even when absent keys read as \"\"");
+    }
+
+    @Test
     void chunksSplitOnCodePointBoundaries() {
         // 'ă' is 2 UTF-8 bytes — 20000 of them exceed the 32000-byte limit
         String heavy = "ă".repeat(20_000);
@@ -216,7 +246,9 @@ class PersistenceTest {
                 "test", "players", "mission_templates", "emergency", "audiences", "reports",
                 "admin_tools", "incidents", "bolos", "evidence", "arrest_records", "reputation",
                 "personnel", "promotions", "stations", "documents", "equipment_ledger",
-                "mobilizations", "campaigns", "settlements", "operations", "outbox"), java.util.Set.copyOf(stores),
+                "mobilizations", "campaigns", "settlements", "operations", "outbox",
+                "storage_watch", "law_checkpoints", "inspection_ledger", "prisoner_register",
+                "labor_camps", "merchant_desks", "npc_bindings"), java.util.Set.copyOf(stores),
                 "the snapshot must retain every persisted source store");
         assertFalse(stores.contains("backup"),
                 "the backup store must never snapshot itself");

@@ -63,6 +63,18 @@ public final class KubeJsNbtReader {
                 out.put(key, in.readUTF());
             } else if (type == TAG_COMPOUND) {
                 readCompound(in, key, out);
+            } else if (type == TAG_BYTE) {
+                out.put(key, in.readByte() != 0 ? "true" : "false");
+            } else if (type == TAG_SHORT) {
+                out.put(key, Short.toString(in.readShort()));
+            } else if (type == TAG_INT) {
+                out.put(key, Integer.toString(in.readInt()));
+            } else if (type == TAG_LONG) {
+                out.put(key, Long.toString(in.readLong()));
+            } else if (type == TAG_FLOAT) {
+                out.put(key, Float.toString(in.readFloat()));
+            } else if (type == TAG_DOUBLE) {
+                out.put(key, Double.toString(in.readDouble()));
             } else {
                 skip(in, type);
             }

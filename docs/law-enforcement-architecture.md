@@ -341,7 +341,7 @@ Migration (M8): `MigrationService.migrateServer` gains a `strajaStorageCfg` →
 | `strajaStorageCfg` / `strajaGoldCfg` | storage | `StorageWatchStore` | M8 migration read-only |
 | per-player `cpJailed`,`cpFugitive`,`cpJailOnRespawn`,`cpJailWasMode` | prison | `PrisonStore`/`CustodyStore` | M8 |
 | per-player `strajaThief`,`strajaOwed`,`strajaRepBackup` | storage | `ThiefRecord` fields | M8 |
-| per-player `strajaWantedUntil` | shared | **dropped** — `BoloService` is the wanted ledger | already replaced |
+| per-player `strajaWantedUntil` | shared | `PrisonerRegisterStore.legacyWantedUntil` (raw epoch preserved; `BoloService` is the live wanted ledger, M7 guards consume the import) | M1 migrated |
 | per-player `cpBoard` | checkpoint | `BoardingStamp` record | M2 |
 | `cpPick*`,`spPick`,`ssPick*` | all | **dropped** — session pickers, intentionally non-persistent | done pattern |
 | `checkpoint-log.json`/`prison-log.json` files | both | `InspectionLedger`/`AuditRepository` | M2 |

@@ -92,6 +92,7 @@ public final class MigrationService {
         errors += migrateMissions(data, lines);
         errors += migrateCustody(data, lines);
         errors += migrateAudit(data, lines);
+        errors += migrateLawEnforcement(data, lines);
         migrateCommissionerHint(data, lines);
 
         audit.record("kubejs_migration", "migration", null, null, null,
@@ -140,7 +141,74 @@ public final class MigrationService {
                 lines.add("player " + uuid + " archivist flag imported");
             }
         }
+        errors += migratePlayerLawFlags(uuid, data, lines);
         return new Report(lines, errors);
+    }
+
+    /** LAW-001: thief ledger + custody flags from the legacy player NBT keys. */
+    private int migratePlayerLawFlags(UUID uuid, Map<String, String> data, List<String> lines) {
+        String thief = find(data, "strajaThief");
+        int errors = 0;
+        if (truthy(thief)) {
+            try {
+                long owed = parseLong(find(data, "strajaOwed"));
+                String repRaw = find(data, "strajaRepBackup");
+                Integer repBackup = repRaw == null || repRaw.isBlank() ? null : (int) parseLong(repRaw);
+                var store = ctx.storage().read();
+                if (!store.isThief(uuid.toString())) {
+                    store.markThief(uuid.toString(),
+                            new com.dwurdy.straja.domain.model.ThiefRecord(owed, repBackup, System.currentTimeMillis()));
+                    ctx.storage().write(store);
+                    lines.add("player " + uuid + " thief flag imported (owed=" + owed + ")");
+                }
+            } catch (Exception e) {
+                errors++;
+                lines.add("player " + uuid + " thief flag FAILED: " + e.getMessage());
+            }
+        }
+        long wantedUntil = parseLong(find(data, "strajaWantedUntil"));
+        if (wantedUntil > 0) {
+            try {
+                var reg = ctx.prisonerRegister().read();
+                reg.legacyWantedUntil().put(uuid.toString(), wantedUntil);
+                ctx.prisonerRegister().write(reg);
+                lines.add("player " + uuid + " wanted-until imported");
+            } catch (Exception e) {
+                errors++;
+                lines.add("player " + uuid + " wanted-until FAILED: " + e.getMessage());
+            }
+        }
+        String jailed = find(data, "cpJailed");
+        // cpJailOnRespawn = "hunted death → re-jail on respawn" — same pending custody.
+        if (truthy(jailed) || truthy(find(data, "cpJailOnRespawn"))) {
+            try {
+                var reg = ctx.prisonerRegister().read();
+                String key = uuid.toString();
+                if (reg.prisoner(key) == null) {
+                    var rec = new com.dwurdy.straja.domain.model.PrisonerRegisterRecord(key, key,
+                            truthy(find(data, "cpFugitive")) ? "legacy fugitive flag" : "legacy jailed flag");
+                    rec.status = truthy(find(data, "cpFugitive"))
+                            ? com.dwurdy.straja.domain.model.PrisonerStatus.FUGITIVE
+                            : com.dwurdy.straja.domain.model.PrisonerStatus.IN_CELL;
+                    reg.put(rec);
+                    ctx.prisonerRegister().write(reg);
+                    lines.add("player " + uuid + " custody flag imported (" + rec.status + ")");
+                }
+            } catch (Exception e) {
+                errors++;
+                lines.add("player " + uuid + " custody flags FAILED: " + e.getMessage());
+            }
+        }
+        return errors;
+    }
+
+    private static boolean truthy(String value) {
+        return "1".equals(value) || "true".equalsIgnoreCase(value == null ? "" : value.trim());
+    }
+
+    private static long parseLong(String raw) {
+        if (raw == null || raw.isBlank()) return 0L;
+        try { return Long.parseLong(raw.trim()); } catch (NumberFormatException e) { return 0L; }
     }
 
     /** KubeJS nests player keys inside a {@code KubeJSPersistentData} compound. */
@@ -330,6 +398,352 @@ public final class MigrationService {
 
     private static String str(JsonObject o, String key) {
         return o.has(key) && !o.get(key).isJsonNull() ? o.get(key).getAsString() : "";
+    }
+
+    // ------------------------------------------------------------ law enforcement (LAW-001)
+
+    /**
+     * Translates the law prototypes' JSON blobs — {@code portCheckpointCfg}
+     * (checkpoint sites + global policy), {@code strajaPrisonJail} /
+     * {@code portCheckpointJail} (jail register, fines, pendingChest),
+     * {@code strajaPrisonCfg} (personal-chest geometry used to resolve locker
+     * indices), and {@code strajaStorageCfg}/{@code strajaGoldCfg} (protected
+     * storage placement). Idempotent: records merge by id and never duplicate.
+     */
+    private int migrateLawEnforcement(Map<String, String> data, List<String> lines) {
+        int errors = 0;
+        errors += migrateCheckpointCfg(data, lines);
+        errors += migratePrisonJail(data, lines);
+        errors += migrateStorageCfg(data, lines);
+        return errors;
+    }
+
+    private int migrateCheckpointCfg(Map<String, String> data, List<String> lines) {
+        String raw = data.get("portCheckpointCfg");
+        if (raw == null || raw.isBlank()) return 0;
+        try {
+            JsonObject cfg = JsonParser.parseString(raw).getAsJsonObject();
+            var store = ctx.lawCheckpoints().read();
+            int added = 0;
+
+            JsonObject sites = cfg.has("sites") && cfg.get("sites").isJsonObject()
+                    ? cfg.getAsJsonObject("sites") : null;
+            if (sites == null && (cfg.has("denyTarget") || cfg.has("doors") || cfg.has("evidence"))) {
+                // pre-sites flat layout → single "main" site (prototype parity)
+                sites = new JsonObject();
+                JsonObject main = new JsonObject();
+                for (String k : List.of("denyTarget", "doors", "evidence", "gates", "board", "cb", "exempt", "link")) {
+                    if (cfg.has(k)) main.add(k, cfg.get(k));
+                }
+                sites.add("main", main);
+            }
+            if (sites != null) {
+                for (var entry : sites.entrySet()) {
+                    if (!entry.getValue().isJsonObject()) continue;
+                    var record = checkpointFromSite(entry.getKey(), entry.getValue().getAsJsonObject());
+                    if (store.checkpoint(record.id) == null) {
+                        store.put(record);
+                        added++;
+                    }
+                }
+            }
+            if (cfg.has("contraband") && cfg.get("contraband").isJsonObject()) {
+                cfg.getAsJsonObject("contraband").entrySet().forEach(e ->
+                        store.globalIllegalItems().putIfAbsent(e.getKey(), e.getValue().getAsBoolean()));
+            }
+            if (cfg.has("banned") && cfg.get("banned").isJsonObject()) {
+                cfg.getAsJsonObject("banned").keySet().forEach(n -> {
+                    if (!store.globalBans().contains(n)) store.globalBans().add(n);
+                });
+            }
+            if (cfg.has("exempt") && cfg.get("exempt").isJsonObject()) {
+                cfg.getAsJsonObject("exempt").keySet().forEach(n -> {
+                    if (!store.globalExemptions().contains(n)) store.globalExemptions().add(n);
+                });
+            }
+            ctx.lawCheckpoints().write(store);
+            lines.add("law checkpoints: " + added + " sites imported (globals: "
+                    + store.globalIllegalItems().size() + " items, "
+                    + store.globalBans().size() + " bans, "
+                    + store.globalExemptions().size() + " exemptions)");
+            return 0;
+        } catch (Exception e) {
+            lines.add("law checkpoints FAILED: " + e.getMessage());
+            return 1;
+        }
+    }
+
+    private static com.dwurdy.straja.domain.model.LawCheckpointRecord checkpointFromSite(
+            String name, JsonObject site) {
+        var r = new com.dwurdy.straja.domain.model.LawCheckpointRecord();
+        r.id = name;
+        r.name = name;
+        JsonObject deny = site.has("denyTarget") && site.get("denyTarget").isJsonObject()
+                ? site.getAsJsonObject("denyTarget") : null;
+        if (deny != null) {
+            r.pushback = new com.dwurdy.straja.domain.model.PushbackPoint(
+                    str(deny, "dim"), num(deny, "x"), num(deny, "y"), num(deny, "z"),
+                    (float) num(deny, "yaw"), 0, 0, 0);
+            r.dimension = r.pushback.dimension();
+        }
+        for (var el : arr(site, "doors")) {
+            if (el.isJsonObject()) r.doors.add(pointFrom(el.getAsJsonObject()));
+        }
+        for (var el : arr(site, "evidence")) {
+            if (el.isJsonObject()) r.evidenceChests.add(pointFrom(el.getAsJsonObject()));
+        }
+        JsonObject evidenceSingle = obj(site, "evidence"); // pre-normalized saves may hold a lone object
+        if (evidenceSingle != null && r.evidenceChests.isEmpty()) {
+            r.evidenceChests.add(pointFrom(evidenceSingle));
+        }
+        for (var el : arr(site, "gates")) {
+            if (!el.isJsonObject()) continue;
+            JsonObject g = el.getAsJsonObject();
+            JsonObject a = obj(g, "a"), b = obj(g, "b"), from = obj(g, "from");
+            if (a == null || b == null || from == null) continue; // no 'from' = undirected, prototype skips
+            r.gates.add(new com.dwurdy.straja.domain.model.GateLane(
+                    str(g, "dim"), num(a, "x"), num(a, "z"), num(b, "x"), num(b, "z"),
+                    num(from, "x"), num(from, "z")));
+        }
+        JsonObject board = obj(site, "board");
+        if (board != null) {
+            r.boardZone = new com.dwurdy.straja.domain.model.BoardingZone(
+                    str(board, "dim"), num(board, "x1"), num(board, "z1"),
+                    num(board, "x2"), num(board, "z2"), num(board, "y"));
+        }
+        JsonObject cb = obj(site, "cb");
+        if (cb != null) {
+            for (var e : cb.entrySet()) {
+                if (e.getValue().getAsBoolean()) r.localIllegalItems.add(e.getKey());
+                else r.localAllowedItems.add(e.getKey());
+            }
+        }
+        JsonObject exempt = obj(site, "exempt");
+        if (exempt != null) r.exemptions.addAll(exempt.keySet());
+        String link = str(site, "link");
+        if (!link.isBlank()) r.linkedCheckpointId = link;
+        if (r.dimension.isBlank() || "minecraft:overworld".equals(r.dimension)) {
+            // pick a declared dimension off any configured point
+            for (var p : r.doors) { r.dimension = p.dimension(); break; }
+            if (r.dimension.isBlank() || "minecraft:overworld".equals(r.dimension)) {
+                for (var g : r.gates) { r.dimension = g.dimension(); break; }
+            }
+            if (r.dimension.isBlank() || "minecraft:overworld".equals(r.dimension)) {
+                if (r.boardZone != null) r.dimension = r.boardZone.dimension();
+            }
+        }
+        return r;
+    }
+
+    private int migratePrisonJail(Map<String, String> data, List<String> lines) {
+        String raw = data.get("strajaPrisonJail");
+        if (raw == null || raw.isBlank()) raw = data.get("portCheckpointJail"); // legacy alias
+        if (raw == null || raw.isBlank()) return 0;
+        try {
+            JsonObject jail = JsonParser.parseString(raw).getAsJsonObject();
+            JsonObject pcfg = parseObj(data.get("strajaPrisonCfg"));
+            com.google.gson.JsonArray pcells = pcfg != null && pcfg.has("pcells")
+                    && pcfg.get("pcells").isJsonArray() ? pcfg.getAsJsonArray("pcells") : null;
+            if (pcells == null) {
+                // Pre-split saves keep cell geometry on portCheckpointCfg.
+                JsonObject pccfg = parseObj(data.get("portCheckpointCfg"));
+                if (pccfg != null && pccfg.has("pcells") && pccfg.get("pcells").isJsonArray()) {
+                    pcells = pccfg.getAsJsonArray("pcells");
+                }
+            }
+
+            var reg = ctx.prisonerRegister().read();
+            int added = 0;
+            JsonObject jailed = obj(jail, "jailed");
+            JsonObject fines = obj(jail, "fines");
+            int skipped = 0;
+            if (jailed != null) {
+                for (var e : jailed.entrySet()) {
+                    if (!e.getValue().isJsonObject()) continue;
+                    String name = e.getKey();
+                    try {
+                        JsonObject entry = e.getValue().getAsJsonObject();
+                        String uuid = com.dwurdy.straja.domain.model.PrisonerRegisterStore.legacyUuid(name);
+                        if (reg.prisoner(uuid) != null) continue;
+                        if (reg.prisonerByName(name) != null) continue;
+                        var rec = new com.dwurdy.straja.domain.model.PrisonerRegisterRecord(uuid, name, str(entry, "reason"));
+                        rec.status = "fugitive".equals(str(entry, "status"))
+                                ? com.dwurdy.straja.domain.model.PrisonerStatus.FUGITIVE
+                                : com.dwurdy.straja.domain.model.PrisonerStatus.IN_CELL;
+                        rec.bookedAt = (long) num(entry, "t");
+                        rec.arrestCount = (int) num(entry, "arrests");
+                        rec.confiscatedFully = entry.has("confiscated")
+                                && entry.get("confiscated").isJsonPrimitive()
+                                && entry.get("confiscated").getAsBoolean();
+                        rec.arrestSite = str(entry, "site");
+                        if (fines != null && fines.has(name)) rec.outstandingFines = (int) num(fines, name);
+                        int jcell = numField(entry, "jcell");
+                        if (jcell >= 0) rec.assignedCellId = "jcell:" + jcell;
+                        int pc = numField(entry, "pchest");
+                        if (pc >= 0 && pcells != null && pc < pcells.size() && pcells.get(pc).isJsonObject()) {
+                            JsonObject pair = pcells.get(pc).getAsJsonObject();
+                            JsonObject a = obj(pair, "a"), b = obj(pair, "b");
+                            if (a != null) rec.personalLocker.add(pointFrom(a));
+                            if (b != null) rec.personalLocker.add(pointFrom(b));
+                        }
+                        JsonObject items = obj(entry, "items");
+                        if (items != null) {
+                            for (var it : items.entrySet()) {
+                                if (it.getValue().isJsonObject()) {
+                                    JsonObject io = it.getValue().getAsJsonObject();
+                                    int count = (int) num(io, "count");
+                                    rec.confiscatedSummary.add(count + " x " + it.getKey());
+                                    rec.arrestSnapshot.add(new com.dwurdy.straja.domain.model.SnapshotItem(
+                                            "legacy", it.getKey(), count, null, str(io, "name")));
+                                }
+                            }
+                        }
+                        reg.put(rec);
+                        added++;
+                    } catch (Exception entryError) {
+                        skipped++;
+                        lines.add("jailed[" + name + "] skipped: " + entryError.getMessage());
+                    }
+                }
+            }
+            JsonObject pending = obj(jail, "pendingChest");
+            if (pending != null) {
+                // Prototype shape: pendingChest[realName] = pcIdx (scalar), resolved
+                // through pcells[pcIdx] = {a,b} into coordinate locker keys.
+                for (var e : pending.entrySet()) {
+                    String name = e.getKey();
+                    try {
+                        String uuid = com.dwurdy.straja.domain.model.PrisonerRegisterStore.legacyUuid(name);
+                        List<String> keys = new ArrayList<>();
+                        if (e.getValue().isJsonPrimitive() && e.getValue().getAsJsonPrimitive().isNumber()) {
+                            int pc = e.getValue().getAsInt();
+                            if (pc >= 0 && pcells != null && pc < pcells.size() && pcells.get(pc).isJsonObject()) {
+                                JsonObject pair = pcells.get(pc).getAsJsonObject();
+                                JsonObject a = obj(pair, "a"), b = obj(pair, "b");
+                                if (a != null) keys.add(pointFrom(a).key());
+                                if (b != null) keys.add(pointFrom(b).key());
+                            }
+                        } else if (e.getValue().isJsonArray()) {
+                            // Defensive: accept a list of indices too.
+                            for (var el : e.getValue().getAsJsonArray()) {
+                                if (!el.isJsonPrimitive() || !el.getAsJsonPrimitive().isNumber()) continue;
+                                int pc = el.getAsInt();
+                                if (pc >= 0 && pcells != null && pc < pcells.size() && pcells.get(pc).isJsonObject()) {
+                                    JsonObject pair = pcells.get(pc).getAsJsonObject();
+                                    JsonObject a = obj(pair, "a"), b = obj(pair, "b");
+                                    if (a != null) keys.add(pointFrom(a).key());
+                                    if (b != null) keys.add(pointFrom(b).key());
+                                }
+                            }
+                        }
+                        if (!keys.isEmpty()) reg.reserveLockers(uuid, keys);
+                    } catch (Exception entryError) {
+                        skipped++;
+                        lines.add("pendingChest[" + name + "] skipped: " + entryError.getMessage());
+                    }
+                }
+            }
+            if (fines != null) {
+                // Fines accrue on release too — keep them for names never booked.
+                for (var e : fines.entrySet()) {
+                    if (jailed == null || !jailed.has(e.getKey())) {
+                        try {
+                            reg.legacyFines().put(e.getKey(), e.getValue().getAsInt());
+                        } catch (Exception entryError) {
+                            skipped++;
+                            lines.add("fines[" + e.getKey() + "] skipped: " + entryError.getMessage());
+                        }
+                    }
+                }
+            }
+            ctx.prisonerRegister().write(reg);
+            lines.add("prisoner register: " + added + " imported, " + reg.pendingLockers().size()
+                    + " pending lockers" + (skipped > 0 ? ", " + skipped + " skipped malformed" : ""));
+            return 0;
+        } catch (Exception e) {
+            lines.add("prisoner register FAILED: " + e.getMessage());
+            return 1;
+        }
+    }
+
+    private int migrateStorageCfg(Map<String, String> data, List<String> lines) {
+        String raw = data.get("strajaStorageCfg");
+        if (raw == null || raw.isBlank()) raw = data.get("strajaGoldCfg"); // gold-era key
+        if (raw == null || raw.isBlank()) return 0;
+        try {
+            JsonObject cfg = JsonParser.parseString(raw).getAsJsonObject();
+            var store = ctx.storage().read();
+            var current = store.setup();
+            if (current.dest() != null || current.zone() != null || !current.chests().isEmpty()) {
+                lines.add("storage setup: already configured — legacy import skipped");
+                return 0;
+            }
+            var destObj = obj(cfg, "dest");
+            var dest = destObj == null ? null : pointFrom(destObj);
+            var zoneObj = obj(cfg, "zone");
+            if (zoneObj == null) zoneObj = obj(cfg, "vault"); // pre-rename field
+            com.dwurdy.straja.domain.model.StorageZone zone = null;
+            if (zoneObj != null) {
+                var min = zoneObj.has("min") && zoneObj.get("min").isJsonArray() ? zoneObj.getAsJsonArray("min") : null;
+                var max = zoneObj.has("max") && zoneObj.get("max").isJsonArray() ? zoneObj.getAsJsonArray("max") : null;
+                if (min != null && max != null && min.size() == 3 && max.size() == 3) {
+                    zone = new com.dwurdy.straja.domain.model.StorageZone(str(zoneObj, "dim"),
+                            min.get(0).getAsInt(), min.get(1).getAsInt(), min.get(2).getAsInt(),
+                            max.get(0).getAsInt(), max.get(1).getAsInt(), max.get(2).getAsInt());
+                }
+            }
+            var chests = new ArrayList<com.dwurdy.straja.domain.model.StoragePoint>();
+            for (var el : arr(cfg, "chests")) {
+                if (el.isJsonObject()) chests.add(pointFrom(el.getAsJsonObject()));
+            }
+            store.setup(new com.dwurdy.straja.domain.model.StorageSetup(dest, zone, chests));
+            ctx.storage().write(store);
+            lines.add("storage setup: imported (zone=" + (zone != null) + ", chests=" + chests.size()
+                    + ", dest=" + (dest != null) + ")");
+            return 0;
+        } catch (Exception e) {
+            lines.add("storage setup FAILED: " + e.getMessage());
+            return 1;
+        }
+    }
+
+    private static JsonObject parseObj(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        try {
+            var el = JsonParser.parseString(raw);
+            return el.isJsonObject() ? el.getAsJsonObject() : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static JsonObject obj(JsonObject o, String key) {
+        return o != null && o.has(key) && o.get(key).isJsonObject() ? o.getAsJsonObject(key) : null;
+    }
+
+    private static com.google.gson.JsonArray arr(JsonObject o, String key) {
+        if (o != null && o.has(key) && o.get(key).isJsonArray()) return o.getAsJsonArray(key);
+        return new com.google.gson.JsonArray();
+    }
+
+    private static double num(JsonObject o, String key) {
+        return o != null && o.has(key) && o.get(key).isJsonPrimitive()
+                && o.get(key).getAsJsonPrimitive().isNumber()
+                ? o.get(key).getAsDouble() : 0.0;
+    }
+
+    /** Index fields: present-and-numeric -> value; absent or non-numeric -> -1. */
+    private static int numField(JsonObject o, String key) {
+        return o != null && o.has(key) && o.get(key).isJsonPrimitive()
+                && o.get(key).getAsJsonPrimitive().isNumber()
+                ? o.get(key).getAsInt() : -1;
+    }
+
+    private static com.dwurdy.straja.domain.model.StoragePoint pointFrom(JsonObject o) {
+        String dim = str(o, "dim");
+        if (dim.isBlank()) dim = "minecraft:overworld";
+        return new com.dwurdy.straja.domain.model.StoragePoint(dim,
+                (int) num(o, "x"), (int) num(o, "y"), (int) num(o, "z"));
     }
 
     // ------------------------------------------------------------ merge helpers

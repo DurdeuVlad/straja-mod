@@ -176,6 +176,36 @@ public final class SavedStores {
         @Override public void write(StorageWatchStore store) { writeJson(store); }
     }
 
+    public static class LawCheckpoints extends JsonBackedStore implements LawCheckpointRepository {
+        public LawCheckpoints(StoreAccess access) { super(access, "law_checkpoints"); }
+        @Override public LawCheckpointStore read() { return readJsonVersioned(LawCheckpointStore.class, LawCheckpointStore::new, LawCheckpointStore.CURRENT_SCHEMA); }
+        @Override public void write(LawCheckpointStore store) { writeJson(store); }
+    }
+
+    public static class InspectionLedger extends JsonBackedStore implements InspectionLedgerRepository {
+        public InspectionLedger(StoreAccess access) { super(access, "inspection_ledger"); }
+        @Override public InspectionLedgerStore read() { return readJsonVersioned(InspectionLedgerStore.class, InspectionLedgerStore::new, InspectionLedgerStore.CURRENT_SCHEMA); }
+        @Override public void write(InspectionLedgerStore store) { writeJson(store); }
+    }
+
+    public static class PrisonerRegister extends JsonBackedStore implements PrisonerRegisterRepository {
+        public PrisonerRegister(StoreAccess access) { super(access, "prisoner_register"); }
+        @Override public PrisonerRegisterStore read() { return readJsonVersioned(PrisonerRegisterStore.class, PrisonerRegisterStore::new, PrisonerRegisterStore.CURRENT_SCHEMA); }
+        @Override public void write(PrisonerRegisterStore store) { writeJson(store); }
+    }
+
+    public static class LaborCamps extends JsonBackedStore implements LaborCampRepository {
+        public LaborCamps(StoreAccess access) { super(access, "labor_camps"); }
+        @Override public LaborCampStore read() { return readJsonVersioned(LaborCampStore.class, LaborCampStore::new, LaborCampStore.CURRENT_SCHEMA); }
+        @Override public void write(LaborCampStore store) { writeJson(store); }
+    }
+
+    public static class MerchantDesks extends JsonBackedStore implements MerchantDeskRepository {
+        public MerchantDesks(StoreAccess access) { super(access, "merchant_desks"); }
+        @Override public MerchantDeskStore read() { return readJsonVersioned(MerchantDeskStore.class, MerchantDeskStore::new, MerchantDeskStore.CURRENT_SCHEMA); }
+        @Override public void write(MerchantDeskStore store) { writeJson(store); }
+    }
+
     public static class Reputation extends JsonBackedStore implements ReputationRepository {
         public Reputation(StoreAccess access) { super(access, "reputation"); }
         @Override public ReputationStore read() { return readJson(ReputationStore.class, ReputationStore::new); }

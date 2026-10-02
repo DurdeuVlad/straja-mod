@@ -42,5 +42,10 @@ public record StrajaContext(
         ArrestRecordRepository arrestRecords,
         ReputationRepository reputation,
         StorageRepository storage,
+        LawCheckpointRepository lawCheckpoints,
+        InspectionLedgerRepository inspectionLedger,
+        PrisonerRegisterRepository prisonerRegister,
+        LaborCampRepository laborCamps,
+        MerchantDeskRepository merchantDesks,
         WorldContainerGateway containers,
         NpcGuardGateway npcGuards) {}
