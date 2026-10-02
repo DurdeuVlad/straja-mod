@@ -93,6 +93,8 @@ class RefusalConventionTest {
             "Ai fost arestat pentru",
             "această tură cere",
             "alege colțul opus",   // storage pick instruction, not a denial
+            "vinde-le la Intendent", // carry-ban remedy accompanying a titled repel
+            "Nu există punctul de control", // admin config feedback, not a refusal
             "este deja supravegheat",
             "alege din nou sau editează",
             "Niciun hoț de depozit nu este marcat",

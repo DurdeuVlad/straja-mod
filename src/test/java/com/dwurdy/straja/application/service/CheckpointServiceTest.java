@@ -10,12 +10,15 @@ import com.dwurdy.straja.domain.model.GateLane;
 import com.dwurdy.straja.domain.model.InspectionLedgerEntry;
 import com.dwurdy.straja.domain.model.LawBounds;
 import com.dwurdy.straja.domain.model.LawCheckpointRecord;
+import com.dwurdy.straja.domain.model.PrisonerRegisterRecord;
 import com.dwurdy.straja.domain.model.PrisonerStatus;
 import com.dwurdy.straja.domain.model.PushbackPoint;
 import com.dwurdy.straja.domain.model.SnapshotItem;
 import com.dwurdy.straja.domain.model.StoragePoint;
+import com.dwurdy.straja.adapter.out.persistence.SavedStores;
 import com.dwurdy.straja.support.Fakes;
 import com.dwurdy.straja.support.Fakes.*;
+import com.dwurdy.straja.support.MemoryStore;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -39,6 +42,8 @@ class CheckpointServiceTest {
     private StorageService storage;
     private BoloService bolos;
     private CheckpointService checkpoints;
+    private PersonnelService personnel;
+    private final java.util.Map<String, MemoryStore> personnelRaw = new java.util.HashMap<>();
     private TestPlayer player;
 
     @BeforeEach
@@ -54,7 +59,8 @@ class CheckpointServiceTest {
         prison = new PrisonService(ctx, players, audit, custody);
         bolos = new BoloService(ctx, players, audit);
         storage = new StorageService(ctx, players, audit, bolos, prison);
-        checkpoints = new CheckpointService(ctx, audit, prison, storage, bolos);
+        personnel = new PersonnelService(new SavedStores.Personnel(name -> personnelRaw.computeIfAbsent(name, k -> new MemoryStore())), clock, new Fakes.SeqIds());
+        checkpoints = new CheckpointService(ctx, audit, prison, storage, bolos, personnel);
         player = server.add("civ");
         player.x = 5; player.y = 60; player.z = -5; // within MAX_STEP of the stage edge
     }
@@ -630,5 +636,166 @@ class CheckpointServiceTest {
 
         assertTrue(ledger().isEmpty());
         assertEquals(-2, player.z, 1e-6);
+    }
+
+    // ------------------------------------------------------------ LAW-003: rules of the gate
+
+    /** AT2 (mine exit, DENY): a MINER carrying camp ore is repelled and told to sell. */
+    @Test
+    void minerCarryBanRepelsWithQuartermasterRemedy() {
+        var mine = site("mine", CheckpointMode.DENY);
+        mine.stage1 = LawBounds.of(DIM, 0, 55, 0, 10, 65, 10);
+        mine.roleCarryBans.put("MINER", new java.util.ArrayList<>(List.of("minecraft:iron_ore")));
+        save(mine);
+        personnel.enrollProfessional(player.uuid.toString(), "miner");
+        carry("minecraft:iron_ore", 12);
+
+        move(5, 60, 5);
+
+        var entry = lastEntry();
+        assertEquals(CrossingOutcome.DENY, entry.outcome);
+        assertEquals("restricție rol — marfă de vândut", entry.detail);
+        assertTrue(entry.contrabandSummary.stream().anyMatch(l -> l.contains("MINER")));
+        assertTrue(player.told("straja.checkpoint.quartermaster"));
+        assertEquals(-10, player.z, 1e-6); // pushback point, not through
+        assertFalse(inCell());
+    }
+
+    /** AT2: the same miner, pockets emptied (sold to the quartermaster), passes. */
+    @Test
+    void minerAfterSellingPassesCleanly() {
+        var mine = site("mine", CheckpointMode.DENY);
+        mine.stage1 = LawBounds.of(DIM, 0, 55, 0, 10, 65, 10);
+        mine.roleCarryBans.put("MINER", new java.util.ArrayList<>(List.of("minecraft:iron_ore")));
+        save(mine);
+        personnel.enrollProfessional(player.uuid.toString(), "miner");
+
+        move(5, 60, 5);
+
+        var entry = lastEntry();
+        assertEquals(CrossingOutcome.PASS, entry.outcome);
+        assertFalse(player.told("straja.checkpoint.quartermaster"));
+    }
+
+    /** AT2: a PRISONER is repelled with entirely empty pockets — role bans are absolute. */
+    @Test
+    void prisonerRoleBanRepelsEvenNaked() {
+        var mine = site("mine", CheckpointMode.DENY);
+        mine.stage1 = LawBounds.of(DIM, 0, 55, 0, 10, 65, 10);
+        mine.roleBans.add("PRISONER");
+        save(mine);
+        var reg = ctx.prisonerRegister().read();
+        var rec = new PrisonerRegisterRecord(player.uuid.toString(), player.name, "camp");
+        rec.status = PrisonerStatus.IN_CAMP;
+        reg.put(rec);
+        ctx.prisonerRegister().write(reg);
+
+        move(5, 60, 5);
+
+        var entry = lastEntry();
+        assertEquals(CrossingOutcome.DENY, entry.outcome);
+        assertEquals("rol interzis: PRISONER", entry.detail);
+        assertTrue(entry.contrabandSummary.isEmpty()); // clean pockets — repelled anyway
+        assertEquals(-10, player.z, 1e-6);
+    }
+
+    /** In ARREST mode a carry-ban violation escalates to custody, not pushback. */
+    @Test
+    void carryBanInArrestModeArrests() {
+        var mine = site("mine", CheckpointMode.ARREST);
+        mine.stage2 = LawBounds.of(DIM, 0, 55, 0, 10, 65, 10);
+        mine.roleCarryBans.put("MINER", new java.util.ArrayList<>(List.of("minecraft:iron_ore")));
+        save(mine);
+        personnel.enrollProfessional(player.uuid.toString(), "miner");
+        carry("minecraft:iron_ore", 3);
+
+        move(5, 60, 5);
+
+        var entry = lastEntry();
+        assertEquals(CrossingOutcome.ARREST, entry.outcome);
+        assertTrue(inCell());
+    }
+
+    /** Role-based exemption: exempt MINER crosses even carrying the restricted item. */
+    @Test
+    void roleExemptionBypassesInspection() {
+        var mine = site("mine", CheckpointMode.DENY);
+        mine.stage1 = LawBounds.of(DIM, 0, 55, 0, 10, 65, 10);
+        mine.roleCarryBans.put("MINER", new java.util.ArrayList<>(List.of("minecraft:iron_ore")));
+        mine.exemptions.add("MINER");
+        save(mine);
+        personnel.enrollProfessional(player.uuid.toString(), "miner");
+        carry("minecraft:iron_ore", 5);
+
+        move(5, 60, 5);
+
+        assertTrue(ledger().isEmpty()); // fully bypassed — no PASS row, no repel
+        assertEquals(5, player.z, 1e-6);
+    }
+
+    /** Policy stacking: global + local + carry-ban all resolve in one inspection. */
+    @Test
+    void policyStacksGlobalLocalAndCarryBan() {
+        var site = site("border", CheckpointMode.ARREST);
+        site.stage1 = LawBounds.of(DIM, 0, 55, 0, 10, 65, 10);
+        site.localIllegalItems.add("minecraft:tnt");
+        site.roleCarryBans.put("MINER", new java.util.ArrayList<>(List.of("minecraft:iron_ore")));
+        save(site);
+        globalBan("minecraft:diamond");
+        personnel.enrollProfessional(player.uuid.toString(), "miner");
+        deepScan.inventories.put(player.uuid, List.of(
+                new SnapshotItem("main:0", "minecraft:diamond", 1, "", "minecraft:diamond"),
+                new SnapshotItem("main:1", "minecraft:tnt", 4, "", "minecraft:tnt"),
+                new SnapshotItem("main:2", "minecraft:iron_ore", 7, "", "minecraft:iron_ore")));
+
+        move(5, 60, 5);
+
+        var entry = lastEntry();
+        assertEquals(CrossingOutcome.WARN, entry.outcome);
+        assertTrue(entry.contrabandSummary.stream().anyMatch(l -> l.contains("minecraft:diamond")));
+        assertTrue(entry.contrabandSummary.stream().anyMatch(l -> l.contains("minecraft:tnt")));
+        assertTrue(entry.contrabandSummary.stream().anyMatch(l -> l.contains("minecraft:iron_ore") && l.contains("MINER")));
+        assertTrue(player.told("straja.checkpoint.quartermaster"));
+    }
+
+    /** Admin policy commands mutate the store and propagate to linked gates. */
+    @Test
+    void adminPolicyCommandsApplyAndPropagateToLinkedSites() {
+        var admin = server.add("admin");
+        var entry = site("entry", CheckpointMode.ARREST);
+        var exit = site("exit", CheckpointMode.ARREST);
+        entry.linkedCheckpointId = "exit";
+        save(entry);
+        save(exit);
+
+        checkpoints.setIllegalItem(admin, "minecraft:tnt", "entry", true);
+        checkpoints.setRoleBan(admin, "entry", "prisoner", true);
+        checkpoints.setCarryBan(admin, "entry", "miner", "minecraft:iron_ore", true);
+        checkpoints.setExemption(admin, "entry", "FERRYMAN", true);
+        checkpoints.setExemption(admin, "global", "vip", true);
+        checkpoints.setIllegalItem(admin, "minecraft:bedrock", null, true);
+
+        var store = ctx.lawCheckpoints().read();
+        var e = store.checkpoint("entry");
+        var x = store.checkpoint("exit");
+        assertTrue(e.localIllegalItems.contains("minecraft:tnt"));
+        assertTrue(x.localIllegalItems.contains("minecraft:tnt"));     // linked propagation
+        assertTrue(e.roleBans.contains("PRISONER"));
+        assertTrue(x.roleBans.contains("PRISONER"));
+        assertTrue(e.roleCarryBans.get("MINER").contains("minecraft:iron_ore"));
+        assertTrue(x.roleCarryBans.get("MINER").contains("minecraft:iron_ore"));
+        assertTrue(e.exemptions.contains("FERRYMAN"));
+        assertTrue(x.exemptions.contains("FERRYMAN"));
+        assertTrue(store.globalExemptions().contains("vip"));
+        assertTrue(Boolean.TRUE.equals(store.globalIllegalItems().get("minecraft:bedrock")));
+        assertTrue(admin.told("straja.checkpoint.policy_set"));
+
+        checkpoints.setRoleBan(admin, "entry", "prisoner", false);
+        store = ctx.lawCheckpoints().read();
+        assertTrue(store.checkpoint("entry").roleBans.isEmpty());
+        assertTrue(store.checkpoint("exit").roleBans.isEmpty());
+
+        checkpoints.setIllegalItem(admin, "minecraft:tnt", "nowhere", true);
+        assertTrue(admin.told("straja.checkpoint.no_site"));
     }
 }

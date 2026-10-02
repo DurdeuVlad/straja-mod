@@ -342,7 +342,7 @@ public final class StrajaRuntime {
         this.storage = new com.dwurdy.straja.application.service.StorageService(
                 ctx, players, audit, bolos, prison);
         this.checkpoints = new com.dwurdy.straja.application.service.CheckpointService(
-                ctx, audit, prison, storage, bolos);
+                ctx, audit, prison, storage, bolos, v2Personnel);
         this.prison.onArrest(sentence -> {
             try {
                 storage.onArrested(UUID.fromString(sentence.targetUuid));
