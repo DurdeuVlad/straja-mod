@@ -110,8 +110,11 @@ public final class CheckpointService {
         // M4 escort bypass (AT8): a cuffed suspect beside their escorting
         // officer passes every checkpoint pipeline — the tether IS the
         // custody, so the gate does not repel what an officer escorts.
+        // Camp exits are the one exception: the officer may escort the
+        // prisoner out, but the camp's banned cargo does not leave with them.
         if (custody != null && custody.escortOfficerWithin(
                 p, ctx.policies().escortGateBypassRadius) != null) {
+            confiscateEscortedAtCampExit(p, store, dim, x, y, z);
             prevPositions.put(p.uuid(), new PrevPos(dim, x, y, z));
             return;
         }
@@ -354,9 +357,52 @@ public final class CheckpointService {
         if (!campExit) return;
         String uuid = p.uuid() == null ? "" : p.uuid().toString();
         var rec = ctx.prisonerRegister().read().prisoner(uuid);
-        if (rec == null || rec.status != PrisonerStatus.IN_CAMP) return;
+        if (rec == null || (rec.status != PrisonerStatus.IN_CAMP
+                && rec.status != PrisonerStatus.ESCORTED)
+                || rec.assignedCampId == null || rec.assignedCampId.isBlank()) {
+            return;
+        }
         int n = seizure.confiscateItems(p, site, found);
         if (n > 0) p.tellKey("straja.camp.confiscated", n);
+    }
+
+    /**
+     * LAW-006 escort variant: an officer walking a cuffed prisoner out the
+     * camp exit keeps custody, but the prisoner's banned cargo is still
+     * confiscated into evidence — escort authority is not a smuggle channel.
+     */
+    private void confiscateEscortedAtCampExit(PlayerGateway p, LawCheckpointStore store,
+                                              String dim, double x, double y, double z) {
+        if (seizure == null) return;
+        String uuid = p.uuid() == null ? "" : p.uuid().toString();
+        var rec = ctx.prisonerRegister().read().prisoner(uuid);
+        if (rec == null || (rec.status != PrisonerStatus.IN_CAMP
+                && rec.status != PrisonerStatus.ESCORTED)
+                || rec.assignedCampId == null || rec.assignedCampId.isBlank()) {
+            return;
+        }
+        LawCheckpointRecord exit = null;
+        for (var camp : ctx.laborCamps().read().camps().values()) {
+            if (camp == null || !rec.assignedCampId.equals(camp.id)
+                    || camp.exitCheckpointId == null) continue;
+            var site = store.checkpoints().get(camp.exitCheckpointId);
+            if (site != null && insideSite(site, dim, x, y, z)) {
+                exit = site;
+                break;
+            }
+        }
+        if (exit == null) return;
+        var snapshot = ctx.deepScan().deepScan(p.uuid());
+        var ids = bannedItemIds(snapshot, exit, store, rolesOf(p));
+        int n = seizure.confiscateItems(p, exit, ids);
+        if (n > 0) p.tellKey("straja.camp.confiscated", n);
+    }
+
+    private static boolean insideSite(LawCheckpointRecord site, String dim,
+                                      double x, double y, double z) {
+        int bx = (int) Math.floor(x), by = (int) Math.floor(y), bz = (int) Math.floor(z);
+        return site.stage1 != null && site.stage1.contains(dim, bx, by, bz)
+                || site.stage2 != null && site.stage2.contains(dim, bx, by, bz);
     }
 
     /** Wrong-way lane crossing — back to the position they crossed FROM, never to 'from'. */

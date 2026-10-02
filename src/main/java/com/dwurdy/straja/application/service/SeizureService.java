@@ -52,12 +52,17 @@ public final class SeizureService {
             rec = new PrisonerRegisterRecord(uuid, target.name(), reason == null ? "" : reason);
             reg.put(rec);
         }
-        if (rec.releasedAt > 0 || rec.status == PrisonerStatus.RELEASED) {
+        if (rec.releasedAt > 0 || rec.status.isReleased()) {
             // Fresh booking after a release: the evidentiary snapshot belongs
             // to THIS arrest — a stale snapshot/summary would misattribute
-            // the prior arrest's belongings to the new seizure.
+            // the prior arrest's belongings to the new seizure. A stale camp
+            // assignment or labor balance would also corrupt the new custody:
+            // an old camp id misroutes recapture, and a carried-over balance
+            // could meet the freedom price on the first tick.
             rec.arrestSnapshot.clear();
             rec.confiscatedSummary.clear();
+            rec.assignedCampId = "";
+            rec.laborAccount = 0;
         }
         rec.status = PrisonerStatus.IN_CELL;
         rec.priorGameMode = safeGameMode(target);
@@ -207,9 +212,15 @@ public final class SeizureService {
         int seized = 0, dropped = 0;
         for (int slot = 0; slot < inv.slots(); slot++) {
             var stack = inv.stackAt(slot);
-            if (stack == null || stack.count() <= 0
-                    || stack.id() == null || !wanted.contains(stack.id())) continue;
+            if (stack == null || stack.count() <= 0 || stack.id() == null) continue;
             String snbt = inv.snbtAt(slot);
+            // A container stack (shulker, bundle) holding a wanted item is
+            // seized whole — the deep scan already proved the id lives inside
+            // its SNBT, so leaving it would let the ore walk out the gate.
+            if (!wanted.contains(stack.id())
+                    && (snbt == null || wanted.stream().noneMatch(snbt::contains))) {
+                continue;
+            }
             var taken = inv.extract(slot, stack.count());
             if (taken == null || taken.count() <= 0) continue;
             seized += taken.count();

@@ -70,8 +70,20 @@ public final class LaborCampService {
             double mult = camp.freedomFineMultiplier > 0
                     ? camp.freedomFineMultiplier : p.laborFreedomFineMultiplier;
             long fines = rec == null ? 0 : Math.max(0, rec.outstandingFines);
-            return Math.round(fines * mult);
+            double price = fines * mult;
+            // A prisoner with no fines (or an unreachable price) would make the
+            // buy-out valve dead — fall back to the flat price so release is
+            // always earnable, and never exceed the int-capped account.
+            if (price <= 0 || price > Integer.MAX_VALUE) {
+                return flatPrice(camp, p);
+            }
+            return Math.round(price);
         }
+        return flatPrice(camp, p);
+    }
+
+    private static long flatPrice(LaborCampRecord camp,
+                                  com.dwurdy.straja.domain.model.StrajaPolicies p) {
         if (camp != null && camp.freedomFlatPrice > 0) return camp.freedomFlatPrice;
         return Math.max(0, p.laborFreedomFlatPrice);
     }
@@ -134,7 +146,12 @@ public final class LaborCampService {
             else if (low.endsWith("s")) { mult = t[2]; digits = tok.substring(0, tok.length() - 1); }
             else if (low.endsWith("g")) { mult = t[3]; digits = tok.substring(0, tok.length() - 1); }
             if (digits.isEmpty() || !digits.matches("\\d+")) return -1;
-            long amount = Long.parseLong(digits);
+            long amount;
+            try {
+                amount = Long.parseLong(digits);
+            } catch (NumberFormatException tooLong) {
+                return -1;
+            }
             if (mult > 0 && amount > Integer.MAX_VALUE / mult) return -1;
             total += mult < 0 ? amount : amount * mult;
             if (total > Integer.MAX_VALUE) return -1;
@@ -273,6 +290,14 @@ public final class LaborCampService {
     public boolean setSpawn(PlayerGateway actor, String campId, String kind) {
         var camp = requireCamp(actor, campId);
         if (camp == null) return false;
+        // A spawn in the wrong dimension teleports prisoners outside the wire
+        // and the perimeter check flags them fugitive for doing nothing.
+        if (camp.boundary != null
+                && !camp.boundary.dimension().equals(actor.dimension())) {
+            actor.refuse("straja.camp.bad_dimension", "straja.remedy.stand_in_camp",
+                    camp.id);
+            return false;
+        }
         var point = new StoragePoint(actor.dimension(),
                 (int) Math.floor(actor.x()), (int) Math.floor(actor.y()),
                 (int) Math.floor(actor.z()));

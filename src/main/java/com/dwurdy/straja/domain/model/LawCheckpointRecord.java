@@ -60,7 +60,7 @@ public class LawCheckpointRecord {
     /**
      * Where this site's arrests deliver the prisoner: empty = the prison
      * cells; {@code "CAMP:<campId>"} routes them into a labor camp instead
-     * (LAW-006). Normalized to upper case on write.
+     * (LAW-006). The {@code CAMP:} prefix is compared case-insensitively.
      */
     public String arrestDestination = "";
 

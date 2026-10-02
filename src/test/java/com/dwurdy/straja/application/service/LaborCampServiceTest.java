@@ -432,4 +432,83 @@ class LaborCampServiceTest {
         var rec = reg();
         assertEquals(PrisonerStatus.IN_CAMP, rec.status);
     }
+
+    // -------------------------------------------- adversarial review round
+
+    @Test
+    void transferRestoresSurvivalForLabor() {
+        ((TestWorld) ctx.world()).room(DIM, -1, 59, -1, 6, 66, 6, -1, 61, 2);
+        prison.createCell(boss, "celula_1", DIM, 0, 60, 0, 5, 65, 5);
+        prison.arrest(inmate, null, 1, boss, null);
+        assertEquals("adventure", inmate.gameModeName());
+        campWithSpawns();
+        // A cell prisoner lands in adventure; camp labor needs real hands.
+        assertTrue(prison.transferToCamp(boss, inmate, "mine"));
+        assertEquals("survival", inmate.gameModeName());
+    }
+
+    @Test
+    void zeroOrOverflowingFinesPriceFallsBackToFlat() {
+        var camp = registerCamp();
+        camp.freedomMode = FreedomPriceMode.FINES_MULTIPLIER;
+        camp.freedomFineMultiplier = 2.0;
+        var rec = new PrisonerRegisterRecord(inmate.uuid().toString(), "miner", "test");
+        // No fines would price freedom at 0 — a dead release valve; the flat
+        // price is the floor so buy-out always stays earnable.
+        rec.outstandingFines = 0;
+        assertEquals(4096, camps.freedomPrice(camp, rec));
+        // A price past the int-capped account is unreachable — same fallback.
+        rec.outstandingFines = Integer.MAX_VALUE;
+        assertEquals(4096, camps.freedomPrice(camp, rec));
+    }
+
+    @Test
+    void oversizedPriceTokensRefuseCleanly() {
+        registerCamp();
+        assertFalse(camps.setFreedomPrice(boss, "mine", "flat",
+                "99999999999999999999"));
+        assertFalse(camps.setFreedomPrice(boss, "mine", "flat",
+                "99999999999999999999g"));
+    }
+
+    @Test
+    void spawnMustBeSetFromInsideTheCampDimension() {
+        registerCamp();
+        boss.dimension = "minecraft:the_nether";
+        assertFalse(camps.setSpawn(boss, "mine", "intake"));
+        boss.dimension = DIM;
+        assertTrue(camps.setSpawn(boss, "mine", "intake"));
+    }
+
+    @Test
+    void vanishedCampRequeuesPrisonerToCellPath() {
+        arrestToCamp();
+        assertEquals(PrisonerStatus.IN_CAMP, reg().status);
+        var camps_ = ctx.laborCamps().read();
+        camps_.remove("mine");
+        ctx.laborCamps().write(camps_);
+        prison.tick();
+        var rec = reg();
+        // No box means no enforceable custody — the prisoner is requeued to
+        // the ordinary cell path rather than roaming free as IN_CAMP.
+        assertEquals(PrisonerStatus.IN_CELL, rec.status);
+        assertEquals("", rec.assignedCampId);
+        assertEquals("WAITING_CELL", ctx.prison().read().sentences.get(0).status);
+    }
+
+    @Test
+    void rebookingClearsLaborAccountAndCampLink() {
+        arrestToCamp();
+        mutateReg(r -> r.laborAccount = 999999);
+        assertTrue(prison.release(boss, inmate, "command"));
+        assertEquals(PrisonerStatus.RELEASED, reg().status);
+        // Re-arrest to the same camp: the old balance must not meet the
+        // freedom price on the first tick.
+        arrestToCamp();
+        var rec = reg();
+        assertEquals(PrisonerStatus.IN_CAMP, rec.status);
+        assertEquals(0, rec.laborAccount);
+        prison.tick();
+        assertEquals(PrisonerStatus.IN_CAMP, reg().status); // still in custody
+    }
 }
