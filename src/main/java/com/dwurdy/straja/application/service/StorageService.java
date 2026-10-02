@@ -74,11 +74,15 @@ public final class StorageService {
 
     /** BOLO-active is the native "wanted" surface (the prototype read a shared NBT flag). */
     public boolean isWanted(UUID uuid) {
-        var active = bolos.active();
-        for (var record : active) {
-            if (record != null && uuid.toString().equals(record.subjectUuid)) return true;
+        return wantedUuids().contains(uuid.toString());
+    }
+
+    private Set<String> wantedUuids() {
+        var out = new HashSet<String>();
+        for (var record : bolos.active()) {
+            if (record != null && record.subjectUuid != null) out.add(record.subjectUuid);
         }
-        return false;
+        return out;
     }
 
     /**
@@ -90,6 +94,13 @@ public final class StorageService {
         var player = ctx.server().findPlayer(uuid);
         if (player == null) return;
         clearThief(store, player, false);
+        save(store);
+    }
+
+    /** A flagged thief dying (the hunt's resolution) clears the debt flag. */
+    public void onPlayerDeath(PlayerGateway player) {
+        var store = store();
+        clearThief(store, player, true);
         save(store);
     }
 
@@ -141,14 +152,13 @@ public final class StorageService {
         if (rec == null) {
             Integer rep = ctx.npcGuards().factionPoints(player.uuid(), ctx.policies().storageFactionId);
             rec = new ThiefRecord(0, rep, now());
-            store.markThief(key, rec);
             ctx.npcGuards().setFactionPoints(player.uuid(), ctx.policies().storageFactionId, 0);
             announceTheft(player.name());
             ctx.npcGuards().startQuestForTeam(ctx.policies().storageHuntTeam, ctx.policies().storageHuntQuestId);
             audit.record("storage_thief_marked", "storage", "", player.name(), key,
                     "FLAGGED", "units=" + units);
         }
-        store.markThief(key, store.thief(key).addOwed(units));
+        store.markThief(key, rec.addOwed(units));
     }
 
     private void creditThief(StorageWatchStore store, PlayerGateway player, long units) {
@@ -256,9 +266,13 @@ public final class StorageService {
                     ctx.policies().storageWatchedItemUnits);
             if (count < 0) continue;
             String key = chest.key();
-            Integer prev = chestCache.put(key, count);
-            if (prev == null) continue;
+            // Consume our own deposits first: when the chest was never polled
+            // (fresh boot/reset), the deposit is folded into the baseline so
+            // the next delta cannot attribute our deposit to a bystander.
             int pending = pendingDeposits.containsKey(key) ? pendingDeposits.remove(key) : 0;
+            Integer prev = chestCache.get(key);
+            chestCache.put(key, count);
+            if (prev == null) continue;
             int delta = count - prev - pending;
             if (delta == 0) continue;
             if (delta < 0) {
@@ -324,8 +338,11 @@ public final class StorageService {
     private void aggroScan() {
         var guards = ctx.npcGuards();
         if (!guards.available()) return;
+        var wanted = wantedUuids();
+        var watchStore = store();
         for (var p : ctx.server().onlinePlayers()) {
-            boolean hostile = (isThief(p.uuid()) || isWanted(p.uuid()))
+            boolean hostile = (watchStore.isThief(p.uuid().toString())
+                    || wanted.contains(p.uuid().toString()))
                     && !jailed(p) && isSurvivalOrAdventure(p) && !isExempt(p);
             if (!hostile && !aggroMarked.contains(p.uuid())) continue;
             var near = guards.guardsNear(p.dimension(), p.x(), p.y(), p.z(),
@@ -378,6 +395,7 @@ public final class StorageService {
             return new DepositResult(false, 0, count);
         }
         int leftover = ctx.containers().insert(dest.dimension(), dest.x(), dest.y(), dest.z(), itemId, count);
+        if (leftover < 0) return new DepositResult(false, 0, count); // item id does not resolve
         int inserted = count - leftover;
         if (inserted > 0) {
             pendingDeposits.merge(dest.key(), inserted * value, Integer::sum);
@@ -426,6 +444,7 @@ public final class StorageService {
                     return true;
                 }
                 store.setup(store.setup().withDest(point));
+                pickModes.remove(admin.uuid());
                 admin.tellKey("straja.storage.pick_dest", point.key());
             }
             case PICK_ZONE -> {
@@ -468,6 +487,9 @@ public final class StorageService {
         var store = store();
         store.setup(new StorageSetup(null, null, List.of()));
         chestCache.clear();
+        pendingDeposits.clear();
+        pickModes.clear();
+        zoneCorners.clear();
         save(store);
         admin.tellKey("straja.storage.cfg_reset");
         audit.record("storage_cfg_reset", admin.name(), admin.uuid().toString(), "", "", "RESET", "");

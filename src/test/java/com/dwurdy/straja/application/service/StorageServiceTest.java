@@ -193,6 +193,38 @@ class StorageServiceTest {
         assertFalse(r2.success());
     }
 
+    @Test
+    void depositIntoWatchedDestDoesNotFlagBystander() {
+        var dest = new StoragePoint(DIM, 51, 60, 51);
+        var s = ctx.storage().read();
+        s.setup(new StorageSetup(dest, null, List.of(dest))); // dest is also watched
+        ctx.storage().write(s);
+        containers.placeContainer(DIM, 51, 60, 51);
+        // Deposit lands between boot and the first poll — pending must fold
+        // into the baseline, not be attributed to the nearest player.
+        var r = storage.deposit("merchant", "minecraft:gold_ingot", 20);
+        assertTrue(r.success());
+        civ.x = 51; civ.y = 60; civ.z = 52;
+        storage.tick();
+        assertFalse(storage.isThief(civ.uuid()));
+        // And a deposit between polls is not credited to a flagged payer...
+        containers.insert(DIM, 51, 60, 51, "minecraft:gold_ingot", 5);
+        storage.tick();
+        assertFalse(storage.isThief(civ.uuid()));
+    }
+
+    @Test
+    void thiefDeathClearsFlagAndRestoresRep() {
+        configureZone();
+        npcGuards.factionPoints.computeIfAbsent(civ.uuid().toString(), k -> new java.util.HashMap<>())
+                .put(12, 750);
+        storage.onBlockBroken(civ, DIM, 2, 60, 2, "minecraft:gold_block");
+        storage.onPlayerDeath(civ);
+        assertFalse(storage.isThief(civ.uuid()));
+        assertEquals(750, npcGuards.factionPoints(civ.uuid(), 12));
+        assertTrue(civ.told("straja.storage.thief_died"));
+    }
+
     // ----------------------------------------------------------------- aggro
 
     @Test

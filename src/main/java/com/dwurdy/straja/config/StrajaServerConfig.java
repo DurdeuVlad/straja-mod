@@ -540,7 +540,8 @@ public final class StrajaServerConfig {
                         "Scoreboard teams whose members may handle watched goods",
                         "without being flagged (merchants, vault keepers).")
                 .defineListAllowEmpty(List.of("alliedTeams"),
-                        List.of(), () -> "Merchant", StrajaServerConfig::isNonBlankString);
+                        new java.util.ArrayList<>(defaults.storageAlliedTeams),
+                        () -> "Merchant", StrajaServerConfig::isNonBlankString);
         STORAGE_EXEMPT_PLAYERS = B.comment(
                         "Player names or UUIDs never flagged by the storage watch.")
                 .defineListAllowEmpty(List.of("exemptPlayers"),

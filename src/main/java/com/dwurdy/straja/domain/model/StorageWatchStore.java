@@ -10,27 +10,35 @@ import java.util.Map;
  * pending deposits) deliberately live in the service, not here.
  */
 public final class StorageWatchStore {
-    private StorageSetup setup = new StorageSetup(null, null, List.of());
-    private final Map<String, ThiefRecord> thieves = new HashMap<>();
+    private StorageSetup setup;
+    private Map<String, ThiefRecord> thieves;
 
-    public StorageSetup setup() { return setup; }
+    public StorageSetup setup() {
+        if (setup == null) setup = new StorageSetup(null, null, List.of());
+        return setup;
+    }
+
     public void setup(StorageSetup s) { setup = s == null ? new StorageSetup(null, null, List.of()) : s; }
 
-    public Map<String, ThiefRecord> thieves() { return thieves; }
+    /** Null-safe: partial or corrupt JSON may leave the map unset. */
+    public Map<String, ThiefRecord> thieves() {
+        if (thieves == null) thieves = new HashMap<>();
+        return thieves;
+    }
 
     public boolean isThief(String uuid) {
-        return thieves.containsKey(uuid);
+        return thieves().containsKey(uuid);
     }
 
     public ThiefRecord thief(String uuid) {
-        return thieves.get(uuid);
+        return thieves().get(uuid);
     }
 
     public void markThief(String uuid, ThiefRecord record) {
-        thieves.put(uuid, record);
+        thieves().put(uuid, record);
     }
 
     public void clearThief(String uuid) {
-        thieves.remove(uuid);
+        thieves().remove(uuid);
     }
 }

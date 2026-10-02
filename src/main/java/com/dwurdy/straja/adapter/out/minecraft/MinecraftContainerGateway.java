@@ -54,14 +54,21 @@ public final class MinecraftContainerGateway implements WorldContainerGateway {
         return total;
     }
 
+    /**
+     * {@inheritDoc}
+     * Returns {@code -1} when the item id does not resolve (the defaulted
+     * registry would otherwise silently hand back AIR).
+     */
     @Override public int insert(String dimension, int x, int y, int z, String itemId, int count) {
         Container container = containerAt(dimension, x, y, z);
-        Item item = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(itemId));
-        if (container == null || item == null || count <= 0) return count;
+        var item = BuiltInRegistries.ITEM.getOptional(ResourceLocation.tryParse(itemId));
+        if (item.isEmpty() || item.get() == net.minecraft.world.item.Items.AIR) return -1;
+        if (container == null || count <= 0) return count;
+        Item resolved = item.get();
         int remaining = count;
         for (int i = 0; i < container.getContainerSize() && remaining > 0; i++) {
             ItemStack cur = container.getItem(i);
-            if (cur.isEmpty() || cur.getItem() != item || cur.getCount() >= cur.getMaxStackSize()) continue;
+            if (cur.isEmpty() || cur.getItem() != resolved || cur.getCount() >= cur.getMaxStackSize()) continue;
             int move = Math.min(remaining, cur.getMaxStackSize() - cur.getCount());
             cur.grow(move);
             container.setItem(i, cur);
@@ -69,7 +76,7 @@ public final class MinecraftContainerGateway implements WorldContainerGateway {
         }
         for (int i = 0; i < container.getContainerSize() && remaining > 0; i++) {
             if (!container.getItem(i).isEmpty()) continue;
-            ItemStack fresh = new ItemStack(item, Math.min(remaining, item.getDefaultMaxStackSize()));
+            ItemStack fresh = new ItemStack(resolved, Math.min(remaining, resolved.getDefaultMaxStackSize()));
             container.setItem(i, fresh);
             remaining -= fresh.getCount();
         }
@@ -79,9 +86,9 @@ public final class MinecraftContainerGateway implements WorldContainerGateway {
 
     @Override public void dropItem(String dimension, int x, int y, int z, String itemId, int count) {
         ServerLevel level = level(dimension);
-        Item item = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(itemId));
-        if (level == null || item == null || count <= 0) return;
-        var entity = new ItemEntity(level, x + 0.5, y + 1.0, z + 0.5, new ItemStack(item, count));
+        var item = BuiltInRegistries.ITEM.getOptional(ResourceLocation.tryParse(itemId));
+        if (level == null || item.isEmpty() || item.get() == net.minecraft.world.item.Items.AIR || count <= 0) return;
+        var entity = new ItemEntity(level, x + 0.5, y + 1.0, z + 0.5, new ItemStack(item.get(), count));
         level.addFreshEntity(entity);
     }
 }

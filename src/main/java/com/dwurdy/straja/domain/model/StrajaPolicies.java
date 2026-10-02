@@ -352,7 +352,7 @@ public class StrajaPolicies {
             "minecraft:gold_nugget", 1,
             "minecraft:gold_ingot", 9,
             "minecraft:gold_block", 81));
-    public List<String> storageAlliedTeams = new ArrayList<>(List.of());
+    public List<String> storageAlliedTeams = new ArrayList<>(List.of("Straja"));
     public List<String> storageExemptPlayers = new ArrayList<>(List.of());
     public boolean storageAlliesHandleGoods = true;
     public String storageHuntTeam = "Straja";

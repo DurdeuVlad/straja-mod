@@ -37,6 +37,9 @@ public final class StrajaCommands {
     public static void onRegisterCommands(RegisterCommandsEvent event) {
         CommandDispatcher<CommandSourceStack> dispatcher = event.getDispatcher();
         dispatcher.register(root());
+        // Legacy prototype surface: live CustomNPCs quest commands still call
+        // /strajastorage deposit — keep the alias alive (perm 2, as scripted).
+        dispatcher.register(storageAlias());
         AdminCommandHelp.attach(dispatcher);
     }
 
@@ -1054,8 +1057,18 @@ public final class StrajaCommands {
      * prototype strajastorage command): in-game pickers, merchant deposit
      * bridge for NPC quest commands, and the thief ledger.
      */
+    /** /strajastorage — permission-2 root hosting the same subtree for NPC/command-block callers. */
+    private static LiteralArgumentBuilder<CommandSourceStack> storageAlias() {
+        return storageTree(Commands.literal("strajastorage")
+                .requires(source -> source.hasPermission(2)));
+    }
+
     private static LiteralArgumentBuilder<CommandSourceStack> storageCommands() {
-        var node = adminOnly(Commands.literal("storage"));
+        return storageTree(adminOnly(Commands.literal("storage")));
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> storageTree(
+            LiteralArgumentBuilder<CommandSourceStack> node) {
         var pick = Commands.literal("pick");
         for (String mode : List.of("dest", "zone", "chest", "off")) {
             pick.then(Commands.literal(mode).executes(c -> player(c, p -> {

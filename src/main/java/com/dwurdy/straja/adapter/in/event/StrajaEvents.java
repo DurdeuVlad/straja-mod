@@ -587,7 +587,10 @@ public final class StrajaEvents {
             return;
         }
         // An armed storage pick consumes the click before any chest can open.
-        if (runtime.storage().onPickClick(gateway, dimension, pos.getX(), pos.getY(), pos.getZ())) {
+        // RightClickBlock fires once per hand — main hand only, like the wand
+        // tools below, or a single zone click would complete both corners.
+        if (event.getHand() == net.minecraft.world.InteractionHand.MAIN_HAND
+                && runtime.storage().onPickClick(gateway, dimension, pos.getX(), pos.getY(), pos.getZ())) {
             event.setCanceled(true);
             return;
         }
@@ -815,13 +818,17 @@ public final class StrajaEvents {
         if (runtime == null || !(event.getPlayer() instanceof net.minecraft.server.level.ServerPlayer player)) return;
         var itemEntity = event.getItemEntity();
         if (itemEntity.level().isClientSide()) return;
+        // Post fires after the pickup: current is the *remaining* stack, so the
+        // amount taken is original − current.
+        int taken = event.getOriginalStack().getCount() - event.getCurrentStack().getCount();
+        if (taken <= 0) return;
         var gateway = new MinecraftPlayerGateway(player.getServer(), player.getUUID());
-        var stack = itemEntity.getItem();
-        String itemId = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+        String itemId = net.minecraft.core.registries.BuiltInRegistries.ITEM
+                .getKey(event.getOriginalStack().getItem()).toString();
         var pos = itemEntity.blockPosition();
         runtime.storage().onItemPickedUp(gateway,
                 itemEntity.level().dimension().location().toString(),
-                pos.getX(), pos.getY(), pos.getZ(), itemId, stack.getCount());
+                pos.getX(), pos.getY(), pos.getZ(), itemId, taken);
     }
 
     /**
@@ -883,6 +890,8 @@ public final class StrajaEvents {
                         new MinecraftPlayerGateway(attacker.getServer(), attacker.getUUID()), victimGateway);
             }
             runtime.custodyRoleplay().recoverAfterDeath(victimGateway);
+            // A flagged thief dying (hunt resolution) clears the debt flag.
+            runtime.storage().onPlayerDeath(victimGateway);
         }
         if (attacker == null) return;
         var gateway = new MinecraftPlayerGateway(attacker.getServer(), attacker.getUUID());

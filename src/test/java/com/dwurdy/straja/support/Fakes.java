@@ -288,6 +288,7 @@ public final class Fakes {
     /** In-memory guard-NPC bridge: faction points, quest log, positioned guards. */
     public static final class TestNpcGuards implements NpcGuardGateway {
         public static final class Guard {
+            public String dimension = "minecraft:overworld";
             public int factionId;
             public double x, y, z;
             public int aggroRange = 0;
@@ -334,7 +335,7 @@ public final class Fakes {
                 double radius, int factionId) {
             var out = new ArrayList<GuardRef>();
             guards.forEach((id, g) -> {
-                if (g.dead || g.factionId != factionId) return;
+                if (g.dead || g.factionId != factionId || !dim.equals(g.dimension)) return;
                 double dx = g.x - x, dy = g.y - y, dz = g.z - z;
                 if (dx * dx + dy * dy + dz * dz <= radius * radius) {
                     out.add(new GuardRef(id, g.x, g.y, g.z));
