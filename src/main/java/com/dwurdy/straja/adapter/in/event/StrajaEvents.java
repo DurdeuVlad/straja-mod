@@ -63,6 +63,7 @@ public final class StrajaEvents {
         runtime.fineRoleplay().tick();
         runtime.expansionRoleplay().tick();
         runtime.storage().tick();
+        runtime.checkpoints().tick();
         if (runtime.serverGateway().tickCount() % 20 != 0) return;
         runtime.v2Mobilizations().expireDue();
         runtime.v2Campaigns().expireDue();
@@ -238,6 +239,8 @@ public final class StrajaEvents {
         runtime.roomRoleplay().processWaitlist();
         runtime.audienceRoleplay().deliverOutcome(gateway);
         runtime.storage().onLogin(gateway);
+        // Stale crossing/board state from a previous session must not seed M2.
+        runtime.checkpoints().clearPlayer(gateway.uuid());
         String setupHint = runtime.playerQueries().setupHintFor(gateway, runtime.setupProbes());
         if (setupHint != null) {
             gateway.tell("[Straja] Configurarea este incompletă. " + setupHint
@@ -255,6 +258,7 @@ public final class StrajaEvents {
         runtime.storage().setPickMode(
                 new MinecraftPlayerGateway(player.getServer(), player.getUUID()), "off");
         var gateway = new MinecraftPlayerGateway(event.getEntity().getServer(), player.getUUID());
+        runtime.checkpoints().clearPlayer(gateway.uuid());
         runtime.custodyRoleplay().recoverOnLogout(gateway);
         // Pending admin-tool state (routes, corners, templates) never survives logout.
         runtime.adminTools().clearState(gateway);

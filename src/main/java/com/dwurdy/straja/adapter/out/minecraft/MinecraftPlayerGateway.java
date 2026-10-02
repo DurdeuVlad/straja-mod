@@ -190,6 +190,34 @@ public class MinecraftPlayerGateway implements PlayerGateway {
         }
     }
 
+    @Override public void teleport(String dimension, double x, double y, double z,
+                                   float yaw, float pitch) {
+        ServerPlayer p = entity();
+        if (p == null) return;
+        var levelKey = net.minecraft.resources.ResourceKey.create(
+                net.minecraft.core.registries.Registries.DIMENSION, ResourceLocation.parse(dimension));
+        ServerLevel level = server.getLevel(levelKey);
+        if (level != null) {
+            p.teleportTo(level, x, y, z, yaw, pitch);
+        }
+    }
+
+    @Override public void setVelocity(double vx, double vy, double vz) {
+        ServerPlayer p = entity();
+        if (p == null) return;
+        p.setDeltaMovement(vx, vy, vz);
+        p.hurtMarked = true; // sync velocity to the client
+    }
+
+    @Override public boolean ridingBoatLike() {
+        ServerPlayer p = entity();
+        if (p == null) return false;
+        var vehicle = p.getVehicle();
+        if (vehicle == null) return false;
+        String type = BuiltInRegistries.ENTITY_TYPE.getKey(vehicle.getType()).toString();
+        return type.contains("boat") || type.contains("raft");
+    }
+
     @Override public boolean startRiding(UUID vehicleUuid) {
         ServerPlayer passenger = entity();
         ServerPlayer vehicle = vehicleUuid == null ? null : server.getPlayerList().getPlayer(vehicleUuid);

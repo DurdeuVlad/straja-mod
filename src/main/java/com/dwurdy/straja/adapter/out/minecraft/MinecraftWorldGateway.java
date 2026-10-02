@@ -44,6 +44,21 @@ public class MinecraftWorldGateway implements WorldGateway {
         return new BlockInfo(id, air, door, solid);
     }
 
+    @Override public void closeDoor(String dimension, int x, int y, int z) {
+        ServerLevel level = level(dimension);
+        if (level == null) return;
+        // Iterate both vertical halves — a door can be registered at either.
+        for (int dy = 0; dy <= 1; dy++) {
+            var pos = new BlockPos(x, y + dy, z);
+            var state = level.getBlockState(pos);
+            if (!(state.getBlock() instanceof DoorBlock)) continue;
+            if (!state.getValue(DoorBlock.OPEN) && !state.getValue(DoorBlock.POWERED)) continue;
+            level.setBlock(pos,
+                    state.setValue(DoorBlock.OPEN, false).setValue(DoorBlock.POWERED, false),
+                    3);
+        }
+    }
+
     @Override public boolean setRoomSign(String dimension, int x, int y, int z, String facing,
                                        String line1, String line2, String line3) {
         ServerLevel level = level(dimension);

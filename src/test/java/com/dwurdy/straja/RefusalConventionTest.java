@@ -78,6 +78,10 @@ class RefusalConventionTest {
             "preaviz pentru",
             "Demisia este în așteptare",
             "livrat parțial",
+            "nu ai nimic ilegal", // checkpoint pass notice — no remedy applies
+            "Lasă marfa interzisă", // warn-stage guidance inside a WARN, not a refusal
+            "Sens interzis — această bandă", // wrong-way repel notice; the repel is the remedy
+            "Nicio trecere înregistrată", // ledger status line
             "livrată parțial",
             "nu au putut fi rezolvate",
             "s-a putut salva",

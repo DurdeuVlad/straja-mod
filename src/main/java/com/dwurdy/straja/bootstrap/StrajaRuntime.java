@@ -62,6 +62,7 @@ public final class StrajaRuntime {
     private final com.dwurdy.straja.application.service.IncidentService incidents;
     private final com.dwurdy.straja.application.service.BoloService bolos;
     private final com.dwurdy.straja.application.service.StorageService storage;
+    private final com.dwurdy.straja.application.service.CheckpointService checkpoints;
     private final com.dwurdy.straja.application.service.EvidenceService evidence;
     private final com.dwurdy.straja.application.service.ArrestRecordService arrestRecords;
     private final com.dwurdy.straja.application.service.ReputationService reputation;
@@ -179,7 +180,8 @@ public final class StrajaRuntime {
                 new SavedStores.LaborCamps(stores),
                 new SavedStores.MerchantDesks(stores),
                 new com.dwurdy.straja.adapter.out.minecraft.MinecraftContainerGateway(server),
-                com.dwurdy.straja.adapter.out.npc.customnpcs.CustomNpcsGuardGateway.create(server));
+                com.dwurdy.straja.adapter.out.npc.customnpcs.CustomNpcsGuardGateway.create(server),
+                new com.dwurdy.straja.adapter.out.minecraft.MinecraftDeepScanGateway(server));
 
         this.v2PersonnelRepository = new SavedStores.Personnel(stores);
         this.v2PromotionRepository = new SavedStores.Promotions(stores);
@@ -339,6 +341,8 @@ public final class StrajaRuntime {
                 ctx, players, audit, incidents, bolos);
         this.storage = new com.dwurdy.straja.application.service.StorageService(
                 ctx, players, audit, bolos, prison);
+        this.checkpoints = new com.dwurdy.straja.application.service.CheckpointService(
+                ctx, audit, prison, storage, bolos);
         this.prison.onArrest(sentence -> {
             try {
                 storage.onArrested(UUID.fromString(sentence.targetUuid));
@@ -507,6 +511,7 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.service.IncidentService incidents() { return incidents; }
     public com.dwurdy.straja.application.service.BoloService bolos() { return bolos; }
     public com.dwurdy.straja.application.service.StorageService storage() { return storage; }
+    public com.dwurdy.straja.application.service.CheckpointService checkpoints() { return checkpoints; }
     public com.dwurdy.straja.application.service.EvidenceService evidence() { return evidence; }
     public com.dwurdy.straja.application.service.ArrestRecordService arrestRecords() { return arrestRecords; }
     public com.dwurdy.straja.application.service.ReputationService reputation() { return reputation; }

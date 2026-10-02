@@ -107,6 +107,12 @@ public final class Fakes {
         public UUID passengerUuid;
         /** When > 0, the next N giveVerified calls fail as if delivery broke. */
         public int failVerifiedCalls;
+        /** Simulates riding a boat/raft for checkpoint boarding checks. */
+        public boolean ridingBoat;
+        /** Last velocity applied via setVelocity. */
+        public double vx, vy, vz;
+        /** Last yaw applied via the oriented teleport. */
+        public float lastTeleportYaw;
 
         public TestPlayer(String name, int slots) {
             this.uuid = UUID.nameUUIDFromBytes(name.getBytes());
@@ -168,6 +174,14 @@ public final class Fakes {
         @Override public void teleport(String dim, double tx, double ty, double tz) {
             dimension = dim; x = tx; y = ty; z = tz;
         }
+        @Override public void teleport(String dim, double tx, double ty, double tz,
+                                       float yaw, float pitch) {
+            dimension = dim; x = tx; y = ty; z = tz; lastTeleportYaw = yaw;
+        }
+        @Override public void setVelocity(double nvx, double nvy, double nvz) {
+            vx = nvx; vy = nvy; vz = nvz;
+        }
+        @Override public boolean ridingBoatLike() { return ridingBoat; }
         @Override public boolean startRiding(UUID vehicle) {
             TestPlayer carrier = server == null || vehicle == null ? null : server.players.get(vehicle);
             if (carrier == null || carrier == this || carrier.passengerUuid != null) return false;
@@ -452,6 +466,20 @@ public final class Fakes {
             signs.add(x + "," + y + "," + z + "|" + line1 + "|" + line2 + "|" + line3);
             return true;
         }
+
+        /** Door positions closed via WorldGateway.closeDoor — "dim,x,y,z". */
+        public final List<String> closedDoors = new ArrayList<>();
+        /** Sounds played via playSoundAt — "dim,x,y,z|id". */
+        public final List<String> sounds = new ArrayList<>();
+
+        @Override public void closeDoor(String dimension, int x, int y, int z) {
+            closedDoors.add(key(dimension, x, y, z));
+        }
+
+        @Override public void playSoundAt(String dimension, double x, double y, double z,
+                                          double radius, String soundId) {
+            sounds.add(dimension + "," + (int) x + "," + (int) y + "," + (int) z + "|" + soundId);
+        }
     }
 
     // ---------------------------------------------------------------- factions
@@ -526,7 +554,20 @@ public final class Fakes {
                 new SavedStores.LaborCamps(access),
                 new SavedStores.MerchantDesks(access),
                 new TestContainers(),
-                new TestNpcGuards());
+                new TestNpcGuards(),
+                new TestDeepScan());
+    }
+
+    /** Returns the inventory snapshot staged for the scanned player. */
+    public static final class TestDeepScan implements com.dwurdy.straja.application.port.out.DeepScanGateway {
+        public final java.util.Map<java.util.UUID, java.util.List<com.dwurdy.straja.domain.model.SnapshotItem>>
+                inventories = new java.util.HashMap<>();
+
+        @Override
+        public java.util.List<com.dwurdy.straja.domain.model.SnapshotItem> deepScan(java.util.UUID playerUuid) {
+            return new java.util.ArrayList<>(
+                    inventories.getOrDefault(playerUuid, java.util.List.of()));
+        }
     }
 
     public static StrajaPolicies policies() {

@@ -737,4 +737,75 @@ public final class StrajaGameTests {
                 "the «Înapoi» token must re-render the primary page");
         helper.succeed();
     }
+
+    /**
+     * LAW-002: live deep-scan proof on a real ServerPlayer — a shulker box and
+     * a bundle are enumerated structurally, nested rows keep their slot path.
+     */
+    @GameTest(template = "empty")
+    public static void checkpointDeepScanFindsNestedContraband(GameTestHelper helper) {
+        var server = helper.getLevel().getServer();
+        var player = helper.makeMockServerPlayerInLevel();
+
+        ItemStack box = new ItemStack(Items.SHULKER_BOX);
+        box.set(net.minecraft.core.component.DataComponents.CONTAINER,
+                net.minecraft.world.item.component.ItemContainerContents
+                        .fromItems(List.of(new ItemStack(Items.TNT, 2))));
+        player.getInventory().add(0, box);
+
+        ItemStack bundle = new ItemStack(Items.BUNDLE);
+        bundle.set(net.minecraft.core.component.DataComponents.BUNDLE_CONTENTS,
+                new net.minecraft.world.item.component.BundleContents(
+                        List.of(new ItemStack(Items.DIAMOND, 4))));
+        player.getInventory().add(1, bundle);
+
+        player.getInventory().offhand.set(0, new ItemStack(Items.TNT, 1));
+
+        var scanned = new com.dwurdy.straja.adapter.out.minecraft.MinecraftDeepScanGateway(server)
+                .scanInventory(player);
+        var ids = scanned.stream().map(s -> s.slot + "=" + s.itemId).toList();
+
+        helper.assertTrue(ids.stream().anyMatch(s -> s.equals("main:0=minecraft:shulker_box")),
+                "outer shulker must appear as main:0 — got " + ids);
+        helper.assertTrue(ids.stream().anyMatch(s -> s.equals("main:0>0=minecraft:tnt")),
+                "nested TNT must appear under the shulker path — got " + ids);
+        helper.assertTrue(ids.stream().anyMatch(s -> s.equals("main:1>0=minecraft:diamond")),
+                "bundle contents must appear under the bundle path — got " + ids);
+        helper.assertTrue(ids.stream().anyMatch(s -> s.equals("offhand:0=minecraft:tnt")),
+                "offhand stack must appear — got " + ids);
+        var nested = scanned.stream().filter(s -> s.slot.equals("main:0>0")).findFirst().orElse(null);
+        helper.assertTrue(nested != null && nested.count == 2 && nested.componentsTag != null,
+                "nested row must carry count + serialized components for the ledger");
+        helper.succeed();
+    }
+
+    /**
+     * LAW-002: a powered-open iron door is forced shut through the real
+     * WorldGateway — the synchronous lockdown leg of checkpoint denial.
+     */
+    @GameTest(template = "empty")
+    public static void checkpointDoorCloses(GameTestHelper helper) {
+        var runtime = StrajaRuntime.get();
+        var level = helper.getLevel();
+        var lower = helper.absolutePos(new BlockPos(2, 1, 2));
+        var upper = lower.above();
+        var lowerState = Blocks.IRON_DOOR.defaultBlockState()
+                .setValue(DoorBlock.OPEN, true)
+                .setValue(DoorBlock.POWERED, true)
+                .setValue(DoorBlock.HALF, DoubleBlockHalf.LOWER);
+        var upperState = lowerState.setValue(DoorBlock.HALF, DoubleBlockHalf.UPPER);
+        level.setBlock(lower, lowerState, 3);
+        level.setBlock(upper, upperState, 3);
+
+        runtime.context().world().closeDoor(
+                level.dimension().location().toString(), lower.getX(), lower.getY(), lower.getZ());
+
+        helper.assertTrue(!level.getBlockState(lower).getValue(DoorBlock.OPEN),
+                "lower half must close on checkpoint denial");
+        helper.assertTrue(!level.getBlockState(lower).getValue(DoorBlock.POWERED),
+                "powered state must clear so the door stays shut");
+        helper.assertTrue(!level.getBlockState(upper).getValue(DoorBlock.OPEN),
+                "upper half must close too");
+        helper.succeed();
+    }
 }

@@ -16,6 +16,12 @@ public interface WorldGateway {
     default void playSoundAt(String dimension, double x, double y, double z,
                              double radius, String soundId) {}
 
+    /**
+     * Force-closes a door block (both halves for a full door): sets open=false
+     * and powered=false. No-op for non-door blocks or unreadable chunks.
+     */
+    default void closeDoor(String dimension, int x, int y, int z) {}
+
     record BlockInfo(String id, boolean air, boolean door, boolean solid) {
         public boolean traversable() {
             return !door && (air || !solid);

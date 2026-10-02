@@ -177,6 +177,10 @@ public final class StrajaCommands {
                         .then(Commands.argument("id", StringArgumentType.word())
                                 .executes(c -> adminActor(c, p -> StrajaRuntime.get().guards()
                                         .removeCheckpoint(p, StringArgumentType.getString(c, "id"))))));
+        checkpoint.then(Commands.literal("ledger")
+                .then(Commands.argument("player", StringArgumentType.word())
+                        .executes(c -> player(c, p -> StrajaRuntime.get().checkpoints()
+                                .showLedger(p, StringArgumentType.getString(c, "player"))))));
         root.then(adminOnly(checkpoint));
         var setMissionTime = Commands.literal("set-mission-time")
                 .then(Commands.argument("id", StringArgumentType.word())

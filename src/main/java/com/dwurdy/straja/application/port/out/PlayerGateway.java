@@ -93,6 +93,17 @@ public interface PlayerGateway {
 
     void teleport(String dimension, double x, double y, double z);
 
+    /** Teleport with facing; default keeps the player's current yaw/pitch. */
+    default void teleport(String dimension, double x, double y, double z, float yaw, float pitch) {
+        teleport(dimension, x, y, z);
+    }
+
+    /** Applies a velocity shove (checkpoint pushback). Default is a no-op. */
+    default void setVelocity(double vx, double vy, double vz) {}
+
+    /** True while riding a boat or raft-like vehicle (boarding-zone checks). */
+    default boolean ridingBoatLike() { return false; }
+
     /** Server-authorized vanilla-style passenger operations for custody carry. */
     default boolean startRiding(UUID vehicleUuid) { return false; }
     default void stopRiding() {}
