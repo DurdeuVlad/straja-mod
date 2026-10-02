@@ -119,14 +119,30 @@ public final class SeizureService {
      * prototype {@code cpGivePlayer}); an offline release keeps the locker
      * reservation under {@code pendingLockers} so a later login collects it.
      */
+    /**
+     * Same as {@link #releaseLocker(PrisonerRegisterStore, PlayerGateway,
+     * PrisonerRegisterRecord)} but loads and persists the register itself —
+     * for callers that do not already hold the store open.
+     */
     public void releaseLocker(PlayerGateway target, PrisonerRegisterRecord rec) {
+        var reg = ctx.prisonerRegister().read();
+        var live = rec == null ? null : reg.prisoner(rec.detaineeUuid);
+        if (live == null) live = rec;
+        releaseLocker(reg, target, live);
+        ctx.prisonerRegister().write(reg);
+    }
+
+    /**
+     * Mutates {@code rec} inside the caller's {@code reg} so a single
+     * write commits status, locker clear and pending reservation atomically.
+     */
+    public void releaseLocker(com.dwurdy.straja.domain.model.PrisonerRegisterStore reg,
+                              PlayerGateway target, PrisonerRegisterRecord rec) {
         if (rec == null || rec.personalLocker == null || rec.personalLocker.isEmpty()) return;
-        if (target == null) {
-            var reg = ctx.prisonerRegister().read();
+        if (target == null || !target.isOnline()) {
             reg.reserveLockers(rec.detaineeUuid, rec.personalLocker.stream()
                     .map(StoragePoint::key).toList());
             rec.personalLocker = new ArrayList<>();
-            ctx.prisonerRegister().write(reg);
             return;
         }
         int restored = 0;

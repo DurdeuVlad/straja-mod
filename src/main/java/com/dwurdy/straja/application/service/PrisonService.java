@@ -240,8 +240,9 @@ public class PrisonService implements PrisonRoleplayUseCase {
             data.waitlist.removeIf(e -> e != null && entry.sentenceId.equals(e.sentenceId));
             changed = true;
             var target = findFor(sentence);
-            if (target != null) {
+            if (target != null && custody.enterJail(target, "prison")) {
                 teleportToCell(target, cell);
+                target.setGameMode("adventure");
                 target.tell("Ai fost repartizat într-o celulă pentru executarea sentinței.");
             }
         }
@@ -436,7 +437,7 @@ public class PrisonService implements PrisonRoleplayUseCase {
         if (rec != null && rec.status != PrisonerStatus.RELEASED) {
             rec.status = PrisonerStatus.RELEASED;
             rec.releasedAt = now();
-            if (seizure != null) seizure.releaseLocker(target, rec);
+            if (seizure != null) seizure.releaseLocker(reg, target, rec);
             ctx.prisonerRegister().write(reg);
         }
         if (bolos != null && sentence.targetUuid != null && !sentence.targetUuid.isEmpty()) {
