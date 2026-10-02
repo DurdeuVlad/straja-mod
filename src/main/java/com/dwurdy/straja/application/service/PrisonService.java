@@ -367,9 +367,14 @@ public class PrisonService implements PrisonRoleplayUseCase {
                 online.refuse("straja.prison.handover_retry", "straja.remedy.jailer");
             }
         }
-        if (online != null && seizure != null && (jailed || sentence.cellId.isEmpty())) {
+        if (online != null && seizure != null
+                && (jailed || (camp == null && sentence.cellId.isEmpty()))) {
             // Custody consumes the person AND the inventory: seize at the
             // arrest position before the handover moves the body into a cell.
+            // Waitlisted prisoners (no cell yet) are still seized — they are
+            // booked even though the body waits for a bunk. A REFUSED camp
+            // handover is neither: the suspect keeps their belongings and the
+            // wanted marks until a successful recapture delivers them.
             seizure.onArrest(online, site, blank(reason) ? missionId : reason);
         }
         if (camp != null) {
@@ -394,6 +399,14 @@ public class PrisonService implements PrisonRoleplayUseCase {
         } else if (jailed) {
             teleportToCell(online, cell);
             online.setGameMode("adventure");
+        }
+        // LAW-007: the moment custody consumes the suspect — jailed or
+        // waitlisted-seized — every wanted mark resolves on the books. A
+        // refused camp handover does not count: still at large, still wanted.
+        if (bolos != null && online != null && online.uuid() != null
+                && (jailed || (camp == null && sentence.cellId.isEmpty()))) {
+            bolos.resolveFor(online.uuid(),
+                    com.dwurdy.straja.domain.model.BoloStatus.RESOLVED, "arrested");
         }
         if (online != null) {
             online.tell("Ai fost arestat pentru " + sentence.sentenceDays
@@ -426,7 +439,8 @@ public class PrisonService implements PrisonRoleplayUseCase {
             ctx.prisonerRegister().write(reg);
         }
         if (wasHunted && bolos != null && target.uuid() != null) {
-            bolos.clearFor(target.uuid());
+            bolos.resolveFor(target.uuid(),
+                    com.dwurdy.straja.domain.model.BoloStatus.RESOLVED, "arrested");
         }
         var cell = blank(sentence.cellId) ? null : store().cell(sentence.cellId);
         if (camp != null && custody.enterJail(target, "prison")) {
@@ -522,10 +536,13 @@ public class PrisonService implements PrisonRoleplayUseCase {
             if (seizure != null) seizure.releaseLocker(reg, target, rec);
             ctx.prisonerRegister().write(reg);
         }
-        if (bolos != null && sentence.targetUuid != null && !sentence.targetUuid.isEmpty()) {
-            try {
-                bolos.clearFor(java.util.UUID.fromString(sentence.targetUuid));
-            } catch (IllegalArgumentException ignored) {}
+        if (bolos != null) {
+            // Key by uuid or recorded name — a corrupt/legacy uuid must not
+            // leave ACTIVE marks hunting a lawfully released player.
+            bolos.resolveForSubject(sentence.targetUuid,
+                    com.dwurdy.straja.domain.model.BoloStatus.RESOLVED, "released");
+            bolos.resolveForSubject(sentence.target,
+                    com.dwurdy.straja.domain.model.BoloStatus.RESOLVED, "released");
         }
         if (target != null) {
             target.setGameMode(rec == null || blank(rec.priorGameMode)
@@ -645,7 +662,8 @@ public class PrisonService implements PrisonRoleplayUseCase {
         if (custody.enterJail(target, "prison")) {
             if (rec != null && rec.status == PrisonerStatus.FUGITIVE && bolos != null
                     && target.uuid() != null) {
-                bolos.clearFor(target.uuid());
+                bolos.resolveFor(target.uuid(),
+                        com.dwurdy.straja.domain.model.BoloStatus.RESOLVED, "arrested");
             }
             if (rec == null) {
                 rec = new com.dwurdy.straja.domain.model.PrisonerRegisterRecord(

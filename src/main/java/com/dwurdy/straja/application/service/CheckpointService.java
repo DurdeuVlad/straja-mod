@@ -45,6 +45,8 @@ public final class CheckpointService {
     private final CustodyService custody; // nullable — escort bypass off when absent
     /** LAW-006: camp exit confiscation routes banned stacks to evidence. */
     private SeizureService seizure;
+    /** LAW-007: the authoritative wanted surface once wired. */
+    private WantedService wanted;
 
     private final Map<UUID, PrevPos> prevPositions = new ConcurrentHashMap<>();
     // Deliberate deviation: stamps are session-scoped, not persisted like the
@@ -73,6 +75,11 @@ public final class CheckpointService {
     /** LAW-006: late-bound (seizure is built after the checkpoint service). */
     public void useSeizure(SeizureService service) {
         this.seizure = service;
+    }
+
+    /** LAW-007: late-bound (wanted consolidates bolos+register after build). */
+    public void useWanted(WantedService service) {
+        this.wanted = service;
     }
 
     /** Server-tick entry: prototype cadence is every 5 ticks. */
@@ -600,10 +607,11 @@ public final class CheckpointService {
         return prison.activeSentence(p) != null;
     }
 
-    /** Hunted: thief flag, register FUGITIVE, live BOLO, or unexpired legacy wanted mark. */
+    /** Hunted: thief flag plus the authoritative wanted surface (LAW-007). */
     private boolean isHunted(PlayerGateway p) {
-        String uuid = p.uuid().toString();
         if (storage.isThief(p.uuid())) return true;
+        if (wanted != null) return wanted.isWanted(p.uuid());
+        String uuid = p.uuid().toString();
         var reg = ctx.prisonerRegister().read();
         var rec = reg.prisoner(uuid);
         if (rec != null && rec.status == PrisonerStatus.FUGITIVE) return true;
@@ -662,9 +670,10 @@ public final class CheckpointService {
             ctx.prisonerRegister().write(reg);
         }
 
-        // Custody consumes the hunt: thief flag + active BOLOs clear (AT6).
+        // Custody consumes the hunt: thief flag + active BOLOs resolve (AT6).
         storage.onArrested(p.uuid());
-        bolos.clearFor(p.uuid());
+        bolos.resolveFor(p.uuid(), com.dwurdy.straja.domain.model.BoloStatus.RESOLVED,
+                "arrested");
 
         ledger(site, p, dir, CrossingOutcome.ARREST, snapshot, found, reason);
         audit.record("checkpoint_arrest", "checkpoint", "", p.name(), uuid, "ARREST", reason);

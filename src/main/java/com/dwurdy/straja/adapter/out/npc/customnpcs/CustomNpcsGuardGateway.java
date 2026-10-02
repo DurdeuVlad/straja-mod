@@ -175,4 +175,9 @@ public final class CustomNpcsGuardGateway implements NpcGuardGateway {
         if (!(npc instanceof Mob mob) || sp == null) return;
         if (mob.getTarget() == sp) mob.setTarget(null);
     }
+
+    @Override public boolean isGuardOf(UUID entityId, int factionId) {
+        Entity npc = npc(entityId);
+        return npc != null && factionOf(npc) == factionId;
+    }
 }

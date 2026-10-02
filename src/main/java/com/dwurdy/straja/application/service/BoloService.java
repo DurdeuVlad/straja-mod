@@ -129,17 +129,50 @@ public final class BoloService {
      * Returns the number of active BOLOs cancelled.
      */
     public synchronized int clearFor(UUID subjectUuid) {
+        return resolveFor(subjectUuid, BoloStatus.CANCELLED, "arrest_clear");
+    }
+
+    /**
+     * LAW-007: a lawful resolution marks active marks RESOLVED rather than
+     * CANCELLED — arrest and formal release both end the hunt on the books.
+     */
+    public synchronized int resolveFor(UUID subjectUuid, BoloStatus status, String note) {
         String key = subjectUuid == null ? "" : subjectUuid.toString();
         if (key.isEmpty()) return 0;
         BoloStore data = store();
         int cleared = 0;
+        var action = status == BoloStatus.RESOLVED ? "bolo_resolve" : "bolo_cancel";
         for (BoloRecord record : data.records) {
             if (record != null && record.status == BoloStatus.ACTIVE
                     && key.equals(record.subjectUuid)) {
-                record.status = BoloStatus.CANCELLED;
+                record.status = status;
                 cleared++;
-                audit.record("bolo_cancel", "system", "", record.id,
-                        record.subjectUuid, "SUCCESS", "arrest_clear");
+                audit.record(action, "system", "", record.id,
+                        record.subjectUuid, "SUCCESS", note);
+            }
+        }
+        if (cleared > 0) ctx.bolos().write(data);
+        return cleared;
+    }
+
+    /**
+     * Same resolution keyed by uuid OR subject name — the fallback for
+     * corrupt or legacy sentence records whose uuid will not parse.
+     */
+    public synchronized int resolveForSubject(String uuidOrName, BoloStatus status,
+                                              String note) {
+        if (uuidOrName == null || uuidOrName.isBlank()) return 0;
+        BoloStore data = store();
+        int cleared = 0;
+        var action = status == BoloStatus.RESOLVED ? "bolo_resolve" : "bolo_cancel";
+        for (BoloRecord record : data.records) {
+            if (record != null && record.status == BoloStatus.ACTIVE
+                    && (uuidOrName.equals(record.subjectUuid)
+                            || uuidOrName.equalsIgnoreCase(record.subjectName))) {
+                record.status = status;
+                cleared++;
+                audit.record(action, "system", "", record.id,
+                        record.subjectUuid, "SUCCESS", note);
             }
         }
         if (cleared > 0) ctx.bolos().write(data);

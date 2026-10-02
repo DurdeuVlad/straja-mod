@@ -43,6 +43,10 @@ public interface NpcGuardGateway {
     /** Clears the guard's target only when it currently targets {@code playerId}. */
     void clearTargetIfTargeting(UUID guardId, UUID playerId);
 
+    /** True when {@code entityId} is a guard NPC of the given faction — used to
+     *  identify guard-side damage sources for escort protection. */
+    boolean isGuardOf(UUID entityId, int factionId);
+
     /** No-op implementation for environments without a guard NPC provider. */
     static NpcGuardGateway disabled() {
         return DisabledNpcGuardGateway.INSTANCE;
@@ -66,4 +70,5 @@ final class DisabledNpcGuardGateway implements NpcGuardGateway {
     @Override public int aggroRange(UUID guardId, int fallback) { return fallback; }
     @Override public void setTarget(UUID guardId, UUID playerId) {}
     @Override public void clearTargetIfTargeting(UUID guardId, UUID playerId) {}
+    @Override public boolean isGuardOf(UUID entityId, int factionId) { return false; }
 }

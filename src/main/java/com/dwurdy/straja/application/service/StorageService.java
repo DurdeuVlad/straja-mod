@@ -37,6 +37,8 @@ public final class StorageService {
     private final PrisonService prison;
     /** M4: cuffed suspects under escort are already caught — guards hold fire. */
     private CustodyService custody;
+    /** LAW-007: the authoritative wanted surface once wired; BOLO fallback otherwise. */
+    private WantedService wantedService;
 
     // Transient runtime state — pick sessions, container snapshots and the
     // aggro bookkeeping are inherently per-boot, matching the prototype.
@@ -61,6 +63,27 @@ public final class StorageService {
         this.custody = service;
     }
 
+    /** Late-bound: the wanted service is constructed after storage's deps. */
+    public void useWanted(WantedService service) {
+        this.wantedService = service;
+    }
+
+    private boolean isWantedPlayer(UUID uuid) {
+        return wantedService != null ? wantedService.isWanted(uuid)
+                : wantedUuids().contains(uuid.toString());
+    }
+
+    /** Wanted uuid set for a scan pass — parsed once, not per player. */
+    private Set<String> wantedSnapshot() {
+        return wantedService != null ? wantedService.wantedUuids() : wantedUuids();
+    }
+
+    private boolean underEscort(PlayerGateway p) {
+        if (wantedService != null) return wantedService.isUnderEscort(p);
+        return custody != null && custody.escortOfficerWithin(
+                p, ctx.policies().escortTetherRadius) != null;
+    }
+
     private StorageWatchStore store() {
         return ctx.storage().read();
     }
@@ -79,9 +102,9 @@ public final class StorageService {
         return store().isThief(uuid.toString());
     }
 
-    /** BOLO-active is the native "wanted" surface (the prototype read a shared NBT flag). */
+    /** LAW-007: the wanted service is authoritative; BOLO is the fallback. */
     public boolean isWanted(UUID uuid) {
-        return wantedUuids().contains(uuid.toString());
+        return isWantedPlayer(uuid);
     }
 
     private Set<String> wantedUuids() {
@@ -366,14 +389,12 @@ public final class StorageService {
     private void aggroScan() {
         var guards = ctx.npcGuards();
         if (!guards.available()) return;
-        var wanted = wantedUuids();
+        var wanted = wantedSnapshot();
         var watchStore = store();
         for (var p : ctx.server().onlinePlayers()) {
-            boolean escorted = custody != null && custody.escortOfficerWithin(
-                    p, ctx.policies().escortGateBypassRadius) != null;
             boolean hostile = (watchStore.isThief(p.uuid().toString())
                     || wanted.contains(p.uuid().toString()))
-                    && !escorted && !jailed(p) && isSurvivalOrAdventure(p) && !isExempt(p);
+                    && !underEscort(p) && !jailed(p) && isSurvivalOrAdventure(p) && !isExempt(p);
             if (!hostile && !aggroMarked.contains(p.uuid())) continue;
             var near = guards.guardsNear(p.dimension(), p.x(), p.y(), p.z(),
                     ctx.policies().storageAggroRange, ctx.policies().storageFactionId);
