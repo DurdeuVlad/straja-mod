@@ -356,6 +356,15 @@ public final class StrajaGameTests {
         NeoForge.EVENT_BUS.post(breakOutside);
         helper.assertFalse(breakOutside.isCanceled(),
                 "blocks outside protected areas must stay mutable");
+
+        // The GameTest world persists across runs — the confirmed cell must
+        // not leak into the shared cell pool or it eventually hits maxCells.
+        var prison = runtime.context().prison().read();
+        prison.cells.removeIf(c -> c != null && dimension.equals(c.dimension)
+                && inside.getX() >= c.minX && inside.getX() <= c.maxX
+                && inside.getY() >= c.minY && inside.getY() <= c.maxY
+                && inside.getZ() >= c.minZ && inside.getZ() <= c.maxZ);
+        runtime.context().prison().write(prison);
         helper.succeed();
     }
 
