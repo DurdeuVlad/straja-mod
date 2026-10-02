@@ -302,7 +302,9 @@ class CheckpointServiceTest {
 
         move(5, 60, 5);
 
-        assertEquals(BoloStatus.CANCELLED, ctx.bolos().read().records.get(0).status);
+        // LAW-007: a lawful arrest resolves the mark — RESOLVED on the books,
+        // not CANCELLED (which stays the admin/user cancel outcome).
+        assertEquals(BoloStatus.RESOLVED, ctx.bolos().read().records.get(0).status);
         assertTrue(inCell());
     }
 

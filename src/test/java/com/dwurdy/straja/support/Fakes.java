@@ -463,6 +463,10 @@ public final class Fakes {
             Guard g = guards.get(guardId);
             if (g != null && playerId != null && playerId.equals(g.target)) g.target = null;
         }
+        @Override public boolean isGuardOf(UUID entityId, int factionId) {
+            Guard g = guards.get(entityId);
+            return g != null && !g.dead && g.factionId == factionId;
+        }
     }
 
     // ---------------------------------------------------------------- currency

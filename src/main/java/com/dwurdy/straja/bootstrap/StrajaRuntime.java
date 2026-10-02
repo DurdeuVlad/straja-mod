@@ -65,6 +65,7 @@ public final class StrajaRuntime {
     private final com.dwurdy.straja.application.service.CheckpointService checkpoints;
     private final com.dwurdy.straja.application.service.MerchantDeskService desks;
     private final com.dwurdy.straja.application.service.LaborCampService laborCamps;
+    private final com.dwurdy.straja.application.service.WantedService wanted;
     private final com.dwurdy.straja.application.service.EvidenceService evidence;
     private final com.dwurdy.straja.application.service.ArrestRecordService arrestRecords;
     private final com.dwurdy.straja.application.service.ReputationService reputation;
@@ -314,7 +315,6 @@ public final class StrajaRuntime {
         // M4 uncuff boundary rule: restraints off inside custody keep the
         // prisoner; outside custody mark them fugitive.
         this.custody.onRestraintReleased(prison::onUncuffed);
-        this.custody.onRestraintApplied(prison::onEscortStart);
         this.fines = new com.dwurdy.straja.application.service.FineService(ctx, players, audit, prison);
         this.complaints = new com.dwurdy.straja.application.service.ComplaintService(ctx, players, audit);
         this.complaints.useV2Escalation(v2ComplaintEscalation);
@@ -347,14 +347,26 @@ public final class StrajaRuntime {
         this.arrestRecords = new com.dwurdy.straja.application.service.ArrestRecordService(ctx, players, audit);
         this.reputation = new com.dwurdy.straja.application.service.ReputationService(
                 ctx, players, audit, incidents, bolos);
+        // LAW-007: the authoritative wanted surface — guards, checkpoints and
+        // the storage watch all read wanted/escort state through one service.
+        this.wanted = new com.dwurdy.straja.application.service.WantedService(
+                ctx, audit, bolos, custody);
+        this.custody.onRestraintApplied((officer, target) -> {
+            prison.onEscortStart(officer, target);
+            // LAW-007: cuffs landing calls the hunt off immediately — no
+            // waiting for the next periodic aggro scan.
+            wanted.onCuffed(officer, target);
+        });
         this.storage = new com.dwurdy.straja.application.service.StorageService(
                 ctx, players, audit, bolos, prison);
         this.storage.useCustody(this.custody);
+        this.storage.useWanted(this.wanted);
         this.prison.useBolos(bolos);
         this.checkpoints = new com.dwurdy.straja.application.service.CheckpointService(
                 ctx, audit, prison, storage, bolos, v2Personnel, custody);
         // LAW-006: camp exits confiscate repelled prisoners' banned cargo.
         this.checkpoints.useSeizure(seizure);
+        this.checkpoints.useWanted(this.wanted);
         this.desks = new com.dwurdy.straja.application.service.MerchantDeskService(
                 ctx, players, audit);
         this.laborCamps = new com.dwurdy.straja.application.service.LaborCampService(
@@ -532,6 +544,8 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.service.CheckpointService checkpoints() { return checkpoints; }
     public com.dwurdy.straja.application.service.MerchantDeskService desks() { return desks; }
     public com.dwurdy.straja.application.service.LaborCampService laborCamps() { return laborCamps; }
+    public com.dwurdy.straja.application.service.WantedService wanted() { return wanted; }
+    public com.dwurdy.straja.application.port.in.WantedRoleplayUseCase wantedRoleplay() { return wanted; }
     public com.dwurdy.straja.application.service.EvidenceService evidence() { return evidence; }
     public com.dwurdy.straja.application.service.ArrestRecordService arrestRecords() { return arrestRecords; }
     public com.dwurdy.straja.application.service.ReputationService reputation() { return reputation; }

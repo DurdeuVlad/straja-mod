@@ -369,6 +369,20 @@ verification run); no external scripting needed. The
 `TestPlayer`/`TestContainers`/`TestNpcGuards` fakes (#221) cover the
 unit-test layer.
 
+**M7 status (LAW-007, #218):** the wanted surface consolidated into
+`WantedService` (`isWanted` = active BOLO ∪ register FUGITIVE ∪ unexpired
+legacy marks; `isUnderEscort` = cuffed ∧ officer within tether radius).
+`StorageService.aggroScan` and `CheckpointService.isHunted` delegate to it;
+`NpcGuardGateway.isGuardOf` identifies faction guards for the
+`LivingIncomingDamageEvent` hold-fire wall (`StrajaEvents.onGuardVsEscortedDamage`);
+cuff application drops guard aggro immediately via `WantedService.onCuffed`
+wired into the restraint-applied hook; arrest/release resolve marks as
+`BoloStatus.RESOLVED` (admin cancels stay `CANCELLED`). Guard targeting on
+CustomNPCs entities is steering through `setTarget`/`clearTargetIfTargeting`
+— the CustomNPCs AI tick consumes `Mob.target`, so the periodic spatial scan
+is the targeting injection; native `StrajaNpcEntity` is `NoAi` and carries
+no combat goals by design.
+
 ---
 
 ## 9. Open decisions

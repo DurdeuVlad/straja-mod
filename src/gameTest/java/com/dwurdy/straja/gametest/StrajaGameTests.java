@@ -962,4 +962,51 @@ public final class StrajaGameTests {
         }
         helper.succeed();
     }
+
+    /**
+     * LAW-007: the authoritative wanted surface — a BOLO makes a player
+     * wanted, a register FUGITIVE counts even with no BOLO, and arresting the
+     * suspect resolves every mark and clears wanted state.
+     */
+    @GameTest(template = "empty")
+    public static void wantedMarksLifecycle(GameTestHelper helper) {
+        var runtime = runtime(helper);
+        var prisoner = mockPlayer(helper);
+        var pg = gateway(prisoner);
+
+        var bs = runtime.context().bolos().read();
+        var record = new com.dwurdy.straja.domain.model.BoloRecord();
+        record.id = "b-gt-1";
+        record.subjectUuid = prisoner.getUUID().toString();
+        record.subjectName = prisoner.getGameProfile().getName();
+        record.status = com.dwurdy.straja.domain.model.BoloStatus.ACTIVE;
+        bs.records.add(record);
+        runtime.context().bolos().write(bs);
+        helper.assertTrue(runtime.wanted().isWanted(prisoner.getUUID()),
+                "an ACTIVE bolo must make the player wanted");
+
+        var commissioner = new VirtualPlayerGateway("dwurdy");
+        commissioner.setOp(true);
+        commissioner.setDimension(prisoner.level().dimension().location().toString());
+        runtime.prison().arrest(pg, null, 1, commissioner, "gt-wanted");
+
+        bs = runtime.context().bolos().read();
+        helper.assertTrue(bs.records.get(0).status
+                        == com.dwurdy.straja.domain.model.BoloStatus.RESOLVED,
+                "arrest must resolve the bolo as RESOLVED");
+        helper.assertTrue(!runtime.wanted().isWanted(prisoner.getUUID()),
+                "an arrested suspect must no longer be wanted");
+
+        var reg = runtime.context().prisonerRegister().read();
+        var rec = reg.prisoner(prisoner.getUUID().toString());
+        rec.status = com.dwurdy.straja.domain.model.PrisonerStatus.FUGITIVE;
+        runtime.context().prisonerRegister().write(reg);
+        helper.assertTrue(runtime.wanted().isWanted(prisoner.getUUID()),
+                "a register fugitive is wanted even with no active bolo");
+        rec.status = com.dwurdy.straja.domain.model.PrisonerStatus.RELEASED;
+        runtime.context().prisonerRegister().write(reg);
+        helper.assertTrue(!runtime.wanted().isWanted(prisoner.getUUID()),
+                "release must clear wanted state");
+        helper.succeed();
+    }
 }

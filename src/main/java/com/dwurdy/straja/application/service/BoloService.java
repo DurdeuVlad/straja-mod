@@ -129,6 +129,14 @@ public final class BoloService {
      * Returns the number of active BOLOs cancelled.
      */
     public synchronized int clearFor(UUID subjectUuid) {
+        return resolveFor(subjectUuid, BoloStatus.CANCELLED, "arrest_clear");
+    }
+
+    /**
+     * LAW-007: a lawful resolution marks active marks RESOLVED rather than
+     * CANCELLED — arrest and formal release both end the hunt on the books.
+     */
+    public synchronized int resolveFor(UUID subjectUuid, BoloStatus status, String note) {
         String key = subjectUuid == null ? "" : subjectUuid.toString();
         if (key.isEmpty()) return 0;
         BoloStore data = store();
@@ -136,10 +144,10 @@ public final class BoloService {
         for (BoloRecord record : data.records) {
             if (record != null && record.status == BoloStatus.ACTIVE
                     && key.equals(record.subjectUuid)) {
-                record.status = BoloStatus.CANCELLED;
+                record.status = status;
                 cleared++;
                 audit.record("bolo_cancel", "system", "", record.id,
-                        record.subjectUuid, "SUCCESS", "arrest_clear");
+                        record.subjectUuid, "SUCCESS", note);
             }
         }
         if (cleared > 0) ctx.bolos().write(data);

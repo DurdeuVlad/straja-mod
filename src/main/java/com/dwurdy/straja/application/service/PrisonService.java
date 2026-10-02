@@ -395,6 +395,13 @@ public class PrisonService implements PrisonRoleplayUseCase {
             teleportToCell(online, cell);
             online.setGameMode("adventure");
         }
+        // LAW-007: the moment custody consumes the suspect — jailed or
+        // waitlisted-seized — every wanted mark resolves on the books.
+        if (bolos != null && online != null && online.uuid() != null
+                && (jailed || sentence.cellId.isEmpty())) {
+            bolos.resolveFor(online.uuid(),
+                    com.dwurdy.straja.domain.model.BoloStatus.RESOLVED, "arrested");
+        }
         if (online != null) {
             online.tell("Ai fost arestat pentru " + sentence.sentenceDays
                     + " zi(e) de Minecraft. Timpul se consumă doar când ești online și activ.");
@@ -426,7 +433,8 @@ public class PrisonService implements PrisonRoleplayUseCase {
             ctx.prisonerRegister().write(reg);
         }
         if (wasHunted && bolos != null && target.uuid() != null) {
-            bolos.clearFor(target.uuid());
+            bolos.resolveFor(target.uuid(),
+                    com.dwurdy.straja.domain.model.BoloStatus.RESOLVED, "arrested");
         }
         var cell = blank(sentence.cellId) ? null : store().cell(sentence.cellId);
         if (camp != null && custody.enterJail(target, "prison")) {
@@ -524,7 +532,8 @@ public class PrisonService implements PrisonRoleplayUseCase {
         }
         if (bolos != null && sentence.targetUuid != null && !sentence.targetUuid.isEmpty()) {
             try {
-                bolos.clearFor(java.util.UUID.fromString(sentence.targetUuid));
+                bolos.resolveFor(java.util.UUID.fromString(sentence.targetUuid),
+                        com.dwurdy.straja.domain.model.BoloStatus.RESOLVED, "released");
             } catch (IllegalArgumentException ignored) {}
         }
         if (target != null) {
@@ -645,7 +654,8 @@ public class PrisonService implements PrisonRoleplayUseCase {
         if (custody.enterJail(target, "prison")) {
             if (rec != null && rec.status == PrisonerStatus.FUGITIVE && bolos != null
                     && target.uuid() != null) {
-                bolos.clearFor(target.uuid());
+                bolos.resolveFor(target.uuid(),
+                        com.dwurdy.straja.domain.model.BoloStatus.RESOLVED, "arrested");
             }
             if (rec == null) {
                 rec = new com.dwurdy.straja.domain.model.PrisonerRegisterRecord(

@@ -880,6 +880,32 @@ public final class StrajaEvents {
         }
     }
 
+    /**
+     * LAW-007 escort protection: a wanted suspect cuffed and tethered to a
+     * reachable officer is already caught — guard NPCs (CustomNPCs faction
+     * members or native guard-role entities) must never damage them. This is
+     * the hard wall behind the scan's soft suspension: it cancels the hit
+     * even in the window before the next aggro tick clears the target.
+     */
+    @SubscribeEvent
+    public void onGuardVsEscortedDamage(
+            net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent event) {
+        StrajaRuntime runtime = StrajaRuntime.get();
+        if (runtime == null || event.getEntity().level().isClientSide()
+                || !(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer target)) {
+            return;
+        }
+        var attacker = event.getSource().getEntity();
+        if (attacker == null || attacker instanceof net.minecraft.server.level.ServerPlayer) {
+            return;
+        }
+        var targetGateway = new MinecraftPlayerGateway(target.getServer(), target.getUUID());
+        if (runtime.wantedRoleplay().guardDamageBlocked(attacker.getUUID(),
+                npcRoleOf(runtime, attacker), targetGateway)) {
+            event.setCanceled(true);
+        }
+    }
+
     /** Hurting or killing the jailer NPC spawns a JAILER_ASSAULT arrest mission. */
     @SubscribeEvent
     public void onNpcDamage(net.neoforged.neoforge.event.entity.living.LivingDamageEvent.Post event) {

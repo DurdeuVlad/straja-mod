@@ -115,6 +115,18 @@ Configurare TOML (`straja-server.toml`): `[economy].tierRatio` (implicit 64),
 coinItemIds pentru cele patru monede, `[labor_camp].freedomPriceMode` /
 `freedomFlatPrice` / `freedomFineMultiplier` ca fallbackuri per-lagăr.
 
+### Gărzi și urmărire (LAW-007)
+
+Gărzile NPC (facțiunea `[storage].factionId`, implicit 12) atacă din proprie
+inițiativă orice jucător **wanted**: BOLO activ (`/straja bolo`), fugitiv
+înregistrat (evadare din celulă/lagăr) sau marcă wanted moștenită. Reguli de
+angajare: **niciodată** un suspect încătușat aflat în escortă (ofiterul în
+raza lese) — lovitura e anulată chiar și între două cicluri de scanare;
+niciodată un deținut în custodie sau un jucător în afara survival/adventure.
+Arestarea rezolvă marcajele ca `RESOLVED`; eliberarea face la fel. Anularea
+manuală a unui BOLO **nu** oprește urmărirea unui fugitiv înregistrat —
+statutul de custodie rămâne adevărul autoritar.
+
 ## 4. Verificare finală
 
 ```
