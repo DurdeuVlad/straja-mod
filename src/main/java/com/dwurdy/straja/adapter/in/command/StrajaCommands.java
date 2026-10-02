@@ -1093,12 +1093,13 @@ public final class StrajaCommands {
             node.then(Commands.literal("hunted")
                     .executes(c -> player(c, StrajaRuntime.get().storage()::hunted)));
         }
-        attachStorageBridge(node);
+        attachStorageBridge(node, adminSurface);
         return node;
     }
 
     /** The deposit bridge + help — shared by the admin subtree and the perm-2 alias. */
-    private static void attachStorageBridge(LiteralArgumentBuilder<CommandSourceStack> node) {
+    private static void attachStorageBridge(LiteralArgumentBuilder<CommandSourceStack> node,
+            boolean adminSurface) {
         node.then(Commands.literal("deposit")
                 .then(Commands.argument("player", EntityArgument.player())
                 .then(Commands.argument("item", StringArgumentType.word())
@@ -1131,13 +1132,16 @@ public final class StrajaCommands {
                     return 0;
                 })))));
         node.then(Commands.literal("help").executes(c -> {
-            for (String line : List.of(
-                    "/straja storage pick dest|zone|chest — arm the in-game pickers",
-                    "/straja storage pick off — disarm",
-                    "/straja storage deposit <player> <item> <count> — merchant deposit bridge",
-                    "/straja storage status — show picked configuration",
-                    "/straja storage hunted — list flagged thieves and their debt",
-                    "/straja storage resetcfg — drop all picked configuration")) {
+            var lines = adminSurface
+                    ? List.of(
+                        "/straja storage pick dest|zone|chest — arm the in-game pickers",
+                        "/straja storage pick off — disarm",
+                        "/straja storage deposit <player> <item> <count> — merchant deposit bridge",
+                        "/straja storage status — show picked configuration",
+                        "/straja storage hunted — list flagged thieves and their debt",
+                        "/straja storage resetcfg — drop all picked configuration")
+                    : List.of("/strajastorage deposit <player> <item> <count> — merchant deposit bridge");
+            for (String line : lines) {
                 c.getSource().sendSystemMessage(Component.literal(line));
             }
             return 1;

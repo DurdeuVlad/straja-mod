@@ -97,9 +97,11 @@ public final class StorageService {
         if (player != null) {
             clearThief(store, player, Release.ARRESTED);
         } else {
-            // Offline target: drop the flag so the hunt stops; rep restore is a
-            // no-op while offline and the ledger still records the release.
+            // Offline target: drop the flag and finish the team quest — the
+            // quest command is team-scoped and works without the player online.
             store.clearThief(key);
+            ctx.npcGuards().finishQuestForTeam(
+                    ctx.policies().storageHuntTeam, ctx.policies().storageHuntQuestId);
             audit.record("storage_thief_cleared", "storage", "", key, key, "ARRESTED", "offline");
         }
         save(store);
@@ -280,7 +282,10 @@ public final class StorageService {
             int count = ctx.containers().countUnits(chest.dimension(), chest.x(), chest.y(), chest.z(),
                     ctx.policies().storageWatchedItemUnits);
             if (count < 0) continue;
-            String key = chest.key();
+            // Canonical key: both halves of a joined chest share one cache
+            // entry, so registering both halves can never double-attribute.
+            String key = ctx.containers().canonicalKey(
+                    chest.dimension(), chest.x(), chest.y(), chest.z());
             // Consume our own deposits first: when the chest was never polled
             // (fresh boot/reset), the deposit is folded into the baseline so
             // the next delta cannot attribute our deposit to a bystander.
@@ -385,9 +390,10 @@ public final class StorageService {
 
     /** Guards keep the flagged player's faction pinned at 0 unless jailed. */
     private void enforceRep() {
+        var watchStore = store();
         for (var p : ctx.server().onlinePlayers()) {
             if (jailed(p)) continue;
-            if (isThief(p.uuid())) {
+            if (watchStore.isThief(p.uuid().toString())) {
                 ctx.npcGuards().setFactionPoints(p.uuid(), ctx.policies().storageFactionId, 0);
             }
         }
@@ -413,21 +419,23 @@ public final class StorageService {
         int leftover = ctx.containers().insert(dest.dimension(), dest.x(), dest.y(), dest.z(), itemId, count);
         if (leftover < 0) return new DepositResult(false, 0, count); // item id does not resolve
         int inserted = count - leftover;
-        if (inserted > 0 && isWatched(store, dest)) {
+        String destKey = ctx.containers().canonicalKey(dest.dimension(), dest.x(), dest.y(), dest.z());
+        if (inserted > 0 && isWatched(store, destKey)) {
             // Only a watched chest needs the netting entry — unwatched dests
             // would accumulate the map forever for no benefit.
-            pendingDeposits.merge(dest.key(), inserted * value, Integer::sum);
+            pendingDeposits.merge(destKey, inserted * value, Integer::sum);
         }
         if (leftover > 0) {
-            ctx.containers().dropItem(dest.dimension(), dest.x(), dest.y() + 1, dest.z(), itemId, leftover);
+            ctx.containers().dropItem(dest.dimension(), dest.x(), dest.y(), dest.z(), itemId, leftover);
         }
         audit.record("storage_deposit", "storage", "", playerName, "", "OK",
                 count + "x " + itemId + " (leftover " + leftover + ")");
         return new DepositResult(true, inserted, leftover);
     }
 
-    private static boolean isWatched(StorageWatchStore store, StoragePoint point) {
-        return store.setup().chests().stream().anyMatch(c -> c.key().equals(point.key()));
+    private boolean isWatched(StorageWatchStore store, String canonicalKey) {
+        return store.setup().chests().stream().anyMatch(c ->
+                ctx.containers().canonicalKey(c.dimension(), c.x(), c.y(), c.z()).equals(canonicalKey));
     }
 
     // --------------------------------------------------------------- picking
@@ -492,7 +500,9 @@ public final class StorageService {
                     admin.refuse("straja.storage.pick_not_container", "straja.remedy.fix_retry");
                     return true;
                 }
-                boolean dup = store.setup().chests().stream().anyMatch(c -> c.key().equals(point.key()));
+                String canon = ctx.containers().canonicalKey(dimension, x, y, z);
+                boolean dup = store.setup().chests().stream().anyMatch(c ->
+                        ctx.containers().canonicalKey(c.dimension(), c.x(), c.y(), c.z()).equals(canon));
                 if (dup) {
                     admin.tellKey("straja.storage.pick_chest_dup", point.key());
                 } else {
@@ -521,13 +531,14 @@ public final class StorageService {
     // ------------------------------------------------------------ reporting
 
     public void status(PlayerGateway admin) {
-        var setup = store().setup();
+        var s = store();
+        var setup = s.setup();
         admin.tellKey("straja.storage.status_dest",
                 setup.dest() == null ? "-" : setup.dest().key());
         admin.tellKey("straja.storage.status_zone",
                 setup.zone() == null ? "-" : zoneKey(setup.zone()));
         admin.tellKey("straja.storage.status_chests", setup.chests().size());
-        admin.tellKey("straja.storage.status_thieves", store().thieves().size());
+        admin.tellKey("straja.storage.status_thieves", s.thieves().size());
     }
 
     public void hunted(PlayerGateway admin) {

@@ -26,8 +26,9 @@ public final class StorageWatchStore {
         return thieves;
     }
 
+    /** Null-record safe: corrupt JSON can leave a null value under a uuid key. */
     public boolean isThief(String uuid) {
-        return thieves().containsKey(uuid);
+        return thieves().get(uuid) != null;
     }
 
     public ThiefRecord thief(String uuid) {

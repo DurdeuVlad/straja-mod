@@ -73,9 +73,11 @@ public final class MinecraftContainerGateway implements WorldContainerGateway {
         if (container == null || count <= 0) return count;
         Item resolved = item.get();
         int remaining = count;
+        var template = new ItemStack(resolved);
         for (int i = 0; i < container.getContainerSize() && remaining > 0; i++) {
             ItemStack cur = container.getItem(i);
-            if (cur.isEmpty() || cur.getItem() != resolved || cur.getCount() >= cur.getMaxStackSize()) continue;
+            if (cur.isEmpty() || !ItemStack.isSameItemSameComponents(cur, template)
+                    || cur.getCount() >= cur.getMaxStackSize()) continue;
             int move = Math.min(remaining, cur.getMaxStackSize() - cur.getCount());
             cur.grow(move);
             container.setItem(i, cur);
@@ -97,5 +99,23 @@ public final class MinecraftContainerGateway implements WorldContainerGateway {
         if (level == null || item.isEmpty() || item.get() == net.minecraft.world.item.Items.AIR || count <= 0) return;
         var entity = new ItemEntity(level, x + 0.5, y + 1.0, z + 0.5, new ItemStack(item.get(), count));
         level.addFreshEntity(entity);
+    }
+
+    @Override public String canonicalKey(String dimension, int x, int y, int z) {
+        ServerLevel level = level(dimension);
+        if (level == null) return WorldContainerGateway.super.canonicalKey(dimension, x, y, z);
+        var pos = new BlockPos(x, y, z);
+        var state = level.getBlockState(pos);
+        if (state.getBlock() instanceof net.minecraft.world.level.block.ChestBlock
+                && state.getValue(net.minecraft.world.level.block.ChestBlock.TYPE)
+                        != net.minecraft.world.level.block.state.properties.ChestType.SINGLE) {
+            var partner = pos.relative(
+                    net.minecraft.world.level.block.ChestBlock.getConnectedDirection(state));
+            // Canonical half = lexicographically smaller position, so either
+            // half's click or watch resolves to the same key.
+            var canon = pos.compareTo(partner) <= 0 ? pos : partner;
+            return dimension + "|" + canon.getX() + "," + canon.getY() + "," + canon.getZ();
+        }
+        return WorldContainerGateway.super.canonicalKey(dimension, x, y, z);
     }
 }
