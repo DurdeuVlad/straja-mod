@@ -66,7 +66,9 @@ blocks) are **untrusted inputs** natively. Rules carried into every mapping:
 | `server.runCommandSilent('execute in … tp …')` | `ServerPlayer.teleportTo(ServerLevel, x,y,z, yaw,pitch)` via `WorldGateway`/`ServerGateway` | pushback + jail teleport |
 | `block.set('minecraft:iron_door', props)` | `ServerLevel.setBlock(pos, state.setValue(DoorBlock.OPEN,false), 3)` via `WorldGateway` | door closure |
 | `player.persistentData` | `SavedData` stores (`adapter/out/persistence`, `JsonBackedStore`) keyed by UUID | all durable flags move to stores |
-| `player.tell`, `cpTitle`, `cpSound` | `PlayerGateway.sendMessage`/`tellKey`, `title`, `playSound` | existing gateway methods |
+| `player.tell`, `cpTitle`, `cpSound` | `PlayerGateway.tell`/`tellKey`/`title`, `WorldGateway.playSoundAt` | existing gateway methods |
+| `cpSetGameMode` (`gamemode` cmd) | **new** `PlayerGateway.setGameMode(GameType)` + `gameMode()` getter | adventure custody + mode restore need it; nothing sets gamemode natively today |
+| cuff/escort entity interaction (AT8 — net-new, no prototype code) | `PlayerInteractEvent.EntityInteract` (already wired for cuffs/rope in `StrajaEvents`), `LivingIncomingDamageEvent`→`actionBlocked` for attack suppression, `PlayerTickEvent.Post` distance tether | `EntityInteract` isn't an attack-cancel path; there is no server-side sprint input event — sprint blocking is speed-enforced server-side |
 | `stack.get(DataComponents.CONTAINER/BUNDLE_CONTENTS)` | same vanilla API on `ItemStack` inside `MinecraftInventoryView`/`ItemView` | deep container scan, §5 |
 | ItemHandler capability | `Capabilities.ItemHandler.ITEM` | modded backpacks — see §5 |
 | `player.inventory` iteration | `Player.getInventory()`, `player.getOffhandItem()`, armor slots via `InventoryView` | inspection snapshots |
@@ -89,14 +91,20 @@ board zone, doors[], denyTarget, link, cb overrides, siteExempts} plus global
 `CP_SITE_RADIUS` (24) for command context, but gate scanning tests *every*
 site's gates (lanes can sit beyond the anchor radius).
 
-**Two-stage crossing** (`cpInspect`, `cpArrest`/delegation): command-driven,
-fired by pressure-plate command blocks or NPC dialogue at two physical
-points. Stage 1 (`inspect`): banned → title+pushback to `denyTarget`;
-fugitive/hunted → delegate arrest; contraband → warn title + itemized list +
-log `warned`; clean → log `in`, optional confirmation. Stage 2 is the prison
-service's arrest path (see §4). Legacy single-stage verbs `aggressive`
-(mark wanted `strajaWantedUntil`), `info` (list only), `deny` (pushback only)
-remain for custom gates.
+**Two-stage crossing** (`cpInspect`, `cpArrest`): command-driven, fired by
+pressure-plate command blocks or NPC dialogue at two physical points.
+Stage 1 (`inspect`): banned → title+pushback to `denyTarget`; in-custody
+(`cpJailed`) → delegate arrest; contraband → warn title + itemized list +
+log `warned`; clean → log `in`, optional confirmation. **Note:** stage 1 does
+*not* consult `cpIsHunted` (thief/fugitive/`strajaWantedUntil`) — a wanted
+player with clean pockets passes silently. Stage 2 (`cpArrest`, a separate
+checkpoint-side verb): re-runs banned/`cpJailed`/`cpIsHunted`/contraband
+assessment, picks the arrest reason, then delegates to `strajaprison arrest`;
+clean players log `out`. So AT6's "wanted on-sight arrest at stage 1 / gate"
+is **new** behavior over the prototype — it must be added natively, not just
+ported. Legacy single-stage verbs `aggressive` (mark `strajaWantedUntil` —
+no-op on clean inventory), `info` (list only), `deny` (pushback only,
+no-op on clean) remain for custom gates.
 
 **Gate lanes** (`cpGateScan`, every 5 ticks): per-player prev-position map;
 movement segment vs each gate's directed segment `a→b`; `cpSegCross` strict
@@ -105,18 +113,20 @@ teleport guard; survival/adventure only. Wrong-way (`cpGateSide` sign
 mismatch vs `from` marker) → `cpGateDeny` teleports back to the **origin
 point** (never `from`, which would deliver exit-violators to their
 destination) + close doors + log `denied`. Right-way at a **linked** site:
-consumes a boarding stamp (`cpBoard`, 20 min wall-clock TTL) or runs the full
-stage-2 pipeline at the line (`cpGateArrive`: banned→pushback,
-custody/hunted→arrest, contraband→arrest, else log).
+consumes a boarding stamp (`cpBoard`, 20 min wall-clock TTL) or runs the
+arrival pipeline at the line (`cpGateArrive`: banned→pushback,
+`cpJailed`→arrest, contraband→arrest, else log). Like stage 1, it does
+*not* check `cpIsHunted` — wanted-on-sight at gates is new work (AT6).
 
-**Boarding zones** (`cpBoardScan`): player riding a `*boat*`-typed vehicle
-inside a site's board rectangle (XZ box + |Δy|≤6) is scanned on the spot;
+**Boarding zones** (`cpBoardScan`): player riding a `boat`- or `raft`-typed
+vehicle inside a site's board rectangle (XZ box + |Δy|≤6) is scanned on the spot;
 contraband/banned/custody → arrest; clean → stamp written. Prevents
 jump-off-mid-route checkpoint skipping.
 
-**Pushback & doors**: `cpPushBack` = tp to site `denyTarget` (yaw preserved)
-+ `cpCloseDoors` iterating `site.doors[]` setting `iron_door.open=false` on
-both door halves (dy 0..1).
+**Pushback & doors**: `cpPushBack` = tp to site `denyTarget` (configured yaw,
+pitch 0 — `PlayerGateway.teleport` lacks yaw today; extend the signature or
+drop yaw) + `cpCloseDoors` iterating `site.doors[]` setting `iron_door`
+`open=false` **and** `powered=false` on both door halves (dy 0..1).
 
 **Deep contraband scan** (`cpScanContraband` → `cpSubStacks` +
 `cpScanTagForContraband` + `cpDeepScan`, recursion depth ≤3): inventory +
@@ -127,9 +137,13 @@ components yielded nothing (no double-count); else `stack.save(registryAccess)`
 NBT fallback scanning `components` subtree for item IDs. Site-local `cb[id]`
 overrides global contraband (`true`=extra ban, `false`=site exception).
 
-**Inspection ledger**: `cpLogEvent` appends `{t,event,name,inv,detail}` to
-`kubejs/checkpoint-log.json` (cap 2000); `inv` = `cpInvSummary` full
-inventory snapshot `{id:{count,name}}` taken **before** any mutation.
+**Inspection ledger**: `cpLogEvent` appends `{t, iso, event, name, inv, detail}`
+to `kubejs/checkpoint-log.json` (cap 2000); `inv` = `cpInvSummary`, a
+**compact 500-char string** (`"3x minecraft:gold_ingot; …"`), not a
+structured snapshot — the structured `{id:{count,name}}` map is the
+contraband-only `found` result stored in the jail register's `items`. AT4's
+"full inventory snapshot at the moment of arrest" is therefore a **native
+upgrade**, not prototype parity (see §5 snapshot shape).
 
 ### 3.2 Mapping matrix (target = new types unless noted)
 
@@ -142,11 +156,11 @@ inventory snapshot `{id:{count,name}}` taken **before** any mutation.
 | `cpPushBack`, door close | `PlayerGateway.teleport` (existing), `WorldGateway.setDoorOpen(pos,false)` (new port method) | `ServerLevel.setBlock` `DoorBlock.OPEN` |
 | boarding zone + boat check | `BoardingZone.contains(pos)` + mount trigger | `EntityMountEvent` (or keep tick poll on `ServerPlayer.getVehicle() instanceof Boat`) |
 | `cpBoard` stamp TTL | `BoardingStamp` in `CheckpointSiteStore` (epoch ms, like storage hunt fields) | wall-clock TTL survives restarts (prototype rationale preserved) |
-| `cpInspect`/`cpAggressive`/`cpInfo`/`cpDeny` stage verbs | `CheckpointService.inspect/deny/info/markWanted` invoked by `/straja checkpoint …` **and** an NPC surface action (`NpcSurfaceAction`) so dialogues/plates keep working | plates become interactable block bindings or stay command-block → `/straja` alias |
+| `cpInspect`/`cpArrest`/`cpAggressive`/`cpInfo`/`cpDeny` stage verbs | `CheckpointService.inspect/arrestStage2/deny/info/markWanted` invoked by `/straja checkpoint …` **and** an NPC surface action (`NpcSurfaceAction`) so dialogues/plates keep working; `arrestStage2` keeps the checkpoint-side assessment (`cpJailed`/`cpIsHunted`/contraband → reason selection, clean → `log 'out'`) | plates become interactable block bindings or stay command-block → `/straja` alias |
 | `cpScanContraband` + deep scan | `ContrabandScanner` (application service) over `InventoryView` + new `DeepItemScanner` port | §5 |
 | `cpLogEvent`/ledger | `InspectionLedger` domain + `ArrestRecordService`/`EvidenceService` snapshot reuse; new `CheckpointLogStore` | JSON `SavedData`, cap port of `CP_LOG_MAX` |
-| `cpIsBanned`/exempts | fields on `CheckpointSite` + global `CheckpointPolicy` | — |
-| `strajaWantedUntil` flag | `BoloService` active-BOLO check (storage already made this switch in #221) | wanted = BOLO record, not raw NBT |
+| `cpIsBanned`/`site.exempt`/global exempts | fields on `CheckpointSite` (`exempt`) + global `CheckpointPolicy` | — |
+| `strajaWantedUntil` flag | `BoloService` active check **plus a new system-issuance path** (`BoloService.create` is issuer-gated — on-duty guard + rank required — and `cancel` is issuer/superior-gated; checkpoint `aggressive` marks, escape fugitive marks, and AT6's clear-on-arrest need e.g. `issueSystemBolo`/`clearSystemBolo` bypassing issuer gates). Wanted = BOLO record, not raw NBT (storage made this switch in #221) | — |
 | `cpInCustody` check | `CustodyService.isCuffed/isBound` + `PrisonService.activeSentence` | existing |
 | `cpDelegateArrest` → `strajaprison arrest` | direct call `PrisonService.arrest(...)` with `ArrestRecord` reason/site | typed, no command string |
 | pick modes `cpPick*` | session-scoped map in `CheckpointService` (storage precedent), `MAIN_HAND` right-click | — |
@@ -174,33 +188,43 @@ inventory snapshot `{id:{count,name}}` taken **before** any mutation.
 legacy alias): `jailed[name]={t,reason,items,confiscated,status,site,arrests,
 pchest,jcell}` + `fines[name]=total`. `status`: `jailed`|`fugitive`.
 
-**Arrest pipeline** (`cpFinishArrest`): allocate personal-chest pair index
-(`cpAllocPChest`) + cell index (`cpAllocJCell`) if first booking →
+**Arrest pipeline** (`cpFinishArrest`): reuse `prev.pchest`/`prev.jcell`
+whenever the register has them (including legacy entries), else allocate
+(`cpAllocPChest`, `cpAllocJCell`) →
 `cpScanContraband` + `cpInvSummary` snapshot **before** seizure → `cpSeizeAll`
-(contraband → site `evidence[]` chest list with sequential overflow; personal
-items → the allocated personal chest pair; curios slots included) → flags:
+(classification is **per-stack** via `cpSlotIsContraband` — a clean backpack
+*hiding* contraband goes wholesale to evidence; contraband → site
+`evidence[]` chest list with sequential overflow; personal items → the
+allocated personal chest pair; personal overflow falls through to evidence;
+unplaceable leftovers stay on the player; curios slots included) → flags:
 `cpJailWasMode` (first time only), `cpJailed=true`, `cpFugitive=false`, scoreboard
 tag `cp_jailed` → clear hunt flags + restore faction rep (custody consumes the
 hunt) → adventure mode → `cpTpJail` → `cpGiveReport` (written book intake
 report) → register entry + log + jailer notify. Works for offline players
 (entry written, physical steps deferred).
 
-**Escape sweep** (`cpSweepJail`, 5-tick): for each jailed player —
+**Escape sweep** (`cpSweepJail`, every 40 ticks ≈ 2s): for each jailed player —
 stale-flag heal (released-while-offline → clear, restore mode+rep);
 `!cpJailed` → set; non-adventure non-exempt → force adventure; distance to
 cell `jt` > `SP_JAIL_RADIUS`(24) or wrong dimension → `status=fugitive` +
 `strajaWantedUntil` + faction rep 0 + log `escaped`. Fugitive physically back
 inside cell perimeter → recapture path.
 
-**Death/respawn**: `EntityEvents.death` — jailed or hunted player dying gets
-`cpSeizeAll` into personal chest + `cpJailOnRespawn` flag (hunted non-jailed
-also get a register entry so they're booked); `PlayerEvents.respawned` —
-`cpJailOnRespawn` → full `cpFinishArrest`; jailed → `cpRecapture` + adventure
-+ `cpTpJail`.
+**Death/respawn**: `EntityEvents.death` — any jailed-or-hunted death seizes
+into the personal chest (`cpSeizeAll`); additionally a **hunted non-jailed**
+death creates a register entry and sets `cpJailOnRespawn` (already-jailed
+deaths don't get that flag — their respawn path is recapture).
+`PlayerEvents.respawned` — `cpJailOnRespawn` → full `cpFinishArrest` (booked
+as "died while fleeing"); plain jailed → `cpRecapture` + adventure +
+`cpTpJail`.
 
 **Release** (`cpRelease`, jailer-gated): optional fine accumulation → pour
 personal chest pair back (`cpPourPChest`) → restore gamemode from
-`cpJailWasMode` → clear `cpJailed`, tag → status out of register.
+`cpJailWasMode` → clear `cpJailed`, tag → teleport the freed player to the
+arresting site's `denyTarget` → status out of register. **Offline release**:
+deleting the entry while offline reserves the chest pair in the register's
+`pendingChest[name]` bucket, poured back on the player's next login —
+belongings are never lost because the player was offline.
 
 ### 4.2 Mapping matrix
 
@@ -208,17 +232,17 @@ personal chest pair back (`cpPourPChest`) → restore gamemode from
 |---|---|---|
 | jail register `strajaPrisonJail` | extend `PrisonStore`/`Sentence` + `ArrestRecordStore` (booking fields: items, confiscated, pchest, jcell, site, arrests) | `SavedData` |
 | `cpJailed`/`cpFugitive`/`cpJailOnRespawn`/`cpJailWasMode` flags | `CustodyStore`/`PrisonStore` fields (CustodyState already carries restraint/jail status) | — |
-| `cpFinishArrest` | `PrisonService.arrest(...)` extended with seizure pipeline hook | existing service + new `SeizureService` for physical movement |
+| `cpFinishArrest` | `PrisonService.arrest(...)` extended with seizure pipeline hook. **Signature gaps**: today `arrest` requires a live `PlayerGateway` and `release` refuses offline targets — both need UUID/offline-capable overloads (prototype arrests and releases offline players fine). Also note: `Sentence` is day-based auto-SERVED vs the prototype's indefinite-until-jailer model — pick deliberately per sentence type | existing service + new `SeizureService` for physical movement |
 | `cpSeizeAll` contraband→evidence / personal→locker | `SeizureService` using `WorldContainerGateway.insert` (merge-then-fill, `-1`=invalid item) + `ChestBlock.getContainer` canonical keys (double-chest precedent from #221) | physical chest writes are server-side only |
 | `evidence[]` sequential overflow | `EvidenceChestPool` domain: ordered point list, fill-first-fit, mark changed | — |
 | `cpAllocPChest`/`cpFreePChest` personal lockers | `LockerPool` domain + sign write (`WorldGateway.setSignText`, replaces `cpWriteSign` command) | — |
 | `cpAllocJCell`/`cpJailSpot`/`cpTpJail` | existing `PrisonService` cells + `PlayerGateway.teleport` | `createCell`, `insideCell` already exist |
 | `cpGiveReport` written book | `DocumentService`/written-book item creation (`DataComponents.WRITTEN_BOOK_CONTENT`) | reuse document pipeline |
-| `cpSweepJail` escape/fugitive | `PrisonService.tick()` extension (already ticks) + `BoloService` for fugitive marking | `ServerTickEvent.Post` |
+| `cpSweepJail` escape/fugitive (40-tick) | **Replace**, don't extend: today's `PrisonService.tick()` teleports out-of-bounds inmates *back into* the cell — the fugitive state would be unreachable. M4 swaps in escape→fugitive marking + system BOLO | `ServerTickEvent.Post` |
 | rep suppress/restore (`cpSuppressRep`, faction id 12) | `NpcGuardGateway.setFactionPoints` with rep backup in `PrisonStore` (storage `ThiefRecord.repBackup` precedent) | CNPC reflection |
 | death seizure/`cpJailOnRespawn`/respawn recapture | `StrajaEvents.onPlayerDeath` → `PrisonService` hook; `PlayerRespawnEvent` → recapture | storage `onPlayerDeath` already wired here |
 | `cpRecapture` | `PrisonService.arrest` reuse with reason | — |
-| `cpRelease`+fines+jailer gate | `PrisonService.release(actor,target,reason)` + `FineService` | both exist; add locker restore + mode restore |
+| `cpRelease`+fines+jailer gate+release-teleport to arresting site's `denyTarget` | `PrisonService.release(actor,target,reason)` + `FineService`; offline release → `pendingChest` reservation poured back at login (`PlayerLoggedInEvent`) | add locker restore + mode restore + deny-target tp |
 | `/strajaprison …` | `/straja prison …` subtree + restricted `strajaprison` alias | — |
 
 ### 4.3 Prototype notes worth preserving
@@ -233,7 +257,7 @@ personal chest pair back (`cpPourPChest`) → restore gamemode from
   for offline targets (also how `StorageService` handles offline cleanup).
 - **`adventure_zone` datapack interference**: prototype comment notes an
   external datapack force-reverts adventure outside its zone — the sweep
-  re-enforces adventure every 5 ticks. Native port should apply gamemode on
+  re-enforces adventure every 40 ticks. Native port should apply gamemode on
   transitions *and* keep the sweep enforcement (in `PrisonService.tick()`).
 
 ---
@@ -293,9 +317,9 @@ Precedent mapping, already native and merged:
 | `SS_ZONE`/`SS_WATCHED_CHESTS`/`SS_DEST_CHEST` | `StorageZone`, `StoragePoint` list, `StorageSetup` | domain model |
 | `SS_ITEM_VALUES` | `[storage] watchedItems` `item_id=units` | `StrajaServerConfig`/`StrajaPolicies` |
 | `ssMarkThief`/`strajaThief`,`strajaOwed`,`strajaRepBackup` | `ThiefRecord` in store (thief flag, owed units, rep backup) | domain |
-| `ssPollWatchedChests` | `StorageService.pollWatchedChests` — canonical container keys fix double-chest double-attribution; pending-deposit netting for merchant desk writes | `ServerTickEvent.Post` |
-| `ssAggroScan` | `StorageService.scanGuardAggro` → `NpcGuardGateway` (reflection CNPC: faction filter, `stats.aggroRange`, target set/clear, LoS) | — |
-| `ssEnforceRep` | `StorageService.enforceReputation` — pin 0 while flagged, restore on clear | — |
+| `ssPollWatchedChests` | `StorageService` chest poll (internal) — canonical container keys fix double-chest double-attribution; pending-deposit netting for merchant desk writes | `ServerTickEvent.Post` |
+| `ssAggroScan` | `StorageService` aggro scan (internal) → `NpcGuardGateway` (reflection CNPC: faction filter, `stats.aggroRange`, target set/clear, LoS) | — |
+| `ssEnforceRep` | `StorageService` rep enforcement (internal) — pin 0 while flagged, restore on clear | — |
 | `noppes quest start/finish` | `NpcGuardGateway.startQuestForTeam/finishQuestForTeam` | CNPC console cmd bridge |
 | `strajaWantedUntil` read | `BoloService` active check | wanted = BOLO now |
 | `ssDepositItem`/`ssCmdDeposit` | `StorageService.deposit` — sequential fill, overflow drop +1y, `strajastorage` restricted alias kept for live NPC quest commands | — |
@@ -313,7 +337,7 @@ Migration (M8): `MigrationService.migrateServer` gains a `strajaStorageCfg` →
 |---|---|---|---|
 | `portCheckpointCfg` | checkpoint | `CheckpointSiteStore` + `[checkpoint]` TOML defaults | M1/M2 |
 | `portCheckpointJail` (legacy alias) | prison | `PrisonStore` fields | M8 migration read-only |
-| `strajaPrisonCfg` / `strajaPrisonJail` | prison | `PrisonStore` + `[prison]` TOML | M1/M4 |
+| `strajaPrisonCfg` / `strajaPrisonJail` (incl. `jailed`, `fines`, `pendingChest` buckets) | prison | `PrisonStore` + `[prison]` TOML; `pendingChest` → locker-reservation records | M1/M4 |
 | `strajaStorageCfg` / `strajaGoldCfg` | storage | `StorageWatchStore` | M8 migration read-only |
 | per-player `cpJailed`,`cpFugitive`,`cpJailOnRespawn`,`cpJailWasMode` | prison | `PrisonStore`/`CustodyStore` | M8 |
 | per-player `strajaThief`,`strajaOwed`,`strajaRepBackup` | storage | `ThiefRecord` fields | M8 |
@@ -335,14 +359,15 @@ Log files move into stores (no ad-hoc JSON files natively).
 | 3 | Port ARREST gate: contraband → instant custody | `CheckpointService` `ARREST` mode → `PrisonService.arrest` | GameTest |
 | 4 | Ledger & snapshot integrity (incl. nested containers) | `InspectionLedger` + `DeepItemScanner` snapshot into `ArrestRecord` | Unit test on `DeepItemScanner` (shulker/bundle/handler cases) + GameTest arrest snapshot equality |
 | 5 | Quartermaster trade: 4-coin payout (1:64 default, TOML tiers), optimal denomination breakdown, sequential chest fill, trade ledger | new `TradeService`/`EconomyService` (LAW-005): `[economy]` tiers Bronze/Brass/Silver/Gold + `WorldContainerGateway.insert` into desk chest list + `TradeLedger` store | Unit test denomination math incl. non-default ratios; GameTest chest fill order |
-| 6 | Wanted on-sight: arrest at any arresting checkpoint; deny-gate repel + sighting log; mark cleared on arrest | `BoloService` check inside `inspect`/`gateArrive`; `PrisonService.arrest` clears BOLO | GameTest both modes |
+| 6 | Wanted on-sight: arrest at any arresting checkpoint; deny-gate repel + sighting log; mark cleared on arrest | **New behavior** (prototype checked `cpIsHunted` only in stage-2 `cpArrest`): `BoloService` check inside `inspect`/`gateArrive` + system-BOLO issuance/clear path; `PrisonService.arrest` clears | GameTest both modes |
 | 7 | Labor camp loop: camp gate repels inmates; quartermaster credits penal account (no physical coins); freedom-price auto-release with locker restore; camp dormitory respawn keeps custody | `LaborCampService` (LAW-006): camp zone + `PenalAccountStore` + `[labor_camp]` TOML + respawn hook (`PlayerRespawnEvent` → camp spawn) | GameTest full loop; penal-account unit tests |
-| 8 | Escort & cuff tether: cuff suspends hunt + blocks sprint/attack; tether keeps suspect adjacent; escorted pass through repel-gate; uncuff inside→custody, outside→fugitive | `CustodyService` cuffs (exists) + new `EscortTetherService`: per-tick distance enforce (`PlayerTickEvent.Post`), sprint/attack cancel (`EntityInteract`/input events), gate check honors cuffing officer adjacency | GameTest tether + gate-with-officer pass |
+| 8 | Escort & cuff tether: cuff suspends hunt + blocks sprint/attack; tether keeps suspect adjacent; escorted pass through repel-gate; uncuff inside→custody, outside→fugitive | **Net-new** (prototypes have no cuff/escort code): `CustodyService` cuffs (exists) + new `EscortTetherService`: per-tick distance enforce (`PlayerTickEvent.Post`), attack cancel via `LivingIncomingDamageEvent`→`actionBlocked` (already wired) + server-side speed clamp for sprint (no client input trust), gate check honors cuffing officer adjacency | GameTest tether + gate-with-officer pass |
 
 All 8 are GameTest-realizable on the headless server harness already in the
-repo (`src/gameTest`, `runGameTestServer`, 24 tests green today); no external
-scripting needed. The `TestPlayer`/`TestContainers`/`TestNpcGuards` fakes
-(#221) cover the unit-test layer.
+repo (`src/gameTest`, `runGameTestServer`; 24 tests green as of PR #221's
+verification run); no external scripting needed. The
+`TestPlayer`/`TestContainers`/`TestNpcGuards` fakes (#221) cover the
+unit-test layer.
 
 ---
 
