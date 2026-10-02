@@ -62,6 +62,7 @@ public final class StrajaEvents {
         runtime.prisonRoleplay().tick();
         runtime.fineRoleplay().tick();
         runtime.expansionRoleplay().tick();
+        runtime.storage().tick();
         if (runtime.serverGateway().tickCount() % 20 != 0) return;
         runtime.v2Mobilizations().expireDue();
         runtime.v2Campaigns().expireDue();
@@ -236,6 +237,7 @@ public final class StrajaEvents {
         runtime.roomRoleplay().assignAutomatically(gateway);
         runtime.roomRoleplay().processWaitlist();
         runtime.audienceRoleplay().deliverOutcome(gateway);
+        runtime.storage().onLogin(gateway);
         String setupHint = runtime.playerQueries().setupHintFor(gateway, runtime.setupProbes());
         if (setupHint != null) {
             gateway.tell("[Straja] Configurarea este incompletă. " + setupHint
@@ -584,6 +586,11 @@ public final class StrajaEvents {
             event.setCanceled(true);
             return;
         }
+        // An armed storage pick consumes the click before any chest can open.
+        if (runtime.storage().onPickClick(gateway, dimension, pos.getX(), pos.getY(), pos.getZ())) {
+            event.setCanceled(true);
+            return;
+        }
         // The block-interact packet fires once per hand; routing the main-hand
         // packet only keeps a single click from toggling a waypoint on and
         // straight back off, while an item in the offhand still works.
@@ -755,7 +762,11 @@ public final class StrajaEvents {
         if (!runtime.playerQueries().isCommissioner(gateway)
                 && runtime.roomRoleplay().protectBlock(gateway, dimension, pos.getX(), pos.getY(), pos.getZ())) {
             event.setCanceled(true);
+            return;
         }
+        String placedId = net.minecraft.core.registries.BuiltInRegistries.BLOCK
+                .getKey(event.getPlacedBlock().getBlock()).toString();
+        runtime.storage().onBlockPlaced(gateway, dimension, pos.getX(), pos.getY(), pos.getZ(), placedId);
     }
 
     /** Explosions cannot destroy occupied room blocks or their managed signs. */
@@ -790,7 +801,27 @@ public final class StrajaEvents {
         if (runtime.roomRoleplay().roomAtSign(dimension, pos.getX(), pos.getY(), pos.getZ()) != null) {
             event.setCanceled(true);
             gateway.tell("Semnul camerei este gestionat automat de Straja.");
+            return;
         }
+        String brokenId = net.minecraft.core.registries.BuiltInRegistries.BLOCK
+                .getKey(event.getState().getBlock()).toString();
+        runtime.storage().onBlockBroken(gateway, dimension, pos.getX(), pos.getY(), pos.getZ(), brokenId);
+    }
+
+    /** Watched goods picked up inside a protected zone flag the taker. */
+    @SubscribeEvent
+    public void onItemPickup(net.neoforged.neoforge.event.entity.player.ItemEntityPickupEvent.Post event) {
+        StrajaRuntime runtime = StrajaRuntime.get();
+        if (runtime == null || !(event.getPlayer() instanceof net.minecraft.server.level.ServerPlayer player)) return;
+        var itemEntity = event.getItemEntity();
+        if (itemEntity.level().isClientSide()) return;
+        var gateway = new MinecraftPlayerGateway(player.getServer(), player.getUUID());
+        var stack = itemEntity.getItem();
+        String itemId = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+        var pos = itemEntity.blockPosition();
+        runtime.storage().onItemPickedUp(gateway,
+                itemEntity.level().dimension().location().toString(),
+                pos.getX(), pos.getY(), pos.getZ(), itemId, stack.getCount());
     }
 
     /**

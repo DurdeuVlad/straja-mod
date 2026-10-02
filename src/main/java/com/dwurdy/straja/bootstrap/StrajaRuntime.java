@@ -61,6 +61,7 @@ public final class StrajaRuntime {
     private final com.dwurdy.straja.application.service.PolicyService policyService;
     private final com.dwurdy.straja.application.service.IncidentService incidents;
     private final com.dwurdy.straja.application.service.BoloService bolos;
+    private final com.dwurdy.straja.application.service.StorageService storage;
     private final com.dwurdy.straja.application.service.EvidenceService evidence;
     private final com.dwurdy.straja.application.service.ArrestRecordService arrestRecords;
     private final com.dwurdy.straja.application.service.ReputationService reputation;
@@ -170,7 +171,10 @@ public final class StrajaRuntime {
                 new SavedStores.Bolos(stores),
                 new SavedStores.Evidence(stores),
                 new SavedStores.ArrestRecords(stores),
-                new SavedStores.Reputation(stores));
+                new SavedStores.Reputation(stores),
+                new SavedStores.Storage(stores),
+                new com.dwurdy.straja.adapter.out.minecraft.MinecraftContainerGateway(server),
+                com.dwurdy.straja.adapter.out.npc.customnpcs.CustomNpcsGuardGateway.create(server));
 
         this.v2PersonnelRepository = new SavedStores.Personnel(stores);
         this.v2PromotionRepository = new SavedStores.Promotions(stores);
@@ -328,6 +332,15 @@ public final class StrajaRuntime {
         this.arrestRecords = new com.dwurdy.straja.application.service.ArrestRecordService(ctx, players, audit);
         this.reputation = new com.dwurdy.straja.application.service.ReputationService(
                 ctx, players, audit, incidents, bolos);
+        this.storage = new com.dwurdy.straja.application.service.StorageService(
+                ctx, players, audit, bolos, prison);
+        this.prison.onArrest(sentence -> {
+            try {
+                storage.onArrested(UUID.fromString(sentence.targetUuid));
+            } catch (RuntimeException ignored) {
+                // Unresolvable target — the flag expires with the sentence anyway.
+            }
+        });
         this.guards.onRecruitmentEligibility(reputation::recruitmentAllowed);
         this.custody.onCustodyEscape((actor, target) -> {
             if (target != null) {
@@ -488,6 +501,7 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.service.RpExpansionService expansion() { return expansion; }
     public com.dwurdy.straja.application.service.IncidentService incidents() { return incidents; }
     public com.dwurdy.straja.application.service.BoloService bolos() { return bolos; }
+    public com.dwurdy.straja.application.service.StorageService storage() { return storage; }
     public com.dwurdy.straja.application.service.EvidenceService evidence() { return evidence; }
     public com.dwurdy.straja.application.service.ArrestRecordService arrestRecords() { return arrestRecords; }
     public com.dwurdy.straja.application.service.ReputationService reputation() { return reputation; }

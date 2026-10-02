@@ -345,6 +345,25 @@ public class StrajaPolicies {
             4096, "adys_decorations:silver_coin",
             262144, "adys_decorations:gold_coin"));
 
+    // Straja Storage — protected-zone watch + deposit routing. Watched items
+    // are valued in abstract units; the defaults mirror the legacy gold table
+    // but any item ids work.
+    public Map<String, Integer> storageWatchedItemUnits = new LinkedHashMap<>(Map.of(
+            "minecraft:gold_nugget", 1,
+            "minecraft:gold_ingot", 9,
+            "minecraft:gold_block", 81));
+    public List<String> storageAlliedTeams = new ArrayList<>(List.of());
+    public List<String> storageExemptPlayers = new ArrayList<>(List.of());
+    public boolean storageAlliesHandleGoods = true;
+    public String storageHuntTeam = "Straja";
+    public int storageHuntQuestId = 2035;
+    public int storageFactionId = 12;
+    public int storageAggroPeriodTicks = 20;
+    public int storageChestPollTicks = 10;
+    public int storageEnforcePeriodTicks = 200;
+    public int storageSuspectRange = 8;
+    public int storageAggroRange = 16;
+
     // food/kits/equipment — kits are permanent owned gear granted at rank-up;
     // the former per-shift lease was removed (see docs/guard-gear-*).
     public String foodItem = "minecraft:bread";
@@ -559,6 +578,27 @@ public class StrajaPolicies {
     }
 
     public static List<String> formatIntMap(Map<Integer, Integer> map) {
+        List<String> out = new ArrayList<>();
+        map.forEach((k, v) -> out.add(k + "=" + v));
+        return out;
+    }
+
+    /** "key=value" entries with string keys and integer values; malformed entries are skipped. */
+    public static Map<String, Integer> parseStringIntMap(List<? extends String> entries) {
+        Map<String, Integer> out = new LinkedHashMap<>();
+        for (String entry : entries) {
+            int sep = entry.indexOf('=');
+            if (sep <= 0 || entry.substring(0, sep).isBlank()) continue;
+            try {
+                out.put(entry.substring(0, sep).trim(),
+                        Integer.parseInt(entry.substring(sep + 1).trim()));
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return out;
+    }
+
+    public static List<String> formatStringIntMap(Map<String, Integer> map) {
         List<String> out = new ArrayList<>();
         map.forEach((k, v) -> out.add(k + "=" + v));
         return out;

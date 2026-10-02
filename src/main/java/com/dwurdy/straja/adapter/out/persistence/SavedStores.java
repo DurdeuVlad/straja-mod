@@ -170,6 +170,12 @@ public final class SavedStores {
         @Override public void write(ArrestRecordStore store) { writeJson(store); }
     }
 
+    public static class Storage extends JsonBackedStore implements StorageRepository {
+        public Storage(StoreAccess access) { super(access, "storage_watch"); }
+        @Override public StorageWatchStore read() { return readJson(StorageWatchStore.class, StorageWatchStore::new); }
+        @Override public void write(StorageWatchStore store) { writeJson(store); }
+    }
+
     public static class Reputation extends JsonBackedStore implements ReputationRepository {
         public Reputation(StoreAccess access) { super(access, "reputation"); }
         @Override public ReputationStore read() { return readJson(ReputationStore.class, ReputationStore::new); }

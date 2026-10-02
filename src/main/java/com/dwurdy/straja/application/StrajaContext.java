@@ -40,4 +40,7 @@ public record StrajaContext(
         BoloRepository bolos,
         EvidenceRepository evidence,
         ArrestRecordRepository arrestRecords,
-        ReputationRepository reputation) {}
+        ReputationRepository reputation,
+        StorageRepository storage,
+        WorldContainerGateway containers,
+        NpcGuardGateway npcGuards) {}

@@ -131,6 +131,19 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.ConfigValue<String> COIN_SILVER_ITEM;
     public static final ModConfigSpec.ConfigValue<String> COIN_GOLD_ITEM;
 
+    public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> STORAGE_WATCHED_ITEMS;
+    public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> STORAGE_ALLIED_TEAMS;
+    public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> STORAGE_EXEMPT_PLAYERS;
+    public static final ModConfigSpec.BooleanValue STORAGE_ALLIES_HANDLE_GOODS;
+    public static final ModConfigSpec.ConfigValue<String> STORAGE_HUNT_TEAM;
+    public static final ModConfigSpec.IntValue STORAGE_HUNT_QUEST_ID;
+    public static final ModConfigSpec.IntValue STORAGE_FACTION_ID;
+    public static final ModConfigSpec.IntValue STORAGE_AGGRO_PERIOD_TICKS;
+    public static final ModConfigSpec.IntValue STORAGE_CHEST_POLL_TICKS;
+    public static final ModConfigSpec.IntValue STORAGE_ENFORCE_PERIOD_TICKS;
+    public static final ModConfigSpec.IntValue STORAGE_SUSPECT_RANGE;
+    public static final ModConfigSpec.IntValue STORAGE_AGGRO_RANGE;
+
     public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> SALARY_PER_HOUR;
     public static final ModConfigSpec.IntValue SALARY_COMMISSIONER_PER_HOUR;
     public static final ModConfigSpec.IntValue SALARY_GRANULARITY_SECONDS;
@@ -511,6 +524,42 @@ public final class StrajaServerConfig {
         COIN_BRASS_ITEM = B.define("brassCoin", "adys_decorations:brass_coin", StrajaServerConfig::isItemId);
         COIN_SILVER_ITEM = B.define("silverCoin", "adys_decorations:silver_coin", StrajaServerConfig::isItemId);
         COIN_GOLD_ITEM = B.define("goldCoin", "adys_decorations:gold_coin", StrajaServerConfig::isItemId);
+        B.pop();
+
+        B.push("storage");
+        STORAGE_WATCHED_ITEMS = B.comment(
+                        "Items the protected-storage watch tracks, valued in abstract",
+                        "units: \"item_id=units\". Breaking, picking up, or draining",
+                        "these inside the picked zone flags the actor as a thief;",
+                        "placing them back repays. Defaults mirror the legacy gold",
+                        "table; any item ids work.")
+                .defineListAllowEmpty(List.of("watchedItems"),
+                        StrajaPolicies.formatStringIntMap(defaults.storageWatchedItemUnits),
+                        () -> "minecraft:gold_ingot=9", StrajaServerConfig::isStringIntEntry);
+        STORAGE_ALLIED_TEAMS = B.comment(
+                        "Scoreboard teams whose members may handle watched goods",
+                        "without being flagged (merchants, vault keepers).")
+                .defineListAllowEmpty(List.of("alliedTeams"),
+                        List.of(), () -> "Merchant", StrajaServerConfig::isNonBlankString);
+        STORAGE_EXEMPT_PLAYERS = B.comment(
+                        "Player names or UUIDs never flagged by the storage watch.")
+                .defineListAllowEmpty(List.of("exemptPlayers"),
+                        List.of(), () -> "Steve", StrajaServerConfig::isNonBlankString);
+        STORAGE_ALLIES_HANDLE_GOODS = B.comment(
+                        "When true, an allied player nearer the chest than any",
+                        "outsider vetoes theft attribution for a watched-chest drain.")
+                .define("alliesHandleGoods", true);
+        STORAGE_HUNT_TEAM = B.comment(
+                        "Scoreboard team that receives the hunt quest when a",
+                        "thief is flagged.")
+                .define("huntTeam", "Straja");
+        STORAGE_HUNT_QUEST_ID = B.defineInRange("huntQuestId", 2035, 0, 1000000);
+        STORAGE_FACTION_ID = B.defineInRange("factionId", 12, 0, 1000);
+        STORAGE_AGGRO_PERIOD_TICKS = B.defineInRange("aggroPeriodTicks", 20, 1, 1200);
+        STORAGE_CHEST_POLL_TICKS = B.defineInRange("chestPollTicks", 10, 1, 1200);
+        STORAGE_ENFORCE_PERIOD_TICKS = B.defineInRange("enforcePeriodTicks", 200, 1, 20000);
+        STORAGE_SUSPECT_RANGE = B.defineInRange("suspectRange", 8, 1, 128);
+        STORAGE_AGGRO_RANGE = B.defineInRange("aggroRange", 16, 1, 256);
         B.pop();
 
         B.push("salary");
@@ -1011,6 +1060,20 @@ public final class StrajaServerConfig {
         p.coinItemIds.put(4096, COIN_SILVER_ITEM.get());
         p.coinItemIds.put(262144, COIN_GOLD_ITEM.get());
 
+        var watchedItems = StrajaPolicies.parseStringIntMap(STORAGE_WATCHED_ITEMS.get());
+        if (!watchedItems.isEmpty()) p.storageWatchedItemUnits = watchedItems;
+        p.storageAlliedTeams = new java.util.ArrayList<>(STORAGE_ALLIED_TEAMS.get());
+        p.storageExemptPlayers = new java.util.ArrayList<>(STORAGE_EXEMPT_PLAYERS.get());
+        p.storageAlliesHandleGoods = STORAGE_ALLIES_HANDLE_GOODS.get();
+        p.storageHuntTeam = STORAGE_HUNT_TEAM.get();
+        p.storageHuntQuestId = STORAGE_HUNT_QUEST_ID.get();
+        p.storageFactionId = STORAGE_FACTION_ID.get();
+        p.storageAggroPeriodTicks = STORAGE_AGGRO_PERIOD_TICKS.get();
+        p.storageChestPollTicks = STORAGE_CHEST_POLL_TICKS.get();
+        p.storageEnforcePeriodTicks = STORAGE_ENFORCE_PERIOD_TICKS.get();
+        p.storageSuspectRange = STORAGE_SUSPECT_RANGE.get();
+        p.storageAggroRange = STORAGE_AGGRO_RANGE.get();
+
         p.salaryPerHour = mapOrDefault(StrajaPolicies.parseIntMap(SALARY_PER_HOUR.get()),
                 defaults().salaryPerHour);
         p.salaryCommissionerPerHour = SALARY_COMMISSIONER_PER_HOUR.get();
@@ -1185,6 +1248,10 @@ public final class StrajaServerConfig {
         return o instanceof String s && ResourceLocation.tryParse(s) != null;
     }
 
+    private static boolean isNonBlankString(Object o) {
+        return o instanceof String s && !s.isBlank();
+    }
+
     private static boolean isNpcProviderMode(Object o) {
         return o instanceof String s
                 && ("customnpcs".equalsIgnoreCase(s.trim())
@@ -1209,6 +1276,18 @@ public final class StrajaServerConfig {
         if (sep <= 0) return false;
         try {
             Integer.parseInt(s.substring(0, sep).trim());
+            Integer.parseInt(s.substring(sep + 1).trim());
+            return true;
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
+    private static boolean isStringIntEntry(Object o) {
+        if (!(o instanceof String s)) return false;
+        int sep = s.indexOf('=');
+        if (sep <= 0 || s.substring(0, sep).isBlank()) return false;
+        try {
             Integer.parseInt(s.substring(sep + 1).trim());
             return true;
         } catch (NumberFormatException e) {

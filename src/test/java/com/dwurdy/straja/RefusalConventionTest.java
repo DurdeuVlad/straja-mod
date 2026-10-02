@@ -88,6 +88,10 @@ class RefusalConventionTest {
             "până la reconectare",
             "Ai fost arestat pentru",
             "această tură cere",
+            "alege colțul opus",   // storage pick instruction, not a denial
+            "este deja supravegheat",
+            "alege din nou sau editează",
+            "Niciun hoț de depozit nu este marcat",
             // post-event notices allowed by the widened vocabulary
             "a expirat",          // expiry notices (transport/inconștiență/resuscitare/predare)
             "refuz",              // notices that a refusal happened (post-event, both sides)

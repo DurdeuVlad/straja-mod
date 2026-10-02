@@ -100,6 +100,14 @@ public interface PlayerGateway {
     default boolean isPassengerOf(UUID vehicleUuid) { return false; }
     default boolean hasPassenger(UUID passengerUuid) { return false; }
 
+    /** Vanilla game mode name ("survival", "creative", ...) — fakes default to survival. */
+    default String gameModeName() { return "survival"; }
+
+    /** Sends a title/subtitle pair; the default degrades to the title message. */
+    default void title(String titleKey, String subtitleKey, Object... args) {
+        tellKey(titleKey, args);
+    }
+
     /** Opens a simple button GUI when the client is present; headless-safe. */
     default void openButtonGui(String title, java.util.List<ButtonSpec> buttons) {}
 

@@ -54,6 +54,7 @@ public final class StrajaCommands {
         root.then(Commands.literal("rules").executes(c -> player(c, StrajaRuntime.get().guards()::showRules)));
         root.then(Commands.literal("regulament").executes(c -> player(c, StrajaRuntime.get().guards()::showRules)));
         root.then(adminOnly(Commands.literal("backup").executes(StrajaCommands::backup)));
+        root.then(storageCommands());
         root.then(v2PersonnelCommands());
         root.then(v2StationCommands());
         root.then(v2DoctorCommands());
@@ -1046,6 +1047,75 @@ public final class StrajaCommands {
             ctx.getSource().sendFailure(refusal("straja.cmd.backup_failed", "straja.remedy.retry", error.getMessage()));
             return 0;
         }
+    }
+
+    /**
+     * /straja storage — protected-storage admin surface (native port of the
+     * prototype strajastorage command): in-game pickers, merchant deposit
+     * bridge for NPC quest commands, and the thief ledger.
+     */
+    private static LiteralArgumentBuilder<CommandSourceStack> storageCommands() {
+        var node = adminOnly(Commands.literal("storage"));
+        var pick = Commands.literal("pick");
+        for (String mode : List.of("dest", "zone", "chest", "off")) {
+            pick.then(Commands.literal(mode).executes(c -> player(c, p -> {
+                if (StrajaRuntime.get().storage().setPickMode(p, mode)) {
+                    p.tellKey("off".equals(mode)
+                            ? "straja.storage.pick_off" : "straja.storage.pick_armed", mode);
+                }
+            })));
+        }
+        node.then(pick);
+        node.then(Commands.literal("deposit")
+                .then(Commands.argument("player", EntityArgument.player())
+                .then(Commands.argument("item", StringArgumentType.word())
+                .then(Commands.argument("count", IntegerArgumentType.integer(1))
+                .executes(c -> {
+                    String name;
+                    try {
+                        name = EntityArgument.getPlayer(c, "player").getGameProfile().getName();
+                    } catch (CommandSyntaxException e) {
+                        c.getSource().sendFailure(refusal(
+                                "straja.storage.player_unknown", "straja.remedy.fix_retry"));
+                        return 0;
+                    }
+                    String item = StringArgumentType.getString(c, "item");
+                    int count = IntegerArgumentType.getInteger(c, "count");
+                    var result = StrajaRuntime.get().storage().deposit(name, item, count);
+                    if (result.success()) {
+                        int inserted = result.inserted();
+                        int leftover = result.leftover();
+                        c.getSource().sendSuccess(() -> Component.translatable(
+                                "straja.storage.deposit_ok", inserted, item, name), false);
+                        if (leftover > 0) {
+                            c.getSource().sendSuccess(() -> Component.translatable(
+                                    "straja.storage.deposit_overflow", leftover, item), false);
+                        }
+                        return 1;
+                    }
+                    c.getSource().sendFailure(refusal(
+                            "straja.storage.deposit_failed", "straja.remedy.fix_retry"));
+                    return 0;
+                })))));
+        node.then(Commands.literal("resetcfg")
+                .executes(c -> player(c, StrajaRuntime.get().storage()::resetConfig)));
+        node.then(Commands.literal("status")
+                .executes(c -> player(c, StrajaRuntime.get().storage()::status)));
+        node.then(Commands.literal("hunted")
+                .executes(c -> player(c, StrajaRuntime.get().storage()::hunted)));
+        node.then(Commands.literal("help").executes(c -> {
+            for (String line : List.of(
+                    "/straja storage pick dest|zone|chest — arm the in-game pickers",
+                    "/straja storage pick off — disarm",
+                    "/straja storage deposit <player> <item> <count> — merchant deposit bridge",
+                    "/straja storage status — show picked configuration",
+                    "/straja storage hunted — list flagged thieves and their debt",
+                    "/straja storage resetcfg — drop all picked configuration")) {
+                c.getSource().sendSystemMessage(Component.literal(line));
+            }
+            return 1;
+        }));
+        return node;
     }
 
     private static LiteralArgumentBuilder<CommandSourceStack> v2PersonnelCommands() {
