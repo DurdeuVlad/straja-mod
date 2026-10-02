@@ -1000,7 +1000,9 @@ public final class StrajaGameTests {
         runtime.prison().arrest(pg, null, 1, commissioner, "gt-wanted");
 
         bs = runtime.context().bolos().read();
-        helper.assertTrue(bs.records.get(0).status
+        var own = bs.records.stream()
+                .filter(r -> "b-gt-1".equals(r.id)).findFirst().orElse(null);
+        helper.assertTrue(own != null && own.status
                         == com.dwurdy.straja.domain.model.BoloStatus.RESOLVED,
                 "arrest must resolve the bolo as RESOLVED");
         helper.assertTrue(!runtime.wanted().isWanted(prisoner.getUUID()),
