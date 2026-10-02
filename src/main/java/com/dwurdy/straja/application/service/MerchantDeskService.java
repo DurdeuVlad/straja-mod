@@ -53,7 +53,9 @@ public final class MerchantDeskService {
 
     public boolean createDesk(PlayerGateway actor, String deskId, String npcRef) {
         if (!authorized(actor)) return refuseAuthority(actor, "desk_create");
-        if (deskId == null || deskId.isBlank() || !deskId.matches("[a-zA-Z0-9_\\-]{1,32}")) {
+        if (deskId == null || deskId.isBlank() || !deskId.matches("[a-zA-Z0-9_\\-]{1,32}")
+                || "off".equalsIgnoreCase(deskId)) {
+            // "off" is the pick-disarm sentinel — never a valid desk id.
             actor.refuse("straja.desk.bad_id", "straja.remedy.fix_retry");
             return false;
         }
@@ -80,7 +82,7 @@ public final class MerchantDeskService {
         }
         store.put(desk);
         ctx.merchantDesks().write(store);
-        actor.tellKey("straja.desk.created", deskId);
+        actor.tellKey("straja.desk.created", deskId, deskId);
         audit.record("desk_create", actor.name(), uuidOf(actor), deskId, "",
                 "SUCCESS", "npc=" + npcRef);
         return true;
@@ -117,7 +119,7 @@ public final class MerchantDeskService {
             actor.tellKey("straja.desk.price_removed", itemId, deskId);
         } else {
             desk.sellTable.put(itemId, price);
-            actor.tellKey("straja.desk.price_set", itemId, deskId, price);
+            actor.tellKey("straja.desk.price_set", itemId, price, deskId);
         }
         store.put(desk);
         ctx.merchantDesks().write(store);
@@ -253,6 +255,10 @@ public final class MerchantDeskService {
     }
 
     public void listDesks(PlayerGateway viewer) {
+        if (!authorized(viewer)) {
+            refuseAuthority(viewer, "desk_list");
+            return;
+        }
         var store = store();
         if (store.desks().isEmpty()) {
             viewer.tellKey("straja.desk.none");
@@ -266,6 +272,11 @@ public final class MerchantDeskService {
 
     /** `/straja desk ledger <deskId> [seller]` — newest entries first. */
     public void showLedger(PlayerGateway viewer, String deskId, String sellerRef) {
+        // The ledger names sellers and marks labor sales — staff-only data.
+        if (!authorized(viewer)) {
+            refuseAuthority(viewer, "desk_ledger");
+            return;
+        }
         var store = store();
         var desk = store.desk(deskId);
         if (desk == null) {
@@ -315,26 +326,35 @@ public final class MerchantDeskService {
             seller.refuse("straja.desk.no_table", "straja.remedy.alert_manager");
             return false;
         }
-        // The trade surface is the desk itself — sellers must stand at it.
-        if (desk.deskPos != null && seller.uuid() != null) {
-            double dx = seller.x() - desk.deskPos.x();
-            double dy = seller.y() - desk.deskPos.y();
-            double dz = seller.z() - desk.deskPos.z();
-            if (!desk.dimension.equals(seller.dimension())
-                    || dx * dx + dy * dy + dz * dz > 64.0) {
-                seller.refuse("straja.desk.too_far", "straja.remedy.desk_table", desk.id);
-                return false;
-            }
+        // The trade surface is the desk itself — fail closed when the desk
+        // record lacks an anchor or the seller can't be verified present.
+        if (desk.deskPos == null || seller.uuid() == null || !seller.isOnline()) {
+            seller.refuse("straja.desk.too_far", "straja.remedy.desk_table", desk.id);
+            return false;
+        }
+        double dx = seller.x() - desk.deskPos.x();
+        double dy = seller.y() - desk.deskPos.y();
+        double dz = seller.z() - desk.deskPos.z();
+        if (!desk.dimension.equals(seller.dimension())
+                || dx * dx + dy * dy + dz * dz > 64.0) {
+            seller.refuse("straja.desk.too_far", "straja.remedy.desk_table", desk.id);
+            return false;
         }
 
         InventoryView inv = seller.inventory();
+        // Only the main inventory is sellable — worn armor/offhand stay put.
+        Map<String, Integer> carried = new LinkedHashMap<>();
+        for (int slot = 0; slot < inv.mainSlots(); slot++) {
+            ItemView v = inv.stackAt(slot);
+            if (!v.isEmpty()) carried.merge(v.id(), v.count(), Integer::sum);
+        }
         Map<String, Integer> sale = new LinkedHashMap<>();
         for (var entry : desk.sellTable.entrySet()) {
             String itemId = entry.getKey();
             if (itemFilter != null && !itemFilter.isBlank() && !itemId.equals(itemFilter)) continue;
             Integer price = entry.getValue();
             if (price == null || price <= 0) continue;
-            int avail = inv.countOf(itemId);
+            int avail = carried.getOrDefault(itemId, 0);
             if (avail <= 0) continue;
             sale.put(itemId, maxCount > 0 ? Math.min(avail, maxCount) : avail);
         }
@@ -352,38 +372,45 @@ public final class MerchantDeskService {
             }
         }
 
-        // Atomic preflight: simulate the sequential fill before anything moves.
-        if (!fitsAll(desk, sale)) {
-            seller.refuse("straja.desk.chests_full", "straja.remedy.alert_manager");
-            return false;
-        }
-
-        // Extract first: the stacks are held in memory until the chests commit
-        // them, and freed slots leave room for the coin payout.
-        record Held(String itemId, int count, String snbt) {}
+        // Extract first: the stacks are held in memory with their component
+        // data until the chests commit them — extraction also frees slots for
+        // the coin payout. Main inventory only, never armor/offhand.
         List<Held> held = new ArrayList<>();
         for (var e : sale.entrySet()) {
             int remaining = e.getValue();
-            for (int slot = 0; slot < inv.slots() && remaining > 0; slot++) {
+            for (int slot = 0; slot < inv.mainSlots() && remaining > 0; slot++) {
                 ItemView v = inv.stackAt(slot);
                 if (v.isEmpty() || !e.getKey().equals(v.id())) continue;
                 String snbt = inv.snbtAt(slot);
                 int take = Math.min(remaining, v.count());
                 ItemView taken = inv.extract(slot, take);
                 if (taken.isEmpty()) continue;
-                held.add(new Held(e.getKey(), taken.count(), snbt));
+                held.add(new Held(e.getKey(), taken.count(), snbt, 0));
                 remaining -= taken.count();
             }
+        }
+
+        // Atomic preflight on the real held stacks: merge room only counts for
+        // component-free stacks, so a differently-componented seller stack can
+        // never "fit" into a merge headroom the real insert would reject.
+        if (!fitsAll(desk, held)) {
+            for (Held h : held) seller.giveStack(h.itemId(), h.count(), h.snbt());
+            seller.refuse("straja.desk.chests_full", "straja.remedy.alert_manager");
+            return false;
         }
 
         // Physical routing: chest 1 fills first, overflow walks the list.
         // Any race that leaves a leftover hands the unsold rest straight back.
         Map<String, Integer> placed = new LinkedHashMap<>();
+        List<Held> commits = new ArrayList<>(held.size());
         int returned = 0;
         for (Held h : held) {
             int leftover = insertAll(desk, h.itemId(), h.count(), h.snbt());
             int in = h.count() - Math.max(0, leftover);
-            if (in > 0) placed.merge(h.itemId(), in, Integer::sum);
+            if (in > 0) {
+                placed.merge(h.itemId(), in, Integer::sum);
+                commits.add(new Held(h.itemId(), h.count(), h.snbt(), in));
+            }
             if (leftover > 0) {
                 seller.giveStack(h.itemId(), leftover, h.snbt());
                 returned += leftover;
@@ -397,38 +424,44 @@ public final class MerchantDeskService {
 
         // Payment only after goods are physically committed — and only for the
         // amounts that actually landed.
-        boolean laborCredit = desk.creditsLaborAccount && isCampPrisoner(seller);
+        var reg = ctx.prisonerRegister().read();
+        var rec = seller.uuid() == null ? null
+                : reg.prisoner(seller.uuid().toString());
+        boolean laborCredit = desk.creditsLaborAccount && rec != null
+                && rec.status == PrisonerStatus.IN_CAMP
+                && rec.assignedCampId != null && !rec.assignedCampId.isBlank();
         long paidTotal = 0;
         for (var e : placed.entrySet()) paidTotal += (long) desk.priceOf(e.getKey()) * e.getValue();
         int baseUnits = (int) Math.min(paidTotal, Integer.MAX_VALUE);
         if (laborCredit) {
-            var reg = ctx.prisonerRegister().read();
-            var rec = reg.prisoner(seller.uuid().toString());
-            if (rec != null) {
-                rec.laborAccount += baseUnits;
-                ctx.prisonerRegister().write(reg);
-            } else {
-                laborCredit = false; // register row vanished mid-sale — pay cash
-            }
-        }
-        if (!laborCredit) {
+            rec.laborAccount = (int) Math.min((long) rec.laborAccount + baseUnits,
+                    Integer.MAX_VALUE);
+            ctx.prisonerRegister().write(reg);
+        } else {
             var deposit = ctx.currency().deposit(seller, baseUnits,
                     "desk-" + desk.id + "-" + ctx.ids().token());
             if (!deposit.ok()) {
-                // Compensation: pull the committed goods back out of the desk
-                // chests and return everything the sale still owes the seller.
-                for (var e : placed.entrySet()) {
-                    int owed = e.getValue();
+                // Compensation: pull each committed stack back out of the desk
+                // chests (SNBT preserved) and return only what was reclaimed —
+                // a shortfall is audited, never silently duplicated.
+                int residue = 0;
+                for (Held c : commits) {
+                    int owed = c.placed();
+                    int reclaimed = 0;
                     for (StoragePoint chest : desk.chests) {
-                        if (owed <= 0 || chest == null) continue;
-                        owed -= ctx.containers().remove(chest.dimension(), chest.x(),
-                                chest.y(), chest.z(), e.getKey(), owed);
+                        if (owed <= 0) break;
+                        int got = ctx.containers().remove(chest.dimension(), chest.x(),
+                                chest.y(), chest.z(), c.itemId(), owed);
+                        owed -= got;
+                        reclaimed += got;
                     }
-                    seller.giveStack(e.getKey(), e.getValue(), null);
+                    if (reclaimed > 0) seller.giveStack(c.itemId(), reclaimed, c.snbt());
+                    residue += owed;
                 }
                 seller.refuse("straja.desk.payment_failed", "straja.remedy.retry");
                 audit.record("desk_sale", seller.name(), uuidOf(seller), desk.id, "",
-                        "REFUSED", "payment_failed_after_commit; goods reclaimed");
+                        "REFUSED", "payment_failed_after_commit; goods reclaimed"
+                                + (residue > 0 ? "; residue=" + residue : ""));
                 return false;
             }
         }
@@ -462,34 +495,44 @@ public final class MerchantDeskService {
         return remaining;
     }
 
-    /** Simulates the sequential fill — merge room first, shared empties after. */
-    private boolean fitsAll(MerchantDeskRecord desk, Map<String, Integer> sale) {
-        Map<String, Integer> remaining = new LinkedHashMap<>(sale);
+    /**
+     * A stack held between extraction and chest commit — {@code snbt} is the
+     * seller's component data, {@code placed} is the committed count used by
+     * the payment-failure rollback.
+     */
+    private record Held(String itemId, int count, String snbt, int placed) {}
+
+    /**
+     * Simulates the sequential fill over the real held stacks. Merge room only
+     * applies to component-free stacks — a held stack carrying SNBT can never
+     * merge into a plain partial, so it only consumes shared empty slots.
+     */
+    private boolean fitsAll(MerchantDeskRecord desk, List<Held> held) {
+        int[] remaining = held.stream().mapToInt(Held::count).toArray();
         for (StoragePoint chest : desk.chests) {
             if (chest == null) continue;
             var cap = ctx.containers().capacity(chest.dimension(), chest.x(), chest.y(), chest.z());
             if (cap == null) continue;
             int empty = cap.emptySlots();
-            for (var e : remaining.entrySet()) {
-                if (e.getValue() <= 0) continue;
-                int limit = Math.max(1, ctx.containers().stackLimit(e.getKey()));
-                int merged = Math.min(e.getValue(),
-                        cap.mergeRoom().getOrDefault(e.getKey(), 0));
-                int afterMerge = e.getValue() - merged;
-                int slotsFit = Math.min(empty, (afterMerge + limit - 1) / limit);
-                int placed = merged + slotsFit * limit;
-                empty -= (placed - merged + limit - 1) / limit;
-                e.setValue(e.getValue() - placed);
+            Map<String, Integer> mergeLeft = new HashMap<>(cap.mergeRoom());
+            for (int i = 0; i < held.size(); i++) {
+                if (remaining[i] <= 0) continue;
+                var h = held.get(i);
+                int limit = Math.max(1, ctx.containers().stackLimit(h.itemId()));
+                int merged = 0;
+                if (h.snbt() == null || h.snbt().isBlank()) {
+                    merged = Math.min(remaining[i], mergeLeft.getOrDefault(h.itemId(), 0));
+                    mergeLeft.merge(h.itemId(), -merged, Integer::sum);
+                }
+                int rest = remaining[i] - merged;
+                int slotsUse = Math.min(empty, (rest + limit - 1) / limit);
+                int inSlots = Math.min(rest, slotsUse * limit);
+                empty -= (inSlots + limit - 1) / limit;
+                remaining[i] -= merged + inSlots;
             }
         }
-        return remaining.values().stream().allMatch(v -> v <= 0);
-    }
-
-    private boolean isCampPrisoner(PlayerGateway seller) {
-        if (seller.uuid() == null) return false;
-        var rec = ctx.prisonerRegister().read().prisoner(seller.uuid().toString());
-        return rec != null && rec.status == PrisonerStatus.IN_CAMP
-                && rec.assignedCampId != null && !rec.assignedCampId.isBlank();
+        for (int r : remaining) if (r > 0) return false;
+        return true;
     }
 
     private boolean authorized(PlayerGateway actor) {

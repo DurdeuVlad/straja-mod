@@ -148,7 +148,10 @@ public final class MinecraftContainerGateway implements WorldContainerGateway {
                 continue;
             }
             int room = stack.getMaxStackSize() - stack.getCount();
-            if (room > 0) {
+            // Only component-free stacks advertise merge room: insertStack
+            // merges on isSameItemSameComponents, so a modified stack's
+            // headroom is unusable for a plain incoming stack.
+            if (room > 0 && stack.getComponentsPatch().isEmpty()) {
                 mergeRoom.merge(BuiltInRegistries.ITEM.getKey(stack.getItem())
                         .toString(), room, Integer::sum);
             }

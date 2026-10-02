@@ -324,7 +324,10 @@ public final class Fakes {
             for (ItemView v : c) {
                 if (v.isEmpty()) { empty++; continue; }
                 int head = Math.max(0, v.maxStackSize() - v.count());
-                if (head > 0) room.merge(v.id(), head, Integer::sum);
+                // Component-free stacks only — mirrors the adapter's rule.
+                if (head > 0 && (v.customData() == null || v.customData().isEmpty())) {
+                    room.merge(v.id(), head, Integer::sum);
+                }
             }
             return new ContainerCapacity(empty, room);
         }

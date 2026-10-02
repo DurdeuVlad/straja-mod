@@ -27,4 +27,16 @@ public class MerchantDeskRecord {
     public Integer priceOf(String itemId) {
         return sellTable.get(itemId);
     }
+
+    /** Self-heals explicit {@code null}s a Gson payload may carry. */
+    public void normalize() {
+        if (id == null) id = "";
+        if (npcUuid == null) npcUuid = "";
+        if (npcName == null) npcName = "";
+        if (dimension == null) dimension = "minecraft:overworld";
+        if (chests == null) chests = new ArrayList<>();
+        chests.removeIf(java.util.Objects::isNull);
+        if (sellTable == null) sellTable = new LinkedHashMap<>();
+        sellTable.entrySet().removeIf(e -> e.getKey() == null || e.getValue() == null);
+    }
 }

@@ -60,6 +60,10 @@ public class MinecraftInventoryView implements InventoryView {
         return inventory.getContainerSize();
     }
 
+    @Override public int mainSlots() {
+        return inventory.items.size();
+    }
+
     @Override public ItemView stackAt(int slot) {
         if (slot < 0 || slot >= slots()) return ItemView.EMPTY;
         return view(inventory.getItem(slot));

@@ -342,13 +342,20 @@ class MerchantDeskServiceTest {
         desks.sell(seller, "qm", null, 0);
         desks.sell(other, "qm", null, 0);
 
+        // Ledger rows are staff-only data (seller names + labor flags).
+        boss.messages.clear();
+        desks.showLedger(boss, "qm", null);
+        assertEquals(2, boss.messages.size());
+
+        boss.messages.clear();
+        desks.showLedger(boss, "qm", "smith");
+        assertEquals(1, boss.messages.size());
+
+        // Civilians get refused, not the ledger.
         seller.messages.clear();
         desks.showLedger(seller, "qm", null);
-        assertEquals(2, seller.messages.size());
-
-        seller.messages.clear();
-        desks.showLedger(seller, "qm", "smith");
-        assertEquals(1, seller.messages.size());
+        assertTrue(ctx.merchantDesks().read().trades().size() == 2);
+        assertTrue(seller.told("Comisar") || seller.told("gardian"));
     }
 
     @Test
