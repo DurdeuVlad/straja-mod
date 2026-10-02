@@ -181,6 +181,38 @@ public final class StrajaCommands {
                 .then(Commands.argument("player", StringArgumentType.word())
                         .executes(c -> player(c, p -> StrajaRuntime.get().checkpoints()
                                 .showLedger(p, StringArgumentType.getString(c, "player"))))));
+        // LAW-003 policy management: linked gates share edits automatically.
+        for (boolean add : new boolean[]{true, false}) {
+            String verb = add ? "add" : "remove";
+            checkpoint.then(Commands.literal("illegal").then(Commands.literal(verb)
+                    .then(Commands.argument("item", StringArgumentType.word())
+                            .executes(c -> player(c, p -> StrajaRuntime.get().checkpoints()
+                                    .setIllegalItem(p, StringArgumentType.getString(c, "item"), null, add)))
+                            .then(Commands.argument("site", StringArgumentType.word())
+                                    .executes(c -> player(c, p -> StrajaRuntime.get().checkpoints()
+                                            .setIllegalItem(p, StringArgumentType.getString(c, "item"),
+                                                    StringArgumentType.getString(c, "site"), add)))))));
+            checkpoint.then(Commands.literal("roleban").then(Commands.literal(verb)
+                    .then(Commands.argument("site", StringArgumentType.word())
+                            .then(Commands.argument("role", StringArgumentType.word())
+                                    .executes(c -> player(c, p -> StrajaRuntime.get().checkpoints()
+                                            .setRoleBan(p, StringArgumentType.getString(c, "site"),
+                                                    StringArgumentType.getString(c, "role"), add)))))));
+            checkpoint.then(Commands.literal("carryban").then(Commands.literal(verb)
+                    .then(Commands.argument("site", StringArgumentType.word())
+                            .then(Commands.argument("role", StringArgumentType.word())
+                                    .then(Commands.argument("item", StringArgumentType.word())
+                                            .executes(c -> player(c, p -> StrajaRuntime.get().checkpoints()
+                                                    .setCarryBan(p, StringArgumentType.getString(c, "site"),
+                                                            StringArgumentType.getString(c, "role"),
+                                                            StringArgumentType.getString(c, "item"), add))))))));
+            checkpoint.then(Commands.literal("exempt").then(Commands.literal(verb)
+                    .then(Commands.argument("scope", StringArgumentType.word())
+                            .then(Commands.argument("subject", StringArgumentType.word())
+                                    .executes(c -> player(c, p -> StrajaRuntime.get().checkpoints()
+                                            .setExemption(p, StringArgumentType.getString(c, "scope"),
+                                                    StringArgumentType.getString(c, "subject"), add)))))));
+        }
         root.then(adminOnly(checkpoint));
         var setMissionTime = Commands.literal("set-mission-time")
                 .then(Commands.argument("id", StringArgumentType.word())

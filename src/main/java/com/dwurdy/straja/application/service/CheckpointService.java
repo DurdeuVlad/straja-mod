@@ -8,12 +8,16 @@ import com.dwurdy.straja.domain.model.GateLane;
 import com.dwurdy.straja.domain.model.InspectionLedgerEntry;
 import com.dwurdy.straja.domain.model.LawCheckpointRecord;
 import com.dwurdy.straja.domain.model.LawCheckpointStore;
+import com.dwurdy.straja.domain.model.PersonnelRecord;
 import com.dwurdy.straja.domain.model.PrisonerRegisterRecord;
 import com.dwurdy.straja.domain.model.PrisonerStatus;
 import com.dwurdy.straja.domain.model.SnapshotItem;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -37,6 +41,7 @@ public final class CheckpointService {
     private final PrisonService prison;
     private final StorageService storage;
     private final BoloService bolos;
+    private final PersonnelService personnel;
 
     private final Map<UUID, PrevPos> prevPositions = new ConcurrentHashMap<>();
     // Deliberate deviation: stamps are session-scoped, not persisted like the
@@ -48,12 +53,14 @@ public final class CheckpointService {
     private record BoardingStamp(String siteId, long expiresAt) {}
 
     public CheckpointService(StrajaContext ctx, AuditService audit,
-                             PrisonService prison, StorageService storage, BoloService bolos) {
+                             PrisonService prison, StorageService storage, BoloService bolos,
+                             PersonnelService personnel) {
         this.ctx = ctx;
         this.audit = audit;
         this.prison = prison;
         this.storage = storage;
         this.bolos = bolos;
+        this.personnel = personnel;
     }
 
     /** Server-tick entry: prototype cadence is every 5 ticks. */
@@ -87,15 +94,17 @@ public final class CheckpointService {
         String dim = p.dimension();
         double x = p.x(), y = p.y(), z = p.z();
         PrevPos prev = prevPositions.get(p.uuid());
+        // Role resolution reads several stores — do it once per player per scan.
+        Set<String> roles = rolesOf(p);
 
         // Boarding is position-state, not a crossing: a rider inside the dock
         // zone is checked even on first sighting (prototype cpBoardScan had no
         // prev dependency). An arrest here mutates position — stop scanning.
         for (var site : store.checkpoints().values()) {
-            if (site == null || !site.active || isExempt(p, site, store)) continue;
+            if (site == null || !site.active || isExempt(p, site, store, roles)) continue;
             if (site.boardZone != null && p.ridingBoatLike()
                     && site.boardZone.contains(dim, x, y, z)
-                    && boardCheck(p, site, store)) {
+                    && boardCheck(p, site, store, roles)) {
                 reseed(p);
                 return;
             }
@@ -109,7 +118,7 @@ public final class CheckpointService {
         boolean bigStep = mx * mx + mz * mz > MAX_STEP * MAX_STEP;  // teleport jump
 
         for (var site : store.checkpoints().values()) {
-            if (site == null || !site.active || isExempt(p, site, store)) continue;
+            if (site == null || !site.active || isExempt(p, site, store, roles)) continue;
 
             // Gate lanes only evaluate walking crossings — a teleport step is
             // not a "walked through the gate" event. Stage boxes still run:
@@ -126,14 +135,14 @@ public final class CheckpointService {
                         return;
                     }
                     if (site.linkedCheckpointId != null && !site.linkedCheckpointId.isBlank()
-                            && rightWayArrival(p, site, store)) {
+                            && rightWayArrival(p, site, store, roles)) {
                         reseed(p);
                         return;
                     }
                     break;
                 }
             }
-            if (handleStages(p, site, store, prev, x, y, z)) {
+            if (handleStages(p, site, store, roles, prev, x, y, z)) {
                 reseed(p); // arrested/pushed back — re-seed at the post-effect position
                 return;
             }
@@ -149,7 +158,8 @@ public final class CheckpointService {
 
     /** Returns true when the stage pipeline arrested or pushed the player back. */
     private boolean handleStages(PlayerGateway p, LawCheckpointRecord site,
-                                 LawCheckpointStore store, PrevPos prev, double x, double y, double z) {
+                                 LawCheckpointStore store, Set<String> roles,
+                                 PrevPos prev, double x, double y, double z) {
         String dim = p.dimension();
         if (site.direction != CrossingDirection.BIDIRECTIONAL) {
             CrossingDirection dir = directionOf(site, prev, dim);
@@ -159,10 +169,10 @@ public final class CheckpointService {
         boolean entered2 = entered(site.stage2, dim, prev, x, y, z);
         if (!entered1 && !entered2) return false;
         if (site.mode == com.dwurdy.straja.domain.model.CheckpointMode.DENY) {
-            return denyStage(p, site, store, dir(site, prev, dim));
+            return denyStage(p, site, store, roles, dir(site, prev, dim));
         }
-        return entered2 ? arrestStage2(p, site, store, dir(site, prev, dim))
-                        : inspect(p, site, store, dir(site, prev, dim));
+        return entered2 ? arrestStage2(p, site, store, roles, dir(site, prev, dim))
+                        : inspect(p, site, store, roles, dir(site, prev, dim));
     }
 
     private static boolean entered(com.dwurdy.straja.domain.model.LawBounds bounds,
@@ -190,17 +200,16 @@ public final class CheckpointService {
 
     // ------------------------------------------------------------ pipelines (prototype order preserved)
 
-    /** Stage 1 — banned push back, custody/hunted arrest on sight, contraband warns, clean pass. */
+    /** Stage 1 — banned/role-banned push back, custody/hunted arrest on sight, contraband warns. */
     private boolean inspect(PlayerGateway p, LawCheckpointRecord site,
-                            LawCheckpointStore store, CrossingDirection dir) {
+                            LawCheckpointStore store, Set<String> roles, CrossingDirection dir) {
         List<SnapshotItem> snapshot = ctx.deepScan().deepScan(p.uuid());
         List<String> found = contraband(snapshot, site, store);
-        if (isBanned(p, site, store)) {
-            p.title("straja.checkpoint.deny_title", "straja.checkpoint.banned_sub");
-            pushback(p, site);
-            ledger(site, p, dir, CrossingOutcome.DENY, snapshot, found, "interzis (ban)");
-            return true;
-        }
+        List<String> carry = carryBanHits(snapshot, site, roles);
+        found.addAll(carry);
+        String roleBan = bannedRole(roles, site);
+        // Custody/hunted first: a wanted or fugitive player is arrested on sight
+        // even when they would also match a ban list — repelling them keeps them free.
         if (inCustody(p)) {
             arrest(p, site, "fugitiv prins la punctul de control", snapshot, found, dir);
             return true;
@@ -208,6 +217,14 @@ public final class CheckpointService {
         if (isHunted(p)) {
             // AT6: wanted on-sight at ANY arresting gate — clean pockets don't protect.
             arrest(p, site, "vânat de Straja prins la frontieră", snapshot, found, dir);
+            return true;
+        }
+        if (isBanned(p, site, store) || roleBan != null) {
+            p.title("straja.checkpoint.deny_title",
+                    roleBan != null ? "straja.checkpoint.role_ban_sub" : "straja.checkpoint.banned_sub");
+            pushback(p, site);
+            ledger(site, p, dir, CrossingOutcome.DENY, snapshot, found,
+                    roleBan != null ? "rol interzis: " + roleBan : "interzis (ban)");
             return true;
         }
         if (found.isEmpty()) {
@@ -221,44 +238,54 @@ public final class CheckpointService {
         p.tellKey("straja.checkpoint.contraband_header");
         for (String line : found) p.tell("§7- §f" + line);
         p.tellKey("straja.checkpoint.contraband_footer");
+        if (!carry.isEmpty()) p.tellKey("straja.checkpoint.quartermaster");
         return false;
     }
 
     /** Stage 2 — arrest assessment: custody > hunted > banned > contraband; clean logs 'out'. */
     private boolean arrestStage2(PlayerGateway p, LawCheckpointRecord site,
-                                 LawCheckpointStore store, CrossingDirection dir) {
+                                 LawCheckpointStore store, Set<String> roles, CrossingDirection dir) {
         List<SnapshotItem> snapshot = ctx.deepScan().deepScan(p.uuid());
         List<String> found = contraband(snapshot, site, store);
+        found.addAll(carryBanHits(snapshot, site, roles));
         boolean banned = isBanned(p, site, store);
+        String roleBan = bannedRole(roles, site);
         boolean jailed = inCustody(p);
         boolean hunted = isHunted(p);
-        if (!banned && !jailed && !hunted && found.isEmpty()) {
+        if (!banned && roleBan == null && !jailed && !hunted && found.isEmpty()) {
             ledger(site, p, dir, CrossingOutcome.PASS, snapshot, found, "curat — a trecut frontiera");
             return false;
         }
         String reason = jailed ? "fugitiv prins la punctul de control"
                 : hunted ? "vânat de Straja prins la frontieră"
                 : banned ? "interdicție la punctul de control (ban activ)"
+                : roleBan != null ? "rol interzis la frontieră: " + roleBan
                 : "marfă interzisă la frontieră";
         return arrest(p, site, reason, snapshot, found, dir);
     }
 
     /** DENY-mode stage entry — violators repelled (wanted logged as sighting), clean pass. */
     private boolean denyStage(PlayerGateway p, LawCheckpointRecord site,
-                              LawCheckpointStore store, CrossingDirection dir) {
+                              LawCheckpointStore store, Set<String> roles, CrossingDirection dir) {
         List<SnapshotItem> snapshot = ctx.deepScan().deepScan(p.uuid());
         List<String> found = contraband(snapshot, site, store);
+        List<String> carry = carryBanHits(snapshot, site, roles);
+        found.addAll(carry);
+        String roleBan = bannedRole(roles, site);
         String violation = null;
         if (isBanned(p, site, store)) violation = "interzis (ban)";
+        else if (roleBan != null) violation = "rol interzis: " + roleBan;
         else if (inCustody(p)) violation = "deținut la poartă";
-        else if (!found.isEmpty()) violation = "marfă interzisă";
+        else if (!found.isEmpty()) violation = carry.isEmpty() ? "marfă interzisă" : "restricție rol — marfă de vândut";
         else if (isHunted(p)) violation = "vânat reperat la poartă";
         if (violation == null) {
             ledger(site, p, dir, CrossingOutcome.PASS, snapshot, found, "curat");
             return false;
         }
-        p.title("straja.checkpoint.deny_title", "straja.checkpoint.deny_sub");
+        p.title("straja.checkpoint.deny_title",
+                roleBan != null ? "straja.checkpoint.role_ban_sub" : "straja.checkpoint.deny_sub");
         pushback(p, site);
+        if (!carry.isEmpty()) p.tellKey("straja.checkpoint.quartermaster");
         ledger(site, p, dir, CrossingOutcome.DENY, snapshot, found, violation);
         return true;
     }
@@ -276,7 +303,8 @@ public final class CheckpointService {
     }
 
     /** Right-way arrival at a linked gate: boarding stamp consumed, else full assessment. */
-    private boolean rightWayArrival(PlayerGateway p, LawCheckpointRecord site, LawCheckpointStore store) {
+    private boolean rightWayArrival(PlayerGateway p, LawCheckpointRecord site,
+                                    LawCheckpointStore store, Set<String> roles) {
         BoardingStamp stamp = boardStamps.get(p.uuid());
         long now = ctx.clock().nowMillis();
         if (stamp != null && stamp.expiresAt() > now && stamp.siteId().equals(site.linkedCheckpointId)) {
@@ -287,20 +315,17 @@ public final class CheckpointService {
             p.tellKey("straja.checkpoint.stamp_ok", site.linkedCheckpointId);
             return false;
         }
-        return gateArrive(p, site, store);
+        return gateArrive(p, site, store, roles);
     }
 
-    /** Arrival without a stamp: banned pushed back, custody/hunted/contraband arrested. */
-    private boolean gateArrive(PlayerGateway p, LawCheckpointRecord site, LawCheckpointStore store) {
+    /** Arrival without a stamp: banned/role-banned pushed back, custody/hunted/contraband arrested. */
+    private boolean gateArrive(PlayerGateway p, LawCheckpointRecord site,
+                               LawCheckpointStore store, Set<String> roles) {
         List<SnapshotItem> snapshot = ctx.deepScan().deepScan(p.uuid());
         List<String> found = contraband(snapshot, site, store);
-        if (isBanned(p, site, store)) {
-            p.title("straja.checkpoint.deny_title", "straja.checkpoint.banned_sub");
-            pushback(p, site);
-            ledger(site, p, CrossingDirection.OUTGOING, CrossingOutcome.DENY,
-                    snapshot, found, "interzis (ban)");
-            return true;
-        }
+        found.addAll(carryBanHits(snapshot, site, roles));
+        String roleBan = bannedRole(roles, site);
+        // Custody/hunted before bans — arrest on sight beats repelling a fugitive.
         if (inCustody(p)) {
             return arrest(p, site, "fugitiv prins la punctul de control",
                     snapshot, found, CrossingDirection.OUTGOING);
@@ -308,6 +333,14 @@ public final class CheckpointService {
         if (isHunted(p)) {
             return arrest(p, site, "vânat de Straja prins la frontieră",
                     snapshot, found, CrossingDirection.OUTGOING);
+        }
+        if (isBanned(p, site, store) || roleBan != null) {
+            p.title("straja.checkpoint.deny_title",
+                    roleBan != null ? "straja.checkpoint.role_ban_sub" : "straja.checkpoint.banned_sub");
+            pushback(p, site);
+            ledger(site, p, CrossingDirection.OUTGOING, CrossingOutcome.DENY,
+                    snapshot, found, roleBan != null ? "rol interzis: " + roleBan : "interzis (ban)");
+            return true;
         }
         if (!found.isEmpty()) {
             return arrest(p, site, "marfă interzisă — control ocolit la îmbarcare",
@@ -319,17 +352,21 @@ public final class CheckpointService {
     }
 
     /** Dock-side check for boat/raft riders. Returns true when it arrested the rider. */
-    private boolean boardCheck(PlayerGateway p, LawCheckpointRecord site, LawCheckpointStore store) {
+    private boolean boardCheck(PlayerGateway p, LawCheckpointRecord site,
+                               LawCheckpointStore store, Set<String> roles) {
         BoardingStamp stamp = boardStamps.get(p.uuid());
         if (stamp != null && stamp.expiresAt() > ctx.clock().nowMillis()) return false;
         List<SnapshotItem> snapshot = ctx.deepScan().deepScan(p.uuid());
         List<String> found = contraband(snapshot, site, store);
+        found.addAll(carryBanHits(snapshot, site, roles));
         boolean jailed = inCustody(p);
         boolean banned = isBanned(p, site, store);
+        String roleBan = bannedRole(roles, site);
         boolean hunted = isHunted(p);
-        if (!found.isEmpty() || banned || jailed || hunted) {
+        if (!found.isEmpty() || banned || roleBan != null || jailed || hunted) {
             String reason = jailed ? "fugitiv la îmbarcare"
                     : banned ? "interzis la îmbarcare (ban activ)"
+                    : roleBan != null ? "rol interzis la îmbarcare: " + roleBan
                     : hunted ? "vânat la îmbarcare"
                     : "marfă interzisă la îmbarcare";
             return arrest(p, site, reason, snapshot, found, CrossingDirection.INCOMING);
@@ -343,14 +380,82 @@ public final class CheckpointService {
 
     // ------------------------------------------------------------ decisions
 
-    /** Exempt lists hold names or UUIDs (prototype parity: ops are scanned like anyone). */
-    private boolean isExempt(PlayerGateway p, LawCheckpointRecord site, LawCheckpointStore store) {
+    /**
+     * LAW-003: a player's gate roles — {@code PRISONER} when in custody, the
+     * personnel grade/track/professions of an AUTHORIZED_ACTIVE member, else
+     * {@code CIVIL}. All values compare case-insensitively against ban,
+     * carry-ban and exemption lists.
+     */
+    private Set<String> rolesOf(PlayerGateway p) {
+        Set<String> roles = new HashSet<>();
+        if (inCustody(p)) roles.add("PRISONER");
+        PersonnelRecord rec = personnel.find(p.uuid().toString());
+        if (rec != null && rec.active()) {
+            if (rec.careerGrade != null) roles.add(rec.careerGrade.name());
+            if (rec.careerTrack != null) roles.add(rec.careerTrack.name());
+            for (String prof : rec.professions) {
+                if (prof != null && !prof.isBlank()) roles.add(prof.trim().toUpperCase(Locale.ROOT));
+            }
+        } else {
+            roles.add("CIVIL");
+        }
+        return roles;
+    }
+
+    /** Role-ban hit: the first configured role the player actually has, else null. */
+    private String bannedRole(Set<String> roles, LawCheckpointRecord site) {
+        for (String banned : site.roleBans) {
+            if (banned == null) continue;
+            for (String role : roles) {
+                if (banned.equalsIgnoreCase(role)) return banned;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Role carry-bans: items restricted only for matching roles, reported with
+     * the role so the remedy ("sell to the quartermaster") stays attributable.
+     * {@code localAllowedItems} does NOT lift a carry ban — role policy wins.
+     */
+    private List<String> carryBanHits(List<SnapshotItem> snapshot,
+                                      LawCheckpointRecord site, Set<String> roles) {
+        List<String> out = new ArrayList<>();
+        for (var e : site.roleCarryBans.entrySet()) {
+            String role = e.getKey();
+            if (role == null || e.getValue() == null) continue;
+            boolean hasRole = roles.stream().anyMatch(r -> r.equalsIgnoreCase(role));
+            if (!hasRole) continue;
+            Map<String, Integer> counts = new java.util.LinkedHashMap<>();
+            for (SnapshotItem item : snapshot) {
+                if (item != null && item.itemId != null
+                        && e.getValue().stream().anyMatch(id -> item.itemId.equalsIgnoreCase(id))) {
+                    counts.merge(item.itemId, item.count, Integer::sum);
+                }
+            }
+            counts.forEach((id, count) -> out.add(count + " x " + id + " (rol: " + role + ")"));
+        }
+        return out;
+    }
+
+    private static boolean containsAnyIgnoreCase(List<String> list, Set<String> values) {
+        for (String v : values) {
+            if (containsIgnoreCase(list, v)) return true;
+        }
+        return false;
+    }
+
+    /** Exempt lists hold names, UUIDs or role names (ops are scanned like anyone). */
+    private boolean isExempt(PlayerGateway p, LawCheckpointRecord site,
+                             LawCheckpointStore store, Set<String> roles) {
         String name = p.name();
         String uuid = p.uuid().toString();
         return containsIgnoreCase(site.exemptions, name)
                 || containsIgnoreCase(site.exemptions, uuid)
                 || containsIgnoreCase(store.globalExemptions(), name)
-                || containsIgnoreCase(store.globalExemptions(), uuid);
+                || containsIgnoreCase(store.globalExemptions(), uuid)
+                || containsAnyIgnoreCase(site.exemptions, roles)
+                || containsAnyIgnoreCase(store.globalExemptions(), roles);
     }
 
     /** Ban lists hold names or UUIDs; legacy name-only bans still apply. */
@@ -514,6 +619,144 @@ public final class CheckpointService {
             }
             viewer.tell("§7" + line);
         }
+    }
+
+    // ------------------------------------------------------------ admin policy (LAW-003)
+
+    /** `illegal add|remove <item> [site]` — blank/"global" site edits the global list. */
+    public void setIllegalItem(PlayerGateway admin, String itemId, String siteId, boolean add) {
+        var store = ctx.lawCheckpoints().read();
+        String scope;
+        if (siteId == null || siteId.isBlank() || "global".equalsIgnoreCase(siteId)) {
+            if (add) store.globalIllegalItems().put(itemId, true);
+            else store.globalIllegalItems().remove(itemId);
+            scope = "global";
+        } else {
+            var site = store.checkpoint(siteId);
+            if (site == null) {
+                admin.tellKey("straja.checkpoint.no_site", siteId);
+                return;
+            }
+            List<LawCheckpointRecord> targets = linkedScope(store, site);
+            for (var s : targets) {
+                if (add) {
+                    if (!s.localIllegalItems.contains(itemId)) s.localIllegalItems.add(itemId);
+                    s.localAllowedItems.remove(itemId); // illegal wins over allowed
+                } else {
+                    s.localIllegalItems.remove(itemId);
+                }
+            }
+            scope = scopeName(targets);
+        }
+        ctx.lawCheckpoints().write(store);
+        policy(admin, scope, (add ? "+illegal " : "-illegal ") + itemId);
+    }
+
+    /** `roleban add|remove <site> <role>` — repelled on sight, pockets irrelevant. */
+    public void setRoleBan(PlayerGateway admin, String siteId, String role, boolean add) {
+        var store = ctx.lawCheckpoints().read();
+        var site = store.checkpoint(siteId);
+        if (site == null) {
+            admin.tellKey("straja.checkpoint.no_site", siteId);
+            return;
+        }
+        String normalized = role.trim().toUpperCase(Locale.ROOT);
+        List<LawCheckpointRecord> targets = linkedScope(store, site);
+        for (var s : targets) {
+            if (add) {
+                if (s.roleBans.stream().noneMatch(normalized::equalsIgnoreCase)) s.roleBans.add(normalized);
+            } else {
+                s.roleBans.removeIf(normalized::equalsIgnoreCase);
+            }
+        }
+        ctx.lawCheckpoints().write(store);
+        policy(admin, scopeName(targets), (add ? "+roleban " : "-roleban ") + normalized);
+    }
+
+    /** `carryban add|remove <site> <role> <item>` — role-specific item restriction. */
+    public void setCarryBan(PlayerGateway admin, String siteId, String role, String itemId, boolean add) {
+        var store = ctx.lawCheckpoints().read();
+        var site = store.checkpoint(siteId);
+        if (site == null) {
+            admin.tellKey("straja.checkpoint.no_site", siteId);
+            return;
+        }
+        String normalized = role.trim().toUpperCase(Locale.ROOT);
+        List<LawCheckpointRecord> targets = linkedScope(store, site);
+        for (var s : targets) {
+            var list = s.roleCarryBans.computeIfAbsent(normalized, k -> new ArrayList<>());
+            if (add) {
+                if (list.stream().noneMatch(itemId::equalsIgnoreCase)) list.add(itemId);
+            } else {
+                list.removeIf(itemId::equalsIgnoreCase);
+                if (list.isEmpty()) s.roleCarryBans.remove(normalized);
+            }
+        }
+        ctx.lawCheckpoints().write(store);
+        policy(admin, scopeName(targets), (add ? "+carryban " : "-carryban ") + normalized + " " + itemId);
+    }
+
+    /** `exempt add|remove <site|global> <player|role>` — subject matched against name, uuid or role. */
+    public void setExemption(PlayerGateway admin, String scope, String subject, boolean add) {
+        var store = ctx.lawCheckpoints().read();
+        List<String> list;
+        String scopeName;
+        if ("global".equalsIgnoreCase(scope)) {
+            list = store.globalExemptions();
+            scopeName = "global";
+        } else {
+            var site = store.checkpoint(scope);
+            if (site == null) {
+                admin.tellKey("straja.checkpoint.no_site", scope);
+                return;
+            }
+            List<LawCheckpointRecord> targets = linkedScope(store, site);
+            for (var s : targets) {
+                if (add) {
+                    if (s.exemptions.stream().noneMatch(subject::equalsIgnoreCase)) s.exemptions.add(subject);
+                } else {
+                    s.exemptions.removeIf(subject::equalsIgnoreCase);
+                }
+            }
+            ctx.lawCheckpoints().write(store);
+            policy(admin, scopeName(targets), (add ? "+exempt " : "-exempt ") + subject);
+            return;
+        }
+        if (add) {
+            if (list.stream().noneMatch(subject::equalsIgnoreCase)) list.add(subject);
+        } else {
+            list.removeIf(subject::equalsIgnoreCase);
+        }
+        ctx.lawCheckpoints().write(store);
+        policy(admin, scopeName, (add ? "+exempt " : "-exempt ") + subject);
+    }
+
+    /** Linked-gate policy sharing: the site plus its link partner(s), both directions. */
+    private List<LawCheckpointRecord> linkedScope(LawCheckpointStore store, LawCheckpointRecord site) {
+        List<LawCheckpointRecord> scope = new ArrayList<>();
+        scope.add(site);
+        if (site.linkedCheckpointId != null && !site.linkedCheckpointId.isBlank()) {
+            var other = store.checkpoint(site.linkedCheckpointId);
+            if (other != null && !other.id.equals(site.id)) scope.add(other);
+        }
+        for (var cand : store.checkpoints().values()) {
+            if (cand != null && site.id.equals(cand.linkedCheckpointId)
+                    && scope.stream().noneMatch(s -> s.id.equals(cand.id))) {
+                scope.add(cand);
+            }
+        }
+        return scope;
+    }
+
+    private static String scopeName(List<LawCheckpointRecord> targets) {
+        return targets.size() == 1 ? targets.get(0).id
+                : targets.get(0).id + "+" + (targets.size() - 1) + " linked";
+    }
+
+    private void policy(PlayerGateway admin, String scope, String what) {
+        audit.record("checkpoint_policy", "checkpoint", "", admin.name(),
+                admin.uuid().toString(), "POLICY", scope + " " + what);
+        admin.tellKey("straja.checkpoint.policy_set", scope, what);
     }
 
     private static String pretty(long timestamp) {
