@@ -9,9 +9,11 @@ import com.dwurdy.straja.domain.model.ItemSpec;
 import com.dwurdy.straja.domain.model.StrajaPolicies;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /** Deterministic fakes for pure unit tests — no Minecraft runtime needed. */
@@ -100,6 +102,7 @@ public final class Fakes {
         public final List<String> actionbarMessages = new ArrayList<>();
         public int selectedSlot = -1;
         public final List<String> effects = new ArrayList<>();
+        public String gameMode = "survival";
         public UUID vehicleUuid;
         public UUID passengerUuid;
         /** When > 0, the next N giveVerified calls fail as if delivery broke. */
@@ -129,6 +132,10 @@ public final class Fakes {
                     reasonKey, remedyKey, reasonArgs));
         }
         @Override public void actionbar(String text) { actionbarMessages.add(text); }
+        @Override public String gameModeName() { return gameMode; }
+        @Override public void title(String titleKey, String subtitleKey, Object... args) {
+            messages.add("TITLE:" + titleKey + "|" + subtitleKey);
+        }
         @Override public boolean give(ItemSpec item) {
             return inventory.insert(new ItemView(item.id(), item.count(), 64, item.customData()));
         }
@@ -214,6 +221,144 @@ public final class Fakes {
         }
 
         @Override public long tickCount() { return tick; }
+    }
+
+    // ---------------------------------------------------------------- storage
+
+    /** In-memory world containers: 27-slot chests with merge-then-fill inserts. */
+    public static final class TestContainers implements WorldContainerGateway {
+        public final Map<String, List<ItemView>> slots = new HashMap<>();
+        public final List<String> drops = new ArrayList<>();
+        public int slotCount = 27;
+        public int maxStack = 64;
+
+        private static String key(String dim, int x, int y, int z) {
+            return dim + "|" + x + "," + y + "," + z;
+        }
+
+        public void placeContainer(String dim, int x, int y, int z) {
+            slots.computeIfAbsent(key(dim, x, y, z), k -> new ArrayList<>(
+                    java.util.Collections.nCopies(slotCount, ItemView.EMPTY)));
+        }
+
+        public void put(String dim, int x, int y, int z, String itemId, int count) {
+            placeContainer(dim, x, y, z);
+            insert(dim, x, y, z, itemId, count);
+        }
+
+        @Override public boolean isContainer(String dim, int x, int y, int z) {
+            return slots.containsKey(key(dim, x, y, z));
+        }
+
+        @Override public int countUnits(String dim, int x, int y, int z, Map<String, Integer> unitValues) {
+            List<ItemView> c = slots.get(key(dim, x, y, z));
+            if (c == null) return -1;
+            int total = 0;
+            for (ItemView v : c) {
+                if (!v.isEmpty()) total += unitValues.getOrDefault(v.id(), 0) * v.count();
+            }
+            return total;
+        }
+
+        @Override public int insert(String dim, int x, int y, int z, String itemId, int count) {
+            List<ItemView> c = slots.get(key(dim, x, y, z));
+            if (c == null || count <= 0) return count;
+            int remaining = count;
+            for (int i = 0; i < c.size() && remaining > 0; i++) {
+                ItemView cur = c.get(i);
+                if (cur.isEmpty() || !cur.id().equals(itemId) || cur.count() >= maxStack) continue;
+                int move = Math.min(remaining, maxStack - cur.count());
+                c.set(i, cur.withCount(cur.count() + move));
+                remaining -= move;
+            }
+            for (int i = 0; i < c.size() && remaining > 0; i++) {
+                if (!c.get(i).isEmpty()) continue;
+                int move = Math.min(remaining, maxStack);
+                c.set(i, new ItemView(itemId, move, maxStack, Map.of()));
+                remaining -= move;
+            }
+            return remaining;
+        }
+
+        @Override public void dropItem(String dim, int x, int y, int z, String itemId, int count) {
+            drops.add(key(dim, x, y, z) + " " + itemId + " x" + count);
+        }
+    }
+
+    /** In-memory guard-NPC bridge: faction points, quest log, positioned guards. */
+    public static final class TestNpcGuards implements NpcGuardGateway {
+        public static final class Guard {
+            public String dimension = "minecraft:overworld";
+            public int factionId;
+            public double x, y, z;
+            public int aggroRange = 0;
+            public UUID target;
+            public boolean dead;
+            public final Set<UUID> lineOfSight = new HashSet<>();
+        }
+
+        public boolean available = true;
+        public final Map<UUID, Guard> guards = new LinkedHashMap<>();
+        public final Map<String, Map<Integer, Integer>> factionPoints = new HashMap<>();
+        public final List<String> questLog = new ArrayList<>();
+        public final List<String> commands = new ArrayList<>();
+
+        public UUID addGuard(double x, double y, double z, int factionId) {
+            Guard g = new Guard();
+            g.x = x; g.y = y; g.z = z; g.factionId = factionId;
+            UUID id = UUID.randomUUID();
+            guards.put(id, g);
+            return id;
+        }
+
+        public UUID lastGuardId() {
+            return guards.isEmpty() ? null : new ArrayList<>(guards.keySet()).get(guards.size() - 1);
+        }
+
+        @Override public boolean available() { return available; }
+        @Override public Integer factionPoints(UUID playerId, int factionId) {
+            return factionPoints.getOrDefault(playerId.toString(), Map.of()).get(factionId);
+        }
+        @Override public void setFactionPoints(UUID playerId, int factionId, int points) {
+            factionPoints.computeIfAbsent(playerId.toString(), k -> new HashMap<>()).put(factionId, points);
+        }
+        @Override public void startQuestForTeam(String teamName, int questId) {
+            questLog.add("start-team:" + teamName + ":" + questId);
+        }
+        @Override public void startQuestForPlayer(UUID playerId, int questId) {
+            questLog.add("start-player:" + playerId + ":" + questId);
+        }
+        @Override public void finishQuestForTeam(String teamName, int questId) {
+            questLog.add("finish-team:" + teamName + ":" + questId);
+        }
+        @Override public List<GuardRef> guardsNear(String dim, double x, double y, double z,
+                double radius, int factionId) {
+            var out = new ArrayList<GuardRef>();
+            guards.forEach((id, g) -> {
+                if (g.dead || g.factionId != factionId || !dim.equals(g.dimension)) return;
+                double dx = g.x - x, dy = g.y - y, dz = g.z - z;
+                if (dx * dx + dy * dy + dz * dz <= radius * radius) {
+                    out.add(new GuardRef(id, g.x, g.y, g.z));
+                }
+            });
+            return out;
+        }
+        @Override public boolean hasLineOfSight(UUID guardId, UUID playerId) {
+            Guard g = guards.get(guardId);
+            return g != null && g.lineOfSight.contains(playerId);
+        }
+        @Override public int aggroRange(UUID guardId, int fallback) {
+            Guard g = guards.get(guardId);
+            return g != null && g.aggroRange > 0 ? g.aggroRange : fallback;
+        }
+        @Override public void setTarget(UUID guardId, UUID playerId) {
+            Guard g = guards.get(guardId);
+            if (g != null) g.target = playerId;
+        }
+        @Override public void clearTargetIfTargeting(UUID guardId, UUID playerId) {
+            Guard g = guards.get(guardId);
+            if (g != null && playerId != null && playerId.equals(g.target)) g.target = null;
+        }
     }
 
     // ---------------------------------------------------------------- currency
@@ -373,7 +518,10 @@ public final class Fakes {
                 new SavedStores.Bolos(access),
                 new SavedStores.Evidence(access),
                 new SavedStores.ArrestRecords(access),
-                new SavedStores.Reputation(access));
+                new SavedStores.Reputation(access),
+                new SavedStores.Storage(access),
+                new TestContainers(),
+                new TestNpcGuards());
     }
 
     public static StrajaPolicies policies() {

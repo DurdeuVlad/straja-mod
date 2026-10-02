@@ -89,6 +89,21 @@ public class MinecraftPlayerGateway implements PlayerGateway {
         if (p != null) p.displayClientMessage(Component.literal(text), true);
     }
 
+    @Override public String gameModeName() {
+        ServerPlayer p = entity();
+        return p != null ? p.gameMode.getGameModeForPlayer().getName() : "survival";
+    }
+
+    @Override public void title(String titleKey, String subtitleKey, Object... args) {
+        ServerPlayer p = entity();
+        if (p == null) return;
+        p.connection.send(new net.minecraft.network.protocol.game.ClientboundSetTitlesAnimationPacket(10, 60, 10));
+        p.connection.send(new net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket(
+                Component.translatable(subtitleKey)));
+        p.connection.send(new net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket(
+                Component.translatable(titleKey, args)));
+    }
+
     @Override public boolean give(ItemSpec item) {
         ServerPlayer p = entity();
         if (p == null) return false;
