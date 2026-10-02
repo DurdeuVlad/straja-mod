@@ -52,6 +52,13 @@ public final class SeizureService {
             rec = new PrisonerRegisterRecord(uuid, target.name(), reason == null ? "" : reason);
             reg.put(rec);
         }
+        if (rec.releasedAt > 0 || rec.status == PrisonerStatus.RELEASED) {
+            // Fresh booking after a release: the evidentiary snapshot belongs
+            // to THIS arrest — a stale snapshot/summary would misattribute
+            // the prior arrest's belongings to the new seizure.
+            rec.arrestSnapshot.clear();
+            rec.confiscatedSummary.clear();
+        }
         rec.status = PrisonerStatus.IN_CELL;
         rec.priorGameMode = safeGameMode(target);
         rec.detaineeUuid = uuid.isEmpty() ? rec.detaineeUuid : uuid;
@@ -67,26 +74,40 @@ public final class SeizureService {
         int contraband = 0, personal = 0, dropped = 0;
         List<String> contrabandLines = new ArrayList<>();
         for (SeizedStack stack : stacks) {
-            if (stack == null || stack.count() <= 0 || stack.itemId().isBlank()) continue;
-            boolean illegal = checkpoints.isIllegal(site, stack.itemId())
-                    || containsContraband(stack, site, checkpoints);
-            int leftover;
-            if (illegal) {
-                contraband += stack.count();
-                contrabandLines.add(stack.count() + " x " + stack.itemId());
-                leftover = routeEvidence(site, checkpoints, stack);
-            } else {
-                personal += stack.count();
-                leftover = routeLocker(rec, stack);
-                if (leftover > 0) {
-                    // Locker overflow spills to evidence, never back on the prisoner.
-                    leftover = routeEvidence(site, checkpoints,
-                            withCount(stack, leftover));
+            if (stack == null || stack.count() <= 0
+                    || stack.itemId() == null || stack.itemId().isBlank()) continue;
+            try {
+                boolean illegal = checkpoints.isIllegal(site, stack.itemId())
+                        || containsContraband(stack, site, checkpoints);
+                int leftover;
+                if (illegal) {
+                    contraband += stack.count();
+                    contrabandLines.add(stack.count() + " x " + stack.itemId());
+                    leftover = routeEvidence(site, checkpoints, stack);
+                } else {
+                    personal += stack.count();
+                    leftover = routeLocker(rec, stack);
+                    if (leftover > 0) {
+                        // Locker overflow spills to evidence, never back on the prisoner.
+                        leftover = routeEvidence(site, checkpoints,
+                                withCount(stack, leftover));
+                    }
                 }
-            }
-            if (leftover > 0) {
-                dropped += leftover;
-                dropAtEvidenceOrPlayer(target, site, checkpoints, stack.itemId(), leftover);
+                if (leftover > 0) {
+                    dropped += leftover;
+                    dropAtEvidenceOrPlayer(target, site, checkpoints,
+                            stack.itemId(), leftover);
+                }
+            } catch (RuntimeException ex) {
+                // A broken container must never void a seized stack — drop
+                // the whole count at the prisoner instead.
+                dropped += stack.count();
+                try {
+                    dropAtEvidenceOrPlayer(target, site, checkpoints,
+                            stack.itemId(), stack.count());
+                } catch (RuntimeException ignored) {}
+                audit.record("seizure_route_failure", "system", "", target.name(),
+                        uuid, "FAIL", stack.itemId() + " x" + stack.count());
             }
         }
 
@@ -118,23 +139,8 @@ public final class SeizureService {
      * poured straight into the inventory (overflow drops at their feet —
      * prototype {@code cpGivePlayer}); an offline release keeps the locker
      * reservation under {@code pendingLockers} so a later login collects it.
-     */
-    /**
-     * Same as {@link #releaseLocker(PrisonerRegisterStore, PlayerGateway,
-     * PrisonerRegisterRecord)} but loads and persists the register itself —
-     * for callers that do not already hold the store open.
-     */
-    public void releaseLocker(PlayerGateway target, PrisonerRegisterRecord rec) {
-        var reg = ctx.prisonerRegister().read();
-        var live = rec == null ? null : reg.prisoner(rec.detaineeUuid);
-        if (live == null) live = rec;
-        releaseLocker(reg, target, live);
-        ctx.prisonerRegister().write(reg);
-    }
-
-    /**
-     * Mutates {@code rec} inside the caller's {@code reg} so a single
-     * write commits status, locker clear and pending reservation atomically.
+     * Mutates {@code rec} inside the caller's {@code reg} so a single write
+     * commits status, locker clear and pending reservation atomically.
      */
     public void releaseLocker(com.dwurdy.straja.domain.model.PrisonerRegisterStore reg,
                               PlayerGateway target, PrisonerRegisterRecord rec) {

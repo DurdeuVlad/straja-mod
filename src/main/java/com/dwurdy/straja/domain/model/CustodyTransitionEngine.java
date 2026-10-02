@@ -202,7 +202,8 @@ public final class CustodyTransitionEngine {
                 return reject("JAILED_RESTRAINT_CUFF_ONLY");
             }
             if (state.condition != PlayerCondition.ALIVE
-                    || state.restraint != RestraintStatus.NONE) {
+                    || state.restraint != RestraintStatus.NONE
+                    || state.transport != TransportStatus.NONE) {
                 return reject("RESTRAINT_REQUIRES_FREE_TARGET");
             }
             state.restraint = restraint;
@@ -461,6 +462,12 @@ public final class CustodyTransitionEngine {
             // M4 uncuff boundary rule: removing restraints inside custody
             // clears the restraint but keeps the prisoner JAILED — the cell
             // is the custody, not the cuffs.
+            if (state.condition == PlayerCondition.UNCONSCIOUS_CUSTODY) {
+                // An unconscious custody timer owns the body until revival —
+                // stripping the restraint now would leave an invalid
+                // UNCONSCIOUS_CUSTODY + NONE projection.
+                return reject("JAILED_UNCONSCIOUS_RESTRAINT_HELD");
+            }
             state.restraint = RestraintStatus.NONE;
             state.restraintMode = RestraintMode.ESCORT;
             state.restraintActorId = "";
@@ -524,6 +531,23 @@ public final class CustodyTransitionEngine {
     }
 
     private static CustodyTransitionResult recoverReleaseRestraints(CustodyState state) {
+        if (state.custody == CustodyStatus.JAILED) {
+            // Involuntary restraint recovery (cuff-break, issuer loss) must
+            // not free a jailed prisoner — same boundary rule as
+            // releaseRestraint. Deadlines are kept so jail delivery/revival
+            // timers survive the recovery.
+            state.restraint = RestraintStatus.NONE;
+            state.restraintMode = RestraintMode.ESCORT;
+            state.restraintActorId = "";
+            state.carrierId = "";
+            state.vision = VisionStatus.NORMAL;
+            state.transport = TransportStatus.NONE;
+            state.transportDeadlineAt = null;
+            if (state.condition == PlayerCondition.CONSCIOUS_RESTRAINED) {
+                state.condition = PlayerCondition.ALIVE;
+            }
+            return CustodyTransitionResult.applied();
+        }
         if (state.condition != PlayerCondition.DEAD) state.condition = PlayerCondition.ALIVE;
         clearDeadlines(state);
         state.restraint = RestraintStatus.NONE;

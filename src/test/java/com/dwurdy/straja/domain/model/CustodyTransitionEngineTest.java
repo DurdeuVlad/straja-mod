@@ -359,6 +359,53 @@ class CustodyTransitionEngineTest {
         assertEquals("RETAIN", p.deathRecoveryBehavior);
     }
 
+    @Test
+    void jailedEscortCuffRecoveryKeepsJailCustody() {
+        var state = state("prisoner");
+        var policies = policies();
+        assertTrue(CustodyTransitionEngine.apply(state,
+                new CustodyTransition("jail-enter", CustodyTransition.Action.ENTER_JAIL,
+                        1_000, "system", "", "prison", StateProvider.SYSTEM,
+                        "prison", 0), policies).ok());
+        assertTrue(CustodyTransitionEngine.apply(state,
+                CustodyTransition.of("cuffs-1", CustodyTransition.Action.APPLY_CUFFS,
+                        2_000, "guard"), policies).ok());
+        assertEquals(CustodyStatus.JAILED, state.custody);
+        assertEquals(PlayerCondition.CONSCIOUS_RESTRAINED, state.condition);
+
+        var result = CustodyTransitionEngine.apply(state,
+                CustodyTransition.of("recover-1",
+                        CustodyTransition.Action.RECOVER_RELEASE_RESTRAINTS, 3_000, "system"),
+                policies());
+        assertTrue(result.ok());
+        assertEquals(CustodyStatus.JAILED, state.custody,
+                "involuntary restraint recovery must not free a jailed prisoner");
+        assertEquals(RestraintStatus.NONE, state.restraint);
+        assertEquals(PlayerCondition.ALIVE, state.condition);
+    }
+
+    @Test
+    void unconsciousJailedPrisonerCannotBeUncuffed() {
+        var state = state("prisoner");
+        var policies = policies();
+        assertTrue(CustodyTransitionEngine.apply(state,
+                new CustodyTransition("jail-enter", CustodyTransition.Action.ENTER_JAIL,
+                        1_000, "system", "", "prison", StateProvider.SYSTEM,
+                        "prison", 0), policies).ok());
+        assertTrue(CustodyTransitionEngine.apply(state,
+                CustodyTransition.of("cuffs-1", CustodyTransition.Action.APPLY_CUFFS,
+                        2_000, "guard"), policies).ok());
+        state.condition = PlayerCondition.UNCONSCIOUS_CUSTODY;
+
+        var result = CustodyTransitionEngine.apply(state,
+                CustodyTransition.of("rel-1", CustodyTransition.Action.RELEASE_RESTRAINT,
+                        3_000, "guard2"), policies);
+        assertFalse(result.ok(),
+                "uncuffing an unconscious jailed prisoner would corrupt the projection");
+        assertEquals(RestraintStatus.CUFFED, state.restraint);
+        assertEquals(PlayerCondition.UNCONSCIOUS_CUSTODY, state.condition);
+    }
+
     private static CustodyState state(String id) {
         var state = new CustodyState();
         state.playerId = id;

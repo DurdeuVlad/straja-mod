@@ -278,6 +278,8 @@ public final class StrajaEvents {
         // Respawn moves the player without a walking crossing — stale prev
         // position would otherwise evaluate the death→spawn jump.
         runtime.checkpoints().clearPlayer(player.getUUID());
+        runtime.prisonRoleplay().onRespawn(
+                new MinecraftPlayerGateway(player.getServer(), player.getUUID()));
     }
 
     @SubscribeEvent

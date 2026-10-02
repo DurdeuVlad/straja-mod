@@ -2497,6 +2497,11 @@ public class CustodyService implements CustodyRoleplayUseCase {
             }
         }
 
+        // One register read per tick: hook writes during this loop only touch
+        // records whose cuff entries are removed in the same pass, so a
+        // shared snapshot stays accurate for the detained checks below.
+        var registerView = store.cuffed.isEmpty()
+                ? null : ctx.prisonerRegister().read();
         for (var entry : new java.util.ArrayList<>(store.cuffed.entrySet())) {
             var record = entry.getValue();
             if (record == null || (blank(record.targetUuid) && blank(record.target))) {
@@ -2518,10 +2523,13 @@ public class CustodyService implements CustodyRoleplayUseCase {
             // A prisoner registered IN_CELL is detained, not escorted: the
             // tether must not drag them out of the cell toward the cuffing
             // officer (detention outranks the restraint).
-            var inmate = record.targetUuid == null || record.targetUuid.isEmpty()
-                    ? null : ctx.prisonerRegister().read().prisoner(record.targetUuid);
+            var inmate = registerView == null
+                    || record.targetUuid == null || record.targetUuid.isEmpty()
+                    ? null : registerView.prisoner(record.targetUuid);
             boolean detained = inmate != null
                     && inmate.status == com.dwurdy.straja.domain.model.PrisonerStatus.IN_CELL;
+            // Cuffed suspects cannot sprint, escorted or not.
+            target.setSprinting(false);
             if (issuer == null || !issuer.dimension().equals(target.dimension())) {
                 // M4: officer offline/dead/other dimension — the tether is
                 // broken. Log the escape window once; the restraint stays on
@@ -2539,9 +2547,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
                     record.escortLostAt = null;
                     changed = true;
                 }
-                // Escort restrictions: cuffed suspects cannot sprint; the
-                // tether drags or halts them past the leash radius (AT8).
-                target.setSprinting(false);
+                // Escort restrictions: the tether drags or halts the suspect
+                // past the leash radius (AT8).
                 if (detained) {
                     hideCuffedHand(target, record);
                     target.closeMenu();

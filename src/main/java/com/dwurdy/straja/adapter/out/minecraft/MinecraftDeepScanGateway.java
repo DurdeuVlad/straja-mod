@@ -48,6 +48,14 @@ public final class MinecraftDeepScanGateway implements DeepScanGateway {
         for (int i = 0; i < inv.getContainerSize(); i++) {
             scan(inv.getItem(i), slotLabel(i), 0, out);
         }
+        // The 2x2 inventory crafting grid and the cursor-carried stack live
+        // outside getInventory() — a shulker parked there would otherwise
+        // smuggle contraband past every gate.
+        var craft = player.inventoryMenu.getCraftSlots();
+        for (int i = 0; i < craft.getContainerSize(); i++) {
+            scan(craft.getItem(i), "craft:" + i, 0, out);
+        }
+        scan(player.containerMenu.getCarried(), "cursor:0", 0, out);
         scanCurios(player, out);
         return out;
     }
@@ -76,6 +84,20 @@ public final class MinecraftDeepScanGateway implements DeepScanGateway {
             inv.setItem(i, ItemStack.EMPTY);
         }
         inv.setChanged();
+        // Crafting grid + cursor stack — same hiding spot the scan covers.
+        var craft = player.inventoryMenu.getCraftSlots();
+        for (int i = 0; i < craft.getContainerSize(); i++) {
+            ItemStack stack = craft.getItem(i);
+            if (stack == null || stack.isEmpty()) continue;
+            out.add(seized("craft:" + i, stack));
+            craft.setItem(i, ItemStack.EMPTY);
+        }
+        craft.setChanged();
+        ItemStack carried = player.containerMenu.getCarried();
+        if (carried != null && !carried.isEmpty()) {
+            out.add(seized("cursor:0", carried));
+            player.containerMenu.setCarried(ItemStack.EMPTY);
+        }
         seizeCurios(player, out);
         return out;
     }

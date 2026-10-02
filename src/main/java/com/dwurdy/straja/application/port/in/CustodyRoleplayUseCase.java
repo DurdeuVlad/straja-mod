@@ -47,6 +47,13 @@ public interface CustodyRoleplayUseCase {
     boolean isBound(PlayerGateway player);
     boolean isDowned(PlayerGateway player);
 
+    /**
+     * The cuffing officer when {@code target} is under a valid escort —
+     * cuffed, officer online, same dimension, within {@code radius}. Null
+     * when no live escort exists (includes "cuffed but officer away").
+     */
+    PlayerGateway escortOfficerWithin(PlayerGateway target, double radius);
+
     List<VisualState> visualStates();
 
     boolean requestCuffs(PlayerGateway issuer, PlayerGateway target);

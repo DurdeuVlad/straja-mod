@@ -668,7 +668,12 @@ public final class StrajaCommands {
                                 return 0;
                             }
                             return runtime.prison().release(actor, t, "command") ? 1 : 0;
-                        })));
+                        }))
+                // Offline release: name/UUID resolves the sentence directly;
+                // locker belongings are parked for the next login.
+                .then(Commands.argument("name", StringArgumentType.word())
+                        .executes(c -> StrajaRuntime.get().prison().releaseById(actor(c),
+                                StringArgumentType.getString(c, "name")) ? 1 : 0)));
         node.then(Commands.literal("cell")
                 .then(Commands.literal("create")
                         .then(Commands.argument("id", StringArgumentType.word())

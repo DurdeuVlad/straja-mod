@@ -484,8 +484,14 @@ public final class CheckpointService {
                 || containsIgnoreCase(site.legacyBannedNames, name);
     }
 
-    /** Physical custody: register in IN_CELL/IN_CAMP/ESCORTED or an active sentence. */
+    /** Physical custody: register in IN_CELL/IN_CAMP/ESCORTED or an active
+     * sentence — but a prisoner beside a live escorting officer is in lawful
+     * custody right now, and the gate must not re-arrest them. */
     private boolean inCustody(PlayerGateway p) {
+        if (custody != null && custody.escortOfficerWithin(p,
+                ctx.policies().escortTetherRadius) != null) {
+            return false;
+        }
         String uuid = p.uuid().toString();
         var rec = ctx.prisonerRegister().read().prisoner(uuid);
         if (rec != null && (rec.status == PrisonerStatus.IN_CELL
@@ -641,8 +647,16 @@ public final class CheckpointService {
             boolean dup = site.evidenceChests.stream().anyMatch(pt -> pt != null
                     && ctx.containers().canonicalKey(pt.dimension(), pt.x(), pt.y(), pt.z())
                             .equals(canon));
+            boolean locker = ctx.prison().read().lockerPool.stream().anyMatch(pt -> pt != null
+                    && ctx.containers().canonicalKey(pt.dimension(), pt.x(), pt.y(), pt.z())
+                            .equals(canon));
             if (dup) {
                 admin.tellKey("straja.storage.pick_chest_dup", canon);
+            } else if (locker) {
+                // Evidence and locker pools must not overlap — an evidence
+                // chest counted as a locker would hand contraband back on release.
+                admin.refuse("straja.checkpoint.pick_in_locker_pool",
+                        "straja.remedy.fix_retry");
             } else {
                 site.evidenceChests.add(point);
                 store.put(site);

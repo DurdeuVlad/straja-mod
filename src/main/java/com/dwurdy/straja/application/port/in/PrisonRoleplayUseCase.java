@@ -22,6 +22,9 @@ public interface PrisonRoleplayUseCase {
 
     void recoverOnLogin(PlayerGateway player);
 
+    /** Re-delivers a respawning prisoner with an active sentence to their cell. */
+    void onRespawn(PlayerGateway player);
+
     void processWaitlist();
 
     void tick();

@@ -4,7 +4,10 @@ import com.dwurdy.straja.application.StrajaContext;
 import com.dwurdy.straja.adapter.out.persistence.SavedStores;
 import com.dwurdy.straja.domain.model.BoloStatus;
 import com.dwurdy.straja.domain.model.CheckpointMode;
+import com.dwurdy.straja.domain.model.CustodyState;
+import com.dwurdy.straja.domain.model.CustodyStatus;
 import com.dwurdy.straja.domain.model.CustodyStore;
+import com.dwurdy.straja.domain.model.RestraintStatus;
 import com.dwurdy.straja.domain.model.GateLane;
 import com.dwurdy.straja.application.port.out.ItemView;
 import com.dwurdy.straja.domain.model.LawBounds;
@@ -62,6 +65,7 @@ class CustodySeizureServiceTest {
         bolos = new BoloService(ctx, players, audit);
         prison.useBolos(bolos);
         custody.onRestraintReleased(prison::onUncuffed);
+        custody.onRestraintApplied(prison::onEscortStart);
         storage = new StorageService(ctx, players, audit, bolos, prison);
         storage.useCustody(custody);
         var personnel = new PersonnelService(new SavedStores.Personnel(
@@ -447,5 +451,145 @@ class CustodySeizureServiceTest {
     private void forceScan() {
         server.tick = (server.tick / 5 + 1) * 5;
         checkpoints.tick();
+    }
+
+    @Test
+    void arrestWithBlockedCustodyKeepsInventory() {
+        // A foreign-owned custody state (roped hostage) refuses ENTER_JAIL —
+        // the seizure must not fire for a target custody could not take.
+        var cstore = ctx.custody().read();
+        var foreign = new CustodyState();
+        foreign.playerId = suspect.uuid().toString();
+        foreign.playerUuid = suspect.uuid().toString();
+        foreign.playerName = suspect.name();
+        foreign.custody = CustodyStatus.HOSTAGE;
+        foreign.restraint = RestraintStatus.ROPE_BOUND;
+        cstore.states.put(suspect.uuid().toString(), foreign);
+        ctx.custody().write(cstore);
+        carry(suspect, "minecraft:bread", 5);
+        ((TestWorld) ctx.world()).room(DIM, -1, 59, -1, 6, 66, 6, -1, 61, 2);
+        assertTrue(prison.createCell(boss, "celula_1", DIM, 0, 60, 0, 5, 65, 5));
+
+        prison.arrest(suspect, null, 1, boss, null);
+
+        assertEquals(5, countIn(suspect.inventory.slots, "minecraft:bread"),
+                "a refused custody handover leaves belongings untouched");
+        assertNull(ctx.prisonerRegister().read().prisoner(suspect.uuid().toString()),
+                "no seizure is booked for a target custody could not take");
+    }
+
+    @Test
+    void cuffRecoveryKeepsJailedCustody() {
+        ((TestWorld) ctx.world()).room(DIM, -1, 59, -1, 6, 66, 6, -1, 61, 2);
+        assertTrue(prison.createCell(boss, "celula_1", DIM, 0, 60, 0, 5, 65, 5));
+        prison.arrest(suspect, null, 1, boss, null);
+        cuffSuspect();
+
+        // the escorting officer is suspended — custody recovers the cuff
+        // closed involuntarily, which must not free the prisoner.
+        var ps = new PlayerService(ctx);
+        var officerState = ps.state(officer.uuid());
+        officerState.suspended = true;
+        ps.save(officer.uuid(), officerState);
+        custody.tick();
+
+        assertFalse(custody.isCuffed(suspect), "the cuff is recovered closed");
+        var canonical = ctx.custody().read().states.get(suspect.uuid().toString());
+        assertNotNull(canonical);
+        assertEquals(CustodyStatus.JAILED, canonical.custody,
+                "jail custody survives the involuntary restraint recovery");
+        assertEquals(RestraintStatus.NONE, canonical.restraint);
+        var rec = ctx.prisonerRegister().read().prisoner(suspect.uuid().toString());
+        assertEquals(PrisonerStatus.IN_CELL, rec.status,
+                "uncuff inside the cell restores IN_CELL");
+    }
+
+    @Test
+    void escortedPrisonerBesideOfficerIsNotReArrestedAtGate() {
+        // Outside the 3b gate bypass but inside the 4.5b escort tether — the
+        // gate must treat the prisoner as a civilian, not an escapee.
+        var site = new LawCheckpointRecord();
+        site.id = "gate";
+        site.name = "gate";
+        site.dimension = DIM;
+        site.mode = CheckpointMode.ARREST;
+        site.pushback = PushbackPoint.at(DIM, 0, 60, -10, 180f);
+        site.stage1 = LawBounds.of(DIM, 0, 55, 0, 10, 65, 10);
+        saveSite(site);
+
+        ((TestWorld) ctx.world()).room(DIM, -1, 59, -1, 6, 66, 6, -1, 61, 2);
+        assertTrue(prison.createCell(boss, "celula_1", DIM, 0, 60, 0, 5, 65, 5));
+        prison.arrest(suspect, null, 1, boss, null);
+        cuffSuspect(); // JAILED escort — register flips to ESCORTED
+
+        suspect.teleport(DIM, 5, 60, -5);
+        officer.teleport(DIM, 5, 60, -9); // 4m behind — outside bypass radius
+        forceScan(); // seed positions
+        suspect.teleport(DIM, 5, 60, 5);
+        officer.teleport(DIM, 5, 60, 1);
+        forceScan();
+
+        var rec = ctx.prisonerRegister().read().prisoner(suspect.uuid().toString());
+        assertEquals(PrisonerStatus.ESCORTED, rec.status,
+                "a live escort is not re-arrested at the gate");
+        assertEquals(5, suspect.z, 1e-6,
+                "the escorted prisoner crosses without a cell teleport");
+        long sentences = ctx.prison().read().sentences.stream().filter(s -> s != null
+                && suspect.uuid().toString().equals(s.targetUuid)).count();
+        assertEquals(1, sentences, "no second sentence is booked");
+    }
+
+    @Test
+    void offlineReleaseParksLockersAndCompletesAtLogin() {
+        var pdata = ctx.prison().read();
+        pdata.lockerPool.add(new StoragePoint(DIM, 200, 60, 200));
+        pdata.lockerPool.add(new StoragePoint(DIM, 201, 60, 200));
+        ctx.prison().write(pdata);
+        containers.placeContainer(DIM, 200, 60, 200);
+        containers.placeContainer(DIM, 201, 60, 200);
+        ((TestWorld) ctx.world()).room(DIM, -1, 59, -1, 6, 66, 6, -1, 61, 2);
+        assertTrue(prison.createCell(boss, "celula_1", DIM, 0, 60, 0, 5, 65, 5));
+        carry(suspect, "minecraft:bread", 7);
+        prison.arrest(suspect, null, 1, boss, null);
+
+        suspect.online = false;
+        assertTrue(prison.releaseById(boss, "civ"));
+        assertFalse(ctx.prisonerRegister().read().pendingLockers()
+                        .getOrDefault(suspect.uuid().toString(), List.of()).isEmpty(),
+                "offline release parks locker keys for the next login");
+
+        // login: belongings delivered, adventure mode and jail custody cleared
+        suspect.online = true;
+        assertEquals("adventure", suspect.gameMode);
+        prison.recoverOnLogin(suspect);
+        assertEquals(7, countIn(suspect.inventory.slots, "minecraft:bread"));
+        assertEquals("survival", suspect.gameMode);
+        var canonical = ctx.custody().read().states.get(suspect.uuid().toString());
+        assertTrue(canonical == null || canonical.custody == CustodyStatus.FREE,
+                "residual JAILED canonical state is cleared at login");
+    }
+
+    @Test
+    void respawnRedeliversSentencedPrisonerToCell() {
+        ((TestWorld) ctx.world()).room(DIM, -1, 59, -1, 6, 66, 6, -1, 61, 2);
+        assertTrue(prison.createCell(boss, "celula_1", DIM, 0, 60, 0, 5, 65, 5));
+        prison.arrest(suspect, null, 1, boss, null);
+
+        // death cleared the canonical custody (CLEAR_ALL); the player
+        // respawns at the world spawn
+        var cstore = ctx.custody().read();
+        var dead = cstore.states.get(suspect.uuid().toString());
+        dead.custody = CustodyStatus.FREE;
+        dead.custodyActorId = "";
+        dead.destination = "";
+        ctx.custody().write(cstore);
+        suspect.teleport(DIM, 400, 64, 400);
+        suspect.gameMode = "survival";
+
+        prison.onRespawn(suspect);
+
+        assertTrue(suspect.x >= 0 && suspect.x <= 6 && suspect.z >= 0 && suspect.z <= 6,
+                "respawned prisoner is delivered back into the cell");
+        assertEquals("adventure", suspect.gameMode);
     }
 }
