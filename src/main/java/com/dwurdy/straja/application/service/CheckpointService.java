@@ -79,6 +79,11 @@ public final class CheckpointService {
     // ------------------------------------------------------------ scan
 
     private void scanPlayer(PlayerGateway p, LawCheckpointStore store) {
+        // Creative/spectator players are outside checkpoint jurisdiction entirely —
+        // same gate the prototype applied to every pipeline (lanes, stages, boarding).
+        String gm = p.gameModeName();
+        if (!"survival".equals(gm) && !"adventure".equals(gm)) return;
+
         String dim = p.dimension();
         double x = p.x(), y = p.y(), z = p.z();
         PrevPos prev = prevPositions.get(p.uuid());
@@ -98,8 +103,6 @@ public final class CheckpointService {
 
         prevPositions.put(p.uuid(), new PrevPos(dim, x, y, z));
         if (prev == null || !prev.dim().equals(dim)) return;
-        String gm = p.gameModeName();
-        if (!"survival".equals(gm) && !"adventure".equals(gm)) return;
 
         double mx = x - prev.x(), mz = z - prev.z();
         if (mx == 0 && mz == 0 && y == prev.y()) return;            // no movement

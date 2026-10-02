@@ -527,4 +527,108 @@ class CheckpointServiceTest {
         checkpoints.showLedger(stranger, "nobody");
         assertTrue(stranger.told("straja.checkpoint.ledger_empty"));
     }
+
+    // ------------------------------------------------------------ adversarial
+
+    @Test
+    void uuidFormBanDeniesAtStage1() {
+        var site = site("border", CheckpointMode.ARREST);
+        site.stage1 = LawBounds.of(DIM, 0, 55, 0, 10, 65, 10);
+        site.bannedPlayerUuids.add(player.uuid.toString());
+        save(site);
+
+        move(5, 60, 5);
+
+        var entry = lastEntry();
+        assertEquals(CrossingOutcome.DENY, entry.outcome);
+        assertEquals("interzis (ban)", entry.detail);
+        assertFalse(inCell());
+    }
+
+    @Test
+    void uuidFormExemptionSkipsProcessing() {
+        var site = site("border", CheckpointMode.ARREST);
+        site.stage1 = LawBounds.of(DIM, 0, 55, 0, 10, 65, 10);
+        site.exemptions.add(player.uuid.toString());
+        save(site);
+
+        move(5, 60, 5);
+
+        assertTrue(ledger().isEmpty());
+        assertFalse(inCell());
+    }
+
+    @Test
+    void nullPersistedCollectionsDoNotBreakScan() {
+        var site = site("border", CheckpointMode.ARREST);
+        site.stage1 = LawBounds.of(DIM, 0, 55, 0, 10, 65, 10);
+        // Gson can persist explicit nulls — the store self-heals them per access.
+        site.gates = null;
+        site.doors = null;
+        site.evidenceChests = null;
+        site.bannedPlayerUuids = null;
+        site.exemptions = null;
+        site.localIllegalItems = null;
+        site.localAllowedItems = null;
+        site.roleBans = null;
+        site.roleCarryBans = null;
+        site.legacyBannedNames = null;
+        save(site);
+
+        move(5, 60, 5);
+
+        var entry = lastEntry();
+        assertNotNull(entry);
+        assertEquals(CrossingOutcome.PASS, entry.outcome);
+    }
+
+    @Test
+    void boardingStampDoesNotClearUnlinkedGate() {
+        var dockA = site("dockA", CheckpointMode.DENY);
+        dockA.boardZone = new BoardingZone(DIM, 0, -10, 10, 10, 60);
+        save(dockA);
+        var gate = site("gate", CheckpointMode.ARREST);
+        gate.linkedCheckpointId = "dockB"; // stamp was issued by dockA, not dockB
+        gate.gates.add(new GateLane(DIM, 0, 20, 10, 20, 5, 15));
+        save(gate);
+
+        player.ridingBoat = true;
+        move(5, 60, 0); // boarded clean at dockA
+        assertEquals("boarded curat", lastEntry().detail);
+
+        player.ridingBoat = false;
+        move(5, 60, 15);
+        move(5, 60, 25); // right-way crossing — foreign stamp must not be consumed
+
+        var entry = lastEntry();
+        assertEquals(CrossingOutcome.PASS, entry.outcome);
+        assertEquals("curat — trecere fără îmbarcare", entry.detail);
+        assertFalse(player.told("straja.checkpoint.stamp_ok"));
+    }
+
+    @Test
+    void laneInAnotherDimensionDoesNotFire() {
+        var site = site("gate", CheckpointMode.DENY);
+        site.gates.add(new GateLane("minecraft:the_nether", 0, 0, 10, 0, 5, -5));
+        save(site);
+
+        move(5, 60, -2);
+        move(5, 60, 2); // same coords, but the lane lives in the nether
+
+        assertTrue(ledger().isEmpty());
+        assertEquals(2, player.z, 1e-6);
+    }
+
+    @Test
+    void originExactlyOnLaneIsAmbiguousAndIgnored() {
+        var site = site("gate", CheckpointMode.DENY);
+        site.gates.add(new GateLane(DIM, 0, 0, 10, 0, 5, -5));
+        save(site);
+
+        move(5, 60, 0);  // standing exactly on the lane
+        move(5, 60, -2); // departure from on-line — side is indeterminate
+
+        assertTrue(ledger().isEmpty());
+        assertEquals(-2, player.z, 1e-6);
+    }
 }
