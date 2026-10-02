@@ -13,6 +13,9 @@ public class PrisonStore {
     public List<Sentence> sentences = new ArrayList<>();
     /** Commissioner marker selections for cell discovery. */
     public Map<String, RoomStore.MarkerSelection> selections = new LinkedHashMap<>();
+    /** Admin-picked personal locker containers (M4). Allocated sequentially
+     *  to new prisoners; never renumbered while in use. */
+    public List<StoragePoint> lockerPool = new ArrayList<>();
 
     public static class WaitlistEntry {
         public String sentenceId = "";

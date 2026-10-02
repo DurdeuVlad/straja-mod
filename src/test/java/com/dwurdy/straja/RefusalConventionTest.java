@@ -67,6 +67,7 @@ class RefusalConventionTest {
             "Mail offline",
             "Dosarul nu are foi",
             "au fost returnate",
+            "eliberat cât era offline",
             "îți cere predarea",
             "vrea să te încătușeze",
             "va fi livrată când revine",

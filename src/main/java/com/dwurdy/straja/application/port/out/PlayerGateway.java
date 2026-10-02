@@ -114,6 +114,29 @@ public interface PlayerGateway {
     /** Vanilla game mode name ("survival", "creative", ...) — fakes default to survival. */
     default String gameModeName() { return "survival"; }
 
+    /** Sets the player's game mode by name ("survival", "adventure", ...). */
+    default void setGameMode(String gameModeName) {}
+
+    /** Force-clears/sets sprint state (escort restraints cancel sprinting). */
+    default void setSprinting(boolean sprinting) {}
+
+    /**
+     * Hands the player a written book. Default degrades to a plain
+     * written_book item without authored pages.
+     */
+    default void giveWrittenBook(String title, String author, java.util.List<String> pages) {
+        give(new ItemSpec("minecraft:written_book", 1, java.util.Map.of(), title));
+    }
+
+    /**
+     * Gives a stack preserving full component data (SNBT as produced by a
+     * seizure/drain). Implementations overflow-drop into the world; the
+     * default falls back to a plain give by id+count.
+     */
+    default void giveStack(String itemId, int count, String snbt) {
+        give(ItemSpec.of(itemId, count));
+    }
+
     /** Sends a title/subtitle pair; the default degrades to the title message. */
     default void title(String titleKey, String subtitleKey, Object... args) {
         tellKey(titleKey, args);

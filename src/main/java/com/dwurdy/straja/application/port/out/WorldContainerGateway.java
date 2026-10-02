@@ -1,5 +1,7 @@
 package com.dwurdy.straja.application.port.out;
 
+import com.dwurdy.straja.domain.model.SeizedStack;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -22,6 +24,26 @@ public interface WorldContainerGateway {
 
     /** Spawns an item entity just above the position (overflow delivery). */
     void dropItem(String dimension, int x, int y, int z, String itemId, int count);
+
+    /**
+     * Like {@link #insert} but preserves the full serialized component data
+     * ({@code snbt}, as produced by a seizure/drain) so evidence and locker
+     * items keep their identity. Falls back to id+count when the SNBT does
+     * not parse. Returns leftover count, or {@code -1} on hard failure.
+     */
+    default int insertStack(String dimension, int x, int y, int z,
+                            String itemId, int count, String snbt) {
+        return insert(dimension, x, y, z, itemId, count);
+    }
+
+    /**
+     * Drains every slot of the container and returns the stacks (full SNBT
+     * preserved) — locker restoration pulls belongings out this way.
+     * Returns an empty list when the position is not a container.
+     */
+    default List<SeizedStack> drain(String dimension, int x, int y, int z) {
+        return List.of();
+    }
 
     /**
      * Identity key for the container at a position. For joined chests this

@@ -194,6 +194,25 @@ public final class CustodyTransitionEngine {
         if (blank(transition.actorId()) || samePlayer(state, transition.actorId())) {
             return reject("RESTRAINT_ACTOR_INVALID");
         }
+        if (state.custody == CustodyStatus.JAILED) {
+            // M4 escort cuff: cuffing a jailed prisoner starts an escort —
+            // the restraint binds them to the officer while custody stays
+            // JAILED (the cell assignment and sentence continue unchanged).
+            if (restraint != RestraintStatus.CUFFED) {
+                return reject("JAILED_RESTRAINT_CUFF_ONLY");
+            }
+            if (state.condition != PlayerCondition.ALIVE
+                    || state.restraint != RestraintStatus.NONE
+                    || state.transport != TransportStatus.NONE) {
+                return reject("RESTRAINT_REQUIRES_FREE_TARGET");
+            }
+            state.restraint = restraint;
+            state.restraintMode = RestraintMode.ESCORT;
+            state.restraintActorId = transition.actorId();
+            state.vision = VisionStatus.NORMAL;
+            state.condition = PlayerCondition.CONSCIOUS_RESTRAINED;
+            return CustodyTransitionResult.applied();
+        }
         if ((state.condition != PlayerCondition.ALIVE && state.condition != PlayerCondition.DOWNED)
                 || state.custody != CustodyStatus.FREE
                 || state.restraint != RestraintStatus.NONE) {
@@ -439,7 +458,25 @@ public final class CustodyTransitionEngine {
         if (blank(transition.actorId()) || samePlayer(state, transition.actorId())) {
             return reject("SELF_RESTRAINT_REMOVAL_FORBIDDEN");
         }
-        if (state.custody == CustodyStatus.JAILED) return reject("JAILED_RESTRAINT_REQUIRES_RELEASE");
+        if (state.custody == CustodyStatus.JAILED) {
+            // M4 uncuff boundary rule: removing restraints inside custody
+            // clears the restraint but keeps the prisoner JAILED — the cell
+            // is the custody, not the cuffs.
+            if (state.condition == PlayerCondition.UNCONSCIOUS_CUSTODY) {
+                // An unconscious custody timer owns the body until revival —
+                // stripping the restraint now would leave an invalid
+                // UNCONSCIOUS_CUSTODY + NONE projection.
+                return reject("JAILED_UNCONSCIOUS_RESTRAINT_HELD");
+            }
+            state.restraint = RestraintStatus.NONE;
+            state.restraintMode = RestraintMode.ESCORT;
+            state.restraintActorId = "";
+            state.vision = VisionStatus.NORMAL;
+            if (state.condition == PlayerCondition.CONSCIOUS_RESTRAINED) {
+                state.condition = PlayerCondition.ALIVE;
+            }
+            return CustodyTransitionResult.applied();
+        }
         state.restraint = RestraintStatus.NONE;
         state.restraintMode = RestraintMode.ESCORT;
         state.restraintActorId = "";
@@ -494,6 +531,23 @@ public final class CustodyTransitionEngine {
     }
 
     private static CustodyTransitionResult recoverReleaseRestraints(CustodyState state) {
+        if (state.custody == CustodyStatus.JAILED) {
+            // Involuntary restraint recovery (cuff-break, issuer loss) must
+            // not free a jailed prisoner — same boundary rule as
+            // releaseRestraint. Deadlines are kept so jail delivery/revival
+            // timers survive the recovery.
+            state.restraint = RestraintStatus.NONE;
+            state.restraintMode = RestraintMode.ESCORT;
+            state.restraintActorId = "";
+            state.carrierId = "";
+            state.vision = VisionStatus.NORMAL;
+            state.transport = TransportStatus.NONE;
+            state.transportDeadlineAt = null;
+            if (state.condition == PlayerCondition.CONSCIOUS_RESTRAINED) {
+                state.condition = PlayerCondition.ALIVE;
+            }
+            return CustodyTransitionResult.applied();
+        }
         if (state.condition != PlayerCondition.DEAD) state.condition = PlayerCondition.ALIVE;
         clearDeadlines(state);
         state.restraint = RestraintStatus.NONE;

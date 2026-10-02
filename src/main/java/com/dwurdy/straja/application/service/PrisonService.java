@@ -6,6 +6,7 @@ import com.dwurdy.straja.application.port.in.PrisonRoleplayUseCase;
 import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.domain.model.Capability;
 import com.dwurdy.straja.domain.model.Cell;
+import com.dwurdy.straja.domain.model.PrisonerStatus;
 import com.dwurdy.straja.domain.model.PrisonStore;
 import com.dwurdy.straja.domain.model.Sentence;
 import com.dwurdy.straja.domain.model.SetupData;
@@ -26,7 +27,11 @@ public class PrisonService implements PrisonRoleplayUseCase {
     private final CustodyRoleplayUseCase custody;
     private final java.util.List<Consumer<Sentence>> arrestHooks = new java.util.ArrayList<>();
     private final java.util.List<BiConsumer<Sentence, String>> sentenceCompletedHooks = new java.util.ArrayList<>();
+    private SeizureService seizure;
+    private BoloService bolos;
     private long lastTickMs;
+    /** Armed admin picks for the locker pool (admin uuid → mode). */
+    private final java.util.Map<java.util.UUID, String> pickModes = new java.util.HashMap<>();
 
     public PrisonService(StrajaContext ctx, PlayerService players, AuditService audit,
                          CustodyRoleplayUseCase custody) {
@@ -34,6 +39,16 @@ public class PrisonService implements PrisonRoleplayUseCase {
         this.players = players;
         this.audit = audit;
         this.custody = custody;
+    }
+
+    /** M4: the arrest-time seizure engine (late-bound — storage/checkpoints wire after). */
+    public void useSeizure(SeizureService service) {
+        this.seizure = service;
+    }
+
+    /** M4: fugitive marking writes system BOLOs (late-bound like useSeizure). */
+    public void useBolos(BoloService service) {
+        this.bolos = service;
     }
 
     public void onArrest(Consumer<Sentence> hook) {
@@ -225,8 +240,9 @@ public class PrisonService implements PrisonRoleplayUseCase {
             data.waitlist.removeIf(e -> e != null && entry.sentenceId.equals(e.sentenceId));
             changed = true;
             var target = findFor(sentence);
-            if (target != null) {
+            if (target != null && custody.enterJail(target, "prison")) {
                 teleportToCell(target, cell);
+                target.setGameMode("adventure");
                 target.tell("Ai fost repartizat într-o celulă pentru executarea sentinței.");
             }
         }
@@ -253,6 +269,17 @@ public class PrisonService implements PrisonRoleplayUseCase {
 
     public Sentence arrest(PlayerGateway target, String fineId, int days,
                            PlayerGateway actor, String missionId) {
+        return arrest(target, fineId, days, actor, missionId, "", "");
+    }
+
+    /**
+     * {@code reason}/{@code siteId} carry the register context a checkpoint
+     * arrest knows (detention reason, arrest site); officer-initiated arrests
+     * use the 5-arg overload and leave both blank.
+     */
+    public Sentence arrest(PlayerGateway target, String fineId, int days,
+                           PlayerGateway actor, String missionId,
+                           String reason, String siteId) {
         if (!ctx.policies().prisonEnabled) {
             if (actor != null) actor.refuse("straja.prison.disabled", "straja.remedy.ask_comisar");
             audit.record("prison_arrest", actor == null ? "" : actor.name(),
@@ -262,7 +289,10 @@ public class PrisonService implements PrisonRoleplayUseCase {
         }
         var data = store();
         var existing = activeSentence(target);
-        if (existing != null) return existing;
+        if (existing != null) {
+            recapture(target, existing);
+            return existing;
+        }
         int max = Math.max(1, ctx.policies().prisonMaxSentenceDays);
         int fallback = Math.max(1, ctx.policies().prisonDefaultSentenceDays);
         int sentenceDays = days > 0 ? Math.min(max, days) : fallback;
@@ -296,12 +326,28 @@ public class PrisonService implements PrisonRoleplayUseCase {
         ctx.prison().write(data);
         for (var hook : arrestHooks) hook.accept(sentence);
         var online = findFor(sentence);
+        // Custody must land before inventory is touched: if the jail
+        // transition is refused (foreign provider state), the target keeps
+        // their belongings and the officer gets the handover retry prompt.
+        // Waitlisted prisoners (no cell yet) are still seized — they are
+        // booked even though the body waits for a bunk.
+        boolean jailed = false;
         if (online != null && !sentence.cellId.isEmpty()) {
             if (custody.enterJail(online, "prison")) {
-                teleportToCell(online, cell);
+                jailed = true;
             } else {
                 online.refuse("straja.prison.handover_retry", "straja.remedy.jailer");
             }
+        }
+        if (online != null && seizure != null && (jailed || sentence.cellId.isEmpty())) {
+            // Custody consumes the person AND the inventory: seize at the
+            // arrest position before the handover moves the body into a cell.
+            seizure.onArrest(online, siteFor(siteId, missionId),
+                    blank(reason) ? missionId : reason);
+        }
+        if (jailed) {
+            teleportToCell(online, cell);
+            online.setGameMode("adventure");
         }
         if (online != null) {
             online.tell("Ai fost arestat pentru " + sentence.sentenceDays
@@ -311,6 +357,46 @@ public class PrisonService implements PrisonRoleplayUseCase {
                 actor == null ? "" : uuidOf(actor), sentence.target, sentence.targetUuid,
                 "SUCCESS", "sentenceId=" + sentence.id + " days=" + sentenceDays);
         return sentence;
+    }
+
+    /**
+     * Re-arrest of an already-sentenced player — the recapture path for
+     * fugitives and escorted prisoners returned to a cell. Restores the
+     * register to IN_CELL, clears the system BOLO, and puts the body back.
+     */
+    private void recapture(PlayerGateway target, Sentence sentence) {
+        String uuid = uuidOf(target);
+        var reg = ctx.prisonerRegister().read();
+        var rec = reg.prisoner(uuid);
+        boolean wasHunted = rec != null && (rec.status == PrisonerStatus.FUGITIVE
+                || rec.status == PrisonerStatus.ESCORTED);
+        if (rec != null && rec.status != PrisonerStatus.RELEASED) {
+            rec.status = PrisonerStatus.IN_CELL;
+            ctx.prisonerRegister().write(reg);
+        }
+        if (wasHunted && bolos != null && target.uuid() != null) {
+            bolos.clearFor(target.uuid());
+        }
+        var cell = blank(sentence.cellId) ? null : store().cell(sentence.cellId);
+        if (cell != null && custody.enterJail(target, "prison")) {
+            teleportToCell(target, cell);
+            target.setGameMode("adventure");
+        }
+        if (wasHunted) {
+            target.tell("Ai fost readus în custodie.");
+            audit.record("prison_recapture", "", "", sentence.target, uuid,
+                    "SUCCESS", "sentenceId=" + sentence.id);
+        }
+    }
+
+    /** Resolves the arrest site from an explicit site id or a {@code checkpoint:<id>} mission tag. */
+    private com.dwurdy.straja.domain.model.LawCheckpointRecord siteFor(String siteId,
+                                                                     String missionId) {
+        String id = !blank(siteId) ? siteId
+                : missionId != null && missionId.startsWith("checkpoint:")
+                        ? missionId.substring("checkpoint:".length()) : "";
+        if (blank(id)) return null;
+        return ctx.lawCheckpoints().read().checkpoint(id);
     }
 
     private void teleportToCell(PlayerGateway player, Cell cell) {
@@ -354,7 +440,23 @@ public class PrisonService implements PrisonRoleplayUseCase {
             for (var hook : sentenceCompletedHooks) hook.accept(sentence, sentence.releaseReason);
         }
         if (!sentence.cellId.isEmpty()) data.assignments.remove(sentence.cellId);
+        // M4: an official release restores belongings, game mode and status.
+        var reg = ctx.prisonerRegister().read();
+        var rec = reg.prisoner(sentence.targetUuid);
+        if (rec != null && rec.status != PrisonerStatus.RELEASED) {
+            rec.status = PrisonerStatus.RELEASED;
+            rec.releasedAt = now();
+            if (seizure != null) seizure.releaseLocker(reg, target, rec);
+            ctx.prisonerRegister().write(reg);
+        }
+        if (bolos != null && sentence.targetUuid != null && !sentence.targetUuid.isEmpty()) {
+            try {
+                bolos.clearFor(java.util.UUID.fromString(sentence.targetUuid));
+            } catch (IllegalArgumentException ignored) {}
+        }
         if (target != null) {
+            target.setGameMode(rec == null || blank(rec.priorGameMode)
+                    ? "survival" : rec.priorGameMode);
             teleportToRelease(target);
             target.tell("FORCED_RELEASE".equals(sentence.status)
                     ? "Ai fost eliberat administrativ din celulă."
@@ -366,6 +468,81 @@ public class PrisonService implements PrisonRoleplayUseCase {
     private void teleportToRelease(PlayerGateway player) {
         SetupData.Location point = ctx.setup().read().location("prisonRelease");
         if (point != null) player.teleport(point.dimension, point.x + 0.5, point.y, point.z + 0.5);
+    }
+
+    /**
+     * Releases a sentenced player by name or UUID without requiring them
+     * online — locker belongings are parked under {@code pendingLockers} and
+     * the rest of the release finishes at their next login.
+     */
+    public boolean releaseById(PlayerGateway actor, String targetId) {
+        if (!players.hasCapability(actor, Capability.EXECUTE_ARRESTS)) {
+            actor.refuse("straja.prison.release_rank", "straja.remedy.jailer");
+            audit.record("prison_release", actor.name(), uuidOf(actor),
+                    targetId, "", "REFUSED", "missing_authority");
+            return false;
+        }
+        var online = ctx.server().findPlayer(targetId);
+        if (online != null) return release(actor, online, "command");
+        var data = store();
+        Sentence sentence = null;
+        for (var s : data.sentences) {
+            if (s == null || (!"ACTIVE".equals(s.status)
+                    && !"WAITING_CELL".equals(s.status))) continue;
+            if (targetId.equals(s.targetUuid) || targetId.equalsIgnoreCase(s.target)) {
+                sentence = s;
+                break;
+            }
+        }
+        if (sentence == null) {
+            actor.refuse("straja.prison.no_sentence", "straja.remedy.jailer", targetId);
+            return false;
+        }
+        if (!releaseSentence(data, sentence, null, "FORCED_RELEASE")) return false;
+        ctx.prison().write(data);
+        actor.tellKey("straja.prison.released_offline", sentence.target);
+        audit.record("prison_release", actor.name(), uuidOf(actor),
+                sentence.target, sentence.targetUuid, "SUCCESS",
+                "FORCED_RELEASE offline targetId=" + targetId);
+        return true;
+    }
+
+    /**
+     * Death is not an exit from detention: a respawning prisoner with an
+     * active sentence is re-delivered to their cell instead of waking at
+     * spawn and drifting into an automatic FUGITIVE mark.
+     */
+    public void onRespawn(PlayerGateway player) {
+        var data = store();
+        var sentence = activeSentenceFrom(data, player);
+        if (sentence == null || !"ACTIVE".equals(sentence.status)) return;
+        var rec = ctx.prisonerRegister().read().prisoner(sentence.targetUuid);
+        if (rec != null && (rec.status == PrisonerStatus.FUGITIVE
+                || rec.status == PrisonerStatus.RELEASED)) return;
+        var cell = blank(sentence.cellId) ? null : data.cell(sentence.cellId);
+        if (cell == null) return;
+        if (custody.enterJail(player, "prison")) {
+            teleportToCell(player, cell);
+            player.setGameMode("adventure");
+            player.tell("Ai fost întors în celulă — detenția continuă.");
+        }
+    }
+
+    /**
+     * Finishes a release that ran while the prisoner was offline: clears a
+     * residual JAILED canonical state and restores the captured game mode.
+     * Harmless for players with no pending release.
+     */
+    private void finishReleaseRecovery(PlayerGateway player) {
+        var reg = ctx.prisonerRegister().read();
+        var rec = reg.prisoner(player.uuid().toString());
+        if (rec != null && rec.status == PrisonerStatus.RELEASED
+                && !blank(rec.priorGameMode) && "adventure".equals(player.gameModeName())) {
+            player.setGameMode(rec.priorGameMode);
+            rec.priorGameMode = "";
+            ctx.prisonerRegister().write(reg);
+        }
+        custody.releaseFromJail(player);
     }
 
     public void status(PlayerGateway player) {
@@ -398,10 +575,15 @@ public class PrisonService implements PrisonRoleplayUseCase {
             boolean lockersMoved = register.rekeyPendingLockers(legacyId, uuid);
             if (adopted || lockersMoved) ctx.prisonerRegister().write(register);
         }
+        // Released-while-offline prisoners collect locker belongings at login.
+        if (seizure != null) seizure.deliverPendingLockers(player);
         var data = store();
         var sentence = activeSentenceFrom(data, player);
         if (sentence == null || !"WAITING_CELL".equals(sentence.status)
-                && !"ACTIVE".equals(sentence.status)) return;
+                && !"ACTIVE".equals(sentence.status)) {
+            finishReleaseRecovery(player);
+            return;
+        }
         if (sentence.id == null || sentence.id.isBlank()
                 || (blank(sentence.targetUuid) && blank(sentence.target))) {
             // An active sentence without verifiable identity must not drive
@@ -421,6 +603,13 @@ public class PrisonService implements PrisonRoleplayUseCase {
             sentence = activeSentenceFrom(data, player);
         }
         if (sentence == null || !"ACTIVE".equals(sentence.status)) return;
+        // A relogged fugitive is not teleported back — they escaped; the
+        // register (or their out-of-bounds position) marks them on next tick.
+        // An ESCORTED prisoner relogging mid-escort is likewise left in place:
+        // the tether (or the breach rule, if the officer is gone) resolves it.
+        var regRecord = ctx.prisonerRegister().read().prisoner(sentence.targetUuid);
+        if (regRecord != null && (regRecord.status == PrisonerStatus.FUGITIVE
+                || regRecord.status == PrisonerStatus.ESCORTED)) return;
         var cell = blank(sentence.cellId) ? null : data.cell(sentence.cellId);
         var assignment = cell == null || blank(cell.id) ? null : data.assignments.get(cell.id);
         if (cell != null && !blank(cell.dimension) && assignment != null
@@ -522,18 +711,38 @@ public class PrisonService implements PrisonRoleplayUseCase {
                 if (target != null) {
                     if (custody.enterJail(target, "prison")) {
                         teleportToCell(target, cell);
+                        target.setGameMode("adventure");
                     }
                 }
             }
             if (target == null) continue; // offline time never counts
             var cell = data.cell(sentence.cellId);
-            if (!custody.enterJail(target, "prison")) continue;
+            var rec = ctx.prisonerRegister().read().prisoner(sentence.targetUuid);
+            if (rec != null && rec.status == PrisonerStatus.FUGITIVE) {
+                // Custody breach: the sentence stays open but time does not
+                // drain while the prisoner is at large — recapture resumes it.
+                sentence.lastTickAt = now();
+                changed = true;
+                continue;
+            }
+            // The bounds check runs whether or not the canonical jail
+            // transition can be re-asserted this tick — a prisoner under a
+            // foreign custody state (roped, provider-owned) can still breach
+            // the cell and must still flag FUGITIVE.
+            boolean jailed = custody.enterJail(target, "prison");
             if (cell != null && !(cell.dimension.equals(target.dimension())
                     && target.x() >= cell.minX && target.x() <= cell.maxX
                     && target.y() >= cell.minY && target.y() <= cell.maxY
-                    && target.z() >= cell.minZ && target.z() <= cell.maxZ)) {
-                teleportToCell(target, cell);
+                    && target.z() >= cell.minZ && target.z() <= cell.maxZ)
+                    && custody.escortOfficerWithin(target,
+                            ctx.policies().escortTetherRadius) == null) {
+                // M4: leaving custody bounds without a release — and without
+                // a live escort beside them — is an escape: the prisoner
+                // becomes a hunted fugitive, not a teleport back.
+                markFugitive(sentence, target);
+                continue;
             }
+            if (!jailed) continue;
             long elapsed = Math.max(0, Math.min(now() - sentence.lastTickAt, 5000));
             sentence.lastTickAt = now();
             double x = target.x(), y = target.y(), z = target.z();
@@ -585,6 +794,160 @@ public class PrisonService implements PrisonRoleplayUseCase {
         closed.sort(Comparator.comparingLong(
                 s -> s.servedAt != null ? s.servedAt : s.createdAt));
         return data.sentences.removeAll(closed.subList(0, Math.min(surplus, closed.size())));
+    }
+
+    /**
+     * Custody breach without an official release: the register flips to
+     * FUGITIVE, a system BOLO marks them hunted, and their real game mode is
+     * restored (a fugitive fights back — the sentence pauses until recapture).
+     */
+    private void markFugitive(Sentence sentence, PlayerGateway target) {
+        String uuid = sentence.targetUuid;
+        var reg = ctx.prisonerRegister().read();
+        var rec = reg.prisoner(uuid);
+        if (rec != null && rec.status == PrisonerStatus.FUGITIVE) return;
+        if (rec == null) {
+            rec = new com.dwurdy.straja.domain.model.PrisonerRegisterRecord(
+                    uuid, sentence.target, sentence.missionId);
+            reg.put(rec);
+        }
+        rec.status = PrisonerStatus.FUGITIVE;
+        rec.escapeCount++;
+        ctx.prisonerRegister().write(reg);
+        if (bolos != null) {
+            bolos.markFugitive(uuid, sentence.target, "evadare din custodie", sentence.id);
+        }
+        if (target != null) {
+            String prior = rec.priorGameMode == null || rec.priorGameMode.isBlank()
+                    ? "survival" : rec.priorGameMode;
+            target.setGameMode(prior);
+            target.tell("Ai evadat din custodie. Ești căutat — gardienii te vor prinde din nou.");
+        }
+        audit.record("prison_fugitive", "", "", sentence.target, uuid,
+                "SUCCESS", "escape sentenceId=" + sentence.id
+                        + " escapes=" + rec.escapeCount);
+    }
+
+    /**
+     * Uncuff boundary rule (M4): restraints removed inside custody keep the
+     * prisoner IN_CELL; restraints removed outside custody mark them
+     * fugitive. Wired from CustodyService's restraint-released hook.
+     */
+    public void onUncuffed(PlayerGateway officer, PlayerGateway target) {
+        if (target == null) return;
+        var data = store();
+        var sentence = activeSentenceFrom(data, target);
+        if (sentence == null) return;
+        var reg = ctx.prisonerRegister().read();
+        var rec = reg.prisoner(sentence.targetUuid);
+        if (rec == null || rec.status == PrisonerStatus.RELEASED) return;
+        var cell = blank(sentence.cellId) ? null : data.cell(sentence.cellId);
+        boolean inside = cell != null && cell.dimension.equals(target.dimension())
+                && target.x() >= cell.minX && target.x() <= cell.maxX
+                && target.y() >= cell.minY && target.y() <= cell.maxY
+                && target.z() >= cell.minZ && target.z() <= cell.maxZ;
+        if (inside) {
+            if (rec.status != PrisonerStatus.IN_CELL) {
+                rec.status = PrisonerStatus.IN_CELL;
+                ctx.prisonerRegister().write(reg);
+            }
+            return;
+        }
+        markFugitive(sentence, target);
+    }
+
+    /**
+     * Escort start (M4): a sentenced prisoner cuffed for escort is ESCORTED —
+     * the cell bounds check stops counting them as escaped while the escort
+     * holds. No-op for unsentenced suspects (ordinary cuffs).
+     */
+    public void onEscortStart(PlayerGateway officer, PlayerGateway target) {
+        if (target == null) return;
+        var data = store();
+        var sentence = activeSentenceFrom(data, target);
+        if (sentence == null) return;
+        var reg = ctx.prisonerRegister().read();
+        var rec = reg.prisoner(sentence.targetUuid);
+        if (rec == null || rec.status != PrisonerStatus.IN_CELL) return;
+        rec.status = PrisonerStatus.ESCORTED;
+        ctx.prisonerRegister().write(reg);
+        audit.record("prison_escort", officer == null ? "system" : officer.name(),
+                officer == null ? "" : uuidOf(officer), sentence.target,
+                sentence.targetUuid, "SUCCESS", "escort_start sentenceId=" + sentence.id);
+    }
+
+    // ------------------------------------------------------------ locker pool picks
+
+    /** Arms the locker-pool pick: {@code locker} adds containers, {@code off} disarms. */
+    public boolean setPickMode(PlayerGateway admin, String mode) {
+        if (mode == null) return false;
+        if ("off".equals(mode)) {
+            pickModes.remove(admin.uuid());
+            return true;
+        }
+        if (!"locker".equals(mode)) return false;
+        pickModes.put(admin.uuid(), mode);
+        return true;
+    }
+
+    /** `/straja prison lockers` — the pool plus each chest's current owner. */
+    public void listLockers(PlayerGateway admin) {
+        var data = store();
+        if (data.lockerPool == null || data.lockerPool.isEmpty()) {
+            admin.refuse("straja.prison.no_lockers", "straja.remedy.pick_locker");
+            return;
+        }
+        var reg = ctx.prisonerRegister().read();
+        for (var point : data.lockerPool) {
+            if (point == null) continue;
+            String canon = ctx.containers().canonicalKey(
+                    point.dimension(), point.x(), point.y(), point.z());
+            String owner = "liber";
+            for (var rec : reg.prisoners().values()) {
+                if (rec != null && rec.personalLocker != null
+                        && rec.personalLocker.stream().anyMatch(p -> p != null
+                                && p.key().equals(point.key()))) {
+                    owner = rec.detaineeName;
+                    break;
+                }
+            }
+            admin.tell(canon + " — " + owner);
+        }
+    }
+
+    /**
+     * Right-click consumed by an armed locker pick; returns true when the
+     * click was consumed (caller cancels the interaction).
+     */
+    public boolean onPickClick(PlayerGateway admin, String dimension, int x, int y, int z) {
+        if (!"locker".equals(pickModes.get(admin.uuid()))) return false;
+        if (!ctx.containers().isContainer(dimension, x, y, z)) {
+            admin.refuse("straja.storage.pick_not_container", "straja.remedy.fix_retry");
+            return true;
+        }
+        var data = store();
+        String canon = ctx.containers().canonicalKey(dimension, x, y, z);
+        boolean dup = data.lockerPool.stream().anyMatch(p -> p != null
+                && ctx.containers().canonicalKey(p.dimension(), p.x(), p.y(), p.z()).equals(canon));
+        boolean evidence = ctx.lawCheckpoints().read().checkpoints().values().stream()
+                .filter(site -> site != null && site.evidenceChests != null)
+                .flatMap(site -> site.evidenceChests.stream())
+                .filter(pt -> pt != null)
+                .anyMatch(pt -> ctx.containers()
+                        .canonicalKey(pt.dimension(), pt.x(), pt.y(), pt.z()).equals(canon));
+        var point = new com.dwurdy.straja.domain.model.StoragePoint(dimension, x, y, z);
+        if (dup) {
+            admin.tellKey("straja.storage.pick_chest_dup", canon);
+        } else if (evidence) {
+            // Evidence chests are not personal lockers — overlap would
+            // release seized contraband back into a prisoner's hands.
+            admin.refuse("straja.prison.pick_in_evidence", "straja.remedy.fix_retry");
+        } else {
+            data.lockerPool.add(point);
+            ctx.prison().write(data);
+            admin.tellKey("straja.prison.pick_locker", canon, data.lockerPool.size());
+        }
+        return true;
     }
 
     private static String uuidOf(PlayerGateway p) {

@@ -101,6 +101,79 @@ public final class MinecraftContainerGateway implements WorldContainerGateway {
         level.addFreshEntity(entity);
     }
 
+    /**
+     * {@inheritDoc}
+     * Rebuilds the stack from its serialized SNBT so component data (names,
+     * container contents, enchantments) survives the trip into evidence.
+     */
+    @Override public int insertStack(String dimension, int x, int y, int z,
+                                     String itemId, int count, String snbt) {
+        Container container = containerAt(dimension, x, y, z);
+        var item = BuiltInRegistries.ITEM.getOptional(ResourceLocation.tryParse(itemId));
+        if (item.isEmpty() || item.get() == net.minecraft.world.item.Items.AIR) return -1;
+        if (container == null || count <= 0) return count;
+        ItemStack template = stackFromSnbt(itemId, count, snbt, item.get());
+        int remaining = count;
+        // merge pass — component-aware so identical evidence stacks consolidate
+        for (int i = 0; i < container.getContainerSize() && remaining > 0; i++) {
+            ItemStack cur = container.getItem(i);
+            if (cur.isEmpty() || !ItemStack.isSameItemSameComponents(cur, template)
+                    || cur.getCount() >= cur.getMaxStackSize()) continue;
+            int move = Math.min(remaining, cur.getMaxStackSize() - cur.getCount());
+            cur.grow(move);
+            container.setItem(i, cur);
+            remaining -= move;
+        }
+        // fill pass — fresh stacks keep the full component data
+        for (int i = 0; i < container.getContainerSize() && remaining > 0; i++) {
+            if (!container.getItem(i).isEmpty()) continue;
+            ItemStack fresh = template.copyWithCount(Math.min(remaining, template.getMaxStackSize()));
+            container.setItem(i, fresh);
+            remaining -= fresh.getCount();
+        }
+        if (remaining < count) container.setChanged();
+        return remaining;
+    }
+
+    /** {@inheritDoc} Empties the container; each stack keeps its full SNBT. */
+    @Override public java.util.List<com.dwurdy.straja.domain.model.SeizedStack> drain(
+            String dimension, int x, int y, int z) {
+        Container container = containerAt(dimension, x, y, z);
+        if (container == null) return java.util.List.of();
+        var out = new java.util.ArrayList<com.dwurdy.straja.domain.model.SeizedStack>();
+        for (int i = 0; i < container.getContainerSize(); i++) {
+            ItemStack stack = container.getItem(i);
+            if (stack == null || stack.isEmpty()) continue;
+            String id = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+            String snbt;
+            try {
+                var tag = stack.save(server.registryAccess());
+                snbt = tag instanceof net.minecraft.nbt.CompoundTag c ? c.toString() : null;
+            } catch (RuntimeException ex) {
+                snbt = null;
+            }
+            out.add(new com.dwurdy.straja.domain.model.SeizedStack(
+                    "slot:" + i, id, stack.getCount(), snbt, java.util.List.of()));
+            container.setItem(i, ItemStack.EMPTY);
+        }
+        container.setChanged();
+        return out;
+    }
+
+    /** Rebuilds a stack from SNBT (ItemStack.parse); falls back to id+count. */
+    private ItemStack stackFromSnbt(String itemId, int count, String snbt, Item fallback) {
+        if (snbt != null && !snbt.isBlank()) {
+            try {
+                var tag = net.minecraft.nbt.TagParser.parseTag(snbt);
+                var parsed = ItemStack.parse(server.registryAccess(), tag);
+                if (parsed.isPresent() && !parsed.get().isEmpty()) return parsed.get();
+            } catch (Exception ignored) {
+                // malformed SNBT — plain stack below
+            }
+        }
+        return new ItemStack(fallback, count);
+    }
+
     @Override public String canonicalKey(String dimension, int x, int y, int z) {
         ServerLevel level = level(dimension);
         if (level == null) return WorldContainerGateway.super.canonicalKey(dimension, x, y, z);

@@ -42,6 +42,7 @@ class CheckpointServiceTest {
     private StorageService storage;
     private BoloService bolos;
     private CheckpointService checkpoints;
+    private CustodyService custody;
     private PersonnelService personnel;
     private final java.util.Map<String, MemoryStore> personnelRaw = new java.util.HashMap<>();
     private TestPlayer player;
@@ -55,12 +56,15 @@ class CheckpointServiceTest {
         world = (TestWorld) ctx.world();
         var players = new PlayerService(ctx);
         var audit = new AuditService(ctx);
-        var custody = new CustodyService(ctx, players, audit);
+        custody = new CustodyService(ctx, players, audit);
         prison = new PrisonService(ctx, players, audit, custody);
-        bolos = new BoloService(ctx, players, audit);
+        prison.useSeizure(new SeizureService(ctx, audit));
+        prison.useBolos(bolos = new BoloService(ctx, players, audit));
         storage = new StorageService(ctx, players, audit, bolos, prison);
+        storage.useCustody(custody);
+        deepScan.server = server;
         personnel = new PersonnelService(new SavedStores.Personnel(name -> personnelRaw.computeIfAbsent(name, k -> new MemoryStore())), clock, new Fakes.SeqIds());
-        checkpoints = new CheckpointService(ctx, audit, prison, storage, bolos, personnel);
+        checkpoints = new CheckpointService(ctx, audit, prison, storage, bolos, personnel, custody);
         player = server.add("civ");
         player.x = 5; player.y = 60; player.z = -5; // within MAX_STEP of the stage edge
     }

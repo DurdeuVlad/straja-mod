@@ -51,6 +51,8 @@ public class CustodyStore {
         public long cuffedAt;
         public double maxDistance = 32;
         public Long outOfRangeAt;
+        /** Escape-window marker: set once when the escorting officer is lost. */
+        public Long escortLostAt;
         public String reason = "";
         public int originalSelectedSlot = -1;
         /** The held item hidden while cuffed, restored on release. */

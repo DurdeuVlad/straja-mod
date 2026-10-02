@@ -1,5 +1,6 @@
 package com.dwurdy.straja.application.port.out;
 
+import com.dwurdy.straja.domain.model.SeizedStack;
 import com.dwurdy.straja.domain.model.SnapshotItem;
 import java.util.List;
 import java.util.UUID;
@@ -14,4 +15,14 @@ import java.util.UUID;
  */
 public interface DeepScanGateway {
     List<SnapshotItem> deepScan(UUID playerUuid);
+
+    /**
+     * Physically confiscates every carried stack — main+hotbar+armor+offhand
+     * and equipped Curios when present — returning each stack with its full
+     * serialized component data and the set of item ids reachable inside it.
+     * Nested contents travel inside the parent's SNBT, so nothing is lost.
+     */
+    default List<SeizedStack> seizeAll(UUID playerUuid) {
+        return List.of();
+    }
 }

@@ -42,25 +42,30 @@ public final class CheckpointService {
     private final StorageService storage;
     private final BoloService bolos;
     private final PersonnelService personnel;
+    private final CustodyService custody; // nullable — escort bypass off when absent
 
     private final Map<UUID, PrevPos> prevPositions = new ConcurrentHashMap<>();
     // Deliberate deviation: stamps are session-scoped, not persisted like the
     // prototype's cpBoard persistentData — a relog forces a fresh dock check
     // rather than trusting a 20-minute window across disconnects.
     private final Map<UUID, BoardingStamp> boardStamps = new ConcurrentHashMap<>();
+    /** Armed admin picks: admin uuid → site+mode (evidence chests / doors). */
+    private final Map<UUID, Pick> picks = new ConcurrentHashMap<>();
 
     private record PrevPos(String dim, double x, double y, double z) {}
     private record BoardingStamp(String siteId, long expiresAt) {}
+    private record Pick(String siteId, String mode) {}
 
     public CheckpointService(StrajaContext ctx, AuditService audit,
                              PrisonService prison, StorageService storage, BoloService bolos,
-                             PersonnelService personnel) {
+                             PersonnelService personnel, CustodyService custody) {
         this.ctx = ctx;
         this.audit = audit;
         this.prison = prison;
         this.storage = storage;
         this.bolos = bolos;
         this.personnel = personnel;
+        this.custody = custody;
     }
 
     /** Server-tick entry: prototype cadence is every 5 ticks. */
@@ -94,6 +99,16 @@ public final class CheckpointService {
         String dim = p.dimension();
         double x = p.x(), y = p.y(), z = p.z();
         PrevPos prev = prevPositions.get(p.uuid());
+
+        // M4 escort bypass (AT8): a cuffed suspect beside their escorting
+        // officer passes every checkpoint pipeline — the tether IS the
+        // custody, so the gate does not repel what an officer escorts.
+        if (custody != null && custody.escortOfficerWithin(
+                p, ctx.policies().escortGateBypassRadius) != null) {
+            prevPositions.put(p.uuid(), new PrevPos(dim, x, y, z));
+            return;
+        }
+
         // Role resolution reads several stores — do it once per player per scan.
         Set<String> roles = rolesOf(p);
 
@@ -469,8 +484,14 @@ public final class CheckpointService {
                 || containsIgnoreCase(site.legacyBannedNames, name);
     }
 
-    /** Physical custody: register in IN_CELL/IN_CAMP/ESCORTED or an active sentence. */
+    /** Physical custody: register in IN_CELL/IN_CAMP/ESCORTED or an active
+     * sentence — but a prisoner beside a live escorting officer is in lawful
+     * custody right now, and the gate must not re-arrest them. */
     private boolean inCustody(PlayerGateway p) {
+        if (custody != null && custody.escortOfficerWithin(p,
+                ctx.policies().escortTetherRadius) != null) {
+            return false;
+        }
         String uuid = p.uuid().toString();
         var rec = ctx.prisonerRegister().read().prisoner(uuid);
         if (rec != null && (rec.status == PrisonerStatus.IN_CELL
@@ -520,7 +541,8 @@ public final class CheckpointService {
     private boolean arrest(PlayerGateway p, LawCheckpointRecord site, String reason,
                            List<SnapshotItem> snapshot, List<String> found,
                            CrossingDirection dir) {
-        var sentence = prison.arrest(p, null, 0, null, "checkpoint:" + site.id);
+        var sentence = prison.arrest(p, null, 0, null, "checkpoint:" + site.id,
+                reason, site.id);
         if (sentence == null) {
             p.title("straja.checkpoint.deny_title", "straja.checkpoint.deny_sub");
             pushback(p, site);
@@ -528,23 +550,17 @@ public final class CheckpointService {
                     "arest indisponibil — prison oprit");
             return true;
         }
+        // PrisonService owns booking (register, seizure, report); the
+        // checkpoint only attaches the tamper-evident ledger snapshot it
+        // captured before the arrest mutated the inventory (AT4).
         String uuid = p.uuid().toString();
-        long now = ctx.clock().nowMillis();
         var reg = ctx.prisonerRegister().read();
         var rec = reg.prisoner(uuid);
-        if (rec == null) {
-            rec = new PrisonerRegisterRecord(uuid, p.name(), reason);
-            reg.put(rec);
+        if (rec != null) {
+            if (rec.arrestSnapshot.isEmpty()) rec.arrestSnapshot.addAll(snapshot);
+            if (rec.confiscatedSummary.isEmpty()) rec.confiscatedSummary.addAll(found);
+            ctx.prisonerRegister().write(reg);
         }
-        rec.status = PrisonerStatus.IN_CELL;
-        rec.detentionReason = reason;
-        rec.arrestSite = site.id;
-        rec.bookedAt = now;
-        rec.arrestCount++;
-        if (rec.arrestSnapshot.isEmpty()) rec.arrestSnapshot.addAll(snapshot);
-        if (rec.confiscatedSummary.isEmpty()) rec.confiscatedSummary.addAll(found);
-        reg.legacyWantedUntil().remove(uuid);
-        ctx.prisonerRegister().write(reg);
 
         // Custody consumes the hunt: thief flag + active BOLOs clear (AT6).
         storage.onArrested(p.uuid());
@@ -589,6 +605,72 @@ public final class CheckpointService {
         var ledger = ctx.inspectionLedger().read();
         ledger.append(entry, ctx.policies().inspectionLedgerLimit);
         ctx.inspectionLedger().write(ledger);
+    }
+
+    // ------------------------------------------------------------ site picking (LAW-004)
+
+    /** `pick <site> evidence|door|off` — arms a site-scoped pick for admin clicks. */
+    public boolean setPickMode(PlayerGateway admin, String siteId, String mode) {
+        if ("off".equals(mode) || siteId == null || mode == null) {
+            picks.remove(admin.uuid());
+            return "off".equals(mode);
+        }
+        var store = ctx.lawCheckpoints().read();
+        var site = store.checkpoint(siteId);
+        if (site == null) {
+            admin.refuse("straja.checkpoint.no_site", "straja.remedy.fix_retry", siteId);
+            return true;
+        }
+        if (!"evidence".equals(mode) && !"door".equals(mode)) return false;
+        picks.put(admin.uuid(), new Pick(site.id, mode));
+        return true;
+    }
+
+    /** Consumes an armed site pick; returns true when the click was used. */
+    public boolean onPickClick(PlayerGateway admin, String dimension, int x, int y, int z) {
+        var pick = picks.get(admin.uuid());
+        if (pick == null) return false;
+        var store = ctx.lawCheckpoints().read();
+        var site = store.checkpoint(pick.siteId());
+        if (site == null) {
+            picks.remove(admin.uuid());
+            admin.refuse("straja.checkpoint.no_site", "straja.remedy.fix_retry", pick.siteId());
+            return true;
+        }
+        var point = new com.dwurdy.straja.domain.model.StoragePoint(dimension, x, y, z);
+        if ("evidence".equals(pick.mode())) {
+            if (!ctx.containers().isContainer(dimension, x, y, z)) {
+                admin.refuse("straja.storage.pick_not_container", "straja.remedy.fix_retry");
+                return true;
+            }
+            String canon = ctx.containers().canonicalKey(dimension, x, y, z);
+            boolean dup = site.evidenceChests.stream().anyMatch(pt -> pt != null
+                    && ctx.containers().canonicalKey(pt.dimension(), pt.x(), pt.y(), pt.z())
+                            .equals(canon));
+            boolean locker = ctx.prison().read().lockerPool.stream().anyMatch(pt -> pt != null
+                    && ctx.containers().canonicalKey(pt.dimension(), pt.x(), pt.y(), pt.z())
+                            .equals(canon));
+            if (dup) {
+                admin.tellKey("straja.storage.pick_chest_dup", canon);
+            } else if (locker) {
+                // Evidence and locker pools must not overlap — an evidence
+                // chest counted as a locker would hand contraband back on release.
+                admin.refuse("straja.checkpoint.pick_in_locker_pool",
+                        "straja.remedy.fix_retry");
+            } else {
+                site.evidenceChests.add(point);
+                store.put(site);
+                ctx.lawCheckpoints().write(store);
+                admin.tellKey("straja.checkpoint.pick_evidence", canon, site.id,
+                        site.evidenceChests.size());
+            }
+            return true;
+        }
+        site.doors.add(point);
+        store.put(site);
+        ctx.lawCheckpoints().write(store);
+        admin.tellKey("straja.checkpoint.pick_door", point.key(), site.id, site.doors.size());
+        return true;
     }
 
     // ------------------------------------------------------------ ledger query

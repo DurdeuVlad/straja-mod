@@ -22,7 +22,16 @@ public interface PrisonRoleplayUseCase {
 
     void recoverOnLogin(PlayerGateway player);
 
+    /** Re-delivers a respawning prisoner with an active sentence to their cell. */
+    void onRespawn(PlayerGateway player);
+
     void processWaitlist();
 
     void tick();
+
+    /** Arms/disarms the locker-pool pick for admin clicks (M4). */
+    boolean setPickMode(PlayerGateway admin, String mode);
+
+    /** Consumes an armed locker pick; true when the click was used. */
+    boolean onPickClick(PlayerGateway admin, String dimension, int x, int y, int z);
 }

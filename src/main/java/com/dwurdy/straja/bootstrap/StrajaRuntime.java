@@ -307,6 +307,12 @@ public final class StrajaRuntime {
         this.missions = new com.dwurdy.straja.application.service.MissionService(ctx, players, audit);
         this.custody = new com.dwurdy.straja.application.service.CustodyService(ctx, players, audit);
         this.prison = new com.dwurdy.straja.application.service.PrisonService(ctx, players, audit, custody);
+        var seizure = new com.dwurdy.straja.application.service.SeizureService(ctx, audit);
+        this.prison.useSeizure(seizure);
+        // M4 uncuff boundary rule: restraints off inside custody keep the
+        // prisoner; outside custody mark them fugitive.
+        this.custody.onRestraintReleased(prison::onUncuffed);
+        this.custody.onRestraintApplied(prison::onEscortStart);
         this.fines = new com.dwurdy.straja.application.service.FineService(ctx, players, audit, prison);
         this.complaints = new com.dwurdy.straja.application.service.ComplaintService(ctx, players, audit);
         this.complaints.useV2Escalation(v2ComplaintEscalation);
@@ -341,8 +347,10 @@ public final class StrajaRuntime {
                 ctx, players, audit, incidents, bolos);
         this.storage = new com.dwurdy.straja.application.service.StorageService(
                 ctx, players, audit, bolos, prison);
+        this.storage.useCustody(this.custody);
+        this.prison.useBolos(bolos);
         this.checkpoints = new com.dwurdy.straja.application.service.CheckpointService(
-                ctx, audit, prison, storage, bolos, v2Personnel);
+                ctx, audit, prison, storage, bolos, v2Personnel, custody);
         this.prison.onArrest(sentence -> {
             try {
                 storage.onArrested(UUID.fromString(sentence.targetUuid));

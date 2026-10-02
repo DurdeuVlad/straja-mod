@@ -19,6 +19,8 @@ class PrisonServiceTest {
     private StrajaContext ctx;
     private PlayerService players;
     private PrisonService prison;
+    private CustodyService custody;
+    private BoloService bolos;
     private TestPlayer boss;
     private TestPlayer inmate;
 
@@ -29,8 +31,12 @@ class PrisonServiceTest {
         ctx = Fakes.context(server, clock);
         players = new PlayerService(ctx);
         var audit = new AuditService(ctx);
-        var custody = new CustodyService(ctx, players, audit);
+        custody = new CustodyService(ctx, players, audit);
         prison = new PrisonService(ctx, players, audit, custody);
+        prison.useSeizure(new SeizureService(ctx, audit));
+        bolos = new BoloService(ctx, players, audit);
+        prison.useBolos(bolos);
+        ((TestDeepScan) ctx.deepScan()).server = server;
         boss = server.add("dwurdy");
         inmate = server.add("civ1");
         ((TestWorld) ctx.world()).room("minecraft:overworld", -1, 59, -1, 6, 66, 6,
@@ -150,11 +156,41 @@ class PrisonServiceTest {
     }
 
     @Test
-    void escapeTeleportsBackInside() {
+    void escapeMarksFugitiveInsteadOfTeleportingBack() {
+        prison.arrest(inmate, null, 1, boss, null);
+        assertEquals("adventure", inmate.gameMode);
+        inmate.teleport("minecraft:overworld", 500, 64, 500);
+        clock.advance(2_000);
+        prison.tick();
+        // M4: the prisoner is NOT dragged back — they become a hunted fugitive.
+        assertEquals(500, inmate.x, "custody breach must not teleport the prisoner back");
+        var rec = ctx.prisonerRegister().read().prisoner(inmate.uuid().toString());
+        assertNotNull(rec);
+        assertEquals(com.dwurdy.straja.domain.model.PrisonerStatus.FUGITIVE, rec.status);
+        assertEquals(1, rec.escapeCount);
+        assertEquals("survival", inmate.gameMode, "fugitives recover their real game mode");
+        assertFalse(bolos.active().isEmpty(), "a system BOLO marks the escape");
+        assertEquals(inmate.uuid().toString(), bolos.active().get(0).subjectUuid);
+        // sentence stays open but time pauses while at large
+        assertEquals("ACTIVE", ctx.prison().read().sentences.get(0).status);
+    }
+
+    @Test
+    void recaptureClearsFugitiveAndReturnsToCell() {
         prison.arrest(inmate, null, 1, boss, null);
         inmate.teleport("minecraft:overworld", 500, 64, 500);
+        clock.advance(2_000);
         prison.tick();
-        assertTrue(inmate.x <= 6);
+        assertEquals(com.dwurdy.straja.domain.model.PrisonerStatus.FUGITIVE,
+                ctx.prisonerRegister().read().prisoner(inmate.uuid().toString()).status);
+        // recapture: a second arrest on an open sentence returns custody
+        var s = prison.arrest(inmate, null, 1, boss, null);
+        assertNotNull(s);
+        assertEquals(com.dwurdy.straja.domain.model.PrisonerStatus.IN_CELL,
+                ctx.prisonerRegister().read().prisoner(inmate.uuid().toString()).status);
+        assertTrue(bolos.active().isEmpty(), "recapture clears the fugitive BOLO");
+        assertTrue(prison.insideCell("minecraft:overworld", inmate.x, inmate.y, inmate.z));
+        assertEquals("adventure", inmate.gameMode);
     }
 
     @Test

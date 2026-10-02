@@ -263,6 +263,10 @@ public final class PolicyRegistry {
         k("prison.afkGraceSeconds", "prisonAfkGraceSeconds", Kind.INT);
         k("prison.maxSentenceDays", "prisonMaxSentenceDays", Kind.INT);
         k("prison.arrestRadius", "prisonArrestRadius", Kind.DOUBLE);
+        k("prison.escortTetherRadius", "escortTetherRadius", Kind.DOUBLE);
+        k("prison.escortGateBypassRadius", "escortGateBypassRadius", Kind.DOUBLE);
+        k("prison.escortTeleportDistance", "escortTeleportDistance", Kind.DOUBLE);
+        k("prison.lockerChestsPerPrisoner", "lockerChestsPerPrisoner", Kind.INT);
         // audit
         k("audit.enabled", "auditEnabled", Kind.BOOL);
         k("audit.retentionLimit", "auditRetentionLimit", Kind.INT);
