@@ -51,6 +51,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
     private final CustodyMessageProjector messageProjector = new CustodyMessageProjector();
     private java.util.function.BiConsumer<PlayerGateway, PlayerGateway> custodyEscapeHook =
             (actor, target) -> {};
+    private java.util.function.BiConsumer<PlayerGateway, PlayerGateway> restraintReleasedHook =
+            (actor, target) -> {};
 
     public CustodyService(StrajaContext ctx, PlayerService players, AuditService audit) {
         this.ctx = ctx;
@@ -60,6 +62,26 @@ public class CustodyService implements CustodyRoleplayUseCase {
 
     public void onCustodyEscape(java.util.function.BiConsumer<PlayerGateway, PlayerGateway> hook) {
         this.custodyEscapeHook = hook == null ? (actor, target) -> {} : hook;
+    }
+
+    /**
+     * Fired whenever a cuff restraint is removed by any path (manual release,
+     * distance break, issuer recovery). M4 uses it for the uncuff boundary
+     * rule: inside custody keeps the prisoner, outside marks them fugitive.
+     */
+    public void onRestraintReleased(java.util.function.BiConsumer<PlayerGateway, PlayerGateway> hook) {
+        this.restraintReleasedHook = hook == null ? (actor, target) -> {} : hook;
+    }
+
+    /**
+     * Fired whenever a cuff record is applied. M4 uses it to mark a cuffed
+     * prisoner as ESCORTED so cell-bounds checks stop counting them as
+     * escaped while the escort is valid.
+     */
+    private java.util.function.BiConsumer<PlayerGateway, PlayerGateway> restraintAppliedHook =
+            (actor, target) -> {};
+    public void onRestraintApplied(java.util.function.BiConsumer<PlayerGateway, PlayerGateway> hook) {
+        this.restraintAppliedHook = hook == null ? (actor, target) -> {} : hook;
     }
 
     private long now() { return ctx.clock().nowMillis(); }
@@ -92,6 +114,25 @@ public class CustodyService implements CustodyRoleplayUseCase {
     // ------------------------------------------------------------ queries
 
     public boolean isCuffed(PlayerGateway p) { return store().cuffed.containsKey(key(p)); }
+
+    /**
+     * M4 escort query: returns the escorting officer when the target is
+     * cuffed and the issuer is online, same dimension, and within
+     * {@code radius}. Null otherwise — a cuffed player whose officer walked
+     * away is not "under escort" for gate bypass or hunt suspension.
+     */
+    public PlayerGateway escortOfficerWithin(PlayerGateway target, double radius) {
+        if (target == null) return null;
+        var record = store().cuffed.get(key(target));
+        if (record == null) return null;
+        var issuer = findStored(record.issuerUuid, record.issuer);
+        if (issuer == null || !issuer.dimension().equals(target.dimension())) return null;
+        double dx = target.x() - issuer.x();
+        double dy = target.y() - issuer.y();
+        double dz = target.z() - issuer.z();
+        return dx * dx + dy * dy + dz * dz <= radius * radius ? issuer : null;
+    }
+
     public boolean isBound(PlayerGateway p) { return store().bound.containsKey(key(p)); }
     public boolean isDowned(PlayerGateway p) { return store().downed.containsKey(key(p)); }
     public boolean hasHeadSack(PlayerGateway p) { return store().headSacks.containsKey(key(p)); }
@@ -573,6 +614,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
         hideCuffedHand(target, record);
         store.cuffed.put(targetKey, record);
         if (canonical.condition != PlayerCondition.DOWNED) store.downed.remove(targetKey);
+        restraintAppliedHook.accept(findStored(issuerUuid, issuerName), target);
         return true;
     }
 
@@ -1328,6 +1370,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
         }
         if (cutRope) store.bound.remove(targetKey);
         ctx.custody().write(store);
+        if (openedCuffs) restraintReleasedHook.accept(issuer, target);
         if (cutRope && !players.isOnDutyGuard(issuer)) {
             custodyEscapeHook.accept(issuer, target);
         }
@@ -1410,6 +1453,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
         store.pendingKeys.remove(record.issuerUuid.isEmpty()
                 ? PlayerService.canon(record.issuer) : record.issuerUuid);
         ctx.custody().write(store);
+        restraintReleasedHook.accept(actor, target);
         target.tell("Cătușele au fost eliberate de Comisaru'.");
         actor.tell(target.name() + " a fost eliberat de urgență.");
         audit.record("cuff_emergency_release", actor.name(), uuidOf(actor),
@@ -2403,6 +2447,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
         store.cuffed.remove(targetKey);
         store.bound.remove(targetKey);
         store.headSacks.remove(targetKey);
+        if (target != null) restraintReleasedHook.accept(findStored(record.issuerUuid, record.issuer), target);
         audit.record("cuff_recovery", record.issuer, record.issuerUuid,
                 record.target, record.targetUuid, "SUCCESS", "issuer_no_longer_eligible");
     }
@@ -2470,12 +2515,47 @@ public class CustodyService implements CustodyRoleplayUseCase {
             }
             if (target == null) continue;
             var issuer = findStored(record.issuerUuid, record.issuer);
-            if (issuer != null && issuer.dimension().equals(target.dimension())) {
+            // A prisoner registered IN_CELL is detained, not escorted: the
+            // tether must not drag them out of the cell toward the cuffing
+            // officer (detention outranks the restraint).
+            var inmate = record.targetUuid == null || record.targetUuid.isEmpty()
+                    ? null : ctx.prisonerRegister().read().prisoner(record.targetUuid);
+            boolean detained = inmate != null
+                    && inmate.status == com.dwurdy.straja.domain.model.PrisonerStatus.IN_CELL;
+            if (issuer == null || !issuer.dimension().equals(target.dimension())) {
+                // M4: officer offline/dead/other dimension — the tether is
+                // broken. Log the escape window once; the restraint stays on
+                // (a cuffed fugitive remains restrained until released).
+                if (!detained && record.escortLostAt == null) {
+                    record.escortLostAt = now();
+                    audit.record("cuff_tether", record.issuer, record.issuerUuid,
+                            target.name(), record.targetUuid, "SUCCESS",
+                            "escort_lost reason="
+                                    + (issuer == null ? "officer_missing" : "dimension"));
+                    changed = true;
+                }
+            } else {
+                if (record.escortLostAt != null) {
+                    record.escortLostAt = null;
+                    changed = true;
+                }
+                // Escort restrictions: cuffed suspects cannot sprint; the
+                // tether drags or halts them past the leash radius (AT8).
+                target.setSprinting(false);
+                if (detained) {
+                    hideCuffedHand(target, record);
+                    target.closeMenu();
+                    applyCuffSlowness(target);
+                    continue;
+                }
                 double maxDistance = Math.max(8, record.maxDistance);
+                double tether = Math.max(2.0, ctx.policies().escortTetherRadius);
+                double clamp = Math.max(tether, ctx.policies().escortTeleportDistance);
                 double dx = target.x() - issuer.x();
                 double dy = target.y() - issuer.y();
                 double dz = target.z() - issuer.z();
-                boolean farAway = dx * dx + dy * dy + dz * dz > maxDistance * maxDistance;
+                double dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                boolean farAway = dist > maxDistance;
                 if (farAway) {
                     if (record.outOfRangeAt == null) {
                         record.outOfRangeAt = now();
@@ -2486,6 +2566,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
                         recoverCanonicalRestraint(store, entry.getKey(), "distance_timeout");
                         restoreCuffedHand(store, target, record);
                         store.cuffed.remove(entry.getKey());
+                        restraintReleasedHook.accept(issuer, target);
                         target.tell("Cătușele s-au rupt după ce ai ieșit din raza gardianului.");
                         issuer.tell(target.name() + " a ieșit din raza cătușelor; acestea s-au rupt.");
                         audit.record("cuff_expire", issuer.name(), record.issuerUuid,
@@ -2497,6 +2578,23 @@ public class CustodyService implements CustodyRoleplayUseCase {
                 } else if (record.outOfRangeAt != null) {
                     record.outOfRangeAt = null;
                     changed = true;
+                }
+                if (!farAway && dist > tether) {
+                    if (dist > clamp) {
+                        // Lost contact (teleport, lag, dimension hop): snap the
+                        // prisoner back to the officer instead of letting the
+                        // leash stretch silently.
+                        target.teleport(issuer.dimension(), issuer.x(), issuer.y(), issuer.z());
+                        audit.record("cuff_tether", issuer.name(), record.issuerUuid,
+                                target.name(), record.targetUuid, "SUCCESS",
+                                "teleport_clamp distance=" + (int) dist);
+                    } else {
+                        // Drag: a shove toward the officer proportional to
+                        // leash slack — halted prisoners get pulled back in.
+                        target.setVelocity(-dx / dist * 0.6,
+                                dy > 0.6 ? 0.35 : 0.0,
+                                -dz / dist * 0.6);
+                    }
                 }
             }
             hideCuffedHand(target, record);

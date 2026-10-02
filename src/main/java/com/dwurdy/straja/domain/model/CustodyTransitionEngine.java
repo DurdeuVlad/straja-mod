@@ -194,6 +194,24 @@ public final class CustodyTransitionEngine {
         if (blank(transition.actorId()) || samePlayer(state, transition.actorId())) {
             return reject("RESTRAINT_ACTOR_INVALID");
         }
+        if (state.custody == CustodyStatus.JAILED) {
+            // M4 escort cuff: cuffing a jailed prisoner starts an escort —
+            // the restraint binds them to the officer while custody stays
+            // JAILED (the cell assignment and sentence continue unchanged).
+            if (restraint != RestraintStatus.CUFFED) {
+                return reject("JAILED_RESTRAINT_CUFF_ONLY");
+            }
+            if (state.condition != PlayerCondition.ALIVE
+                    || state.restraint != RestraintStatus.NONE) {
+                return reject("RESTRAINT_REQUIRES_FREE_TARGET");
+            }
+            state.restraint = restraint;
+            state.restraintMode = RestraintMode.ESCORT;
+            state.restraintActorId = transition.actorId();
+            state.vision = VisionStatus.NORMAL;
+            state.condition = PlayerCondition.CONSCIOUS_RESTRAINED;
+            return CustodyTransitionResult.applied();
+        }
         if ((state.condition != PlayerCondition.ALIVE && state.condition != PlayerCondition.DOWNED)
                 || state.custody != CustodyStatus.FREE
                 || state.restraint != RestraintStatus.NONE) {
@@ -439,7 +457,19 @@ public final class CustodyTransitionEngine {
         if (blank(transition.actorId()) || samePlayer(state, transition.actorId())) {
             return reject("SELF_RESTRAINT_REMOVAL_FORBIDDEN");
         }
-        if (state.custody == CustodyStatus.JAILED) return reject("JAILED_RESTRAINT_REQUIRES_RELEASE");
+        if (state.custody == CustodyStatus.JAILED) {
+            // M4 uncuff boundary rule: removing restraints inside custody
+            // clears the restraint but keeps the prisoner JAILED — the cell
+            // is the custody, not the cuffs.
+            state.restraint = RestraintStatus.NONE;
+            state.restraintMode = RestraintMode.ESCORT;
+            state.restraintActorId = "";
+            state.vision = VisionStatus.NORMAL;
+            if (state.condition == PlayerCondition.CONSCIOUS_RESTRAINED) {
+                state.condition = PlayerCondition.ALIVE;
+            }
+            return CustodyTransitionResult.applied();
+        }
         state.restraint = RestraintStatus.NONE;
         state.restraintMode = RestraintMode.ESCORT;
         state.restraintActorId = "";

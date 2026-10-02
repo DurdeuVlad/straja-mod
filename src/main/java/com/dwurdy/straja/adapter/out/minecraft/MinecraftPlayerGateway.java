@@ -94,6 +94,77 @@ public class MinecraftPlayerGateway implements PlayerGateway {
         return p != null ? p.gameMode.getGameModeForPlayer().getName() : "survival";
     }
 
+    @Override public void setGameMode(String gameModeName) {
+        ServerPlayer p = entity();
+        if (p == null || gameModeName == null || gameModeName.isBlank()) return;
+        var type = net.minecraft.world.level.GameType.byName(gameModeName.trim(), null);
+        if (type != null) p.setGameMode(type);
+    }
+
+    @Override public void setSprinting(boolean sprinting) {
+        ServerPlayer p = entity();
+        if (p != null) p.setSprinting(sprinting);
+    }
+
+    @Override public void giveWrittenBook(String title, String author, java.util.List<String> pages) {
+        ServerPlayer p = entity();
+        if (p == null) {
+            PlayerGateway.super.giveWrittenBook(title, author, pages);
+            return;
+        }
+        try {
+            ItemStack book = new ItemStack(net.minecraft.world.item.Items.WRITTEN_BOOK);
+            java.util.List<net.minecraft.server.network.Filterable<Component>> written =
+                    new java.util.ArrayList<>();
+            if (pages != null) {
+                for (String page : pages) {
+                    written.add(net.minecraft.server.network.Filterable.passThrough(
+                            Component.literal(page == null ? "" : page)));
+                }
+            }
+            book.set(net.minecraft.core.component.DataComponents.WRITTEN_BOOK_CONTENT,
+                    new net.minecraft.world.item.component.WrittenBookContent(
+                            net.minecraft.server.network.Filterable.passThrough(
+                                    title == null ? "Proces-verbal" : title),
+                            author == null ? "Straja" : author, 0, written, true));
+            if (!p.getInventory().add(book)) {
+                p.drop(book, false);
+            }
+        } catch (RuntimeException ex) {
+            PlayerGateway.super.giveWrittenBook(title, author, pages);
+        }
+    }
+
+    @Override public void giveStack(String itemId, int count, String snbt) {
+        ServerPlayer p = entity();
+        if (p == null || count <= 0) return;
+        ItemStack stack = parseStack(itemId, count, snbt);
+        if (stack == null || stack.isEmpty()) return;
+        if (!p.getInventory().add(stack)) {
+            p.drop(stack, false);
+        }
+    }
+
+    /** Rebuilds a seized/drained stack from SNBT; falls back to a plain stack. */
+    private ItemStack parseStack(String itemId, int count, String snbt) {
+        if (snbt != null && !snbt.isBlank()) {
+            try {
+                var tag = net.minecraft.nbt.TagParser.parseTag(snbt);
+                var parsed = ItemStack.parse(server.registryAccess(), tag);
+                if (parsed.isPresent() && !parsed.get().isEmpty()) {
+                    var stack = parsed.get();
+                    stack.setCount(count);
+                    return stack;
+                }
+            } catch (Exception ignored) {
+                // malformed SNBT — fall through to the plain-stack build
+            }
+        }
+        var item = BuiltInRegistries.ITEM.getOptional(ResourceLocation.tryParse(itemId));
+        return item.isEmpty() || item.get() == net.minecraft.world.item.Items.AIR
+                ? ItemStack.EMPTY : new ItemStack(item.get(), count);
+    }
+
     @Override public void title(String titleKey, String subtitleKey, Object... args) {
         ServerPlayer p = entity();
         if (p == null) return;

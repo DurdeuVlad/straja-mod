@@ -467,6 +467,14 @@ public class StrajaPolicies {
     public int prisonAfkGraceSeconds = 60;
     public int prisonMaxSentenceDays = 7;
     public double prisonArrestRadius = 6;
+    /** Max leash distance a cuffed escorted suspect may drift before being dragged. */
+    public double escortTetherRadius = 4.5;
+    /** Distance-to-escorting-officer that lets a prisoner cross a checkpoint. */
+    public double escortGateBypassRadius = 3.0;
+    /** Beyond this leash distance the escorted prisoner is teleported, not dragged. */
+    public double escortTeleportDistance = 14.0;
+    /** Personal locker chests allocated to each booked prisoner. */
+    public int lockerChestsPerPrisoner = 2;
 
     // audit
     public boolean auditEnabled = true;

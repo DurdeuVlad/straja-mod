@@ -5,5 +5,6 @@ public enum PrisonerStatus {
     IN_CELL,
     IN_CAMP,
     ESCORTED,
-    FUGITIVE
+    FUGITIVE,
+    RELEASED
 }

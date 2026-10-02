@@ -279,6 +279,10 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.IntValue PRISON_MAX_SENTENCE_DAYS;
     public static final ModConfigSpec.IntValue PRISON_ARREST_RADIUS;
     public static final ModConfigSpec.IntValue PRISON_RETENTION_LIMIT;
+    public static final ModConfigSpec.DoubleValue ESCORT_TETHER_RADIUS;
+    public static final ModConfigSpec.DoubleValue ESCORT_GATE_BYPASS_RADIUS;
+    public static final ModConfigSpec.DoubleValue ESCORT_TELEPORT_DISTANCE;
+    public static final ModConfigSpec.IntValue LOCKER_CHESTS_PER_PRISONER;
 
     public static final ModConfigSpec.BooleanValue AUDIT_ENABLED;
     public static final ModConfigSpec.IntValue AUDIT_RETENTION_LIMIT;
@@ -931,6 +935,10 @@ public final class StrajaServerConfig {
         PRISON_MAX_SENTENCE_DAYS = B.defineInRange("maxSentenceDays", 7, 1, 365);
         PRISON_ARREST_RADIUS = B.defineInRange("arrestRadius", 6, 1, 64);
         PRISON_RETENTION_LIMIT = B.defineInRange("retentionLimit", 32, 1, 10000);
+        ESCORT_TETHER_RADIUS = B.defineInRange("escortTetherRadius", 4.5, 1.0, 64.0);
+        ESCORT_GATE_BYPASS_RADIUS = B.defineInRange("escortGateBypassRadius", 3.0, 1.0, 32.0);
+        ESCORT_TELEPORT_DISTANCE = B.defineInRange("escortTeleportDistance", 14.0, 4.0, 128.0);
+        LOCKER_CHESTS_PER_PRISONER = B.defineInRange("lockerChestsPerPrisoner", 2, 1, 8);
         B.pop();
 
         B.push("audit");
@@ -1254,6 +1262,10 @@ public final class StrajaServerConfig {
         p.prisonMaxSentenceDays = PRISON_MAX_SENTENCE_DAYS.get();
         p.prisonArrestRadius = PRISON_ARREST_RADIUS.get();
         p.prisonRetentionLimit = PRISON_RETENTION_LIMIT.get();
+        p.escortTetherRadius = ESCORT_TETHER_RADIUS.get();
+        p.escortGateBypassRadius = ESCORT_GATE_BYPASS_RADIUS.get();
+        p.escortTeleportDistance = ESCORT_TELEPORT_DISTANCE.get();
+        p.lockerChestsPerPrisoner = LOCKER_CHESTS_PER_PRISONER.get();
 
         p.auditEnabled = AUDIT_ENABLED.get();
         p.auditRetentionLimit = AUDIT_RETENTION_LIMIT.get();

@@ -257,6 +257,10 @@ public final class StrajaEvents {
         // silently overwrite the picked configuration.
         runtime.storage().setPickMode(
                 new MinecraftPlayerGateway(player.getServer(), player.getUUID()), "off");
+        runtime.prisonRoleplay().setPickMode(
+                new MinecraftPlayerGateway(player.getServer(), player.getUUID()), "off");
+        runtime.checkpoints().setPickMode(
+                new MinecraftPlayerGateway(player.getServer(), player.getUUID()), null, "off");
         var gateway = new MinecraftPlayerGateway(event.getEntity().getServer(), player.getUUID());
         runtime.checkpoints().clearPlayer(gateway.uuid());
         runtime.custodyRoleplay().recoverOnLogout(gateway);
@@ -607,7 +611,9 @@ public final class StrajaEvents {
         // RightClickBlock fires once per hand — main hand only, like the wand
         // tools below, or a single zone click would complete both corners.
         if (event.getHand() == net.minecraft.world.InteractionHand.MAIN_HAND
-                && runtime.storage().onPickClick(gateway, dimension, pos.getX(), pos.getY(), pos.getZ())) {
+                && (runtime.storage().onPickClick(gateway, dimension, pos.getX(), pos.getY(), pos.getZ())
+                || runtime.prisonRoleplay().onPickClick(gateway, dimension, pos.getX(), pos.getY(), pos.getZ())
+                || runtime.checkpoints().onPickClick(gateway, dimension, pos.getX(), pos.getY(), pos.getZ()))) {
             event.setCanceled(true);
             return;
         }

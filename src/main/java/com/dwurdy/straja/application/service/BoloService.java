@@ -146,6 +146,44 @@ public final class BoloService {
         return cleared;
     }
 
+    /**
+     * System-side fugitive marker — a prisoner breached custody without an
+     * official release, so the wanted registry must track them even though
+     * no player issued the BOLO. Idempotent per subject while one is active;
+     * the open sentence (recorded in {@code linkedArrestTaskId}) is the
+     * arrest authority, so the record stays INFORMATION_ONLY like
+     * {@link #clearFor} bypasses issuer gates in reverse.
+     */
+    public synchronized BoloRecord markFugitive(String subjectUuid, String subjectName,
+                                                String reason, String sentenceId) {
+        if (subjectUuid == null || subjectUuid.isBlank()
+                || !ctx.policies().bolosEnabled) return null;
+        BoloStore data = store();
+        for (BoloRecord record : data.records) {
+            if (record != null && record.status == BoloStatus.ACTIVE
+                    && subjectUuid.equals(record.subjectUuid)) {
+                return record; // already hunted — do not stack markers
+            }
+        }
+        BoloRecord record = new BoloRecord();
+        record.id = data.nextBoloId();
+        record.subjectUuid = subjectUuid;
+        record.subjectName = subjectName == null ? subjectUuid : subjectName;
+        record.reason = clean(reason, ctx.policies().boloMaxReasonLength);
+        record.issuerName = "system";
+        record.issuerUuid = "";
+        record.issuerRank = 0;
+        record.createdAt = now();
+        record.expiresAt = 0; // custody breach only clears on recapture/release
+        record.authority = BoloAuthority.INFORMATION_ONLY;
+        record.linkedArrestTaskId = sentenceId == null ? "" : sentenceId;
+        data.records.add(record);
+        ctx.bolos().write(data);
+        audit.record("bolo_create", "system", "", record.id,
+                record.subjectUuid, "SUCCESS", "fugitive_escape sentenceId=" + sentenceId);
+        return record;
+    }
+
     public synchronized List<BoloRecord> active() {
         expire();
         return store().records.stream()

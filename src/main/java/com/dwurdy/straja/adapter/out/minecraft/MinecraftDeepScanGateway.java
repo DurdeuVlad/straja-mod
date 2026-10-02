@@ -1,6 +1,7 @@
 package com.dwurdy.straja.adapter.out.minecraft;
 
 import com.dwurdy.straja.application.port.out.DeepScanGateway;
+import com.dwurdy.straja.domain.model.SeizedStack;
 import com.dwurdy.straja.domain.model.SnapshotItem;
 import java.util.ArrayList;
 import java.util.List;
@@ -49,6 +50,72 @@ public final class MinecraftDeepScanGateway implements DeepScanGateway {
         }
         scanCurios(player, out);
         return out;
+    }
+
+    /**
+     * M4 physical seizure ({@code cpSeizeAll} parity): every top-level stack —
+     * main+hotbar+armor+offhand plus equipped Curios when the mod is present —
+     * is emptied from its slot and returned with full SNBT (nested contents
+     * travel inside it) and the set of item ids reachable inside.
+     */
+    @Override
+    public List<SeizedStack> seizeAll(UUID playerUuid) {
+        ServerPlayer player = server.getPlayerList().getPlayer(playerUuid);
+        if (player == null) return List.of();
+        return seizeInventory(player);
+    }
+
+    /** Resolved-player seizure — the GameTest seam mirroring {@link #scanInventory}. */
+    public List<SeizedStack> seizeInventory(ServerPlayer player) {
+        List<SeizedStack> out = new ArrayList<>();
+        Inventory inv = player.getInventory();
+        for (int i = 0; i < inv.getContainerSize(); i++) {
+            ItemStack stack = inv.getItem(i);
+            if (stack == null || stack.isEmpty()) continue;
+            out.add(seized(slotLabel(i), stack));
+            inv.setItem(i, ItemStack.EMPTY);
+        }
+        inv.setChanged();
+        seizeCurios(player, out);
+        return out;
+    }
+
+    /** Reflective Curios extraction — mirrors {@link #scanCurios}; failures mean no extra slots. */
+    private void seizeCurios(ServerPlayer player, List<SeizedStack> out) {
+        try {
+            if (!net.neoforged.fml.ModList.get().isLoaded("curios")) return;
+            var api = Class.forName("top.theillusivec4.curios.api.CuriosApi");
+            Object opt = api.getMethod("getCuriosInventory",
+                    net.minecraft.world.entity.LivingEntity.class).invoke(null, player);
+            if (!(opt instanceof java.util.Optional<?> present) || present.isEmpty()) return;
+            Object equipped = present.get().getClass()
+                    .getMethod("getEquippedCurios").invoke(present.get());
+            int slots = (int) equipped.getClass().getMethod("getSlots").invoke(equipped);
+            var empty = ItemStack.EMPTY;
+            for (int i = 0; i < slots; i++) {
+                Object stack = equipped.getClass()
+                        .getMethod("getStackInSlot", int.class).invoke(equipped, i);
+                if (stack instanceof ItemStack s && !s.isEmpty()) {
+                    out.add(seized("curios:" + i, s));
+                    equipped.getClass().getMethod("setStackInSlot",
+                            int.class, ItemStack.class).invoke(equipped, i, empty);
+                }
+            }
+        } catch (Throwable ignored) {
+            // Curios absent or API drift — vanilla seizure already covered the player
+        }
+    }
+
+    private SeizedStack seized(String slotPath, ItemStack stack) {
+        String id = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+        String snbt = componentsTag(stack);
+        List<String> contained = new ArrayList<>();
+        List<SnapshotItem> nested = new ArrayList<>();
+        for (ItemStack sub : subStacks(stack)) {
+            scan(sub, slotPath + ">", 1, nested);
+        }
+        for (SnapshotItem row : nested) contained.add(row.itemId);
+        return new SeizedStack(slotPath, id, stack.getCount(), snbt, contained);
     }
 
     /**

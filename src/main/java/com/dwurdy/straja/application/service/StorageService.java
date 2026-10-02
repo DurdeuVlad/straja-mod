@@ -35,6 +35,8 @@ public final class StorageService {
     private final AuditService audit;
     private final BoloService bolos;
     private final PrisonService prison;
+    /** M4: cuffed suspects under escort are already caught — guards hold fire. */
+    private CustodyService custody;
 
     // Transient runtime state — pick sessions, container snapshots and the
     // aggro bookkeeping are inherently per-boot, matching the prototype.
@@ -52,6 +54,11 @@ public final class StorageService {
         this.audit = audit;
         this.bolos = bolos;
         this.prison = prison;
+    }
+
+    /** Late-bound: custody is constructed after storage in the runtime graph. */
+    public void useCustody(CustodyService service) {
+        this.custody = service;
     }
 
     private StorageWatchStore store() {
@@ -362,9 +369,11 @@ public final class StorageService {
         var wanted = wantedUuids();
         var watchStore = store();
         for (var p : ctx.server().onlinePlayers()) {
+            boolean escorted = custody != null && custody.escortOfficerWithin(
+                    p, ctx.policies().escortGateBypassRadius) != null;
             boolean hostile = (watchStore.isThief(p.uuid().toString())
                     || wanted.contains(p.uuid().toString()))
-                    && !jailed(p) && isSurvivalOrAdventure(p) && !isExempt(p);
+                    && !escorted && !jailed(p) && isSurvivalOrAdventure(p) && !isExempt(p);
             if (!hostile && !aggroMarked.contains(p.uuid())) continue;
             var near = guards.guardsNear(p.dimension(), p.x(), p.y(), p.z(),
                     ctx.policies().storageAggroRange, ctx.policies().storageFactionId);

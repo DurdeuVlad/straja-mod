@@ -25,4 +25,10 @@ public interface PrisonRoleplayUseCase {
     void processWaitlist();
 
     void tick();
+
+    /** Arms/disarms the locker-pool pick for admin clicks (M4). */
+    boolean setPickMode(PlayerGateway admin, String mode);
+
+    /** Consumes an armed locker pick; true when the click was used. */
+    boolean onPickClick(PlayerGateway admin, String dimension, int x, int y, int z);
 }

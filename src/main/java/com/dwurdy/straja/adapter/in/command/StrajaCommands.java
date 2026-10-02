@@ -213,6 +213,21 @@ public final class StrajaCommands {
                                             .setExemption(p, StringArgumentType.getString(c, "scope"),
                                                     StringArgumentType.getString(c, "subject"), add)))))));
         }
+        // LAW-004: arm an evidence/door pick for a site — clicks append to
+        // the site's evidence chain or door list until `pick off`.
+        checkpoint.then(Commands.literal("pick")
+                .then(Commands.argument("site", StringArgumentType.word())
+                        .then(Commands.literal("evidence")
+                                .executes(c -> player(c, p -> StrajaRuntime.get().checkpoints()
+                                        .setPickMode(p, StringArgumentType.getString(c, "site"),
+                                                "evidence"))))
+                        .then(Commands.literal("door")
+                                .executes(c -> player(c, p -> StrajaRuntime.get().checkpoints()
+                                        .setPickMode(p, StringArgumentType.getString(c, "site"),
+                                                "door")))))
+                .then(Commands.literal("off")
+                        .executes(c -> player(c, p -> StrajaRuntime.get().checkpoints()
+                                .setPickMode(p, null, "off")))));
         root.then(adminOnly(checkpoint));
         var setMissionTime = Commands.literal("set-mission-time")
                 .then(Commands.argument("id", StringArgumentType.word())
@@ -590,6 +605,15 @@ public final class StrajaCommands {
                 .then(Commands.argument("player", EntityArgument.player())
                         .executes(c -> player(c, p -> StrajaRuntime.get().custody()
                                 .emergencyRelease(p, target(c, "player"))))));
+        // M4 escort: direct cuff/uncuff without the item ceremony.
+        node.then(Commands.literal("cuff")
+                .then(Commands.argument("player", EntityArgument.player())
+                        .executes(c -> player(c, p -> StrajaRuntime.get().custody()
+                                .applyCuffsDirect(p, target(c, "player"), "command").ok()))));
+        node.then(Commands.literal("uncuff")
+                .then(Commands.argument("player", EntityArgument.player())
+                        .executes(c -> player(c, p -> StrajaRuntime.get().custody()
+                                .emergencyRelease(p, target(c, "player"))))));
         node.then(Commands.literal("sack-remove")
                 .executes(c -> player(c, StrajaRuntime.get().custody()::removeHeadSack)));
         for (String op : new String[]{"accept", "refuse"}) {
@@ -664,6 +688,16 @@ public final class StrajaCommands {
                                                                                                 IntegerArgumentType.getInteger(c, "maxX"),
                                                                                                 IntegerArgumentType.getInteger(c, "maxY"),
                                                                                                 IntegerArgumentType.getInteger(c, "maxZ")))))))))))));
+        // M4: locker-pool administration — arm a pick, then click chests.
+        node.then(Commands.literal("pick")
+                .then(Commands.literal("locker")
+                        .executes(c -> player(c, p -> StrajaRuntime.get().prison()
+                                .setPickMode(p, "locker"))))
+                .then(Commands.literal("off")
+                        .executes(c -> player(c, p -> StrajaRuntime.get().prison()
+                                .setPickMode(p, "off")))));
+        node.then(Commands.literal("lockers")
+                .executes(c -> player(c, p -> StrajaRuntime.get().prison().listLockers(p))));
         return node;
     }
 

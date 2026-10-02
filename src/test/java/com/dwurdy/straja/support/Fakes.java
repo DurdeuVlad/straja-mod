@@ -113,6 +113,12 @@ public final class Fakes {
         public double vx, vy, vz;
         /** Last yaw applied via the oriented teleport. */
         public float lastTeleportYaw;
+        /** Sprint state — setSprinting writes here (escort suppresses it). */
+        public boolean sprinting;
+        /** Written books handed over via giveWrittenBook: "title|page1//page2". */
+        public final List<String> books = new ArrayList<>();
+        /** Items that did not fit the inventory on giveStack — spilled drops. */
+        public final List<String> spilled = new ArrayList<>();
 
         public TestPlayer(String name, int slots) {
             this.uuid = UUID.nameUUIDFromBytes(name.getBytes());
@@ -139,6 +145,18 @@ public final class Fakes {
         }
         @Override public void actionbar(String text) { actionbarMessages.add(text); }
         @Override public String gameModeName() { return gameMode; }
+        @Override public void setGameMode(String mode) { if (mode != null && !mode.isBlank()) gameMode = mode; }
+        @Override public void setSprinting(boolean sprint) { sprinting = sprint; }
+        @Override public void giveWrittenBook(String title, String author, List<String> pages) {
+            books.add(title + "|" + String.join("//", pages == null ? List.of() : pages));
+            inventory.insert(new ItemView("minecraft:written_book", 1, 1, Map.of()));
+        }
+        @Override public void giveStack(String itemId, int count, String snbt) {
+            var data = snbt == null || snbt.isBlank() ? Map.<String, String>of() : Map.of("snbt", snbt);
+            if (!inventory.insert(new ItemView(itemId, count, 64, data))) {
+                spilled.add(itemId + " x" + count);
+            }
+        }
         @Override public void title(String titleKey, String subtitleKey, Object... args) {
             messages.add("TITLE:" + titleKey + "|" + subtitleKey);
         }
@@ -296,6 +314,46 @@ public final class Fakes {
 
         @Override public void dropItem(String dim, int x, int y, int z, String itemId, int count) {
             drops.add(key(dim, x, y, z) + " " + itemId + " x" + count);
+        }
+
+        /** SNBT survives the trip: slots carry it in customData so drain returns it. */
+        @Override public int insertStack(String dim, int x, int y, int z,
+                                         String itemId, int count, String snbt) {
+            List<ItemView> c = slots.get(key(dim, x, y, z));
+            if (c == null || count <= 0) return count;
+            int remaining = count;
+            var data = snbt == null || snbt.isBlank() ? Map.<String, String>of() : Map.of("snbt", snbt);
+            for (int i = 0; i < c.size() && remaining > 0; i++) {
+                ItemView cur = c.get(i);
+                if (cur.isEmpty() || !cur.id().equals(itemId) || cur.count() >= maxStack
+                        || !cur.customData().equals(data)) continue;
+                int move = Math.min(remaining, maxStack - cur.count());
+                c.set(i, cur.withCount(cur.count() + move));
+                remaining -= move;
+            }
+            for (int i = 0; i < c.size() && remaining > 0; i++) {
+                if (!c.get(i).isEmpty()) continue;
+                int move = Math.min(remaining, maxStack);
+                c.set(i, new ItemView(itemId, move, maxStack, data));
+                remaining -= move;
+            }
+            return remaining;
+        }
+
+        @Override public List<com.dwurdy.straja.domain.model.SeizedStack> drain(
+                String dim, int x, int y, int z) {
+            List<ItemView> c = slots.get(key(dim, x, y, z));
+            if (c == null) return List.of();
+            var out = new ArrayList<com.dwurdy.straja.domain.model.SeizedStack>();
+            for (int i = 0; i < c.size(); i++) {
+                ItemView v = c.get(i);
+                if (v == null || v.isEmpty()) continue;
+                String snbt = v.customData() == null ? null : v.customData().get("snbt");
+                out.add(new com.dwurdy.straja.domain.model.SeizedStack(
+                        "slot:" + i, v.id(), v.count(), snbt, List.of()));
+                c.set(i, ItemView.EMPTY);
+            }
+            return out;
         }
     }
 
@@ -562,11 +620,34 @@ public final class Fakes {
     public static final class TestDeepScan implements com.dwurdy.straja.application.port.out.DeepScanGateway {
         public final java.util.Map<java.util.UUID, java.util.List<com.dwurdy.straja.domain.model.SnapshotItem>>
                 inventories = new java.util.HashMap<>();
+        /** Optional server ref — seizeAll drains the real TestInventory. */
+        public TestServer server;
 
         @Override
         public java.util.List<com.dwurdy.straja.domain.model.SnapshotItem> deepScan(java.util.UUID playerUuid) {
             return new java.util.ArrayList<>(
                     inventories.getOrDefault(playerUuid, java.util.List.of()));
+        }
+
+        /** M4: physically empties every carried slot; SNBT/contained ids ride customData. */
+        @Override
+        public java.util.List<com.dwurdy.straja.domain.model.SeizedStack> seizeAll(java.util.UUID playerUuid) {
+            var p = server == null ? null : server.players.get(playerUuid);
+            if (p == null) return java.util.List.of();
+            var out = new java.util.ArrayList<com.dwurdy.straja.domain.model.SeizedStack>();
+            for (int i = 0; i < p.inventory.slots.size(); i++) {
+                var v = p.inventory.slots.get(i);
+                if (v == null || v.isEmpty()) continue;
+                var data = v.customData();
+                String snbt = data == null ? null : data.get("snbt");
+                String contains = data == null ? null : data.get("contains");
+                java.util.List<String> containedIds = contains == null || contains.isBlank()
+                        ? java.util.List.of() : java.util.List.of(contains.split(","));
+                out.add(new com.dwurdy.straja.domain.model.SeizedStack(
+                        "main:" + i, v.id(), v.count(), snbt, containedIds));
+                p.inventory.slots.set(i, ItemView.EMPTY);
+            }
+            return out;
         }
     }
 

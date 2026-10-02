@@ -36,6 +36,12 @@ public class PrisonerRegisterRecord {
     public String arrestSite = "";
     /** Epoch ms of the last booking. */
     public long bookedAt;
+    /** Times the prisoner left custody without an official release. */
+    public int escapeCount;
+    /** Epoch ms of the last official release (0 while in custody). */
+    public long releasedAt;
+    /** Game mode the player had at booking; restored on release/escape. */
+    public String priorGameMode = "survival";
 
     public PrisonerRegisterRecord() {}
 
