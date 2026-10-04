@@ -1261,8 +1261,15 @@ public final class LawAcceptanceGameTests {
      * <p>Fully synchronous like AT5: arrest, levy, gate and contribution
      * are direct service calls with no tick waits, so a plain try/finally
      * cleans up instead of scheduled steps.
+     *
+     * <p>Runs in its own {@code debtAt10} batch so it cannot perturb the
+     * forty concurrent defaultBatch tests: it temporarily rewrites the
+     * shared {@code runtime.context().policies()} (coin ladder, debt
+     * thresholds, {@code bountyDefaultCampId=at10_camp}), and vanilla batch
+     * boundaries are the only framework mechanism that serialises tests —
+     * batches run sequentially while tests inside a batch run concurrently.
      */
-    @GameTest(template = "empty", timeoutTicks = 200)
+    @GameTest(template = "empty", timeoutTicks = 200, batch = "debtAt10")
     public static void debtGateAndContributions(GameTestHelper helper) {
         var runtime = runtime(helper);
         ServerLevel level = helper.getLevel();
