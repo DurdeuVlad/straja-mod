@@ -154,6 +154,43 @@ Doar **Inspectorul și Comisarul** pot pune recompense pe jucători:
   vânătorul offline la captură încasează la următorul login; o singură
   recompensă activă per țintă; plata e idempotentă (bon `bounty:<id>`).
 
+### Datorii de deținut ([debt], DEBT)
+
+Fiecare amendă duce un `paidAmount` și un istoric de contribuții
+(`FINE_PAY` | `LEVY` | `CONTRIBUTION` | `BAIL`). Comenzile:
+
+```
+/straja debt <jucător>                 # soldul restant, rând cu rând (ofiterii văd orice ledger, civilii doar propriul)
+/straja debt pay <jucător> [sumă]      # contribuție terță — fără sumă acoperă tot restul
+/straja bail <jucător> [sumă]          # idem, dar servește întâi amenzile bounty_capture
+```
+
+```toml
+[debt]
+enabled = true                 # levy + poarta de eliberare
+releaseBlockThreshold = 0      # sold peste prag blochează eliberarea (0 = orice datorie)
+onBlocked = "CAMP"             # CAMP → lagărul implicit; CELL → refuz, rămâne în celulă
+```
+
+- **Levy (sechestru)** rulează la: emiterea unei amenzi pe un deținut, orice
+  încercare de eliberare (înainte de poartă) și înainte de transferul în
+  lagăr. Ordinea de tragere: buzunare live → dulap personal → rezervări
+  `pendingLockers`; monedele ies valoare-descrescător, cu rest vărsat înapoi
+  în cufăr când schimbul exact nu iese. Aplicarea pe amenzi e mereu
+  **oldest-first** și scrie contribuții `LEVY`.
+- **Poarta de eliberare:** sold > `releaseBlockThreshold` → `CAMP` mută
+  deținutul în lagărul implicit (`[bounty].defaultCampId`, altfel primul
+  înregistrat; fără niciun lagăr cade pe refuzul CELL); `CELL` refuză
+  direct. Eliberarea Comisarului/op e `FORCED_RELEASE` și ocolește poarta.
+- **Cărți emise:** „Proces-verbal de sechestru" (levy), „Refuz de eliberare"
+  / „Ordin de transfer" (poartă), „Înștiințare de plată" (contribuții).
+  Online se dau în mână; offline se pun la `pendingNotices` și se livrează
+  la login.
+- **Audit:** `levy` (`extracted=`/`applied=`/`remaining=`), `debt_apply`
+  (`fineId=`/`applied=`/`source=`), `prison_release` REFUSED cu
+  `debt_gate camp=<id> owed=<n> threshold=<n>` (sau `debt_gate cell …`),
+  `camp_transfer` cu `source=debt_gate`, `notice_delivery`.
+
 ## 4. Verificare finală
 
 ```

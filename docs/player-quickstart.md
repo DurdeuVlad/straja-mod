@@ -21,6 +21,8 @@ clickabile în chat), **obiecte fizice** și **formulare native**.
 | `/straja bounty list` | recompensele active — cine e vânat și pentru cât |
 | `/straja surrender` | te predai unui vânător din apropiere (oprește urmărirea) |
 | `/straja bail <jucător>` | plătești cauțiunea cuiva din recompensă — oricine poate plăti pentru oricine |
+| `/straja debt <jucător>` | vezi datoriile restante — ofiterii văd pe ale oricui, tu pe ale tale |
+| `/straja debt pay <jucător> [sumă]` | achiți din datoriile cuiva — oricine poate plăti pentru oricine |
 | `/straja stop` | încheie serviciul (doar după ce ești membru și ești în tură) |
 
 ## Primul pas: cererea de admitere
@@ -41,6 +43,32 @@ Un deținut în lagăr minesz și vinde minereul la intendent — încasările n
 (`flat` sau un multiplicator al amenzilor tale), ești eliberat automat și îți
 recuperezi lucrurile. `/straja camp status` îți arată progresul. Nu ieși din
 perimetru fără escortă — devii fugitiv căutat.
+
+## Datorii în custodie (amenzi neplătite)
+
+O amendă neachitată nu dispare la arest — devine **datorie de deținut**:
+
+- **Sechestru automat (levy).** Un deținut cu datorii nu poate ține monede:
+  la fiecare amendă nouă primită în custodie, la orice încercare de eliberare
+  și înainte de fiecare transfer în lagăr, statul sechestrează monedele din
+  buzunare, apoi pe cele din **dulapul tău personal** (inclusiv rezervările
+  puse deoparte cât ai fost offline) și le virează pe amenzi **de la cea mai
+  veche la cea mai nouă**. Primești o carte „Proces-verbal de sechestru" cu
+  suma luată și unde a ajuns — monedele sechestrate nu se mai restituie.
+- **Eliberarea e blocată peste prag.** Dacă datoria rămasă depășește pragul
+  de eliberare (implicit orice sold pozitiv), cererea de eliberare e
+  refuzată și — în configurația implicită — ești **mutat în lagărul de
+  muncă**, unde contul de muncă merge spre prețul libertății. Primești un
+  „Ordin de transfer"; la blocare în celulă primești „Refuz de eliberare".
+- **Oricine poate plăti pentru tine.** `/straja debt <nume>` arată soldul;
+  `/straja debt pay <nume> [sumă]` virează monedele plătitorului pe
+  amenzile tale — fără sumă se acoperă tot restul. Cauțiunea e tot o
+  contribuție: `/straja bail <nume>` plătește întâi amenda de captură, apoi
+  restul datoriilor. Fiecare plată îți aduce o „Înștiințare de plată" cu
+  cine a plătit, pe ce amendă și cât a rămas.
+- **Cărțile te așteaptă.** Dacă ești offline când curge orice pas, cărțile
+  se pun la coadă și le primești la următorul login.
+- Comisarul/op poate oricând elibera administrativ, ocolind datoria.
 
 ## Recompense: vânat sau vânător
 
