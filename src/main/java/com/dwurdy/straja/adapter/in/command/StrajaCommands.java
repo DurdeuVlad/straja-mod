@@ -238,6 +238,30 @@ public final class StrajaCommands {
                                                 StringArgumentType.getString(c, "site"),
                                                 StringArgumentType.getString(c, "destination")))))));
         root.then(adminOnly(checkpoint));
+        // #231: state-issued bounties — list is public, post/cancel are
+        // Inspector+ (the service enforces the rank gate), surrender and
+        // bail are player-facing.
+        var bounty = Commands.literal("bounty");
+        bounty.then(Commands.literal("list")
+                .executes(c -> player(c, p -> StrajaRuntime.get().bounties().list(p))));
+        bounty.then(Commands.literal("post")
+                .then(Commands.argument("player", EntityArgument.player())
+                        .then(Commands.argument("amount", IntegerArgumentType.integer(1))
+                                .executes(c -> bountyPost(c, null))
+                                .then(Commands.argument("reason", StringArgumentType.greedyString())
+                                        .executes(c -> bountyPost(c,
+                                                StringArgumentType.getString(c, "reason")))))));
+        bounty.then(Commands.literal("cancel")
+                .then(Commands.argument("target", StringArgumentType.word())
+                        .executes(c -> player(c, p -> StrajaRuntime.get().bounties()
+                                .cancel(p, StringArgumentType.getString(c, "target"))))));
+        root.then(bounty);
+        root.then(Commands.literal("surrender")
+                .executes(c -> player(c, StrajaRuntime.get().bounties()::surrender)));
+        root.then(Commands.literal("bail")
+                .then(Commands.argument("player", StringArgumentType.word())
+                        .executes(c -> player(c, p -> StrajaRuntime.get().bounties()
+                                .payBail(p, StringArgumentType.getString(c, "player"))))));
         var setMissionTime = Commands.literal("set-mission-time")
                 .then(Commands.argument("id", StringArgumentType.word())
                         .then(Commands.argument("minutes", IntegerArgumentType.integer())
@@ -1176,6 +1200,25 @@ public final class StrajaCommands {
             return new MinecraftPlayerGateway(ctx.getSource().getServer(), player.getUUID());
         } catch (CommandSyntaxException error) {
             return null;
+        }
+    }
+
+    private static int bountyPost(CommandContext<CommandSourceStack> ctx, String reason) {
+        ServerPlayer issuerPlayer = ctx.getSource().getPlayer();
+        if (issuerPlayer == null) {
+            ctx.getSource().sendFailure(refusal("straja.cmd.player_only", "straja.remedy.fix_retry"));
+            return 0;
+        }
+        try {
+            ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
+            var issuer = new MinecraftPlayerGateway(ctx.getSource().getServer(),
+                    issuerPlayer.getUUID());
+            var targetGateway = new MinecraftPlayerGateway(ctx.getSource().getServer(),
+                    target.getUUID());
+            return StrajaRuntime.get().bounties().post(issuer, targetGateway,
+                    IntegerArgumentType.getInteger(ctx, "amount"), reason) != null ? 1 : 0;
+        } catch (com.mojang.brigadier.exceptions.CommandSyntaxException e) {
+            return 0;
         }
     }
 

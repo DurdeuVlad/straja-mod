@@ -26,7 +26,7 @@ public final class StrajaDataProvider {
                 "setup", "audit", "inbox", "missions", "fines", "prisons", "rooms",
                 "complaints", "custody", "archive", "identity_cards", "npcs", "test", "players",
                 "mission_templates", "emergency", "audiences", "reports",
-                "admin_tools", "incidents", "bolos", "evidence", "arrest_records", "reputation",
+                "admin_tools", "incidents", "bolos", "bounties", "evidence", "arrest_records", "reputation",
                 "personnel", "promotions", "stations", "documents", "equipment_ledger",
                 "mobilizations", "campaigns", "settlements", "operations", "outbox",
                 "storage_watch", "law_checkpoints", "inspection_ledger",

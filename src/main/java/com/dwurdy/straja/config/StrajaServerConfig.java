@@ -135,6 +135,18 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.ConfigValue<String> LABOR_FREEDOM_MODE;
     public static final ModConfigSpec.IntValue LABOR_FREEDOM_FLAT_PRICE;
     public static final ModConfigSpec.DoubleValue LABOR_FREEDOM_FINE_MULTIPLIER;
+    public static final ModConfigSpec.BooleanValue BOUNTY_ENABLED;
+    public static final ModConfigSpec.IntValue BOUNTY_MIN_AMOUNT;
+    public static final ModConfigSpec.IntValue BOUNTY_MAX_AMOUNT;
+    public static final ModConfigSpec.DoubleValue BOUNTY_FINE_MULTIPLIER;
+    public static final ModConfigSpec.IntValue BOUNTY_TTL_DAYS;
+    public static final ModConfigSpec.DoubleValue BOUNTY_SURRENDER_RADIUS;
+    public static final ModConfigSpec.IntValue BOUNTY_SURRENDER_SECONDS;
+    public static final ModConfigSpec.DoubleValue BOUNTY_TETHER_RADIUS;
+    public static final ModConfigSpec.DoubleValue BOUNTY_TELEPORT_DISTANCE;
+    public static final ModConfigSpec.IntValue BOUNTY_BREAK_GRACE_SECONDS;
+    public static final ModConfigSpec.IntValue BOUNTY_BAIL_WINDOW_HOURS;
+    public static final ModConfigSpec.ConfigValue<String> BOUNTY_DEFAULT_CAMP;
     public static final ModConfigSpec.IntValue INSPECTION_LEDGER_LIMIT;
     public static final ModConfigSpec.ConfigValue<String> COIN_SILVER_ITEM;
     public static final ModConfigSpec.ConfigValue<String> COIN_GOLD_ITEM;
@@ -560,6 +572,56 @@ public final class StrajaServerConfig {
         LABOR_FREEDOM_FINE_MULTIPLIER = B.comment(
                         "Multiplier over outstanding fines when freedomPriceMode is fines_multiplier.")
                 .defineInRange("freedomFineMultiplier", 2.0, 0.0, 1000.0);
+        B.pop();
+
+        B.push("bounty");
+        BOUNTY_ENABLED = B.comment(
+                        "State-issued player bounties: Inspector+ posts a price on a",
+                        "wanted player; any player may capture them with the criminal",
+                        "restraint tools (rope, head sack) and deliver them to a",
+                        "checkpoint for a full arrest and a state-paid reward.")
+                .define("enabled", true);
+        BOUNTY_MIN_AMOUNT = B.comment(
+                        "Minimum bounty in base units (bronze = 1).")
+                .defineInRange("minAmount", 64, 1, Integer.MAX_VALUE);
+        BOUNTY_MAX_AMOUNT = B.comment(
+                        "Maximum bounty in base units.")
+                .defineInRange("maxAmount", 65536, 1, Integer.MAX_VALUE);
+        BOUNTY_FINE_MULTIPLIER = B.comment(
+                        "Bail fine multiplier over the posted bounty. The state pays",
+                        "the hunter the bounty; the captured prisoner owes this",
+                        "multiple as a physical-coin bail (or goes to the mines).",
+                        "Default 2.0: state pays 1x, recovers 2x.")
+                .defineInRange("fineMultiplier", 2.0, 0.0, 1000.0);
+        BOUNTY_TTL_DAYS = B.comment(
+                        "Real days a bounty stays ACTIVE before expiring unpaid.")
+                .defineInRange("ttlDays", 7, 1, 365);
+        BOUNTY_SURRENDER_RADIUS = B.comment(
+                        "Radius (blocks) inside which a bountied player's",
+                        "/straja surrender finds a valid captor.")
+                .defineInRange("surrenderRadius", 8.0, 1.0, 64.0);
+        BOUNTY_SURRENDER_SECONDS = B.comment(
+                        "Seconds a surrender flag stays valid before lapsing.")
+                .defineInRange("surrenderFlagSeconds", 120, 5, 3600);
+        BOUNTY_TETHER_RADIUS = B.comment(
+                        "Leash radius for a civilian bounty escort (blocks).")
+                .defineInRange("hunterTetherRadius", 4.5, 1.0, 64.0);
+        BOUNTY_TELEPORT_DISTANCE = B.comment(
+                        "Snap-back distance for a civilian bounty escort (blocks).")
+                .defineInRange("hunterTeleportDistance", 14.0, 4.0, 128.0);
+        BOUNTY_BREAK_GRACE_SECONDS = B.comment(
+                        "Seconds out of tether range before a civilian escort rope",
+                        "breaks and the captive goes free.")
+                .defineInRange("hunterBreakGraceSeconds", 20, 1, 3600);
+        BOUNTY_BAIL_WINDOW_HOURS = B.comment(
+                        "Real hours the captured prisoner's bail stays payable",
+                        "before an automatic labor-camp transfer is attempted.")
+                .defineInRange("bailWindowHours", 24, 1, 720);
+        BOUNTY_DEFAULT_CAMP = B.comment(
+                        "Labor camp id for post-bail-window transfers.",
+                        "Empty picks the first registered camp; if none exists",
+                        "the prisoner keeps cell custody.")
+                .define("defaultCampId", "");
         B.pop();
 
         B.push("inspection");
@@ -1117,6 +1179,18 @@ public final class StrajaServerConfig {
         p.laborFreedomPriceMode = LABOR_FREEDOM_MODE.get();
         p.laborFreedomFlatPrice = LABOR_FREEDOM_FLAT_PRICE.get();
         p.laborFreedomFineMultiplier = LABOR_FREEDOM_FINE_MULTIPLIER.get();
+        p.bountyEnabled = BOUNTY_ENABLED.get();
+        p.bountyMinAmount = BOUNTY_MIN_AMOUNT.get();
+        p.bountyMaxAmount = BOUNTY_MAX_AMOUNT.get();
+        p.bountyFineMultiplier = BOUNTY_FINE_MULTIPLIER.get();
+        p.bountyTtlDays = BOUNTY_TTL_DAYS.get();
+        p.bountySurrenderRadius = BOUNTY_SURRENDER_RADIUS.get();
+        p.bountySurrenderSeconds = BOUNTY_SURRENDER_SECONDS.get();
+        p.bountyTetherRadius = BOUNTY_TETHER_RADIUS.get();
+        p.bountyTeleportDistance = BOUNTY_TELEPORT_DISTANCE.get();
+        p.bountyBreakGraceSeconds = BOUNTY_BREAK_GRACE_SECONDS.get();
+        p.bountyBailWindowHours = BOUNTY_BAIL_WINDOW_HOURS.get();
+        p.bountyDefaultCampId = BOUNTY_DEFAULT_CAMP.get();
         p.inspectionLedgerLimit = INSPECTION_LEDGER_LIMIT.get();
 
         var watchedItems = StrajaPolicies.parseStringIntMap(STORAGE_WATCHED_ITEMS.get());

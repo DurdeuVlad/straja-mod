@@ -1087,6 +1087,122 @@ public final class LawAcceptanceGameTests {
         }
     }
 
+    /**
+     * AT9 (#231): a state-issued bounty turns a wanted player into lawful
+     * civilian prey — the rope only bites on a downed/surrendered captive,
+     * dragging them across an ARREST gate runs the full arrest pipeline,
+     * and the capture pays the hunter while a 2x bail fine lands on the
+     * prisoner.
+     */
+    @GameTest(template = "empty", timeoutTicks = 200)
+    public static void bountyCaptureDelivery(GameTestHelper helper) {
+        var runtime = runtime(helper);
+        ServerLevel level = helper.getLevel();
+        String dim = level.dimension().location().toString();
+        BlockPos anchor = helper.absolutePos(new BlockPos(0, 2, 0));
+        purgeStaleFixtures(runtime, helper);
+
+        ServerPlayer hunter = mockPlayer(helper);
+        ServerPlayer crook = mockPlayer(helper);
+        var hunterGw = gateway(hunter);
+        var crookGw = gateway(crook);
+        String crookUuid = crook.getUUID().toString();
+
+        Runnable cleanup = () -> {
+            removeSite(runtime, "at9_intake");
+            var store = runtime.context().bounties().read();
+            var rec = store.activeFor(crookUuid);
+            String boloId = rec == null ? "at9-linked" : rec.linkedBoloId;
+            store.records.removeIf(r -> r != null && crookUuid.equals(r.targetUuid));
+            runtime.context().bounties().write(store);
+            if (boloId != null && !boloId.isBlank()) removeBolo(runtime, boloId);
+            removeCustodyState(runtime, crookUuid);
+            removeRegister(runtime, crookUuid);
+        };
+        cleanup.run();
+
+        int ay = anchor.getY() + 96;
+        var intake = new LawCheckpointRecord();
+        intake.id = "at9_intake";
+        intake.name = "AT9 Intake";
+        intake.dimension = dim;
+        intake.mode = CheckpointMode.ARREST;
+        intake.stage1 = LawBounds.of(dim, anchor.getX(), ay, anchor.getZ(),
+                anchor.getX() + 8, ay + 6, anchor.getZ() + 8);
+        intake.stage2 = LawBounds.of(dim, anchor.getX() + 2, ay + 1,
+                anchor.getZ() + 2, anchor.getX() + 6, ay + 5, anchor.getZ() + 6);
+        intake.pushback = PushbackPoint.at(dim, anchor.getX() + 4,
+                anchor.getY() + 10, anchor.getZ() - 10, 180f);
+        saveSite(runtime, intake);
+
+        // Inspector-rank issuer posts the bounty; the linked BOLO makes the
+        // crook wanted-on-sight at arrest gates.
+        ServerPlayer issuer = mockPlayer(helper);
+        var issuerGw = gateway(issuer);
+        var issuerState = runtime.players().state(issuerGw);
+        issuerState.rank = 4; // INSPECTOR
+        runtime.players().save(issuer.getUUID(), issuerState);
+        var bounty = runtime.bounties().post(issuerGw, crookGw, 128, "at9 reason");
+        helper.assertTrue(bounty != null, "an Inspector must be able to post a bounty");
+        helper.assertTrue(runtime.wanted().isWanted(crook.getUUID()),
+                "posting a bounty must make the target wanted-on-sight");
+
+        // A conscious bountied target cannot be roped — the fight must be won.
+        hunterGw.give(ItemSpec.of("straja:rope", 1));
+        hunterGw.selectSlot(0);
+        hunter.teleportTo(anchor.getX() + 4, ay + 10, anchor.getZ() + 4);
+        crook.teleportTo(anchor.getX() + 5, ay + 10, anchor.getZ() + 4);
+        helper.assertTrue(!runtime.custody().applyRope(hunterGw, crookGw),
+                "a conscious bountied target must refuse the rope");
+
+        // Downed, the capture is lawful — the rope marks the record for the
+        // bounty pipeline.
+        helper.assertTrue(runtime.custody().startDowned(crookGw, hunterGw,
+                "at9 knockout") != null, "the crook must go down");
+        helper.assertTrue(runtime.custody().applyRope(hunterGw, crookGw),
+                "a downed bountied target must accept the rope");
+        var boundRec = runtime.context().custody().read().bound.get(crookUuid);
+        helper.assertTrue(boundRec != null
+                        && "bounty_capture".equals(boundRec.reason),
+                "the bound record must carry the bounty-capture reason — got "
+                        + (boundRec == null ? "null" : boundRec.reason));
+
+        // The captive crosses the intake gate — wanted-on-sight runs the full
+        // arrest, which resolves the bounty and pays the hunter.
+        step(helper, 7, () -> {
+            crook.teleportTo(anchor.getX() + 4, ay + 2, anchor.getZ() + 4);
+            step(helper, 14, () -> {
+                var entries = entriesFor(runtime, "at9_intake", crookUuid);
+                helper.assertFalse(entries.isEmpty(),
+                        "the captive's delivery crossing must be logged");
+                var last = entries.get(entries.size() - 1);
+                helper.assertTrue(last.outcome == CrossingOutcome.ARREST,
+                        "a bound bountied captive must be fully arrested at the "
+                                + "gate — got " + last.outcome);
+                var resolved = runtime.context().bounties().read()
+                        .records.stream()
+                        .filter(r -> crookUuid.equals(r.targetUuid))
+                        .findFirst().orElseThrow();
+                helper.assertTrue(resolved.status
+                                == com.dwurdy.straja.domain.model.BountyStatus.CAPTURED,
+                        "gate arrest must capture the bounty — got "
+                                + resolved.status);
+                helper.assertTrue(hunter.getUUID().toString()
+                                .equals(resolved.hunterUuid),
+                        "the binding hunter must be credited — got "
+                                + resolved.hunterUuid);
+                var fine = runtime.context().fines().read()
+                        .find(resolved.linkedFineId);
+                helper.assertTrue(fine != null && fine.amount == 256
+                                && "IN_SENTENCE".equals(fine.status),
+                        "the prisoner must owe a 2x in-sentence bail fine — got "
+                                + (fine == null ? "null" : fine.amount + "/" + fine.status));
+                cleanup.run();
+                helper.succeed();
+            }, cleanup);
+        }, cleanup);
+    }
+
     /** Officer qualification: rank 3 + duty, the same pattern the rp suite uses. */
     private static MinecraftPlayerGateway qualifyOfficer(StrajaRuntime runtime,
                                                          ServerPlayer player) {

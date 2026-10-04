@@ -696,6 +696,84 @@ public class PrisonService implements PrisonRoleplayUseCase {
     }
 
     /**
+     * #231 bail release: a paid bounty-capture fine frees the prisoner
+     * immediately — no officer authority needed, the state itself releases.
+     * Works online and offline (offline releases park lockers as pending).
+     */
+    public boolean releaseForBail(String targetUuid) {
+        if (targetUuid == null || targetUuid.isBlank()) return false;
+        var data = store();
+        for (var sentence : data.sentences) {
+            if (sentence == null
+                    || (!"ACTIVE".equals(sentence.status)
+                            && !"WAITING_CELL".equals(sentence.status))
+                    || !targetUuid.equals(sentence.targetUuid)) continue;
+            var target = findFor(sentence);
+            if (!releaseSentence(data, sentence, target, "BAIL_PAID")) return false;
+            ctx.prison().write(data);
+            audit.record("prison_release", "bounty_bail", "",
+                    sentence.target, targetUuid, "SUCCESS", "BAIL_PAID");
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * #231 system camp transfer: an unpaid bail window lapsing sends the
+     * prisoner to the mines without an officer present. Online prisoners are
+     * delivered at the intake point; offline ones get the register link and
+     * land at intake on next login (the IN_CAMP relog heal path).
+     */
+    public boolean systemTransferToCamp(String targetUuid, String campId) {
+        if (camps == null || targetUuid == null || targetUuid.isBlank()) return false;
+        var camp = camps.camp(campId);
+        if (camp == null) return false;
+        var data = store();
+        Sentence sentence = null;
+        for (var s : data.sentences) {
+            if (s != null && ("ACTIVE".equals(s.status)
+                            || "WAITING_CELL".equals(s.status))
+                    && targetUuid.equals(s.targetUuid)) {
+                sentence = s;
+                break;
+            }
+        }
+        if (sentence == null) return false;
+        var reg = ctx.prisonerRegister().read();
+        var rec = reg.prisoner(sentence.targetUuid);
+        if (rec != null && rec.status == PrisonerStatus.IN_CAMP
+                && camp.id.equals(rec.assignedCampId)) return true;
+        if (rec == null) {
+            rec = new com.dwurdy.straja.domain.model.PrisonerRegisterRecord(
+                    sentence.targetUuid, sentence.target, "bounty bail lapsed");
+            reg.put(rec);
+        }
+        rec.status = PrisonerStatus.IN_CAMP;
+        rec.assignedCampId = camp.id;
+        ctx.prisonerRegister().write(reg);
+        if (!sentence.cellId.isEmpty()) {
+            data.assignments.remove(sentence.cellId);
+            sentence.cellId = "";
+        }
+        if ("WAITING_CELL".equals(sentence.status)) {
+            sentence.status = "ACTIVE";
+            String sentenceId = sentence.id;
+            data.waitlist.removeIf(e -> e != null
+                    && sentenceId.equals(e.sentenceId));
+        }
+        ctx.prison().write(data);
+        var target = findFor(sentence);
+        if (target != null && custody.enterJail(target, "prison")) {
+            deliverToCamp(target, camp, true);
+            target.tellKey("straja.camp.transferred",
+                    camp.name.isBlank() ? camp.id : camp.name);
+        }
+        audit.record("camp_transfer", "system", "", sentence.target,
+                targetUuid, "SUCCESS", "camp=" + camp.id + " source=bounty_bail");
+        return true;
+    }
+
+    /**
      * Automatic labor release: when a camp prisoner's labor account reaches
      * the freedom price the sentence closes as served, the register marks
      * SERVED_LABOR, belongings come back and the body exits at the camp's

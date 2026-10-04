@@ -38,6 +38,7 @@ public record StrajaContext(
         IdentityCardRepository identityCards,
         IncidentRepository incidents,
         BoloRepository bolos,
+        BountyRepository bounties,
         EvidenceRepository evidence,
         ArrestRecordRepository arrestRecords,
         ReputationRepository reputation,
