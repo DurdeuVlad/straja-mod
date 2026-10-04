@@ -248,7 +248,7 @@ class PersistenceTest {
                 "personnel", "promotions", "stations", "documents", "equipment_ledger",
                 "mobilizations", "campaigns", "settlements", "operations", "outbox",
                 "storage_watch", "law_checkpoints", "inspection_ledger", "prisoner_register",
-                "labor_camps", "merchant_desks", "npc_bindings"), java.util.Set.copyOf(stores),
+                "labor_camps", "merchant_desks", "npc_bindings", "protocol"), java.util.Set.copyOf(stores),
                 "the snapshot must retain every persisted source store");
         assertFalse(stores.contains("backup"),
                 "the backup store must never snapshot itself");

@@ -390,6 +390,12 @@ public class StrajaPolicies {
     public int debtReleaseBlockThreshold = 0;
     public String debtOnBlocked = "CAMP"; // CAMP | CELL
 
+    // tester protocol (#242) — /straja protocol guided walkthrough. Off by
+    // default: the run grants the tester officer rank and spawns a fake
+    // suspect, so it is a tester-build surface only.
+    public boolean protocolEnabled = false;
+    public String protocolActorName = "Suspectul";
+
     // inspection ledger retention (oldest trimmed; 0 = keep all).
     public int inspectionLedgerLimit = 2000; // prototype parity — entries embed full SNBT snapshots
 

@@ -63,6 +63,7 @@ public final class StrajaRuntime {
     private final com.dwurdy.straja.application.service.IncidentService incidents;
     private final com.dwurdy.straja.application.service.BoloService bolos;
     private final com.dwurdy.straja.application.service.BountyService bounties;
+    private final com.dwurdy.straja.application.service.ProtocolService protocol;
     private final com.dwurdy.straja.application.service.StorageService storage;
     private final com.dwurdy.straja.application.service.CheckpointService checkpoints;
     private final com.dwurdy.straja.application.service.MerchantDeskService desks;
@@ -384,6 +385,12 @@ public final class StrajaRuntime {
         this.bounties.usePrison(this.prison);
         // DEBT-2: bail lands on the debt ledger; in-custody issue levies.
         this.bounties.useDebt(this.debt);
+        // #242: guided tester protocol — scripted state beats + fake suspect.
+        this.protocol = new com.dwurdy.straja.application.service.ProtocolService(
+                ctx, new SavedStores.Protocol(stores), players, audit);
+        this.protocol.usePrison(this.prison);
+        this.protocol.useSpawner(
+                new com.dwurdy.straja.adapter.out.minecraft.ProtocolActors(server));
         this.custody.useBounties(this.bounties);
         this.prison.onArrest(this.bounties::onArrested);
         this.desks = new com.dwurdy.straja.application.service.MerchantDeskService(
@@ -561,6 +568,7 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.service.BoloService bolos() { return bolos; }
 
     public com.dwurdy.straja.application.service.BountyService bounties() { return bounties; }
+    public com.dwurdy.straja.application.service.ProtocolService protocol() { return protocol; }
     public com.dwurdy.straja.application.service.StorageService storage() { return storage; }
     public com.dwurdy.straja.application.service.CheckpointService checkpoints() { return checkpoints; }
     public com.dwurdy.straja.application.service.MerchantDeskService desks() { return desks; }
