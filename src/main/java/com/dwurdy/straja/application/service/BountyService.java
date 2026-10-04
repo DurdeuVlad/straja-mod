@@ -106,7 +106,7 @@ public final class BountyService {
         record.amount = amount;
         record.postedBy = issuer.name();
         record.postedByUuid = uuid(issuer);
-        record.postedByRank = issuerState.rank;
+        record.postedByRank = issuerState == null ? 0 : issuerState.rank;
         record.reason = reason == null ? "" : reason.trim();
         record.postedAt = now();
         record.expiresAt = now() + ctx.policies().bountyTtlDays * 86_400_000L;
@@ -197,9 +197,12 @@ public final class BountyService {
     private boolean isWanted(PlayerGateway target) {
         String id = uuid(target);
         for (BoloRecord bolo : ctx.bolos().read().records) {
-            if (bolo != null && bolo.status == BoloStatus.ACTIVE
-                    && (id.equals(bolo.subjectUuid)
-                            || target.name().equalsIgnoreCase(bolo.subjectName))) {
+            if (bolo == null || bolo.status != BoloStatus.ACTIVE) continue;
+            // UUID-first identity: a bolo carrying a uuid matches by uuid
+            // only; the name fallback exists for legacy uuid-less marks.
+            boolean uuidBound = bolo.subjectUuid != null && !bolo.subjectUuid.isBlank();
+            if ((uuidBound && id.equals(bolo.subjectUuid))
+                    || (!uuidBound && target.name().equalsIgnoreCase(bolo.subjectName))) {
                 return true;
             }
         }
@@ -452,17 +455,23 @@ public final class BountyService {
             if (record == null || record.status != BountyStatus.CAPTURED
                     || record.campTransferAttempted || record.bailDeadlineAt == 0
                     || now() < record.bailDeadlineAt) continue;
-            record.campTransferAttempted = true;
-            changed = true;
             var fine = ctx.fines().read().find(record.linkedFineId);
-            if (fine != null && "PAID".equals(fine.status)) continue;
+            if (fine != null && "PAID".equals(fine.status)) {
+                record.campTransferAttempted = true;
+                changed = true;
+                continue;
+            }
             if (prison != null) {
                 String campId = ctx.policies().bountyDefaultCampId;
                 if (campId == null || campId.isBlank()) {
                     var camps = ctx.laborCamps().read().camps();
                     campId = camps.isEmpty() ? "" : camps.keySet().iterator().next();
                 }
+                // Only mark attempted when a camp actually exists — an
+                // unconfigured server retries after one is created.
                 if (!campId.isBlank()) {
+                    record.campTransferAttempted = true;
+                    changed = true;
                     prison.systemTransferToCamp(record.targetUuid, campId);
                 }
             }
