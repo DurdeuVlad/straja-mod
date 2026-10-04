@@ -36,6 +36,25 @@ public class Fine {
     public Long paymentReviewResolvedAt;
     public Appeal appeal;
     public PaymentAttempt paymentAttempt;
+    /** DEBT-1 ledger: total applied across all contribution sources. */
+    public int paidAmount;
+    /** Ledger rows; JSON-absent loads as an empty list. */
+    public List<Contribution> contributions = new ArrayList<>();
+
+    /** Unpaid balance; never negative. */
+    public int remaining() {
+        return Math.max(0, amount - paidAmount);
+    }
+
+    /** A payment applied to this fine (FINE_PAY|LEVY|CONTRIBUTION|BAIL). */
+    public static class Contribution {
+        public String payer = "";
+        public String payerUuid = "";
+        public int amount;
+        public long at;
+        /** FINE_PAY | LEVY | CONTRIBUTION | BAIL */
+        public String source = "";
+    }
 
     public static class Appeal {
         /** PENDING | UPHELD | REDUCED | VOID | AUTO_WAIVED */

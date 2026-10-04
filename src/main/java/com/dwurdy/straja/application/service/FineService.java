@@ -33,6 +33,7 @@ public class FineService implements FineRoleplayUseCase {
     private final PlayerService players;
     private final AuditService audit;
     private final PrisonRoleplayUseCase prison;
+    private DebtService debt;
     private long lastTickAt;
     private long lastPersistAt;
     private Consumer<Fine> finePaidHook = fine -> {};
@@ -58,6 +59,11 @@ public class FineService implements FineRoleplayUseCase {
     /** Called after an authorized appeal permanently voids a fine. */
     public void onFineVoided(BiConsumer<PlayerGateway, Fine> hook) {
         this.fineVoidedHook = hook == null ? (actor, fine) -> {} : hook;
+    }
+
+    /** DEBT-1: the debt ledger records every reception payment (FINE_PAY). */
+    public void useDebt(DebtService service) {
+        this.debt = service;
     }
 
     private StrajaPolicies p() {
@@ -383,14 +389,15 @@ public class FineService implements FineRoleplayUseCase {
             player.refuse("straja.fine.pay_reception", "straja.remedy.reception");
             return false;
         }
-        if (ctx.currency().balanceOf(player) < fine.amount) {
+        int due = fine.remaining();
+        if (ctx.currency().balanceOf(player) < due) {
             player.refuse("straja.fine.exact_coins", "straja.remedy.reception");
             return false;
         }
         String previousStatus = fine.status;
         fine.status = "PAYMENT_REVIEW";
         Fine.PaymentAttempt attempt = new Fine.PaymentAttempt();
-        attempt.amount = fine.amount;
+        attempt.amount = due;
         attempt.player = player.name();
         attempt.playerUuid = player.uuid().toString();
         attempt.startedAt = now();
@@ -398,7 +405,7 @@ public class FineService implements FineRoleplayUseCase {
         fine.paymentAttempt = attempt;
         ctx.fines().write(data);
         audit.record("fine_payment_review", player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), "STARTED", "payment_boundary fineId=" + fine.id + " amount=" + fine.amount);
-        var withdrawal = ctx.currency().withdraw(player, fine.amount);
+        var withdrawal = ctx.currency().withdraw(player, due);
         attempt.removedValue = withdrawal.removed();
         attempt.error = withdrawal.error() == null ? "" : withdrawal.error();
         attempt.sideEffectUnknown = !withdrawal.ok() && withdrawal.removed() > 0;
@@ -417,8 +424,12 @@ public class FineService implements FineRoleplayUseCase {
             }
             return false;
         }
-        fine.status = "PAID";
-        fine.paidAt = now();
+        if (debt != null) {
+            debt.applyPayment(fine, due, player.name(), player.uuid().toString(), "FINE_PAY");
+        } else {
+            fine.status = "PAID";
+            fine.paidAt = now();
+        }
         fine.paymentAttempt = null;
         for (FineTask task : data.tasks) {
             if (fine.id.equals(task.fineId) && List.of("OPEN", "PRESENTED", "REFUSED", "ARREST_PENDING", "ARRESTED").contains(task.status)) {
