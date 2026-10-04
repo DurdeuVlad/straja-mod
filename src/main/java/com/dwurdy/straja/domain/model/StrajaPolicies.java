@@ -382,6 +382,14 @@ public class StrajaPolicies {
     public int bountyBailWindowHours = 24;
     public String bountyDefaultCampId = "";
 
+    // prisoner debt gate (DEBT-2, #235) — levy + release blockade. Custody
+    // coins (live inventory, personal locker, pending-locker reservations)
+    // settle payable fines oldest-first; a release over the threshold is
+    // diverted to the default labor camp ("CAMP") or refused ("CELL").
+    public boolean debtEnabled = true;
+    public int debtReleaseBlockThreshold = 0;
+    public String debtOnBlocked = "CAMP"; // CAMP | CELL
+
     // inspection ledger retention (oldest trimmed; 0 = keep all).
     public int inspectionLedgerLimit = 2000; // prototype parity — entries embed full SNBT snapshots
 

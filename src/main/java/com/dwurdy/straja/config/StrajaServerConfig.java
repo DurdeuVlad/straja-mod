@@ -147,6 +147,9 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.IntValue BOUNTY_BREAK_GRACE_SECONDS;
     public static final ModConfigSpec.IntValue BOUNTY_BAIL_WINDOW_HOURS;
     public static final ModConfigSpec.ConfigValue<String> BOUNTY_DEFAULT_CAMP;
+    public static final ModConfigSpec.BooleanValue DEBT_ENABLED;
+    public static final ModConfigSpec.IntValue DEBT_RELEASE_BLOCK_THRESHOLD;
+    public static final ModConfigSpec.ConfigValue<String> DEBT_ON_BLOCKED;
     public static final ModConfigSpec.IntValue INSPECTION_LEDGER_LIMIT;
     public static final ModConfigSpec.ConfigValue<String> COIN_SILVER_ITEM;
     public static final ModConfigSpec.ConfigValue<String> COIN_GOLD_ITEM;
@@ -622,6 +625,26 @@ public final class StrajaServerConfig {
                         "Empty picks the first registered camp; if none exists",
                         "the prisoner keeps cell custody.")
                 .define("defaultCampId", "");
+        B.pop();
+
+        B.push("debt");
+        DEBT_ENABLED = B.comment(
+                        "Prisoner debt enforcement: a prisoner owing payable",
+                        "fines cannot hold coins — a levy sweeps live inventory,",
+                        "personal locker chests and pending-locker reservations",
+                        "oldest-first — and cannot leave custody while the balance",
+                        "exceeds releaseBlockThreshold.")
+                .define("enabled", true);
+        DEBT_RELEASE_BLOCK_THRESHOLD = B.comment(
+                        "Outstanding debt above this many base units blocks release.",
+                        "0 = any unpaid debt blocks.")
+                .defineInRange("releaseBlockThreshold", 0, 0, Integer.MAX_VALUE);
+        DEBT_ON_BLOCKED = B.comment(
+                        "Where a debt-blocked release goes: \"CAMP\" transfers the",
+                        "debtor to the default labor camp (bounty.defaultCampId,",
+                        "else the first registered camp); \"CELL\" refuses the",
+                        "release and keeps cell custody.")
+                .define("onBlocked", "CAMP", StrajaServerConfig::isDebtOnBlocked);
         B.pop();
 
         B.push("inspection");
@@ -1191,6 +1214,9 @@ public final class StrajaServerConfig {
         p.bountyBreakGraceSeconds = BOUNTY_BREAK_GRACE_SECONDS.get();
         p.bountyBailWindowHours = BOUNTY_BAIL_WINDOW_HOURS.get();
         p.bountyDefaultCampId = BOUNTY_DEFAULT_CAMP.get();
+        p.debtEnabled = DEBT_ENABLED.get();
+        p.debtReleaseBlockThreshold = DEBT_RELEASE_BLOCK_THRESHOLD.get();
+        p.debtOnBlocked = DEBT_ON_BLOCKED.get().toUpperCase(java.util.Locale.ROOT);
         p.inspectionLedgerLimit = INSPECTION_LEDGER_LIMIT.get();
 
         var watchedItems = StrajaPolicies.parseStringIntMap(STORAGE_WATCHED_ITEMS.get());
@@ -1398,6 +1424,11 @@ public final class StrajaServerConfig {
     private static boolean isFreedomPriceMode(Object o) {
         return o instanceof String s
                 && ("flat".equalsIgnoreCase(s.trim()) || "fines_multiplier".equalsIgnoreCase(s.trim()));
+    }
+
+    private static boolean isDebtOnBlocked(Object o) {
+        return o instanceof String s
+                && ("CAMP".equalsIgnoreCase(s.trim()) || "CELL".equalsIgnoreCase(s.trim()));
     }
 
     private static boolean isDamageBehavior(Object o) {

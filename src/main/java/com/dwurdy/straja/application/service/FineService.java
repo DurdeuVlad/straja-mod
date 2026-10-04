@@ -356,7 +356,17 @@ public class FineService implements FineRoleplayUseCase {
         audit.record("fine_issue", issuer.name(), issuer.uuid().toString(), target.name(), target.uuid().toString(), "SUCCESS", "issued fineId=" + fine.id + " amount=" + fine.amount);
         target.tell("Ai primit amenda " + fine.id + ": " + fine.amount + " monede pentru " + fine.law + ". Plata se face la recepționistă.");
         issuer.tell("Amenda " + fine.id + " a fost emisă și predată. Registrul rămâne reutilizabil.");
+        // DEBT-2: a fine landing on an in-custody prisoner triggers the levy.
+        levyIfInCustody(fine.targetUuid);
         return true;
+    }
+
+    /** DEBT-2: a fine set on an in-custody prisoner sweeps custody coins at once. */
+    private void levyIfInCustody(String targetUuid) {
+        if (debt == null || !p().debtEnabled || targetUuid == null || targetUuid.isBlank()) return;
+        var rec = ctx.prisonerRegister().read().prisoner(targetUuid);
+        if (rec == null || rec.status.isReleased()) return;
+        debt.levy(targetUuid);
     }
 
     private ItemSpec noticeStack(Fine fine) {

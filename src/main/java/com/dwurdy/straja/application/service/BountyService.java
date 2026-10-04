@@ -33,6 +33,7 @@ public final class BountyService {
     private final PlayerService players;
     private final AuditService audit;
     private PrisonService prison;
+    /** DEBT-2: bail fines land on the debt ledger (late-bound like usePrison). */
     private DebtService debt;
 
     public BountyService(StrajaContext ctx, PlayerService players, AuditService audit) {
@@ -335,6 +336,13 @@ public final class BountyService {
         fineData.fines.add(fine);
         ctx.fines().write(fineData);
         record.linkedFineId = fine.id;
+        // DEBT-2: a bail fine set on an in-custody prisoner levies custody
+        // coins. (Fresh bookings show no custody record yet — the levy is
+        // deliberately not part of booking.)
+        if (debt != null && ctx.policies().debtEnabled) {
+            var rec = ctx.prisonerRegister().read().prisoner(fine.targetUuid);
+            if (rec != null && !rec.status.isReleased()) debt.levy(fine.targetUuid);
+        }
         payout(record);
         ctx.bounties().write(store);
         audit.record("bounty_capture", record.hunterName, record.hunterUuid,
