@@ -495,7 +495,11 @@ public class PrisonService implements PrisonRoleplayUseCase {
             actor.refuse("straja.prison.no_sentence", "straja.remedy.jailer", target.name());
             return false;
         }
-        if (!releaseSentence(data, sentence, target, "FORCED_RELEASE")) return false;
+        // DEBT-2: a jailer release settles the ledger first; an explicit
+        // commissioner/op (admin) release is the forced path that bypasses
+        // the levy and the debt gate entirely.
+        if (!releaseSentence(data, sentence, target, "FORCED_RELEASE", null,
+                actor, players.isCommissioner(actor) || actor.isOp())) return false;
         ctx.prison().write(data);
         audit.record("prison_release", actor.name(), uuidOf(actor),
                 sentence.target, sentence.targetUuid, "SUCCESS",
@@ -507,17 +511,29 @@ public class PrisonService implements PrisonRoleplayUseCase {
         return releaseSentence(data, sentence, target, reason, null);
     }
 
+    private boolean releaseSentence(PrisonStore data, Sentence sentence, PlayerGateway target,
+                                    String reason,
+                                    com.dwurdy.straja.domain.model.LaborCampRecord laborCamp) {
+        return releaseSentence(data, sentence, target, reason, laborCamp, null, false);
+    }
+
     /**
      * Core release path. {@code laborCamp} overrides the exit point (the
      * camp's release spawn) and — when the reason is {@code SERVED_LABOR} —
      * the terminal register status. Locker restore, game-mode restore, BOLO
      * clear and audit hooks are identical to a cell release.
+     *
+     * <p>DEBT-2: a normal release settles the ledger before custody or
+     * locker state is touched — levy, then the debt gate. {@code forced}
+     * marks an explicit admin release (commissioner), which bypasses both.
      */
     private boolean releaseSentence(PrisonStore data, Sentence sentence, PlayerGateway target,
                                     String reason,
-                                    com.dwurdy.straja.domain.model.LaborCampRecord laborCamp) {
+                                    com.dwurdy.straja.domain.model.LaborCampRecord laborCamp,
+                                    PlayerGateway releaser, boolean forced) {
         if (sentence == null || java.util.Set.of("SERVED", "FORCED_RELEASE", "CANCELLED")
                 .contains(sentence.status)) return false;
+        if (!forced && !debtGateAllows(data, sentence, target, releaser)) return false;
         if (target != null && !custody.releaseFromJail(target)) return false;
         sentence.status = "FORCED_RELEASE".equals(reason) ? "FORCED_RELEASE" : "SERVED";
         sentence.servedAt = now();
@@ -666,6 +682,8 @@ public class PrisonService implements PrisonRoleplayUseCase {
             actor.tellKey("straja.camp.already_there", target.name(), camp.id);
             return false;
         }
+        // DEBT-2: the levy sweeps custody coins before the prisoner boards.
+        if (debt != null && ctx.policies().debtEnabled) debt.levy(sentence.targetUuid);
         if (custody.enterJail(target, "prison")) {
             if (rec != null && rec.status == PrisonerStatus.FUGITIVE && bolos != null
                     && target.uuid() != null) {
@@ -730,6 +748,8 @@ public class PrisonService implements PrisonRoleplayUseCase {
      * prisoner to the mines without an officer present. Online prisoners are
      * delivered at the intake point; offline ones get the register link and
      * land at intake on next login (the IN_CAMP relog heal path).
+     *
+     * <p>DEBT-2: custody coins settle the ledger before the prisoner boards.
      */
     public boolean systemTransferToCamp(String targetUuid, String campId) {
         if (camps == null || targetUuid == null || targetUuid.isBlank()) return false;
@@ -746,13 +766,37 @@ public class PrisonService implements PrisonRoleplayUseCase {
             }
         }
         if (sentence == null) return false;
+        // DEBT-2: the levy sweeps custody coins before departure. The debt
+        // gate calls applyCampTransfer directly, so a blocked release can
+        // never re-enter the gate through this path.
+        if (debt != null && ctx.policies().debtEnabled) debt.levy(targetUuid);
+        if (!applyCampTransfer(data, sentence, findFor(sentence), camp, "bounty_bail")) {
+            return false;
+        }
+        ctx.prison().write(data);
+        return true;
+    }
+
+    /**
+     * Shared camp-transfer mutation: the register claims IN_CAMP, any cell
+     * bunk is freed, WAITING_CELL promotes to ACTIVE, and an online body
+     * lands at the camp intake. Mutates the caller's store — the caller
+     * owns the prison write. The debt gate routes here so its internal
+     * transfer can never recurse into the release check. Returns true when
+     * the prisoner ends assigned to the camp (moved or already there).
+     */
+    private boolean applyCampTransfer(PrisonStore data, Sentence sentence,
+                                      PlayerGateway target,
+                                      com.dwurdy.straja.domain.model.LaborCampRecord camp,
+                                      String source) {
+        if (sentence == null || camp == null) return false;
         var reg = ctx.prisonerRegister().read();
         var rec = reg.prisoner(sentence.targetUuid);
         if (rec != null && rec.status == PrisonerStatus.IN_CAMP
                 && camp.id.equals(rec.assignedCampId)) return true;
         if (rec == null) {
             rec = new com.dwurdy.straja.domain.model.PrisonerRegisterRecord(
-                    sentence.targetUuid, sentence.target, "bounty bail lapsed");
+                    sentence.targetUuid, sentence.target, source);
             reg.put(rec);
         }
         rec.status = PrisonerStatus.IN_CAMP;
@@ -764,19 +808,100 @@ public class PrisonService implements PrisonRoleplayUseCase {
         }
         if ("WAITING_CELL".equals(sentence.status)) {
             sentence.status = "ACTIVE";
-            String sentenceId = sentence.id;
             data.waitlist.removeIf(e -> e != null
-                    && sentenceId.equals(e.sentenceId));
+                    && sentence.id != null && sentence.id.equals(e.sentenceId));
         }
-        ctx.prison().write(data);
-        var target = findFor(sentence);
         if (target != null && custody.enterJail(target, "prison")) {
             deliverToCamp(target, camp, true);
             target.tellKey("straja.camp.transferred",
                     camp.name.isBlank() ? camp.id : camp.name);
         }
         audit.record("camp_transfer", "system", "", sentence.target,
-                targetUuid, "SUCCESS", "camp=" + camp.id + " source=bounty_bail");
+                sentence.targetUuid, "SUCCESS", "camp=" + camp.id + " source=" + source);
+        return true;
+    }
+
+    // ------------------------------------------------------------ DEBT-2 gate
+
+    /** Suppression window for repeated gate notices (tick-driven retries). */
+    private static final long DEBT_GATE_NOTICE_MS = 60_000L;
+    private record GateNotice(int owed, long at) {}
+    private final java.util.Map<String, GateNotice> debtGateNotice = new java.util.HashMap<>();
+
+    /**
+     * DEBT-2 (#235) release gate: levies custody coins, then re-reads the
+     * balance. At or under {@code debtReleaseBlockThreshold} the release
+     * proceeds; over it, {@code debtOnBlocked=CAMP} diverts the release into
+     * a default-camp transfer on the caller's store (an internal call that
+     * cannot re-enter this gate), while CELL refuses the releaser and keeps
+     * custody. Either way the prisoner is handed a written statement.
+     * Returns true only when release may proceed.
+     */
+    private boolean debtGateAllows(PrisonStore data, Sentence sentence,
+                                   PlayerGateway target, PlayerGateway releaser) {
+        if (debt == null || !ctx.policies().debtEnabled
+                || sentence.targetUuid == null || sentence.targetUuid.isBlank()) return true;
+        debt.levy(sentence.targetUuid);
+        int owed = debt.outstandingDebt(sentence.targetUuid);
+        int threshold = Math.max(0, ctx.policies().debtReleaseBlockThreshold);
+        if (owed <= threshold) {
+            debtGateNotice.remove(sentence.targetUuid);
+            return true;
+        }
+        boolean notify = shouldNotifyGate(sentence.targetUuid, owed);
+        String actor = releaser == null ? "system" : releaser.name();
+        String actorUuid = releaser == null ? "" : uuidOf(releaser);
+        if ("CAMP".equalsIgnoreCase(ctx.policies().debtOnBlocked)) {
+            var camp = debtDefaultCamp();
+            if (camp != null && applyCampTransfer(data, sentence, target, camp, "debt_gate")) {
+                // The transfer mutates the caller's store — persist it here
+                // so failure-returning callers cannot lose the camp claim.
+                ctx.prison().write(data);
+                String campName = camp.name.isBlank() ? camp.id : camp.name;
+                if (releaser != null) {
+                    releaser.refuse("straja.debt.release_to_camp",
+                            "straja.remedy.debt_release",
+                            sentence.target, owed, campName);
+                }
+                if (notify) debt.notifyTransferOrder(sentence.targetUuid, target, owed, campName);
+                audit.record("prison_release", actor, actorUuid, sentence.target,
+                        sentence.targetUuid, "REFUSED",
+                        "debt_gate camp=" + camp.id + " owed=" + owed
+                                + " threshold=" + threshold);
+                return false;
+            }
+            // No camp exists to take them — fall through to a custody refusal.
+        }
+        if (releaser != null) {
+            releaser.refuse("straja.debt.release_blocked",
+                    "straja.remedy.debt_release", owed, threshold);
+        }
+        if (notify) debt.notifyReleaseDenied(sentence.targetUuid, target, owed, threshold);
+        audit.record("prison_release", actor, actorUuid, sentence.target,
+                sentence.targetUuid, "REFUSED",
+                "debt_gate cell owed=" + owed + " threshold=" + threshold);
+        return false;
+    }
+
+    /** The camp a debt-blocked release diverts to: bounty.defaultCampId, else the first registered. */
+    private com.dwurdy.straja.domain.model.LaborCampRecord debtDefaultCamp() {
+        if (camps == null) return null;
+        String campId = ctx.policies().bountyDefaultCampId;
+        if (campId == null || campId.isBlank()) {
+            var registered = ctx.laborCamps().read().camps();
+            campId = registered.isEmpty() ? "" : registered.keySet().iterator().next();
+        }
+        return campId.isBlank() ? null : camps.camp(campId);
+    }
+
+    /** Gate statements re-send at most once a minute while the owed amount is unchanged. */
+    private boolean shouldNotifyGate(String uuid, int owed) {
+        var last = debtGateNotice.get(uuid);
+        long now = now();
+        if (last != null && last.owed() == owed && now - last.at() < DEBT_GATE_NOTICE_MS) {
+            return false;
+        }
+        debtGateNotice.put(uuid, new GateNotice(owed, now));
         return true;
     }
 
@@ -843,7 +968,10 @@ public class PrisonService implements PrisonRoleplayUseCase {
             actor.refuse("straja.prison.no_sentence", "straja.remedy.jailer", targetId);
             return false;
         }
-        if (!releaseSentence(data, sentence, null, "FORCED_RELEASE")) return false;
+        // DEBT-2: same rule as the online path — jailer release is gated,
+        // a commissioner/op release is the forced bypass.
+        if (!releaseSentence(data, sentence, null, "FORCED_RELEASE", null,
+                actor, players.isCommissioner(actor) || actor.isOp())) return false;
         ctx.prison().write(data);
         actor.tellKey("straja.prison.released_offline", sentence.target);
         audit.record("prison_release", actor.name(), uuidOf(actor),

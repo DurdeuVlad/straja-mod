@@ -170,6 +170,88 @@ public final class SeizureService {
                 uuidOf(target), "SUCCESS", "restored=" + restored);
     }
 
+    /**
+     * DEBT-2 (#235) custody levy: pulls coin stacks worth up to {@code
+     * maxValue} base units out of the prisoner's seized assets — personal
+     * locker chests first, then the pending-locker reservations parked for
+     * an offline release. Coins leave value-first (largest denominations
+     * first); when exact change is impossible the smallest covering coin is
+     * broken and the change is poured back into the same chest (overflow
+     * drops beside it — never voided). Returns the value actually taken.
+     */
+    public int extractCustodyCoins(String targetUuid, int maxValue) {
+        if (targetUuid == null || targetUuid.isBlank() || maxValue <= 0) return 0;
+        var denominations = new java.util.TreeMap<>(ctx.currency().denominations());
+        if (denominations.isEmpty()) return 0;
+        var reg = ctx.prisonerRegister().read();
+        int extracted = 0;
+        var rec = reg.prisoner(targetUuid);
+        if (rec != null && rec.personalLocker != null) {
+            for (StoragePoint point : rec.personalLocker) {
+                if (extracted >= maxValue) break;
+                extracted += extractChestCoins(point, maxValue - extracted, denominations);
+            }
+        }
+        var pending = reg.pendingLockers().get(targetUuid);
+        if (extracted < maxValue && pending != null) {
+            for (String key : pending) {
+                if (extracted >= maxValue) break;
+                extracted += extractChestCoins(StoragePoint.fromKey(key),
+                        maxValue - extracted, denominations);
+            }
+        }
+        return extracted;
+    }
+
+    /** Levy extraction on one chest: whole coins descending, then one break-coin with change back. */
+    private int extractChestCoins(StoragePoint point, int maxValue,
+                                  java.util.TreeMap<Integer, String> denominations) {
+        if (point == null || maxValue <= 0) return 0;
+        String dim = point.dimension();
+        int x = point.x(), y = point.y(), z = point.z();
+        if (!ctx.containers().isContainer(dim, x, y, z)) return 0;
+        int remaining = maxValue;
+        int extracted = 0;
+        for (var entry : denominations.descendingMap().entrySet()) {
+            if (remaining <= 0) break;
+            int value = entry.getKey();
+            if (value <= 0) continue;
+            int want = remaining / value;
+            if (want <= 0) continue;
+            int removed = ctx.containers().remove(dim, x, y, z, entry.getValue(), want);
+            extracted += removed * value;
+            remaining -= removed * value;
+        }
+        if (remaining > 0) {
+            // Exact change failed — break the smallest coin that covers the
+            // remainder and pour the difference back into the same locker.
+            for (var entry : denominations.entrySet()) {
+                int value = entry.getKey();
+                if (value < remaining) continue;
+                if (ctx.containers().remove(dim, x, y, z, entry.getValue(), 1) != 1) continue;
+                extracted += remaining;
+                int change = value - remaining;
+                remaining = 0;
+                for (var changeEntry : denominations.descendingMap().entrySet()) {
+                    if (change <= 0) break;
+                    int count = change / changeEntry.getKey();
+                    if (count <= 0) continue;
+                    int leftover = ctx.containers().insert(dim, x, y, z,
+                            changeEntry.getValue(), count);
+                    // -1 = hard failure (nothing went in) — spill it all.
+                    int spilled = leftover < 0 ? count : leftover;
+                    if (spilled > 0) {
+                        ctx.containers().dropItem(dim, x, y, z,
+                                changeEntry.getValue(), spilled);
+                    }
+                    change -= (count - spilled) * changeEntry.getKey();
+                }
+                break;
+            }
+        }
+        return extracted;
+    }
+
     /** Delivers locker contents reserved for a player who was released while offline. */
     public void deliverPendingLockers(PlayerGateway target) {
         if (target == null || target.uuid() == null) return;

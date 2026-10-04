@@ -26,6 +26,8 @@ public final class DebtService {
     private final StrajaContext ctx;
     private final AuditService audit;
     private PlayerService players;
+    /** DEBT-2: locker/chest extraction stays with the seizure engine. */
+    private SeizureService seizure;
 
     public DebtService(StrajaContext ctx, AuditService audit) {
         this.ctx = ctx;
@@ -35,6 +37,11 @@ public final class DebtService {
     /** DEBT-3: the /straja debt view gate needs the officer check (late-bound). */
     public void usePlayers(PlayerService service) {
         this.players = service;
+    }
+
+    /** DEBT-2 (#235): custody-coin extraction (late-bound like prison.useDebt). */
+    public void useSeizure(SeizureService service) {
+        this.seizure = service;
     }
 
     private long now() {
@@ -289,6 +296,119 @@ public final class DebtService {
         pages.add("Rest de plată: " + outstandingDebt(targetUuid) + " monede.");
         notifyPrisoner(targetUuid, null, "Înștiințare de plată", pages);
         return applied;
+    }
+
+    /**
+     * DEBT-2 (#235) levy: a prisoner cannot hold coins while owing. Sweeps
+     * the live inventory first (coins acquired during custody), then the
+     * seized custody chests — personal locker, then pending-locker
+     * reservations — capped at the outstanding debt. The extracted value is
+     * allocated oldest-first under source {@code "LEVY"}, audited, and
+     * receipted as a written book (queued while offline). Safe no-op at
+     * zero debt or zero coins. Returns the base units applied to fines.
+     */
+    public int levy(String targetUuid) {
+        if (targetUuid == null || targetUuid.isBlank()
+                || !ctx.policies().debtEnabled) return 0;
+        int owed = outstandingDebt(targetUuid);
+        if (owed <= 0) return 0;
+        int remaining = owed;
+        int extracted = 0;
+        PlayerGateway online = ctx.server().findPlayer(targetUuid);
+        if (online != null && online.isOnline()) {
+            int take = Math.min(remaining, Math.max(0, ctx.currency().balanceOf(online)));
+            if (take > 0) {
+                var withdrawal = ctx.currency().withdraw(online, take);
+                extracted += Math.max(0, withdrawal.removed());
+                remaining -= Math.max(0, withdrawal.removed());
+            }
+        }
+        if (remaining > 0 && seizure != null) {
+            int taken = seizure.extractCustodyCoins(targetUuid, remaining);
+            extracted += taken;
+            remaining -= taken;
+        }
+        if (extracted <= 0) return 0;
+        String name = debtorName(targetUuid, online);
+        var applied = allocate(targetUuid, extracted, name, targetUuid, "LEVY");
+        int appliedTotal = applied.stream().mapToInt(Allocation::applied).sum();
+        int debtLeft = outstandingDebt(targetUuid);
+        audit.record("levy", "system", "", name, targetUuid, "SUCCESS",
+                "extracted=" + extracted + " applied=" + appliedTotal
+                        + " remaining=" + debtLeft);
+        notifyPrisoner(targetUuid, online, "Proces-verbal de sechestru",
+                levyReceiptPages(name, extracted, applied, debtLeft));
+        return appliedTotal;
+    }
+
+    /**
+     * DEBT-2 release-denial statement: remaining debt, the configured
+     * threshold and the way out (contributions / labor-camp accrual).
+     */
+    public void notifyReleaseDenied(String targetUuid, PlayerGateway online,
+                                    int owed, int threshold) {
+        List<String> pages = new ArrayList<>();
+        pages.add("REFUZ DE ELIBERARE\n\nDatorie restantă: " + owed + " unități"
+                + "\nPrag de eliberare: " + threshold + " unități\n\n"
+                + "Eliberarea rămâne blocată până când datoria nu mai depășește pragul.");
+        pages.add("Cale de ieșire: contribuții plătite la Recepționistă — orice "
+                + "cetățean poate achita pentru tine — sau credit de muncă în "
+                + "lagăr spre prețul libertății.");
+        notifyPrisoner(targetUuid, online, "Refuz de eliberare", pages);
+    }
+
+    /**
+     * DEBT-2 transfer order issued when a debt-blocked release diverts to a
+     * labor camp: amount owed, the camp and how the debt clears.
+     */
+    public void notifyTransferOrder(String targetUuid, PlayerGateway online,
+                                    int owed, String campName) {
+        List<String> pages = new ArrayList<>();
+        pages.add("ORDIN DE TRANSFER\n\nDatorie restantă: " + owed + " unități"
+                + "\nDestinație: lagărul de muncă " + campName + "\n\n"
+                + "Eliberarea a fost blocată de datorie — detenția continuă în lagăr.");
+        pages.add("Datoria se stinge prin contribuții plătite la Recepționistă "
+                + "(orice cetățean poate achita); munca în lagăr adună credit în "
+                + "contul de muncă spre prețul libertății.");
+        notifyPrisoner(targetUuid, online, "Ordin de transfer", pages);
+    }
+
+    private String debtorName(String targetUuid, PlayerGateway online) {
+        if (online != null && online.name() != null && !online.name().isBlank()) {
+            return online.name();
+        }
+        var rec = ctx.prisonerRegister().read().prisoner(targetUuid);
+        if (rec != null && rec.detaineeName != null && !rec.detaineeName.isBlank()) {
+            return rec.detaineeName;
+        }
+        for (Fine fine : ctx.fines().read().fines) {
+            if (fine != null && targetUuid.equals(fine.targetUuid)
+                    && fine.target != null && !fine.target.isBlank()) return fine.target;
+        }
+        return targetUuid;
+    }
+
+    private List<String> levyReceiptPages(String name, int extracted,
+                                          List<Allocation> applied, int debtLeft) {
+        List<String> pages = new ArrayList<>();
+        StringBuilder first = new StringBuilder();
+        first.append("PROCES-VERBAL DE SECHESTRU\n\nDeținut: ").append(name)
+                .append("\nMonede sechestrate: ").append(extracted).append(" unități");
+        if (!applied.isEmpty()) {
+            first.append("\n\nAplicat pe datorii:");
+            var store = ctx.fines().read();
+            for (var row : applied) {
+                Fine fine = store.find(row.fineId());
+                first.append("\n").append(row.fineId()).append(": +").append(row.applied());
+                if (row.covered()) first.append(" (achitată)");
+                else if (fine != null) first.append(" — rest ").append(fine.remaining());
+            }
+        }
+        pages.add(first.toString());
+        pages.add("Datorie restantă: " + debtLeft + " unități.\n\nMonedele sechestrate "
+                + "se văd pe chitanță și nu se mai restituie; restul bunurilor din "
+                + "dulap îți este restituit la eliberare.");
+        return pages;
     }
 
     /**
