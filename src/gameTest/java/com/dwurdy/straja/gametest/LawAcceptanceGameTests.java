@@ -177,6 +177,12 @@ public final class LawAcceptanceGameTests {
         reg.prisoners().values().removeIf(r -> r != null
                 && staleMock.test(r.detaineeName) && offline.test(r.detaineeUuid));
         runtime.context().prisonerRegister().write(reg);
+        // #231: bounty fixtures from crashed runs — same name+offline gate.
+        var bounties = runtime.context().bounties().read();
+        bounties.records.removeIf(r -> r != null
+                && staleMock.test(r.targetName) && offline.test(r.targetUuid));
+        bounties.surrenders.keySet().removeIf(offline::test);
+        runtime.context().bounties().write(bounties);
     }
 
     private static List<InspectionLedgerEntry> entriesFor(StrajaRuntime runtime,
@@ -1110,16 +1116,40 @@ public final class LawAcceptanceGameTests {
 
         Runnable cleanup = () -> {
             removeSite(runtime, "at9_intake");
+            removeCell(runtime, "at9_cell");
             var store = runtime.context().bounties().read();
-            var rec = store.activeFor(crookUuid);
+            var rec = store.records.stream()
+                    .filter(r -> r != null && crookUuid.equals(r.targetUuid))
+                    .findFirst().orElse(null);
             String boloId = rec == null ? "at9-linked" : rec.linkedBoloId;
+            String fineId = rec == null ? "" : rec.linkedFineId;
             store.records.removeIf(r -> r != null && crookUuid.equals(r.targetUuid));
             runtime.context().bounties().write(store);
             if (boloId != null && !boloId.isBlank()) removeBolo(runtime, boloId);
+            if (fineId != null && !fineId.isBlank()) {
+                var fines = runtime.context().fines().read();
+                fines.fines.removeIf(f -> f != null && fineId.equals(f.id));
+                runtime.context().fines().write(fines);
+            }
             removeCustodyState(runtime, crookUuid);
             removeRegister(runtime, crookUuid);
         };
         cleanup.run();
+
+        // A dedicated cell on this test's y-band: the arrest must land a real
+        // custody slot without starving concurrent tests' shared fixtures.
+        var prison = runtime.context().prison().read();
+        var cell = new com.dwurdy.straja.domain.model.Cell();
+        cell.id = "at9_cell";
+        cell.dimension = dim;
+        cell.minX = anchor.getX() - 30; cell.minY = anchor.getY() + 90;
+        cell.minZ = anchor.getZ() - 30;
+        cell.maxX = anchor.getX() - 25; cell.maxY = anchor.getY() + 98;
+        cell.maxZ = anchor.getZ() - 25;
+        cell.doorX = anchor.getX() - 27; cell.doorY = anchor.getY() + 94;
+        cell.doorZ = anchor.getZ() - 27;
+        prison.cells.add(cell);
+        runtime.context().prison().write(prison);
 
         int ay = anchor.getY() + 96;
         var intake = new LawCheckpointRecord();
@@ -1146,6 +1176,15 @@ public final class LawAcceptanceGameTests {
         helper.assertTrue(bounty != null, "an Inspector must be able to post a bounty");
         helper.assertTrue(runtime.wanted().isWanted(crook.getUUID()),
                 "posting a bounty must make the target wanted-on-sight");
+        // Unique subject name: every mock is "test-mock-player" and a
+        // concurrent prisoner's release resolves marks by name fallback —
+        // a shared name would let a foreign release kill this BOLO early.
+        var linkedStore = runtime.context().bolos().read();
+        var linked = linkedStore.find(bounty.linkedBoloId);
+        if (linked != null) {
+            linked.subjectName = "at9-crook";
+            runtime.context().bolos().write(linkedStore);
+        }
 
         // A conscious bountied target cannot be roped — the fight must be won.
         hunterGw.give(ItemSpec.of("straja:rope", 1));
