@@ -33,6 +33,7 @@ public final class BountyService {
     private final PlayerService players;
     private final AuditService audit;
     private PrisonService prison;
+    private DebtService debt;
 
     public BountyService(StrajaContext ctx, PlayerService players, AuditService audit) {
         this.ctx = ctx;
@@ -41,6 +42,9 @@ public final class BountyService {
     }
 
     public void usePrison(PrisonService prison) { this.prison = prison; }
+
+    /** DEBT-3: bail is a pooled contribution served bounty-fine first. */
+    public void useDebt(DebtService debt) { this.debt = debt; }
 
     private long now() { return ctx.clock().nowMillis(); }
 
@@ -385,44 +389,44 @@ public final class BountyService {
      * immediately. Anyone may pay for anyone.
      */
     public synchronized boolean payBail(PlayerGateway payer, String targetName) {
-        if (payer == null) return false;
-        var fineData = ctx.fines().read();
-        Fine fine = null;
-        for (Fine f : fineData.fines) {
-            if (f == null || !"bounty_capture".equals(f.law)) continue;
-            if (!targetName.equals(f.targetUuid)
-                    && !targetName.equalsIgnoreCase(f.target)) continue;
-            if ("ISSUED".equals(f.status) || "IN_SENTENCE".equals(f.status)) {
-                fine = f;
-                break;
+        return payBail(payer, targetName, null);
+    }
+
+    /**
+     * DEBT-3 (#236): bail is a pooled contribution — it lands on the
+     * bounty-capture fine(s) first, then the rest of the prisoner's debt
+     * oldest-first. An omitted amount covers the full remainder; a covered
+     * bounty fine still ends the sentence BAIL_PAID.
+     */
+    public synchronized boolean payBail(PlayerGateway payer, String targetName,
+                                        Integer amount) {
+        if (payer == null || debt == null) return false;
+        String targetUuid = debt.resolveDebtorUuid(targetName);
+        var applied = debt.payContribution(payer, targetUuid, amount,
+                "BAIL", "bounty_capture");
+        if (applied.isEmpty()) return false;
+        int paid = applied.stream().mapToInt(DebtService.Allocation::applied).sum();
+        String display = targetName;
+        boolean bountyFine = false, open = false;
+        for (Fine f : ctx.fines().read().fines) {
+            if (f == null || !"bounty_capture".equals(f.law)
+                    || !targetUuid.equals(f.targetUuid)) continue;
+            bountyFine = true;
+            display = f.target;
+            if (DebtService.PAYABLE.contains(f.status) && f.remaining() > 0) {
+                open = true;
             }
         }
-        if (fine == null) {
-            payer.refuse("straja.bounty.no_bail", "straja.remedy.fix_retry", targetName);
-            return false;
-        }
-        if (ctx.currency().balanceOf(payer) < fine.amount) {
-            payer.refuse("straja.fine.exact_coins", "straja.remedy.retry");
-            return false;
-        }
-        var withdrawal = ctx.currency().withdraw(payer, fine.amount);
-        if (!withdrawal.ok()) {
-            payer.refuse("straja.fine.pay_failed", "straja.remedy.retry");
-            audit.record("bounty_bail", payer.name(), uuid(payer), fine.target,
-                    fine.targetUuid, "FAILED", "no_debit fineId=" + fine.id);
-            return false;
-        }
-        fine.status = "PAID";
-        fine.paidAt = now();
-        ctx.fines().write(fineData);
-        audit.record("bounty_bail", payer.name(), uuid(payer), fine.target,
-                fine.targetUuid, "SUCCESS",
-                "fineId=" + fine.id + " amount=" + fine.amount
-                        + " thirdParty=" + !uuid(payer).equals(fine.targetUuid));
-        payer.tell("Cauțiunea lui " + fine.target + " a fost plătită ("
-                + fine.amount + " unități). Eliberarea se procesează.");
+        boolean covered = bountyFine && !open;
+        audit.record("bounty_bail", payer.name(), uuid(payer), display,
+                targetUuid, "SUCCESS", "amount=" + paid + " covered=" + covered
+                        + " thirdParty=" + !uuid(payer).equals(targetUuid));
         // Paid bail releases immediately — the sentence ends BAIL_PAID.
-        if (prison != null) prison.releaseForBail(fine.targetUuid);
+        if (covered) {
+            payer.tell("Cauțiunea lui " + display + " a fost plătită ("
+                    + paid + " unități). Eliberarea se procesează.");
+            if (prison != null) prison.releaseForBail(targetUuid);
+        }
         return true;
     }
 

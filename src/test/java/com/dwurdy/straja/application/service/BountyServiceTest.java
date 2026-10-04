@@ -40,6 +40,9 @@ class BountyServiceTest {
         prison = new PrisonService(ctx, players, audit, custody);
         bounties = new BountyService(ctx, players, audit);
         bounties.usePrison(prison);
+        var debt = new DebtService(ctx, audit);
+        prison.useDebt(debt);
+        bounties.useDebt(debt);
         custody.useBounties(bounties);
         prison.onArrest(bounties::onArrested);
         currency = (TestCurrency) ctx.currency();

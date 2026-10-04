@@ -261,7 +261,28 @@ public final class StrajaCommands {
         root.then(Commands.literal("bail")
                 .then(Commands.argument("player", StringArgumentType.word())
                         .executes(c -> player(c, p -> StrajaRuntime.get().bounties()
-                                .payBail(p, StringArgumentType.getString(c, "player"))))));
+                                .payBail(p, StringArgumentType.getString(c, "player"), null)))
+                        .then(Commands.argument("amount", IntegerArgumentType.integer())
+                                .executes(c -> player(c, p -> StrajaRuntime.get().bounties()
+                                        .payBail(p, StringArgumentType.getString(c, "player"),
+                                                IntegerArgumentType.getInteger(c, "amount")))))));
+        // #236: pooled debt contributions — officers read any ledger, anyone
+        // chips in toward anyone's debt; the prisoner may self-pay.
+        var debt = Commands.literal("debt");
+        debt.then(Commands.literal("pay")
+                .then(Commands.argument("player", StringArgumentType.word())
+                        .executes(c -> player(c, p -> StrajaRuntime.get().debt()
+                                .payContribution(p, StringArgumentType.getString(c, "player"),
+                                        null, "CONTRIBUTION", null)))
+                        .then(Commands.argument("amount", IntegerArgumentType.integer())
+                                .executes(c -> player(c, p -> StrajaRuntime.get().debt()
+                                        .payContribution(p, StringArgumentType.getString(c, "player"),
+                                                IntegerArgumentType.getInteger(c, "amount"),
+                                                "CONTRIBUTION", null))))));
+        debt.then(Commands.argument("player", StringArgumentType.word())
+                .executes(c -> player(c, p -> StrajaRuntime.get().debt()
+                        .showDebt(p, StringArgumentType.getString(c, "player")))));
+        root.then(debt);
         var setMissionTime = Commands.literal("set-mission-time")
                 .then(Commands.argument("id", StringArgumentType.word())
                         .then(Commands.argument("minutes", IntegerArgumentType.integer())

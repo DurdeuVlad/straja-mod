@@ -2,6 +2,7 @@ package com.dwurdy.straja.application.service;
 
 import com.dwurdy.straja.application.StrajaContext;
 import com.dwurdy.straja.application.port.out.PlayerGateway;
+import com.dwurdy.straja.domain.model.Capability;
 import com.dwurdy.straja.domain.model.Fine;
 import com.dwurdy.straja.domain.model.FineStore;
 import com.dwurdy.straja.domain.model.PrisonerRegisterStore;
@@ -24,10 +25,16 @@ public final class DebtService {
 
     private final StrajaContext ctx;
     private final AuditService audit;
+    private PlayerService players;
 
     public DebtService(StrajaContext ctx, AuditService audit) {
         this.ctx = ctx;
         this.audit = audit;
+    }
+
+    /** DEBT-3: the /straja debt view gate needs the officer check (late-bound). */
+    public void usePlayers(PlayerService service) {
+        this.players = service;
     }
 
     private long now() {
@@ -58,6 +65,16 @@ public final class DebtService {
      */
     public List<Allocation> allocate(String targetUuid, int amount, String payer,
                                      String payerUuid, String source) {
+        return allocate(targetUuid, amount, payer, payerUuid, source, null);
+    }
+
+    /**
+     * DEBT-3: same oldest-first allocation, except fines carrying
+     * {@code priorityLaw} are served first (bail lands on the bounty-capture
+     * fine before the rest of the prisoner's debt).
+     */
+    public List<Allocation> allocate(String targetUuid, int amount, String payer,
+                                     String payerUuid, String source, String priorityLaw) {
         FineStore data = ctx.fines().read();
         List<Fine> payable = new ArrayList<>();
         if (targetUuid != null) {
@@ -69,6 +86,15 @@ public final class DebtService {
             }
         }
         payable.sort(Comparator.comparingLong(fine -> fine.issuedAt));
+        if (priorityLaw != null && !priorityLaw.isBlank()) {
+            List<Fine> first = new ArrayList<>(), rest = new ArrayList<>();
+            for (Fine fine : payable) {
+                (priorityLaw.equals(fine.law) ? first : rest).add(fine);
+            }
+            payable.clear();
+            payable.addAll(first);
+            payable.addAll(rest);
+        }
         int left = Math.max(0, amount);
         List<Allocation> out = new ArrayList<>();
         for (Fine fine : payable) {
@@ -120,6 +146,12 @@ public final class DebtService {
      */
     public List<Allocation> contribute(PlayerGateway payer, String targetUuid,
                                        int amount, String source) {
+        return contribute(payer, targetUuid, amount, source, null);
+    }
+
+    /** As {@link #contribute}, but serves {@code priorityLaw} fines first. */
+    public List<Allocation> contribute(PlayerGateway payer, String targetUuid,
+                                       int amount, String source, String priorityLaw) {
         if (payer == null) return List.of();
         int capped = Math.min(Math.max(0, amount), outstandingDebt(targetUuid));
         if (capped <= 0) {
@@ -132,10 +164,130 @@ public final class DebtService {
             return List.of();
         }
         var applied = allocate(targetUuid, capped, payer.name(),
-                payer.uuid() == null ? "" : payer.uuid().toString(), source);
+                payer.uuid() == null ? "" : payer.uuid().toString(), source, priorityLaw);
         if (!applied.isEmpty()) {
             payer.tell("Contribuția de " + capped + " monede a fost înregistrată.");
         }
+        return applied;
+    }
+
+    // ------------------------------------------------ DEBT-3 player surface
+
+    /**
+     * Resolves a name-or-uuid input to the debtor's uuid, uuid-first: an
+     * online player wins, then the fine store's uuid and name columns, the
+     * prisoner register (uuid key, then name), a syntactically valid uuid,
+     * and finally Mojang's deterministic offline-name uuid so unknown names
+     * still key cleanly (and simply read as zero debt).
+     */
+    public String resolveDebtorUuid(String nameOrUuid) {
+        if (nameOrUuid == null || nameOrUuid.isBlank()) return "";
+        String input = nameOrUuid.trim();
+        PlayerGateway online = ctx.server().findPlayer(input);
+        if (online != null && online.uuid() != null) return online.uuid().toString();
+        var data = ctx.fines().read();
+        for (Fine fine : data.fines) {
+            if (fine != null && input.equals(fine.targetUuid)) return input;
+        }
+        for (Fine fine : data.fines) {
+            if (fine != null && input.equalsIgnoreCase(fine.target)
+                    && fine.targetUuid != null && !fine.targetUuid.isBlank()) {
+                return fine.targetUuid;
+            }
+        }
+        var reg = ctx.prisonerRegister().read();
+        if (reg.prisoner(input) != null) return input;
+        var rec = reg.prisonerByName(input);
+        if (rec != null && rec.detaineeUuid != null && !rec.detaineeUuid.isBlank()) {
+            return rec.detaineeUuid;
+        }
+        try {
+            return java.util.UUID.fromString(input).toString();
+        } catch (IllegalArgumentException notUuid) {
+            return PrisonerRegisterStore.legacyUuid(input);
+        }
+    }
+
+    /** The target's payable fines with a positive balance, oldest-first. */
+    public List<Fine> payableFines(String targetUuid) {
+        List<Fine> out = new ArrayList<>();
+        if (targetUuid != null) {
+            for (Fine fine : ctx.fines().read().fines) {
+                if (fine != null && targetUuid.equals(fine.targetUuid)
+                        && PAYABLE.contains(fine.status) && fine.remaining() > 0) {
+                    out.add(fine);
+                }
+            }
+        }
+        out.sort(Comparator.comparingLong(fine -> fine.issuedAt));
+        return out;
+    }
+
+    /**
+     * {@code /straja debt <player>}: the ledger rows (fine id, law, remaining)
+     * plus the total owed. Officers read any citizen; anyone else may only
+     * inspect their own debt.
+     */
+    public void showDebt(PlayerGateway viewer, String nameOrUuid) {
+        if (viewer == null) return;
+        String targetUuid = resolveDebtorUuid(nameOrUuid);
+        boolean self = viewer.uuid() != null
+                && viewer.uuid().toString().equals(targetUuid);
+        if (!self && (players == null
+                || (!players.isCommissioner(viewer)
+                    && !players.hasCapability(viewer, Capability.ISSUE_FINES)))) {
+            viewer.refuse("straja.debt.view_rank", "straja.remedy.fix_retry");
+            return;
+        }
+        var rows = payableFines(targetUuid);
+        if (rows.isEmpty()) {
+            viewer.refuse("straja.debt.none", "straja.remedy.reception");
+            return;
+        }
+        int total = 0;
+        for (Fine fine : rows) {
+            total += fine.remaining();
+            viewer.tell(fine.id + " — " + fine.law + ": " + fine.remaining()
+                    + " monede rămase");
+        }
+        viewer.tell("Total de plată restant: " + total + " monede.");
+    }
+
+    /**
+     * {@code /straja debt pay} and {@code /straja bail} shared flow: resolves
+     * the debtor, defaults an omitted amount to the full remainder, routes the
+     * capped coins through {@link #contribute} and mails the debtor a
+     * contribution-credit book naming the payer, the per-fine applications
+     * and the new remaining balance.
+     */
+    public List<Allocation> payContribution(PlayerGateway payer, String nameOrUuid,
+                                            Integer amount, String source,
+                                            String priorityLaw) {
+        if (payer == null) return List.of();
+        if (amount != null && amount <= 0) {
+            payer.refuse("straja.debt.invalid_amount", "straja.remedy.fix_retry");
+            return List.of();
+        }
+        String targetUuid = resolveDebtorUuid(nameOrUuid);
+        int requested = amount == null ? outstandingDebt(targetUuid) : amount;
+        var applied = contribute(payer, targetUuid, requested, source, priorityLaw);
+        if (applied.isEmpty()) return applied;
+        int paid = applied.stream().mapToInt(Allocation::applied).sum();
+        var pages = new ArrayList<String>();
+        pages.add("Înștiințare de plată\n\n" + payer.name() + " a achitat " + paid
+                + " monede către datoriile tale restante.");
+        var detail = new StringBuilder();
+        var data = ctx.fines().read();
+        for (Allocation a : applied) {
+            Fine fine = data.find(a.fineId());
+            detail.append(a.fineId()).append(": +").append(a.applied())
+                    .append(" monede").append(a.covered() ? " (achitată)" : "")
+                    .append(fine == null ? "" : " — rămas " + fine.remaining())
+                    .append('\n');
+        }
+        pages.add(detail.toString().trim());
+        pages.add("Rest de plată: " + outstandingDebt(targetUuid) + " monede.");
+        notifyPrisoner(targetUuid, null, "Înștiințare de plată", pages);
         return applied;
     }
 
