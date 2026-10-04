@@ -188,6 +188,8 @@ public final class LawAcceptanceGameTests {
         staleFines.fines.removeIf(f -> f != null
                 && staleMock.test(f.target) && offline.test(f.targetUuid));
         runtime.context().fines().write(staleFines);
+        // #242: protocol tester entries from crashed runs.
+        runtime.protocol().purgeTesters(staleMock);
     }
 
     private static List<InspectionLedgerEntry> entriesFor(StrajaRuntime runtime,
@@ -1517,6 +1519,123 @@ public final class LawAcceptanceGameTests {
         } finally {
             cleanup.run();
         }
+    }
+
+    /**
+     * AT11 (#242): the tester protocol walks a mock tester cover-to-finish —
+     * scripted beats land (fine, Inspector rank, suspect spawn + kit, suspect
+     * fine, surrender flag), the fake suspect really joins the player list,
+     * and sealing the dossier dismisses it and purges its records.
+     * Own batch: it grants rank and joins a fake player — shared-batch
+     * isolation like debtAt10.
+     */
+    @GameTest(template = "empty", batch = "protocolAt11", timeoutTicks = 200)
+    public static void protocolWalkthrough(GameTestHelper helper) {
+        var runtime = runtime(helper);
+        var policies = runtime.context().policies();
+        boolean wasEnabled = policies.protocolEnabled;
+        policies.protocolEnabled = true;
+        try {
+            purgeStaleFixtures(runtime, helper);
+            ServerPlayer tester = mockPlayer(helper);
+            var gw = gateway(tester);
+
+            runtime.protocol().start(gw);
+            helper.assertTrue(countWrittenBooks(tester) == 1,
+                    "start must hand the dossier cover — got " + countWrittenBooks(tester));
+
+            runtime.protocol().next(gw); // ch1 orientarea
+            runtime.protocol().next(gw); // ch2 checkpoint
+            runtime.protocol().next(gw); // ch3 — scripted fine on the tester
+            var testerFines = runtime.context().fines().read().fines.stream()
+                    .filter(f -> tester.getUUID().toString().equals(f.targetUuid))
+                    .toList();
+            helper.assertTrue(testerFines.size() == 1,
+                    "chapter 3 must script a fine on the tester");
+
+            runtime.protocol().next(gw); // ch4 — Inspector rank + duty
+            var state = runtime.players().state(gw);
+            helper.assertTrue(state.rank == com.dwurdy.straja.domain.model.Rank.INSPECTOR.level()
+                            && state.duty,
+                    "chapter 4 must grant Inspector rank and duty");
+
+            runtime.protocol().next(gw); // ch5 — suspect spawn + restraint kit
+            helper.assertTrue(countItem(tester, "straja:rope") >= 1
+                            && countItem(tester, "straja:cuffs") >= 1,
+                    "chapter 5 must hand the restraint kit");
+
+            var storeEntry = repoEntry(runtime, tester);
+            helper.assertTrue(storeEntry != null && !storeEntry.actorUuid.isEmpty(),
+                    "chapter 5 must record the spawned suspect");
+            java.util.UUID actorUuid = java.util.UUID.fromString(storeEntry.actorUuid);
+            helper.assertTrue(
+                    helper.getLevel().getServer().getPlayerList().getPlayer(actorUuid) != null,
+                    "the suspect must be a joined player, not a detached fake");
+
+            runtime.protocol().next(gw); // ch6 — scripted fine on the suspect
+            helper.assertTrue(runtime.context().fines().read().fines.stream()
+                            .anyMatch(f -> actorUuid.toString().equals(f.targetUuid)),
+                    "chapter 6 must fine the suspect");
+
+            runtime.protocol().next(gw); // ch7 — surrender flag for the rope
+            helper.assertTrue(runtime.context().bounties().read().surrenders
+                            .containsKey(actorUuid.toString()),
+                    "chapter 7 must flag the suspect as surrendered");
+
+            runtime.protocol().next(gw); // ch8 comisia
+            runtime.protocol().next(gw); // ch9 raportul
+            runtime.protocol().next(gw); // seal
+
+            var sealed = repoEntry(runtime, tester);
+            helper.assertTrue(sealed != null && sealed.finished,
+                    "the dossier must seal after the last chapter");
+            helper.assertTrue(
+                    helper.getLevel().getServer().getPlayerList().getPlayer(actorUuid) == null,
+                    "sealing must dismiss the suspect");
+            helper.assertTrue(runtime.context().fines().read().fines.stream()
+                            .noneMatch(f -> actorUuid.toString().equals(f.targetUuid)),
+                    "sealing must purge the suspect's fines");
+
+            helper.succeed();
+        } finally {
+            policies.protocolEnabled = wasEnabled;
+            // belt-and-braces: drop a leftover suspect if an assert failed mid-run
+            purgeStaleFixtures(runtime, helper);
+        }
+    }
+
+    /** Reads the persisted protocol store straight off SavedData (the repo is
+     *  not part of StrajaContext — it is injected into the service directly). */
+    private static com.dwurdy.straja.domain.model.ProtocolStore.Entry repoEntry(
+            StrajaRuntime runtime, ServerPlayer tester) {
+        var store = new com.dwurdy.straja.adapter.out.persistence.SavedStores.Protocol(
+                name -> new com.dwurdy.straja.adapter.out.persistence.NbtStore(
+                        com.dwurdy.straja.adapter.out.persistence.StrajaDataProvider.get(
+                                runtime.server(), name)));
+        return store.read().find(tester.getUUID().toString());
+    }
+
+    private static int countWrittenBooks(ServerPlayer player) {
+        int count = 0;
+        for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
+            if (player.getInventory().getItem(i).is(Items.WRITTEN_BOOK)) {
+                count += player.getInventory().getItem(i).getCount();
+            }
+        }
+        return count;
+    }
+
+    private static int countItem(ServerPlayer player, String itemId) {
+        int count = 0;
+        for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
+            var stack = player.getInventory().getItem(i);
+            if (!stack.isEmpty() && itemId.equals(
+                    net.minecraft.core.registries.BuiltInRegistries.ITEM
+                            .getKey(stack.getItem()).toString())) {
+                count += stack.getCount();
+            }
+        }
+        return count;
     }
 
     /** Officer qualification: rank 3 + duty, the same pattern the rp suite uses. */

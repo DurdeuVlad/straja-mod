@@ -150,6 +150,8 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.BooleanValue DEBT_ENABLED;
     public static final ModConfigSpec.IntValue DEBT_RELEASE_BLOCK_THRESHOLD;
     public static final ModConfigSpec.ConfigValue<String> DEBT_ON_BLOCKED;
+    public static final ModConfigSpec.BooleanValue PROTOCOL_ENABLED;
+    public static final ModConfigSpec.ConfigValue<String> PROTOCOL_ACTOR_NAME;
     public static final ModConfigSpec.IntValue INSPECTION_LEDGER_LIMIT;
     public static final ModConfigSpec.ConfigValue<String> COIN_SILVER_ITEM;
     public static final ModConfigSpec.ConfigValue<String> COIN_GOLD_ITEM;
@@ -645,6 +647,18 @@ public final class StrajaServerConfig {
                         "else the first registered camp); \"CELL\" refuses the",
                         "release and keeps cell custody.")
                 .define("onBlocked", "CAMP", StrajaServerConfig::isDebtOnBlocked);
+        B.pop();
+
+        B.push("protocol");
+        PROTOCOL_ENABLED = B.comment(
+                        "Guided tester protocol (/straja protocol): a written-book",
+                        "walkthrough of every mod surface with a spawned mock suspect.",
+                        "Grants the tester officer rank mid-run — OFF by default;",
+                        "enable it only in tester builds.")
+                .define("enabled", false);
+        PROTOCOL_ACTOR_NAME = B.comment(
+                        "Display name of the fake suspect the protocol spawns.")
+                .define("actorName", "Suspectul");
         B.pop();
 
         B.push("inspection");
@@ -1217,6 +1231,8 @@ public final class StrajaServerConfig {
         p.debtEnabled = DEBT_ENABLED.get();
         p.debtReleaseBlockThreshold = DEBT_RELEASE_BLOCK_THRESHOLD.get();
         p.debtOnBlocked = DEBT_ON_BLOCKED.get().toUpperCase(java.util.Locale.ROOT);
+        p.protocolEnabled = PROTOCOL_ENABLED.get();
+        p.protocolActorName = PROTOCOL_ACTOR_NAME.get();
         p.inspectionLedgerLimit = INSPECTION_LEDGER_LIMIT.get();
 
         var watchedItems = StrajaPolicies.parseStringIntMap(STORAGE_WATCHED_ITEMS.get());

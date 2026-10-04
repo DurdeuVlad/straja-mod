@@ -206,3 +206,14 @@ jucători.**" e criteriul de ieșire.
 Un jucător nou ajunge la Recepție → «Depune cererea» → examen la Instructor.
 Tu (Comisarul) vezi cererea în inbox și o aprobi. Detalii complete:
 **[manualul de gardă](guard-manual.md)** · **[player quickstart](player-quickstart.md)**.
+
+## 6. Predarea unui build unui tester
+
+Setează `protocol.enabled = true` în `config/straja-server.toml` — doar pe
+lumea de test, nu în producție (protocolul acordă rang de ofițer și invocă un
+suspect fals). Testerul rulează `/straja protocol start` și este ghidat prin
+toate suprafețele: checkpoint, amendă, carieră, arest, datorie, vânătoare,
+administrație. Primește cărți scrise cu pași și rezultate așteptate, iar
+progresul se păstrează la relog. Opțional: protocolul își spawnează un
+suspect fals («Suspectul») pentru capitolele de arest și vânătoare —
+dismis automat la final.

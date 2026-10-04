@@ -98,6 +98,23 @@ neachitat în termen → **lagărul de muncă**.
   adaptat stării tale actuale.
 - `/straja` oricând — îți reamintește primul pas.
 
+## Ești tester? Protocolul ghidat
+
+Pe build-urile de test există **`/straja protocol`** — un dosar oficial care
+te ghidează pas cu pas prin fiecare suprafață a modului. Rulează
+**`/straja protocol start`**: primești dosarul și, capitol cu capitol,
+cărți scrise cu pași exacți și rezultate așteptate — checkpoint, amendă,
+carieră, arestul unui suspect fals invocat de protocol, datorie, vânătoare,
+administrație. Progresul se păstrează la relog.
+
+- `/straja protocol` — status și capitolul curent
+- `/straja protocol next` / `back` — avansează / recitește capitolul
+- `/straja protocol actor` — cheamă sau demite suspectul de test
+- `/straja protocol reset` — reia de la zero · `stop` — abandonează
+
+La final, protocolul sigilează dosarul și îți cere raportul: ce a funcționat,
+ce nu, comanda și mesajul exact pentru fiecare abatere.
+
 ## Mai departe
 
 Pentru detalii complete despre carieră, misiuni, cătușe, pușcărie, arhivă și

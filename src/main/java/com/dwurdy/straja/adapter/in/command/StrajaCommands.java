@@ -283,6 +283,23 @@ public final class StrajaCommands {
                 .executes(c -> player(c, p -> StrajaRuntime.get().debt()
                         .showDebt(p, StringArgumentType.getString(c, "player")))));
         root.then(debt);
+        // #242: guided tester protocol — permission-0, config-gated
+        // (protocol.enabled); a tester-build surface that walks every feature.
+        var protocol = Commands.literal("protocol");
+        protocol.executes(c -> player(c, StrajaRuntime.get().protocol()::status));
+        protocol.then(Commands.literal("start")
+                .executes(c -> player(c, StrajaRuntime.get().protocol()::start)));
+        protocol.then(Commands.literal("next")
+                .executes(c -> player(c, StrajaRuntime.get().protocol()::next)));
+        protocol.then(Commands.literal("back")
+                .executes(c -> player(c, StrajaRuntime.get().protocol()::back)));
+        protocol.then(Commands.literal("stop")
+                .executes(c -> player(c, StrajaRuntime.get().protocol()::stop)));
+        protocol.then(Commands.literal("reset")
+                .executes(c -> player(c, StrajaRuntime.get().protocol()::reset)));
+        protocol.then(Commands.literal("actor")
+                .executes(c -> player(c, StrajaRuntime.get().protocol()::actor)));
+        root.then(protocol);
         var setMissionTime = Commands.literal("set-mission-time")
                 .then(Commands.argument("id", StringArgumentType.word())
                         .then(Commands.argument("minutes", IntegerArgumentType.integer())

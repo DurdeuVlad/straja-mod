@@ -164,6 +164,12 @@ public final class SavedStores {
         @Override public void write(BountyStore store) { writeJson(store); }
     }
 
+    public static class Protocol extends JsonBackedStore implements ProtocolRepository {
+        public Protocol(StoreAccess access) { super(access, "protocol"); }
+        @Override public ProtocolStore read() { return readJson(ProtocolStore.class, ProtocolStore::new); }
+        @Override public void write(ProtocolStore store) { writeJson(store); }
+    }
+
     public static class Evidence extends JsonBackedStore implements EvidenceRepository {
         public Evidence(StoreAccess access) { super(access, "evidence"); }
         @Override public EvidenceStore read() { return readJson(EvidenceStore.class, EvidenceStore::new); }
