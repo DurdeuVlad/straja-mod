@@ -318,6 +318,7 @@ public final class StrajaRuntime {
         // #234: the debt ledger — late-bound into fines (FINE_PAY) and prison
         // (pending book notices drained beside locker belongings at login).
         this.debt = new com.dwurdy.straja.application.service.DebtService(ctx, audit);
+        this.debt.usePlayers(this.players);
         this.prison.useDebt(this.debt);
         // M4 uncuff boundary rule: restraints off inside custody keep the
         // prisoner; outside custody mark them fugitive.
@@ -379,6 +380,7 @@ public final class StrajaRuntime {
         this.bounties = new com.dwurdy.straja.application.service.BountyService(
                 ctx, players, audit);
         this.bounties.usePrison(this.prison);
+        this.bounties.useDebt(this.debt);
         this.custody.useBounties(this.bounties);
         this.prison.onArrest(this.bounties::onArrested);
         this.desks = new com.dwurdy.straja.application.service.MerchantDeskService(
