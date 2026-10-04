@@ -127,6 +127,33 @@ Arestarea rezolvă marcajele ca `RESOLVED`; eliberarea face la fel. Anularea
 manuală a unui BOLO **nu** oprește urmărirea unui fugitiv înregistrat —
 statutul de custodie rămâne adevărul autoritar.
 
+### Recompense de stat (#231)
+
+Doar **Inspectorul și Comisarul** pot pune recompense pe jucători:
+
+```
+/straja bounty post <jucător> <sumă> [motiv]
+/straja bounty cancel <nume|id>
+/straja bounty list
+```
+
+- Postarea creează automat un **BOLO legat** — ținta e vânată din mers la
+  porți (wanted-on-sight). Pe o țintă fără dosar penal motivul e obligatoriu.
+- Suma e în unități de bază (bronz = 1), între `[bounty] minAmount` /
+  `maxAmount` (implicit 64–65536). TTL implicit 7 zile → `EXPIRED`.
+- Orice civil poate captura ținta cu **Frânghia** — dar numai **doborâtă**
+  sau **predată** (`/straja surrender`). Ofiterii ocolesc regula prin
+  cătușe, nu prin frânghie.
+- Captivul tras la o **poartă cu arest** intră în pipeline-ul complet de
+  arest → statul plătește recompensa vânătorului → prizonierul primește o
+  **cauțiune de 2×** recompensa (`fineMultiplier`), plătibilă în monede
+  fizice de către oricine (`/straja bail`). Neachitată în
+  `bailWindowHours` (implicit 24h) → **transfer automat în lagăr**
+  (`defaultCampId`, sau primul lagăr dacă e gol).
+- Anti-abuz: cel care a postat nu-și poate încasa propria recompensă;
+  vânătorul offline la captură încasează la următorul login; o singură
+  recompensă activă per țintă; plata e idempotentă (bon `bounty:<id>`).
+
 ## 4. Verificare finală
 
 ```

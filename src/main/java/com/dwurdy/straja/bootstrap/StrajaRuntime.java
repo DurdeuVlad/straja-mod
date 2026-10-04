@@ -61,6 +61,7 @@ public final class StrajaRuntime {
     private final com.dwurdy.straja.application.service.PolicyService policyService;
     private final com.dwurdy.straja.application.service.IncidentService incidents;
     private final com.dwurdy.straja.application.service.BoloService bolos;
+    private final com.dwurdy.straja.application.service.BountyService bounties;
     private final com.dwurdy.straja.application.service.StorageService storage;
     private final com.dwurdy.straja.application.service.CheckpointService checkpoints;
     private final com.dwurdy.straja.application.service.MerchantDeskService desks;
@@ -173,6 +174,7 @@ public final class StrajaRuntime {
                 new SavedStores.IdentityCards(stores),
                 new SavedStores.Incidents(stores),
                 new SavedStores.Bolos(stores),
+                new SavedStores.Bounties(stores),
                 new SavedStores.Evidence(stores),
                 new SavedStores.ArrestRecords(stores),
                 new SavedStores.Reputation(stores),
@@ -367,6 +369,12 @@ public final class StrajaRuntime {
         // LAW-006: camp exits confiscate repelled prisoners' banned cargo.
         this.checkpoints.useSeizure(seizure);
         this.checkpoints.useWanted(this.wanted);
+        // #231: state-issued bounties — civilian captures, bail-or-mines.
+        this.bounties = new com.dwurdy.straja.application.service.BountyService(
+                ctx, players, audit);
+        this.bounties.usePrison(this.prison);
+        this.custody.useBounties(this.bounties);
+        this.prison.onArrest(this.bounties::onArrested);
         this.desks = new com.dwurdy.straja.application.service.MerchantDeskService(
                 ctx, players, audit);
         this.laborCamps = new com.dwurdy.straja.application.service.LaborCampService(
@@ -540,6 +548,8 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.service.RpExpansionService expansion() { return expansion; }
     public com.dwurdy.straja.application.service.IncidentService incidents() { return incidents; }
     public com.dwurdy.straja.application.service.BoloService bolos() { return bolos; }
+
+    public com.dwurdy.straja.application.service.BountyService bounties() { return bounties; }
     public com.dwurdy.straja.application.service.StorageService storage() { return storage; }
     public com.dwurdy.straja.application.service.CheckpointService checkpoints() { return checkpoints; }
     public com.dwurdy.straja.application.service.MerchantDeskService desks() { return desks; }

@@ -79,6 +79,9 @@ public class CustodyStore {
         public long boundAt;
         public String reason = "criminal_transport";
         public long lastBlockedNoticeAt;
+        /** #231 civilian bounty escort — out-of-range/broken-escort tracking. */
+        public long outOfRangeAt;
+        public long escortLostAt;
     }
 
     public static class HeadSackRecord {

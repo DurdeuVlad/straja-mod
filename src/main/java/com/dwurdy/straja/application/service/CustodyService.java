@@ -53,12 +53,17 @@ public class CustodyService implements CustodyRoleplayUseCase {
             (actor, target) -> {};
     private java.util.function.BiConsumer<PlayerGateway, PlayerGateway> restraintReleasedHook =
             (actor, target) -> {};
+    private BountyService bounties;
 
     public CustodyService(StrajaContext ctx, PlayerService players, AuditService audit) {
         this.ctx = ctx;
         this.players = players;
         this.audit = audit;
     }
+
+    /** #231: the bounty service supplies the downed-or-surrendered rule and
+     *  the bounty-escort reason marker on bound records. */
+    public void useBounties(BountyService service) { this.bounties = service; }
 
     public void onCustodyEscape(java.util.function.BiConsumer<PlayerGateway, PlayerGateway> hook) {
         this.custodyEscapeHook = hook == null ? (actor, target) -> {} : hook;
@@ -1517,6 +1522,15 @@ public class CustodyService implements CustodyRoleplayUseCase {
             issuer.refuse("straja.custody.tie_revive_fail", "straja.remedy.retry");
             return false;
         }
+        // #231: against a bountied target the civilian rope only bites when
+        // the target is downed or has surrendered — officers bypass via cuffs.
+        boolean bountyTarget = false;
+        if (bounties != null && !players.isOnDutyGuard(issuer)) {
+            String refusal = bounties.restraintRefusal(issuer, target,
+                    state.condition == PlayerCondition.DOWNED);
+            if (refusal != null) return false;
+            bountyTarget = bounties.isBountied(target);
+        }
         long at = now();
         var canonicalResult = CustodyTransitionEngine.apply(state,
                 new CustodyTransition("rp007:rope:" + targetKey + ":" + at,
@@ -1537,6 +1551,10 @@ public class CustodyService implements CustodyRoleplayUseCase {
         record.issuer = issuer.name();
         record.issuerUuid = uuidOf(issuer);
         record.boundAt = at;
+        if (bountyTarget) {
+            record.reason = BountyService.BOUNTY_CAPTURE_REASON;
+            bounties.consumeSurrender(uuidOf(target));
+        }
         store.states.put(targetKey, state);
         store.bound.put(targetKey, record);
         if (state.condition == PlayerCondition.UNCONSCIOUS_CUSTODY) {
@@ -2459,6 +2477,21 @@ public class CustodyService implements CustodyRoleplayUseCase {
         return issuerEligible(record.issuer, record.issuerUuid);
     }
 
+    /**
+     * #231: a prisoner registered IN_CELL or IN_CAMP is detained, not
+     * escorted — the bounty tether must not drag them out of custody.
+     */
+    private static boolean detained(
+            com.dwurdy.straja.domain.model.PrisonerRegisterStore registerView,
+            CustodyStore.BoundRecord record) {
+        var inmate = registerView == null
+                || record.targetUuid == null || record.targetUuid.isEmpty()
+                ? null : registerView.prisoner(record.targetUuid);
+        return inmate != null
+                && (inmate.status == com.dwurdy.straja.domain.model.PrisonerStatus.IN_CELL
+                        || inmate.status == com.dwurdy.straja.domain.model.PrisonerStatus.IN_CAMP);
+    }
+
     /** A downed record that cannot be safely applied is discarded closed. */
     private static boolean malformedDowned(CustodyStore.DownedRecord record) {
         return record == null
@@ -2500,7 +2533,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
         // One register read per tick: hook writes during this loop only touch
         // records whose cuff entries are removed in the same pass, so a
         // shared snapshot stays accurate for the detained checks below.
-        var registerView = store.cuffed.isEmpty()
+        var registerView = store.cuffed.isEmpty() && store.bound.isEmpty()
                 ? null : ctx.prisonerRegister().read();
         for (var entry : new java.util.ArrayList<>(store.cuffed.entrySet())) {
             var record = entry.getValue();
@@ -2624,6 +2657,82 @@ public class CustodyService implements CustodyRoleplayUseCase {
             target.closeMenu();
             target.applyEffect("minecraft:slowness",
                     Math.max(20, ctx.policies().ropeSlownessTicks), ctx.policies().ropeSlownessAmplifier);
+            // #231: a bounty-capture rope tethers the captive to the hunter —
+            // civilian-grade escort: drag, snap-back, and a longer break
+            // grace before the rope gives and the captive walks free.
+            if (bounties != null
+                    && BountyService.BOUNTY_CAPTURE_REASON.equals(record.reason)
+                    && !detained(registerView, record)) {
+                var hunter = findStored(record.issuerUuid, record.issuer);
+                if (hunter == null || !hunter.dimension().equals(target.dimension())) {
+                    if (record.escortLostAt == 0) {
+                        record.escortLostAt = now();
+                        audit.record("bounty_escort", record.issuer, record.issuerUuid,
+                                target.name(), record.targetUuid, "SUCCESS",
+                                "escort_lost reason="
+                                        + (hunter == null ? "hunter_missing" : "dimension"));
+                        changed = true;
+                    } else if (now() - record.escortLostAt
+                            >= Math.max(1, ctx.policies().bountyBreakGraceSeconds) * 1000L) {
+                        // Hunter gone past the break grace: the rope slips and
+                        // the captive is free to be re-hunted.
+                        store.bound.remove(entry.getKey());
+                        target.tell("Vânătorul a dispărut — frânghia a cedat.");
+                        audit.record("bounty_escort", record.issuer, record.issuerUuid,
+                                target.name(), record.targetUuid, "SUCCESS",
+                                "escort_lost_timeout");
+                        changed = true;
+                        continue;
+                    }
+                } else {
+                    if (record.escortLostAt != 0) {
+                        record.escortLostAt = 0;
+                        changed = true;
+                    }
+                    double tether = Math.max(2.0, ctx.policies().bountyTetherRadius);
+                    double clamp = Math.max(tether, ctx.policies().bountyTeleportDistance);
+                    double dx = target.x() - hunter.x();
+                    double dy = target.y() - hunter.y();
+                    double dz = target.z() - hunter.z();
+                    double dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                    if (dist > clamp * 2) {
+                        // Far past any sane leash: the rope parts.
+                        if (record.outOfRangeAt == 0) {
+                            record.outOfRangeAt = now();
+                            changed = true;
+                        } else if (now() - record.outOfRangeAt
+                                >= Math.max(1, ctx.policies().bountyBreakGraceSeconds) * 1000L) {
+                            store.bound.remove(entry.getKey());
+                            target.tell("Frânghia s-a rupt — ai scăpat de vânător.");
+                            hunter.tell(target.name() + " ți-a scăpat: frânghia s-a rupt la distanță.");
+                            audit.record("bounty_escort", record.issuer, record.issuerUuid,
+                                    target.name(), record.targetUuid, "SUCCESS",
+                                    "rope_broken distance=" + (int) dist);
+                            changed = true;
+                            continue;
+                        }
+                    } else if (record.outOfRangeAt != 0) {
+                        record.outOfRangeAt = 0;
+                        changed = true;
+                    }
+                    if (dist > tether) {
+                        if (dist > clamp) {
+                            target.teleport(hunter.dimension(),
+                                    hunter.x(), hunter.y(), hunter.z());
+                            audit.record("bounty_escort", record.issuer, record.issuerUuid,
+                                    target.name(), record.targetUuid, "SUCCESS",
+                                    "teleport_clamp distance=" + (int) dist);
+                        } else {
+                            double nx = dx / dist, ny = dy / dist, nz = dz / dist;
+                            double pull = Math.min(dist - tether, 1.5);
+                            target.teleport(hunter.dimension(),
+                                    target.x() - nx * pull,
+                                    target.y() - ny * pull,
+                                    target.z() - nz * pull);
+                        }
+                    }
+                }
+            }
         }
         for (var entry : new java.util.ArrayList<>(store.headSacks.entrySet())) {
             var record = entry.getValue();

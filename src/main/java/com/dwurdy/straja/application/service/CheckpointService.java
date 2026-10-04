@@ -82,6 +82,14 @@ public final class CheckpointService {
         this.wanted = service;
     }
 
+    /** Officer escort (cuffs) only — #231: a bounty-bound captive is NOT an
+     *  escorted prisoner; they are a wanted player being delivered, and the
+     *  gate's wanted-on-sight arrest pipeline IS the delivery. */
+    private boolean underEscort(PlayerGateway p, double radius) {
+        return custody != null
+                && custody.escortOfficerWithin(p, radius) != null;
+    }
+
     /** Server-tick entry: prototype cadence is every 5 ticks. */
     public void tick() {
         if (ctx.server().tickCount() % SCAN_EVERY != 0) return;
@@ -119,8 +127,7 @@ public final class CheckpointService {
         // custody, so the gate does not repel what an officer escorts.
         // Camp exits are the one exception: the officer may escort the
         // prisoner out, but the camp's banned cargo does not leave with them.
-        if (custody != null && custody.escortOfficerWithin(
-                p, ctx.policies().escortGateBypassRadius) != null) {
+        if (underEscort(p, ctx.policies().escortGateBypassRadius)) {
             confiscateEscortedAtCampExit(p, store, dim, x, y, z);
             prevPositions.put(p.uuid(), new PrevPos(dim, x, y, z));
             return;
@@ -595,8 +602,7 @@ public final class CheckpointService {
      * sentence — but a prisoner beside a live escorting officer is in lawful
      * custody right now, and the gate must not re-arrest them. */
     private boolean inCustody(PlayerGateway p) {
-        if (custody != null && custody.escortOfficerWithin(p,
-                ctx.policies().escortTetherRadius) != null) {
+        if (underEscort(p, ctx.policies().escortTetherRadius)) {
             return false;
         }
         String uuid = p.uuid().toString();

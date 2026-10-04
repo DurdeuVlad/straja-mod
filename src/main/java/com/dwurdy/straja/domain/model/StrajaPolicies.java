@@ -368,6 +368,20 @@ public class StrajaPolicies {
     public int laborFreedomFlatPrice = 4096;
     public double laborFreedomFineMultiplier = 2.0;
 
+    // bounties (#231) — officer-posted contracts, civilian captures, bail-or-mines.
+    public boolean bountyEnabled = true;
+    public int bountyMinAmount = 64;
+    public int bountyMaxAmount = 65536;
+    public double bountyFineMultiplier = 2.0;
+    public int bountyTtlDays = 7;
+    public double bountySurrenderRadius = 8.0;
+    public int bountySurrenderSeconds = 120;
+    public double bountyTetherRadius = 4.5;
+    public double bountyTeleportDistance = 14.0;
+    public int bountyBreakGraceSeconds = 20;
+    public int bountyBailWindowHours = 24;
+    public String bountyDefaultCampId = "";
+
     // inspection ledger retention (oldest trimmed; 0 = keep all).
     public int inspectionLedgerLimit = 2000; // prototype parity — entries embed full SNBT snapshots
 

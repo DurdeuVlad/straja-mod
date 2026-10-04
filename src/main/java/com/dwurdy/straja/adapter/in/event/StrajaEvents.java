@@ -64,6 +64,7 @@ public final class StrajaEvents {
         runtime.expansionRoleplay().tick();
         runtime.storage().tick();
         runtime.checkpoints().tick();
+        runtime.bounties().tick();
         if (runtime.serverGateway().tickCount() % 20 != 0) return;
         runtime.v2Mobilizations().expireDue();
         runtime.v2Campaigns().expireDue();
@@ -232,6 +233,7 @@ public final class StrajaEvents {
         runtime.complaintRoleplay().claimPendingRewards(gateway);
         runtime.missionRoleplay().deliverPendingRewards(gateway);
         runtime.fineRoleplay().recoverOnLogin(gateway);
+        runtime.bounties().recoverOnLogin(gateway);
         runtime.archiveRoleplay().deliverPending(gateway);
         runtime.expansionRoleplay().deliverPendingEvidence(gateway);
         runtime.emergencyRoleplay().deliverUrgency(gateway);
