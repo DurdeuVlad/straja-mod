@@ -429,8 +429,10 @@ public final class BountyService {
     // ------------------------------------------------------------- tick
 
     /** Periodic sweep: TTL expiry + lapsed surrender flags + bail-window
-     *  camp transfers. Wired into the server tick. */
+     *  camp transfers. Wired into the server tick; self-gates to once a
+     *  second — expiry granularity does not need per-tick store reads. */
     public synchronized void tick() {
+        if (ctx.server().tickCount() % 20 != 0) return;
         var store = store();
         boolean changed = false;
         var it = store.surrenders.entrySet().iterator();
