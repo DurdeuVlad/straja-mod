@@ -45,6 +45,7 @@ public final class StrajaRuntime {
     private final com.dwurdy.straja.application.service.CustodyService custody;
     private final com.dwurdy.straja.application.service.PrisonService prison;
     private final com.dwurdy.straja.application.service.FineService fines;
+    private final com.dwurdy.straja.application.service.DebtService debt;
     private final com.dwurdy.straja.application.service.ComplaintService complaints;
     private final com.dwurdy.straja.application.service.ReportService reports;
     private final com.dwurdy.straja.application.service.AudienceService audiences;
@@ -314,10 +315,15 @@ public final class StrajaRuntime {
         this.prison = new com.dwurdy.straja.application.service.PrisonService(ctx, players, audit, custody);
         var seizure = new com.dwurdy.straja.application.service.SeizureService(ctx, audit);
         this.prison.useSeizure(seizure);
+        // #234: the debt ledger — late-bound into fines (FINE_PAY) and prison
+        // (pending book notices drained beside locker belongings at login).
+        this.debt = new com.dwurdy.straja.application.service.DebtService(ctx, audit);
+        this.prison.useDebt(this.debt);
         // M4 uncuff boundary rule: restraints off inside custody keep the
         // prisoner; outside custody mark them fugitive.
         this.custody.onRestraintReleased(prison::onUncuffed);
         this.fines = new com.dwurdy.straja.application.service.FineService(ctx, players, audit, prison);
+        this.fines.useDebt(this.debt);
         this.complaints = new com.dwurdy.straja.application.service.ComplaintService(ctx, players, audit);
         this.complaints.useV2Escalation(v2ComplaintEscalation);
         this.reports = new com.dwurdy.straja.application.service.ReportService(ctx, players, audit);
@@ -670,6 +676,7 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.service.CustodyService custody() { return custody; }
     public com.dwurdy.straja.application.service.PrisonService prison() { return prison; }
     public com.dwurdy.straja.application.service.FineService fines() { return fines; }
+    public com.dwurdy.straja.application.service.DebtService debt() { return debt; }
     public com.dwurdy.straja.application.service.ComplaintService complaints() { return complaints; }
     public com.dwurdy.straja.application.service.RoomService rooms() { return rooms; }
     public com.dwurdy.straja.application.service.ArchiveService archive() { return archive; }

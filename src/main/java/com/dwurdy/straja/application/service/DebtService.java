@@ -1,0 +1,192 @@
+package com.dwurdy.straja.application.service;
+
+import com.dwurdy.straja.application.StrajaContext;
+import com.dwurdy.straja.application.port.out.PlayerGateway;
+import com.dwurdy.straja.domain.model.Fine;
+import com.dwurdy.straja.domain.model.FineStore;
+import com.dwurdy.straja.domain.model.PrisonerRegisterStore;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+
+/**
+ * DEBT-1 (#234) debt ledger. Every fine carries a {@code paidAmount} plus a
+ * contribution trail; this service totals the unpaid balance, applies money
+ * to it oldest-first (auditing each application), and hands debtors written
+ * books — directly while online, queued under {@code pendingNotices} while
+ * offline and drained at login next to pending locker belongings.
+ */
+public final class DebtService {
+    /** Statuses whose {@link Fine#remaining()} still counts as collectible debt. */
+    public static final List<String> PAYABLE = List.of(
+            "ISSUED", "DELIVERY_FAILED", "PAYMENT_REVIEW",
+            "ARREST_PENDING", "IN_SENTENCE", "GRACE_AFTER_SENTENCE");
+
+    private final StrajaContext ctx;
+    private final AuditService audit;
+
+    public DebtService(StrajaContext ctx, AuditService audit) {
+        this.ctx = ctx;
+        this.audit = audit;
+    }
+
+    private long now() {
+        return ctx.clock().nowMillis();
+    }
+
+    /** Per-fine breakdown row returned by {@link #allocate}. */
+    public record Allocation(String fineId, int applied, boolean covered) {}
+
+    /** Total unpaid balance across the target's payable fines. */
+    public int outstandingDebt(String targetUuid) {
+        if (targetUuid == null || targetUuid.isBlank()) return 0;
+        int total = 0;
+        for (Fine fine : ctx.fines().read().fines) {
+            if (fine != null && targetUuid.equals(fine.targetUuid)
+                    && PAYABLE.contains(fine.status)) {
+                total += fine.remaining();
+            }
+        }
+        return total;
+    }
+
+    /**
+     * Applies {@code amount} to the target's payable fines oldest-first by
+     * {@code issuedAt}: each application appends a contribution, bumps
+     * {@code paidAmount}, flips the fine PAID (+{@code paidAt}) when covered
+     * and is audited. Returns the per-fine breakdown.
+     */
+    public List<Allocation> allocate(String targetUuid, int amount, String payer,
+                                     String payerUuid, String source) {
+        FineStore data = ctx.fines().read();
+        List<Fine> payable = new ArrayList<>();
+        if (targetUuid != null) {
+            for (Fine fine : data.fines) {
+                if (fine != null && targetUuid.equals(fine.targetUuid)
+                        && PAYABLE.contains(fine.status) && fine.remaining() > 0) {
+                    payable.add(fine);
+                }
+            }
+        }
+        payable.sort(Comparator.comparingLong(fine -> fine.issuedAt));
+        int left = Math.max(0, amount);
+        List<Allocation> out = new ArrayList<>();
+        for (Fine fine : payable) {
+            if (left <= 0) break;
+            int applied = applyPayment(fine, left, payer, payerUuid, source);
+            if (applied <= 0) continue;
+            out.add(new Allocation(fine.id, applied, "PAID".equals(fine.status)));
+            left -= applied;
+        }
+        if (!out.isEmpty()) ctx.fines().write(data);
+        return List.copyOf(out);
+    }
+
+    /**
+     * Applies up to {@code amount} to one fine: appends a contribution and
+     * bumps {@code paidAmount}; a covered fine flips PAID (+{@code paidAt}).
+     * The application is audited; the caller owns the store write.
+     */
+    public int applyPayment(Fine fine, int amount, String payer,
+                            String payerUuid, String source) {
+        if (fine == null) return 0;
+        int applied = Math.max(0, Math.min(fine.remaining(), amount));
+        if (applied > 0) {
+            Fine.Contribution contribution = new Fine.Contribution();
+            contribution.payer = payer == null ? "" : payer;
+            contribution.payerUuid = payerUuid == null ? "" : payerUuid;
+            contribution.amount = applied;
+            contribution.at = now();
+            contribution.source = source == null ? "" : source;
+            if (fine.contributions == null) fine.contributions = new ArrayList<>();
+            fine.contributions.add(contribution);
+            fine.paidAmount += applied;
+            audit.record("debt_apply", contribution.payer, contribution.payerUuid,
+                    fine.target, fine.targetUuid, "SUCCESS",
+                    "fineId=" + fine.id + " applied=" + applied + " source=" + contribution.source
+                            + " remaining=" + fine.remaining());
+        }
+        if (fine.remaining() <= 0 && PAYABLE.contains(fine.status)) {
+            fine.status = "PAID";
+            fine.paidAt = now();
+        }
+        return applied;
+    }
+
+    /**
+     * Payment toward a citizen's debt (third-party or levy): caps at the
+     * outstanding balance — refusing cleanly at zero — withdraws the capped
+     * amount, then allocates it. Contributions are final.
+     */
+    public List<Allocation> contribute(PlayerGateway payer, String targetUuid,
+                                       int amount, String source) {
+        if (payer == null) return List.of();
+        int capped = Math.min(Math.max(0, amount), outstandingDebt(targetUuid));
+        if (capped <= 0) {
+            payer.refuse("straja.debt.none", "straja.remedy.reception");
+            return List.of();
+        }
+        var withdrawal = ctx.currency().withdraw(payer, capped);
+        if (!withdrawal.ok()) {
+            payer.refuse("straja.fine.pay_failed", "straja.remedy.retry");
+            return List.of();
+        }
+        var applied = allocate(targetUuid, capped, payer.name(),
+                payer.uuid() == null ? "" : payer.uuid().toString(), source);
+        if (!applied.isEmpty()) {
+            payer.tell("Contribuția de " + capped + " monede a fost înregistrată.");
+        }
+        return applied;
+    }
+
+    /**
+     * Book notice for a debtor: online hands the written book over, offline
+     * queues it on the prisoner register so {@link #deliverPendingNotices}
+     * can pour it back at login.
+     */
+    public void notifyPrisoner(String targetUuid, PlayerGateway online,
+                             String title, List<String> pages) {
+        if (targetUuid == null || targetUuid.isBlank()) return;
+        PlayerGateway target = online != null && online.isOnline()
+                ? online : ctx.server().findPlayer(targetUuid);
+        if (target != null && target.isOnline()) {
+            try {
+                target.giveWrittenBook(title == null ? "" : title, "Straja", pages);
+                return;
+            } catch (RuntimeException ignored) {
+                // A book that cannot be handed over waits for the next login.
+            }
+        }
+        var reg = ctx.prisonerRegister().read();
+        var notice = new PrisonerRegisterStore.PendingNotice();
+        notice.title = title == null ? "" : title;
+        notice.author = "Straja";
+        notice.pages = pages == null ? new ArrayList<>() : new ArrayList<>(pages);
+        notice.createdAt = now();
+        reg.enqueueNotice(targetUuid, notice);
+        ctx.prisonerRegister().write(reg);
+    }
+
+    /** Delivers book notices queued while the player was offline. */
+    public void deliverPendingNotices(PlayerGateway target) {
+        if (target == null || target.uuid() == null) return;
+        var reg = ctx.prisonerRegister().read();
+        var notices = reg.drainPendingNotices(target.uuid().toString());
+        if (notices.isEmpty()) return;
+        int delivered = 0;
+        for (var notice : notices) {
+            if (notice == null) continue;
+            try {
+                target.giveWrittenBook(notice.title, notice.author, notice.pages);
+                delivered++;
+            } catch (RuntimeException ignored) {
+                // A report that cannot be delivered must never undo the drain.
+            }
+        }
+        ctx.prisonerRegister().write(reg);
+        if (delivered > 0) {
+            audit.record("notice_delivery", "system", "", target.name(),
+                    target.uuid().toString(), "SUCCESS", "pending delivered=" + delivered);
+        }
+    }
+}

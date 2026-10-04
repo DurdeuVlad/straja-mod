@@ -31,6 +31,8 @@ public class PrisonService implements PrisonRoleplayUseCase {
     private BoloService bolos;
     /** LAW-006 camp custody queries (late-bound like useSeizure). */
     private LaborCampService camps;
+    /** DEBT-1 pending book notices (late-bound like useSeizure). */
+    private DebtService debt;
     private long lastTickMs;
     /** Armed admin picks for the locker pool (admin uuid → mode). */
     private final java.util.Map<java.util.UUID, String> pickModes = new java.util.HashMap<>();
@@ -56,6 +58,11 @@ public class PrisonService implements PrisonRoleplayUseCase {
     /** LAW-006: labor-camp destinations, bounds, spawns and freedom prices. */
     public void useCamps(LaborCampService service) {
         this.camps = service;
+    }
+
+    /** DEBT-1: queued written-book notices drain at login (late-bound like useSeizure). */
+    public void useDebt(DebtService service) {
+        this.debt = service;
     }
 
     public void onArrest(Consumer<Sentence> hook) {
@@ -929,10 +936,13 @@ public class PrisonService implements PrisonRoleplayUseCase {
             boolean adopted = nameMatch != null && legacyId.equals(nameMatch.detaineeUuid);
             if (adopted) register.adoptByName(name, uuid);
             boolean lockersMoved = register.rekeyPendingLockers(legacyId, uuid);
-            if (adopted || lockersMoved) ctx.prisonerRegister().write(register);
+            boolean noticesMoved = register.rekeyPendingNotices(legacyId, uuid);
+            if (adopted || lockersMoved || noticesMoved) ctx.prisonerRegister().write(register);
         }
         // Released-while-offline prisoners collect locker belongings at login.
         if (seizure != null) seizure.deliverPendingLockers(player);
+        // Book notices queued while offline land beside the locker belongings.
+        if (debt != null) debt.deliverPendingNotices(player);
         var data = store();
         var sentence = activeSentenceFrom(data, player);
         if (sentence == null || !"WAITING_CELL".equals(sentence.status)

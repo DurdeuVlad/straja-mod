@@ -345,6 +345,7 @@
   "straja.custody.tie_self": "You cannot tie yourself up.",
   "straja.custody.transport_online": "Transport requires two players online.",
   "straja.custody.weapon_rank": "%s is used from Străjer rank up.",
+  "straja.debt.none": "The citizen has no outstanding debt to pay.",
   "straja.debug.off": "Debug is disabled or forbidden in this environment.",
   "straja.debug.reveal_off": "Answer revealing is disabled.",
   "straja.desk.bad_id": "Desk id must be 1-32 letters, digits, '_' or '-'.",

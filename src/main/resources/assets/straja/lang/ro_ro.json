@@ -345,6 +345,7 @@
   "straja.custody.tie_self": "Nu te poți lega singur.",
   "straja.custody.transport_online": "Transportul cere doi jucători online.",
   "straja.custody.weapon_rank": "%s de Poliție se folosește de la rangul Străjer în sus.",
+  "straja.debt.none": "Cetățeanul nu are datorii restante de achitat.",
   "straja.debug.off": "Debug este dezactivat sau interzis în acest mediu.",
   "straja.debug.reveal_off": "Revelarea răspunsurilor este dezactivată.",
   "straja.desk.bad_id": "Id-ul biroului trebuie să aibă 1-32 de litere, cifre, '_' sau '-'.",

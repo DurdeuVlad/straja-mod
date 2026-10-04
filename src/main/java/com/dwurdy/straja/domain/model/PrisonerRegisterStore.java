@@ -21,6 +21,8 @@ public final class PrisonerRegisterStore {
     private Map<String, PrisonerRegisterRecord> prisoners;
     /** detainee uuid -> reserved locker point keys awaiting offline release. */
     private Map<String, List<String>> pendingLockers;
+    /** detainee uuid -> written-book notices queued while offline. */
+    private Map<String, List<PendingNotice>> pendingNotices;
     /** released-name -> outstanding fine for names never booked. */
     private Map<String, Integer> legacyFines;
     /** real uuid -> strajaWantedUntil epoch ms (legacy hunt expiry, consumed by M7 guards). */
@@ -35,6 +37,11 @@ public final class PrisonerRegisterStore {
     public Map<String, List<String>> pendingLockers() {
         if (pendingLockers == null) pendingLockers = new LinkedHashMap<>();
         return pendingLockers;
+    }
+
+    public Map<String, List<PendingNotice>> pendingNotices() {
+        if (pendingNotices == null) pendingNotices = new LinkedHashMap<>();
+        return pendingNotices;
     }
 
     public Map<String, Integer> legacyFines() {
@@ -93,6 +100,14 @@ public final class PrisonerRegisterStore {
         return true;
     }
 
+    /** Moves queued book notices between uuid keys; true when anything moved. */
+    public boolean rekeyPendingNotices(String oldUuid, String realUuid) {
+        List<PendingNotice> pending = pendingNotices().remove(oldUuid);
+        if (pending == null) return false;
+        pendingNotices().computeIfAbsent(realUuid, k -> new ArrayList<>()).addAll(pending);
+        return true;
+    }
+
     /** Reserves locker keys for an offline release (idempotent merge). */
     public void reserveLockers(String uuid, List<String> lockerKeys) {
         List<String> existing = pendingLockers().computeIfAbsent(uuid, k -> new ArrayList<>());
@@ -105,6 +120,25 @@ public final class PrisonerRegisterStore {
     public List<String> drainPendingLockers(String uuid) {
         List<String> keys = pendingLockers().remove(uuid);
         return keys == null ? List.of() : keys;
+    }
+
+    /** Queues a written-book notice for an offline player (drained at login). */
+    public void enqueueNotice(String uuid, PendingNotice notice) {
+        pendingNotices().computeIfAbsent(uuid, k -> new ArrayList<>()).add(notice);
+    }
+
+    /** Drains the queued book notices for a player who came online. */
+    public List<PendingNotice> drainPendingNotices(String uuid) {
+        List<PendingNotice> notices = pendingNotices().remove(uuid);
+        return notices == null ? List.of() : notices;
+    }
+
+    /** A written-book notice reserved while the recipient was offline. */
+    public static class PendingNotice {
+        public String title = "";
+        public String author = "Straja";
+        public List<String> pages = new ArrayList<>();
+        public long createdAt;
     }
 
     /**
