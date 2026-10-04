@@ -40,7 +40,7 @@ jobs:
     name: Build, test, and package
     needs: version-contract
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 32
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -63,9 +63,29 @@ jobs:
         # Two dedicated servers run sequentially — a single Gradle invocation
         # launches both JVMs concurrently and starves the batch placement on
         # small runners (matches the rc.yml split).
+        #
+        # Each suite runs under a hard time bound with one retry. A vanilla
+        # chunk-visibility race can leave a leading GameTestInfo's chunks
+        # "not entity ticking" forever — the test never starts, its
+        # timeoutTicks never counts, and the batch ticks until the job
+        # timeout cancels it (seen on #241's run). GameTestChunkWatchdog
+        # re-fires the lost notification each batch; the bound + retry here
+        # turns any residual occurrence into a bounded, diagnosable failure
+        # instead of a 20-minute stall.
         run: |
-          ./gradlew runGameTestServer --no-daemon --stacktrace
-          ./gradlew runRpExpansionGameTestServer --no-daemon --stacktrace
+          run_gametest () {
+            local task="$1"
+            for attempt in 1 2; do
+              echo "== $task — attempt $attempt =="
+              if timeout --kill-after=15s 360 ./gradlew "$task" --no-daemon --stacktrace; then
+                return 0
+              fi
+              echo "::warning:: $task attempt $attempt failed or hit the 6-minute bound; retrying once"
+            done
+            return 1
+          }
+          run_gametest runGameTestServer
+          run_gametest runRpExpansionGameTestServer
 
       - name: GUI icon asset contract
         run: |

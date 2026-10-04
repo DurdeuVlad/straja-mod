@@ -183,6 +183,11 @@ public final class LawAcceptanceGameTests {
                 && staleMock.test(r.targetName) && offline.test(r.targetUuid));
         bounties.surrenders.keySet().removeIf(offline::test);
         runtime.context().bounties().write(bounties);
+        // #237: debt fixtures — fine rows keyed to departed mock targets.
+        var staleFines = runtime.context().fines().read();
+        staleFines.fines.removeIf(f -> f != null
+                && staleMock.test(f.target) && offline.test(f.targetUuid));
+        runtime.context().fines().write(staleFines);
     }
 
     private static List<InspectionLedgerEntry> entriesFor(StrajaRuntime runtime,
@@ -1240,6 +1245,278 @@ public final class LawAcceptanceGameTests {
                 helper.succeed();
             }, cleanup);
         }, cleanup);
+    }
+
+    /**
+     * AT10 (#237 DEBT): an in-custody debtor cannot hold coins or walk free.
+     * A jailer release runs the debt gate, which levies the seized personal
+     * locker first — the arrest-time seizure poured the prisoner's coin
+     * stacks into a real pool chest, exactly like a live arrest — applies
+     * the take oldest-first onto {@code paidAmount}, then the
+     * still-over-threshold balance diverts the release to the default camp
+     * ({@code onBlocked=CAMP}, the shipped default). A third-party
+     * {@code /straja debt pay} settles the remainder — both fines flip
+     * PAID — and the next release completes.
+     *
+     * <p>Fully synchronous like AT5: arrest, levy, gate and contribution
+     * are direct service calls with no tick waits, so a plain try/finally
+     * cleans up instead of scheduled steps.
+     *
+     * <p>Runs in its own {@code debtAt10} batch so it cannot perturb the
+     * forty concurrent defaultBatch tests: it temporarily rewrites the
+     * shared {@code runtime.context().policies()} (coin ladder, debt
+     * thresholds, {@code bountyDefaultCampId=at10_camp}), and vanilla batch
+     * boundaries are the only framework mechanism that serialises tests —
+     * batches run sequentially while tests inside a batch run concurrently.
+     */
+    @GameTest(template = "empty", timeoutTicks = 200, batch = "debtAt10")
+    public static void debtGateAndContributions(GameTestHelper helper) {
+        var runtime = runtime(helper);
+        ServerLevel level = helper.getLevel();
+        String dim = level.dimension().location().toString();
+        BlockPos anchor = helper.absolutePos(new BlockPos(0, 2, 0));
+
+        purgeStaleFixtures(runtime, helper);
+        ServerPlayer prisoner = mockPlayer(helper);
+        ServerPlayer jailer = mockPlayer(helper);
+        String uuid = prisoner.getUUID().toString();
+        String jailerUuid = jailer.getUUID().toString();
+
+        var policies = runtime.context().policies();
+        var baseline = com.dwurdy.straja.config.StrajaServerConfig.toPolicies();
+        var lockerPos = helper.absolutePos(new BlockPos(3, 1, 2));
+        var lockerPoint = new com.dwurdy.straja.domain.model.StoragePoint(
+                dim, lockerPos.getX(), lockerPos.getY(), lockerPos.getZ());
+
+        Runnable cleanup = () -> {
+            policies.coinItemIds.clear();
+            policies.coinItemIds.putAll(baseline.coinItemIds);
+            policies.coinTierRatio = baseline.coinTierRatio;
+            policies.debtEnabled = baseline.debtEnabled;
+            policies.debtReleaseBlockThreshold = baseline.debtReleaseBlockThreshold;
+            policies.debtOnBlocked = baseline.debtOnBlocked;
+            policies.bountyDefaultCampId = baseline.bountyDefaultCampId;
+            var prisonData = runtime.context().prison().read();
+            prisonData.lockerPool.removeIf(p -> p != null
+                    && lockerPoint.key().equals(p.key()));
+            runtime.context().prison().write(prisonData);
+            var fineData = runtime.context().fines().read();
+            fineData.fines.removeIf(f -> f != null && uuid.equals(f.targetUuid));
+            runtime.context().fines().write(fineData);
+            removeCell(runtime, "at10_cell");
+            removeCamp(runtime, "at10_camp");
+            removeCustodyState(runtime, uuid);
+            removeCustodyState(runtime, jailerUuid);
+            if (level.getBlockEntity(lockerPos)
+                    instanceof net.minecraft.world.Container chest) {
+                chest.clearContent();
+            }
+            level.setBlock(lockerPos,
+                    net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), 3);
+        };
+        try {
+            cleanup.run(); // drop leftovers + restore policies from a crashed run
+
+            // Vanilla stand-in coin ladder — Ady's Decorations is absent
+            // from the headless rig (see AT5); restored in the finally.
+            policies.coinTierRatio = 64;
+            policies.coinItemIds.clear();
+            policies.coinItemIds.put(1, "minecraft:iron_nugget");
+            policies.coinItemIds.put(64, "minecraft:gold_nugget");
+            policies.coinItemIds.put(4096, "minecraft:emerald");
+            policies.coinItemIds.put(262144, "minecraft:diamond");
+            // The shipped [debt] defaults — pinned so a crashed run's
+            // leftovers cannot flip the assertion.
+            policies.debtEnabled = true;
+            policies.debtReleaseBlockThreshold = 0;
+            policies.debtOnBlocked = "CAMP";
+            policies.bountyDefaultCampId = "at10_camp";
+
+            // A dedicated cell on this test's band: the arrest must land a
+            // real custody slot without starving the shared pool (AT9 lesson).
+            var prison = runtime.context().prison().read();
+            var cell = new com.dwurdy.straja.domain.model.Cell();
+            cell.id = "at10_cell";
+            cell.dimension = dim;
+            cell.minX = anchor.getX() - 30; cell.minY = anchor.getY() + 102;
+            cell.minZ = anchor.getZ() - 30;
+            cell.maxX = anchor.getX() - 25; cell.maxY = anchor.getY() + 110;
+            cell.maxZ = anchor.getZ() - 25;
+            cell.doorX = anchor.getX() - 27; cell.doorY = anchor.getY() + 106;
+            cell.doorZ = anchor.getZ() - 27;
+            prison.cells.add(cell);
+            // The locker pool feeds routeLocker — arrest seizure pours the
+            // prisoner's coins into this chest like a live booking would.
+            level.setBlock(lockerPos,
+                    net.minecraft.world.level.block.Blocks.CHEST.defaultBlockState(), 3);
+            prison.lockerPool.add(lockerPoint);
+            runtime.context().prison().write(prison);
+
+            var commissioner = new VirtualPlayerGateway("dwurdy");
+            commissioner.setOp(true);
+            commissioner.setDimension(dim);
+            var campMin = helper.absolutePos(new BlockPos(12, 102, 0));
+            var campMax = helper.absolutePos(new BlockPos(20, 110, 8));
+            helper.assertTrue(runtime.laborCamps().register(commissioner,
+                            "at10_camp", "AT10 Camp",
+                            campMin.getX() + "," + campMin.getY() + "," + campMin.getZ(),
+                            campMax.getX() + "," + campMax.getY() + "," + campMax.getZ()),
+                    "camp registration must succeed: " + commissioner.messageLog());
+
+            // Two payable fines — issuedAt drives the oldest-first order.
+            var fineData = runtime.context().fines().read();
+            var oldFine = new com.dwurdy.straja.domain.model.Fine();
+            oldFine.id = "at10-fine-old";
+            oldFine.target = prisoner.getGameProfile().getName();
+            oldFine.targetUuid = uuid;
+            oldFine.law = "at10_old";
+            oldFine.amount = 100;
+            oldFine.status = "ISSUED";
+            oldFine.issuedAt = 1000L;
+            var newFine = new com.dwurdy.straja.domain.model.Fine();
+            newFine.id = "at10-fine-new";
+            newFine.target = oldFine.target;
+            newFine.targetUuid = uuid;
+            newFine.law = "at10_new";
+            newFine.amount = 50;
+            newFine.status = "ISSUED";
+            newFine.issuedAt = 2000L;
+            fineData.fines.add(oldFine);
+            fineData.fines.add(newFine);
+            runtime.context().fines().write(fineData);
+            helper.assertTrue(runtime.debt().outstandingDebt(uuid) == 150,
+                    "setup: the prisoner must owe 150 base units");
+
+            // Custody intake: the coins ride the seizure into the locker chest.
+            prisoner.getInventory().setItem(0, new ItemStack(Items.GOLD_NUGGET, 1));
+            prisoner.getInventory().setItem(1, new ItemStack(Items.IRON_NUGGET, 16));
+            var sentence = runtime.prison().arrest(gateway(prisoner), null, 1,
+                    commissioner, "at10-booking");
+            helper.assertTrue(sentence != null && !sentence.cellId.isEmpty(),
+                    "booking must land a cell");
+            var booked = runtime.context().prisonerRegister().read().prisoner(uuid);
+            helper.assertTrue(booked != null && booked.status == PrisonerStatus.IN_CELL,
+                    "the prisoner must be booked IN_CELL");
+            helper.assertTrue(booked.personalLocker.stream()
+                            .anyMatch(p -> lockerPoint.key().equals(p.key())),
+                    "the seizure must claim the pool chest as the personal locker");
+            var lockerChest = (net.minecraft.world.Container)
+                    level.getBlockEntity(lockerPos);
+            int banked = 0;
+            for (int i = 0; i < lockerChest.getContainerSize(); i++) {
+                var st = lockerChest.getItem(i);
+                if (st.is(Items.GOLD_NUGGET)) banked += st.getCount() * 64;
+                if (st.is(Items.IRON_NUGGET)) banked += st.getCount();
+            }
+            helper.assertTrue(banked == 80,
+                    "the seized coins must sit in the locker chest — got " + banked);
+            helper.assertTrue(prisoner.getInventory().countItem(Items.GOLD_NUGGET) == 0
+                            && prisoner.getInventory().countItem(Items.IRON_NUGGET) == 0,
+                    "the seizure must empty the prisoner's pockets");
+            int booksAfterArrest = prisoner.getInventory().countItem(Items.WRITTEN_BOOK);
+
+            // A non-commissioner jailer release runs the debt gate: the levy
+            // drains the locker oldest-first, then the over-threshold balance
+            // diverts the release into the default camp.
+            var jailerGw = qualifyOfficer(runtime, jailer);
+            var prisonerGw = gateway(prisoner);
+            helper.assertTrue(!runtime.prison().release(jailerGw, prisonerGw, "at10"),
+                    "a debtor over the threshold must not leave custody");
+
+            var afterGate = runtime.context().fines().read();
+            var oldAfter = afterGate.find("at10-fine-old");
+            var newAfter = afterGate.find("at10-fine-new");
+            helper.assertTrue(oldAfter != null && oldAfter.paidAmount == 80
+                            && oldAfter.remaining() == 20,
+                    "the levy must fill the oldest fine first — paid="
+                            + (oldAfter == null ? "null" : oldAfter.paidAmount));
+            helper.assertTrue(oldAfter.contributions != null
+                            && oldAfter.contributions.stream()
+                            .anyMatch(c -> "LEVY".equals(c.source) && c.amount == 80),
+                    "the levy application must be recorded as a LEVY contribution");
+            helper.assertTrue(newAfter != null && newAfter.paidAmount == 0,
+                    "the newer fine must wait its turn — paid="
+                            + (newAfter == null ? "null" : newAfter.paidAmount));
+            int leftInLocker = 0;
+            for (int i = 0; i < lockerChest.getContainerSize(); i++) {
+                var st = lockerChest.getItem(i);
+                if (st.is(Items.GOLD_NUGGET) || st.is(Items.IRON_NUGGET)) {
+                    leftInLocker += st.getCount();
+                }
+            }
+            helper.assertTrue(leftInLocker == 0,
+                    "the levy must physically drain the locker coins — left "
+                            + leftInLocker);
+            var diverted = runtime.context().prisonerRegister().read().prisoner(uuid);
+            helper.assertTrue(diverted != null
+                            && diverted.status == PrisonerStatus.IN_CAMP
+                            && "at10_camp".equals(diverted.assignedCampId),
+                    "onBlocked=CAMP must divert the debtor to the default camp — got "
+                            + (diverted == null ? "no record"
+                            : diverted.status + "/" + diverted.assignedCampId));
+            var stillServing = runtime.context().prison().read().sentences.stream()
+                    .filter(s -> uuid.equals(s.targetUuid)).findFirst().orElseThrow();
+            helper.assertTrue("ACTIVE".equals(stillServing.status),
+                    "a debt-diverted sentence must stay ACTIVE — got "
+                            + stillServing.status);
+            helper.assertTrue(prisoner.getInventory().countItem(Items.WRITTEN_BOOK)
+                            >= booksAfterArrest + 2,
+                    "the debtor must receive the levy receipt and the transfer order");
+            var auditRows = runtime.audit().tail(80).stream()
+                    .filter(e -> uuid.equals(e.targetUuid)).toList();
+            helper.assertTrue(auditRows.stream().anyMatch(e -> "levy".equals(e.action)
+                            && e.details.contains("extracted=80")),
+                    "the levy must be audited");
+            helper.assertTrue(auditRows.stream().anyMatch(e -> "debt_apply".equals(e.action)
+                            && e.details.contains("source=LEVY")),
+                    "the levy allocation must be audited");
+            helper.assertTrue(auditRows.stream().anyMatch(e -> "prison_release".equals(e.action)
+                            && "REFUSED".equals(e.result)
+                            && e.details.contains("debt_gate camp=at10_camp")),
+                    "the gate refusal must name the divert camp");
+
+            // Third-party debt pay: a civilian covers the 70 remaining.
+            var payer = new VirtualPlayerGateway("at10_payer");
+            payer.giveVerified(ItemSpec.of("minecraft:gold_nugget", 1));
+            payer.giveVerified(ItemSpec.of("minecraft:iron_nugget", 20));
+            var applied = runtime.debt().payContribution(payer, uuid, null,
+                    "CONTRIBUTION", null);
+            int paidTotal = applied.stream().mapToInt(a -> a.applied()).sum();
+            helper.assertTrue(paidTotal == 70,
+                    "the contribution must settle the remaining 70 — got " + paidTotal);
+            var settled = runtime.context().fines().read();
+            var oldSettled = settled.find("at10-fine-old");
+            var newSettled = settled.find("at10-fine-new");
+            helper.assertTrue(oldSettled != null && "PAID".equals(oldSettled.status)
+                            && oldSettled.paidAt != null,
+                    "the old fine must close PAID after the contribution");
+            helper.assertTrue(newSettled != null && "PAID".equals(newSettled.status)
+                            && newSettled.paidAt != null,
+                    "the new fine must close PAID after the contribution");
+            helper.assertTrue(oldSettled.contributions != null
+                            && oldSettled.contributions.stream()
+                            .anyMatch(c -> "CONTRIBUTION".equals(c.source)
+                                    && "at10_payer".equals(c.payer) && c.amount == 20),
+                    "the contribution trail must name the payer");
+            helper.assertTrue(runtime.debt().outstandingDebt(uuid) == 0,
+                    "settled debt must read zero");
+
+            // Debt cleared — the same jailer release now completes.
+            helper.assertTrue(runtime.prison().release(jailerGw, prisonerGw, "at10-out"),
+                    "the gate must pass once the debt is settled");
+            var freed = runtime.context().prisonerRegister().read().prisoner(uuid);
+            helper.assertTrue(freed != null && freed.status.isReleased(),
+                    "the settled debtor must be released — got "
+                            + (freed == null ? "no record" : freed.status));
+            var closed = runtime.context().prison().read().sentences.stream()
+                    .filter(s -> uuid.equals(s.targetUuid)).findFirst().orElseThrow();
+            helper.assertTrue("FORCED_RELEASE".equals(closed.status),
+                    "the completed release must close the sentence — got "
+                            + closed.status);
+            helper.succeed();
+        } finally {
+            cleanup.run();
+        }
     }
 
     /** Officer qualification: rank 3 + duty, the same pattern the rp suite uses. */

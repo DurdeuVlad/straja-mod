@@ -19,10 +19,10 @@ synthetic fakes.
 | Java | 21 |
 | Harness | `./gradlew runGameTestServer` (GameTest dedicated server) |
 | Unit suite | `./gradlew test` |
-| Latest result | **38/38 required GameTests passed**, `BUILD SUCCESSFUL`, clean server shutdown |
+| Latest result | **40/40 required GameTests passed** (`straja` namespace, `defaultBatch:0`), `BUILD SUCCESSFUL`, clean server shutdown |
 | Companion suite | `src/gameTest/.../StrajaGameTests.java` (pre-existing tests, incl. `cellProtection`, `laborCampCustody`, `wantedLifecycle`) |
 
-## Acceptance tests 1–8
+## Acceptance tests 1–10
 
 | # | Scenario | GameTest | Proven live | Status |
 | --- | --- | --- | --- | --- |
@@ -34,6 +34,8 @@ synthetic fakes.
 | AT6 | Wanted on sight + hunt termination | `wantedOnSightArrestAndDenyRepel` | Seeded active BOLO → arrest on first contact at an `ARREST` gate regardless of inventory; wanted mark resolved at arrest; same wanted player at a `DENY` gate is repelled, not arrested; sighting logged | Pass |
 | AT7 | Labor camp exit + penal accounts | `laborCampExitConfiscation` | IN_CAMP prisoner repelled at camp exit gate; carried ore confiscated into the site's physical evidence chest; custody stays active | Pass (camp lifecycle — intake, dormitory respawn, labor buy-out — additionally proven by `laborCampCustody`) |
 | AT8 | Escort + handcuff tether | `escortBypassAndUncuffOutcome` | Officer cuffs prisoner; suspect cannot sprint while cuffed; escorted suspect passes a `PRISONER`-ban `DENY` gate beside the officer with no repel; uncuff inside the assigned cell restores `IN_CELL`; re-cuff + uncuff outside custody marks `FUGITIVE` | Pass |
+| AT9 | State bounty + capture delivery (#231) | `bountyCaptureDelivery` | Inspector-posted bounty makes the target wanted-on-sight; a conscious target refuses the rope, a downed one accepts it (`bounty_capture` bound reason); dragging the captive through an `ARREST` gate resolves the bounty, pays the hunter and lands a 2× `IN_SENTENCE` bail fine | Pass |
+| AT10 | Prisoner debt: locker levy + release gate (#234–#237) | `debtGateAndContributions` | Arrest seizure pours the prisoner's coins into a real pool-chest locker; a jailer release runs the debt gate — the levy drains the locker oldest-first onto `paidAmount` (`LEVY` contributions audited), the over-threshold balance diverts to the default camp (`onBlocked=CAMP`, register `IN_CAMP`, sentence still `ACTIVE`); a third-party `debt pay` settles the remainder (`CONTRIBUTION` rows), both fines flip `PAID`, and the next release completes | Pass |
 
 ### Test-isolation notes (why a green run is trustworthy)
 
