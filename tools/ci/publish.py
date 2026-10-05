@@ -220,6 +220,21 @@ def _gh(args: list, token: str = None) -> str:
     return proc.stdout
 
 
+def _gh_upload_release_assets(repo: str, tag: str, files: list,
+                              attempts: int = 5, delay: float = 5.0):
+    """Upload release assets, retrying the transient 404 that
+    uploads.github.com returns while a freshly-created release propagates."""
+    for attempt in range(attempts):
+        try:
+            _gh(["release", "upload", tag] + files +
+                ["--repo", repo, "--clobber"])
+            return
+        except PublishError:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(delay * (2 ** attempt))
+
+
 def gh_release(repo: str, tag: str, token: str = None):
     """Return the release object for tag, or None."""
     try:
@@ -260,8 +275,7 @@ def gh_create_release(repo: str, tag: str, name: str, notes: str,
         have = {a["name"] for a in existing.get("assets", [])}
         missing = [f for f in files if os.path.basename(f) not in have]
         if missing:
-            _gh(["release", "upload", tag] + missing +
-                ["--repo", repo, "--clobber"])
+            _gh_upload_release_assets(repo, tag, missing)
         entry.remote_id = str(existing.get("id", ""))
         entry.url = f"https://github.com/{repo}/releases/tag/{tag}"
         entry.state = "noop"
@@ -277,8 +291,7 @@ def gh_create_release(repo: str, tag: str, name: str, notes: str,
         args.append("--latest")
     _gh(args)
     if files:
-        _gh(["release", "upload", tag] + files +
-            ["--repo", repo, "--clobber"])
+        _gh_upload_release_assets(repo, tag, files)
     rel = gh_release(repo, tag) or {}
     entry.remote_id = str(rel.get("id", ""))
     entry.url = f"https://github.com/{repo}/releases/tag/{tag}"
