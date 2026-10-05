@@ -40,7 +40,7 @@ from dataclasses import dataclass, field
 
 MODRINTH_API = "https://api.modrinth.com/v2"
 CURSEFORGE_API = "https://api.curseforge.com/v1"
-CURSEFORGE_GAME_ID = 432  # Minecraft
+CURSEFORGE_UPLOAD_API = "https://minecraft.curseforge.com/api"
 USER_AGENT = "straja-mod release pipeline (github.com/DurdeuVlad/straja-mod)"
 
 RC_TAG_RE = re.compile(r"^v((0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*))-rc\.([1-9]\d*)$")
@@ -106,7 +106,8 @@ def _http(url: str, *, token: str = None, token_header: str = "Authorization",
     if headers:
         req_headers.update(headers)
     if token:
-        req_headers[token_header] = f"{token_prefix} {token}"
+        req_headers[token_header] = f"{token_prefix} {token}" \
+            if token_prefix else token
     req = urllib.request.Request(url, data=body, method=method,
                                  headers=req_headers)
     try:
@@ -438,16 +439,12 @@ def modrinth_promote(project_id: str, token: str, rc_tag: str,
 # ---------------------------------------------------------------------------
 # CurseForge
 
-def cf_headers(token: str) -> dict:
-    return {"X-Api-Token": token}
-
-
 def curseforge_files(project_id: str, token: str) -> list:
     out, index = [], 0
     while True:
         page = _http(f"{CURSEFORGE_API}/mods/{project_id}/files"
                      f"?index={index}&pageSize=50",
-                     token=token, token_header="X-Api-Token",
+                     token=token, token_header="x-api-key",
                      token_prefix="")
         data = page.get("data", []) if isinstance(page, dict) else page
         if not data:
@@ -478,23 +475,21 @@ def _cf_match(files: list, jar_name: str, hashes: dict):
 
 
 def cf_game_version_ids(token: str, names: list) -> list:
-    """Resolve game-version names (e.g. '1.21.1', 'NeoForge') to CurseForge
-    version ids via the game version-types + versions endpoints."""
-    types = _http(f"{CURSEFORGE_API}/games/{CURSEFORGE_GAME_ID}/version-types",
-                  token=token, token_header="X-Api-Token", token_prefix="")
+    """Resolve game-version names (e.g. '1.21.1', 'NeoForge', 'Client') to
+    CurseForge version ids via the upload API's own catalogue — it covers
+    every type (MC versions, modloaders, environments) without needing a
+    per-type slug whitelist like the Core API does."""
+    versions = _http(f"{CURSEFORGE_UPLOAD_API}/game/versions?cache=true",
+                     token=token, token_header="X-Api-Token",
+                     token_prefix="")
+    if not isinstance(versions, list):
+        raise PublishError("CurseForge game versions: unexpected payload")
     wanted, ids = set(names), []
     resolved = set()
-    for vt in types.get("data", []):
-        slug = vt.get("slug", "")
-        if not any(n.lower() in slug for n in ("minecraft", "modloader")):
-            continue
-        vers = _http(f"{CURSEFORGE_API}/games/{CURSEFORGE_GAME_ID}/versions"
-                     f"?versionTypeIds={vt['id']}",
-                     token=token, token_header="X-Api-Token", token_prefix="")
-        for v in vers.get("data", []):
-            if v.get("name") in wanted:
-                ids.append(v["id"])
-                resolved.add(v["name"])
+    for v in versions:
+        if v.get("name") in wanted:
+            ids.append(v["id"])
+            resolved.add(v["name"])
     missing = wanted - resolved
     if missing:
         raise PublishError(
@@ -539,7 +534,8 @@ def curseforge_publish(project_id: str, token: str, tag: str, name: str,
                 "releaseType": release_type}
     body, ctype = _multipart({"metadata": json.dumps(metadata)},
                              "file", jar)
-    created = _http(f"{CURSEFORGE_API}/mods/{project_id}/files",
+    created = _http(f"{CURSEFORGE_UPLOAD_API}/projects/{project_id}"
+                    f"/upload-file",
                     token=token, token_header="X-Api-Token",
                     token_prefix="", method="POST", body=body,
                     headers={"Content-Type": ctype})
