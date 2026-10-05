@@ -275,7 +275,10 @@ def gh_create_release(repo: str, tag: str, name: str, notes: str,
         args.append("--prerelease")
     if latest:
         args.append("--latest")
-    _gh(args + files)
+    _gh(args)
+    if files:
+        _gh(["release", "upload", tag] + files +
+            ["--repo", repo, "--clobber"])
     rel = gh_release(repo, tag) or {}
     entry.remote_id = str(rel.get("id", ""))
     entry.url = f"https://github.com/{repo}/releases/tag/{tag}"
