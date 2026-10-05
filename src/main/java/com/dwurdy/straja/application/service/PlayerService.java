@@ -70,6 +70,7 @@ public class PlayerService implements com.dwurdy.straja.application.port.in.Play
 
     /** UUID wins over name; debug override wins in local/test mode only. */
     public boolean isCommissioner(String name, UUID uuid) {
+        if (debugCommissionerOverride(uuid)) return true;
         PersonnelRecord v2Record = v2Record(uuid);
         if (v2Record != null) {
             return v2Record.active()
@@ -88,14 +89,17 @@ public class PlayerService implements com.dwurdy.straja.application.port.in.Play
         return player != null && isConfiguredCommissioner(player.name(), player.uuid());
     }
 
-    private boolean isConfiguredCommissioner(String name, UUID uuid) {
+    private boolean debugCommissionerOverride(UUID uuid) {
         var policies = ctx.policies();
         var test = ctx.test().read();
-        if (policies.debugEnabled && policies.isLocalEnvironment()
+        return policies.debugEnabled && policies.isLocalEnvironment()
                 && policies.debugAllowCommissionerOverride
-                && uuid != null && uuid.toString().equals(test.debugCommissionerUuid)) {
-            return true;
-        }
+                && uuid != null && uuid.toString().equals(test.debugCommissionerUuid);
+    }
+
+    private boolean isConfiguredCommissioner(String name, UUID uuid) {
+        var policies = ctx.policies();
+        if (debugCommissionerOverride(uuid)) return true;
         String configuredUuid = canon(policies.commissionerUuid);
         String configuredName = canon(policies.commissionerName);
         String playerUuid = uuid == null ? "" : uuid.toString();
