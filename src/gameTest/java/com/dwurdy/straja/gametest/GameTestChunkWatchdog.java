@@ -111,6 +111,12 @@ public final class GameTestChunkWatchdog {
         arm(level);
     }
 
+    /** Same arming for the isolated AT11 batch (see LawAcceptanceGameTests). */
+    @BeforeBatch(batch = "protocolAt11")
+    public static void armProtocolAt11BatchWatchdog(ServerLevel level) {
+        arm(level);
+    }
+
     private static void arm(ServerLevel level) {
         ensureTickerRegistered();
         armedLevel = level;
