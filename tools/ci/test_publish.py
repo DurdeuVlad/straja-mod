@@ -188,7 +188,7 @@ class CurseForgeTests(unittest.TestCase):
     def test_uploads_when_absent(self):
         fake = FakeHttp({"/files": {"data": []},
                          "version-types": {"data": []},
-                         "/mods/p/files": {"id": 42}})
+                         "/upload-file": {"id": 42}})
         with mock.patch.object(pub, "_http", fake):
             e = pub.curseforge_publish("p", "tok", "v0.2.0-rc.1", "Straja",
                                        "beta", self.jar, ["123"],
@@ -212,7 +212,7 @@ class CurseForgeTests(unittest.TestCase):
         so a new upload is correct (CF allows multiple files per name)."""
         files = {"data": [{"id": 7, "fileName": "straja-0.2.0.jar",
                            "hashes": [{"algo": 1, "value": "0" * 40}]}]}
-        fake = FakeHttp({"/files": files, "/mods/p/files": {"id": 9}})
+        fake = FakeHttp({"/files": files, "/upload-file": {"id": 9}})
         with mock.patch.object(pub, "_http", fake):
             e = pub.curseforge_publish("p", "tok", "v0.2.0", "S",
                                        "release", self.jar, ["5"],
