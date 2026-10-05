@@ -42,7 +42,11 @@
       "name": "spawn-receptionist",
       "type": "rcon",
       "setup": true,
-      "command": "straja npc spawn receptionist {px} {py} {pz}"
+      "command": "straja npc spawn receptionist {px} {py} {pz}",
+      "capture": {
+        "name": "receptionist_uuid",
+        "regex": "creat: ([0-9a-f-]{36})"
+      }
     },
     {
       "name": "interact-receptionist",
@@ -150,6 +154,11 @@
     }
   ],
   "cleanup": [
+    {
+      "name": "remove-receptionist",
+      "type": "rcon",
+      "command": "straja npc remove {receptionist_uuid}"
+    },
     {
       "name": "reset",
       "type": "rcon",

@@ -77,6 +77,26 @@ class PlayerServiceTest {
     }
 
     @Test
+    void debugOverrideWinsWhenV2RecordExists() {
+        // quiz-form enrollment leaves an authorized V2 record without a
+        // commissioner appointment; the local debug override must still win.
+        TestPlayer p = server.add("tester");
+        var people = new com.dwurdy.straja.adapter.out.persistence.SavedStores.Personnel(
+                name -> new com.dwurdy.straja.support.MemoryStore());
+        var personnel = new PersonnelService(people, new FixedClock(0), new Fakes.SeqIds());
+        personnel.authorize("bootstrap", p.uuid().toString(),
+                com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STAGIAR,
+                com.dwurdy.straja.domain.model.EmploymentMode.PART_TIME,
+                "TEST", "hq", "auth:tester");
+        players.useV2Authority(personnel,
+                new AuthorizationService(people, new FixedClock(0)));
+        var test = ctx.test().read();
+        test.debugCommissionerUuid = p.uuid().toString();
+        ctx.test().write(test);
+        assertTrue(players.isCommissioner(p));
+    }
+
+    @Test
     void explicitGateOptOutRestoresNameFallback() {
         policies.environment = "production";
         policies.requireCommissionerUuidOutsideLocal = false;
