@@ -814,11 +814,25 @@ def create_client(mct: Mct, manifest: dict, jar_path: str,
     # a second client (client2) wraps the same manifest but needs its own
     # instance and account or `client launch` reports INSTANCE_NOT_FOUND.
     name = mct.client
-    raw = mct.json(["client", "create", name,
-                    "--loader", client["loader"],
-                    "--version", client["minecraftVersion"],
-                    "--account", account or client["account"],
-                    "--java", client.get("java", "java")], timeout=900)
+    # mct's node launcher can die mid-provision (observed on CI: process
+    # exits 1 with a MaxListenersExceededWarning burst, before any instance
+    # state is committed). `client create` is idempotent — mkdir(recursive)
+    # + overwrite of the instance meta — so one clean retry is safe.
+    raw = None
+    for attempt in (1, 2):
+        try:
+            raw = mct.json(["client", "create", name,
+                            "--loader", client["loader"],
+                            "--version", client["minecraftVersion"],
+                            "--account", account or client["account"],
+                            "--java", client.get("java", "java")], timeout=900)
+            break
+        except ClientUiError as exc:
+            if attempt == 2 or exc.kind != "process":
+                raise
+            mct.transcript.record(
+                "client-create-retry",
+                f"client create died in mct ({exc.message[:160]}); retrying once")
     # MC Pilot's JSON command returns a success envelope, while older/local
     # adapters may return the payload directly. Keep this boundary tolerant
     # so the rest of the harness only deals with the client-create payload.
