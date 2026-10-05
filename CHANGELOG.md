@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+## 0.3.1 — 2026-10-05
+
+Patch release: tester-protocol onboarding and release-pipeline fixes over
+0.3.0.
+
+### Tester protocol onboarding
+
+- `/straja protocol` no longer requires a `serverconfig` edit: operators
+  (or the singleplayer host with cheats on) and commissioners can run it
+  in-game; `protocol.enabled` remains only as the opt-in for non-op
+  testers on dedicated servers
+- `protocol start` auto-provisions missing LAW fixtures around the tester
+  as pure store records — a DENY walk-through gate (`protocol_gate`), an
+  ARREST intake lane (`protocol_intake`), a cell (`protocol_cell`), and a
+  labor camp (`protocol_camp`). Provisioned worlds are left untouched
+- Chapter books resolve `{gate}`/`{intake}` to the live site name and
+  coordinates so the invisible bounds stay findable
+
+### Release pipeline
+
+- GitHub releases are created before assets upload — inline asset upload
+  on a fresh release raced `uploads.github.com` and rolled the release
+  back
+- CurseForge game-version resolution is constrained to file-applicable
+  type categories (minecraft/modloader/environment/java), fixing the
+  invalid-dependency upload failure
+
 ## 0.3.0 — 2026-10-05
 
 Targets Minecraft 1.21.1 on NeoForge 21.1.x (built against 21.1.252).
