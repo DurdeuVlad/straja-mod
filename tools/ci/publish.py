@@ -41,6 +41,10 @@ from dataclasses import dataclass, field
 MODRINTH_API = "https://api.modrinth.com/v2"
 CURSEFORGE_API = "https://api.curseforge.com/v1"
 CURSEFORGE_UPLOAD_API = "https://minecraft.curseforge.com/api"
+# CurseForge's public read key — the same demo key mc-publish embeds for
+# Core-API reads. Upload tokens are UUID-format and get 403 on the Core
+# API; file listings are public data, so this is the documented fallback.
+CURSEFORGE_READ_KEY = "$2a$10$QI/yeSnjiEZHZmFlmiJVI.2xmWYlPbkAXW8rQ.xM65vktAssaJpmi"
 USER_AGENT = "straja-mod release pipeline (github.com/DurdeuVlad/straja-mod)"
 
 RC_TAG_RE = re.compile(r"^v((0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*))-rc\.([1-9]\d*)$")
@@ -443,12 +447,12 @@ def modrinth_promote(project_id: str, token: str, rc_tag: str,
 # ---------------------------------------------------------------------------
 # CurseForge
 
-def curseforge_files(project_id: str, token: str) -> list:
+def _cf_files_with_key(project_id: str, key: str) -> list:
     out, index = [], 0
     while True:
         page = _http(f"{CURSEFORGE_API}/mods/{project_id}/files"
                      f"?index={index}&pageSize=50",
-                     token=token, token_header="x-api-key",
+                     token=key, token_header="x-api-key",
                      token_prefix="")
         data = page.get("data", []) if isinstance(page, dict) else page
         if not data:
@@ -458,6 +462,18 @@ def curseforge_files(project_id: str, token: str) -> list:
             break
         index += len(data)
     return out
+
+
+def curseforge_files(project_id: str, token: str) -> list:
+    """Project file listing via the Core API. Upload tokens (UUID format)
+    are rejected here, so fall back to CurseForge's public read key."""
+    last_error = None
+    for key in dict.fromkeys(k for k in (token, CURSEFORGE_READ_KEY) if k):
+        try:
+            return _cf_files_with_key(project_id, key)
+        except PublishError as exc:
+            last_error = exc
+    raise last_error
 
 
 def _cf_hashes(path: str) -> dict:
