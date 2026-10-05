@@ -732,7 +732,7 @@ jobs:
           if [ "${MODRINTH_ENABLED:-false}" = "true" ]; then
             LEDGERS="modrinth-ledger.json $LEDGERS"
           fi
-          python3 tools/ci/publish.py merge-ledger $LEDGERS \
+          python3 tools/ci/publish.py merge-ledger --ledgers $LEDGERS \
             --out publication-ledger.json
           python3 tools/ci/publish.py github \
             --repo "$GITHUB_REPOSITORY" --tag "$GITHUB_REF_NAME" \

@@ -166,7 +166,7 @@ jobs:
           for f in modrinth-ledger.json curseforge-ledger.json; do
             [ -f "$f" ] && LEDGERS="$LEDGERS $f"
           done
-          python3 tools/ci/publish.py merge-ledger $LEDGERS \
+          python3 tools/ci/publish.py merge-ledger --ledgers $LEDGERS \
             --out publication-ledger.json 2>/dev/null || \
             echo '{"entries":[]}' > publication-ledger.json
           # External steps must have succeeded (or dry-run) before the
