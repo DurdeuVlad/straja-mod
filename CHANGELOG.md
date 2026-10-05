@@ -2,6 +2,67 @@
 
 ## Unreleased
 
+## 0.3.0 — 2026-10-05
+
+Targets Minecraft 1.21.1 on NeoForge 21.1.x (built against 21.1.252).
+All persisted stores upgrade in place; no world migration is required
+over 0.2.0.
+
+### Law enforcement series (LAW-000 → LAW-008)
+
+- Full native port of the law-enforcement stack off the legacy KubeJS
+  layer into hexagonal application services with Gson-backed
+  `SavedStores` persistence
+- M2 checkpoint core: gate crossing ledger, contraband detection,
+  repel/deny flows, drop-off bookkeeping
+- M3 rules of the gate and M4 custody & escort: arrest, escort tethers,
+  cell assignment, locker seizure
+- M5 trade NPCs, M6 labor camps, M7 guard integration, M8 hardening and
+  migration tooling (`/straja migrate`)
+
+### Prisoner debt and bail
+
+- Fine ledger with `paidAmount` + pooled `contributions[]`; anyone may
+  chip in any amount, capped at the remainder, final
+- Locker levy: at release, camp transfer, or bail-set, coins are
+  extracted live inventory → locker chests → pending reservations,
+  oldest-first, with exact-change breaking and spill-never-void
+- Release gate: debt over `releaseBlockThreshold` blocks release
+  (`onBlocked = CAMP|CELL`); jailer-gated, commissioner/op bypass
+- `/straja debt`, `/straja debt pay`, `/straja bail`
+- Written-book notices at every key moment — levy receipt,
+  release-denial, transfer order, credit notice — queued for offline
+  players
+
+### State-issued bounty hunting
+
+- Inspector+/Comisar post bounties (`/straja bounty post|list|cancel`);
+  posting auto-issues a wanted-on-sight BOLO
+- Civilian capture: rope binds only a downed or surrendered
+  (`/straja surrender`) target; escort tether to checkpoint delivery
+- Hunter payout by the state; prisoner owes 2× bail payable by anyone;
+  unpaid after 24h → automatic labor-camp transfer
+
+### Guided tester protocol
+
+- `/straja protocol` — a nine-chapter acceptance dossier delivered as
+  written books, one step at a time, covering every player and admin
+  surface
+- `/straja protocol actor` summons "Suspectul", a joined fake player
+  (real player-list entry) that can be cuffed, arrested, roped,
+  escorted, and bountied — no second human needed
+- Per-tester progress persists across relog/restart; `next`/`back`/
+  `skip`/`reset` recovery controls; `[protocol]` config gate (off by
+  default — enable in test worlds only)
+
+### Hardening and docs
+
+- `GameTestChunkWatchdog`: works around a vanilla chunk-ticket race that
+  could stall the GameTest batch on cold worlds
+- Player and administrator quick-start guides (RO), refusal→remedy
+  denial sweep, audit/command surface tightening
+- Gradle 9.8.0; CI action bumps
+
 ## 0.2.0 — 2026-09-28
 
 Targets Minecraft 1.21.1 on NeoForge 21.1.x (built against 21.1.252;
