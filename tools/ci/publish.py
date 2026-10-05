@@ -494,22 +494,40 @@ def _cf_match(files: list, jar_name: str, hashes: dict):
     return None
 
 
+# Version-type slugs that are valid targets for a file's gameVersions
+# (mc-publish's categories minus the plugin/addon dependency-only types).
+CURSEFORGE_VERSION_TYPE_PREFIXES = ("minecraft", "modloader",
+                                    "environment", "java")
+
+
 def cf_game_version_ids(token: str, names: list) -> list:
     """Resolve game-version names (e.g. '1.21.1', 'NeoForge', 'Client') to
-    CurseForge version ids via the upload API's own catalogue — it covers
-    every type (MC versions, modloaders, environments) without needing a
-    per-type slug whitelist like the Core API does."""
+    CurseForge version ids via the upload API's own catalogue.
+
+    The catalogue holds every version under every type — including
+    dependency-only types that the upload endpoint rejects with
+    errorCode 1009 ("belongs to an invalid dependency"). Mirroring
+    mc-publish, constrain matches to the file-applicable type slugs and
+    take the first catalogue hit per requested name."""
+    types = _http(f"{CURSEFORGE_UPLOAD_API}/game/version-types?cache=true",
+                  token=token, token_header="X-Api-Token",
+                  token_prefix="")
     versions = _http(f"{CURSEFORGE_UPLOAD_API}/game/versions?cache=true",
                      token=token, token_header="X-Api-Token",
                      token_prefix="")
-    if not isinstance(versions, list):
+    if not isinstance(types, list) or not isinstance(versions, list):
         raise PublishError("CurseForge game versions: unexpected payload")
+    allowed = {t["id"] for t in types
+               if str(t.get("slug", "")).startswith(
+                   CURSEFORGE_VERSION_TYPE_PREFIXES)}
     wanted, ids = set(names), []
     resolved = set()
     for v in versions:
-        if v.get("name") in wanted:
+        name = v.get("name")
+        if name in wanted and name not in resolved \
+                and v.get("gameVersionTypeID") in allowed:
             ids.append(v["id"])
-            resolved.add(v["name"])
+            resolved.add(name)
     missing = wanted - resolved
     if missing:
         raise PublishError(

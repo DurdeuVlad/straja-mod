@@ -207,6 +207,38 @@ class CurseForgeTests(unittest.TestCase):
         self.assertEqual(e.state, "noop")
         self.assertFalse(any(m == "POST" for m, _ in fake.calls))
 
+    def test_game_version_ids_skip_dependency_types(self):
+        """Names that exist under dependency-only version types must not
+        resolve to those ids — CF rejects them with errorCode 1009."""
+        types = [{"id": 99999, "slug": "dependencies"},
+                 {"id": 75208, "slug": "environment"},
+                 {"id": 68441, "slug": "modloader"},
+                 {"id": 75125, "slug": "minecraft-1-20"}]
+        versions = [{"id": 12735, "name": "Client",
+                     "gameVersionTypeID": 99999},
+                    {"id": 9638, "name": "Client",
+                     "gameVersionTypeID": 75208},
+                    {"id": 10150, "name": "NeoForge",
+                     "gameVersionTypeID": 68441},
+                    {"id": 11494, "name": "1.21.1",
+                     "gameVersionTypeID": 75125}]
+        fake = FakeHttp({"/game/version-types": types,
+                         "/game/versions": versions})
+        with mock.patch.object(pub, "_http", fake):
+            ids = pub.cf_game_version_ids("tok", ["1.21.1", "NeoForge",
+                                                  "Client"])
+        self.assertEqual(ids, [9638, 10150, 11494])
+
+    def test_game_version_ids_unresolved_name_fails(self):
+        types = [{"id": 75208, "slug": "environment"}]
+        versions = [{"id": 9638, "name": "Client",
+                     "gameVersionTypeID": 75208}]
+        fake = FakeHttp({"/game/version-types": types,
+                         "/game/versions": versions})
+        with mock.patch.object(pub, "_http", fake):
+            with self.assertRaises(pub.PublishError):
+                pub.cf_game_version_ids("tok", ["BogusName"])
+
     def test_different_hash_same_name_uploads(self):
         """Same filename, different bytes -> the file genuinely differs,
         so a new upload is correct (CF allows multiple files per name)."""
