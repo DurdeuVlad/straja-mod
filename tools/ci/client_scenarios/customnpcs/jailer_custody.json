@@ -75,10 +75,10 @@
       "type": "mct",
       "args": [
         "chat", "history", "--last", "20",
-        "--match", "Nu ești încătușat.", "--wait", "10"
+        "--match", "You are not cuffed.", "--wait", "10"
       ],
       "timeout": 60,
-      "expect": [{"rawRegex": "Nu ești încătușat"}]
+      "expect": [{"rawRegex": "You are not cuffed"}]
     },
     {
       "name": "close-jailer-gui",

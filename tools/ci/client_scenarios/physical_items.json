@@ -42,7 +42,7 @@
     {"name": "gate-message", "type": "mct",
      "args": ["chat", "history", "--last", "20"],
      "timeout": 30,
-     "expect": [{"rawRegex": "rezervat"}]}
+     "expect": [{"rawRegex": "reserved"}]}
   ],
   "cleanup": [
     {"name": "reset", "type": "rcon",
