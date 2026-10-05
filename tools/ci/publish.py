@@ -106,6 +106,10 @@ def _http(url: str, *, token: str = None, token_header: str = "Authorization",
     if headers:
         req_headers.update(headers)
     if token:
+        # Secrets pasted through `gh secret set` can carry trailing
+        # whitespace/newlines; CurseForge's upload API rejects such tokens as
+        # malformed rather than merely invalid.
+        token = token.strip()
         req_headers[token_header] = f"{token_prefix} {token}" \
             if token_prefix else token
     req = urllib.request.Request(url, data=body, method=method,
