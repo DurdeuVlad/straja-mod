@@ -283,8 +283,8 @@ public final class StrajaCommands {
                 .executes(c -> player(c, p -> StrajaRuntime.get().debt()
                         .showDebt(p, StringArgumentType.getString(c, "player")))));
         root.then(debt);
-        // #242: guided tester protocol — permission-0, config-gated
-        // (protocol.enabled); a tester-build surface that walks every feature.
+        // #242: guided tester protocol — permission-0 node; the service gate
+        // allows ops/cheats-on, commissioners, or protocol.enabled testers.
         var protocol = Commands.literal("protocol");
         protocol.executes(c -> player(c, StrajaRuntime.get().protocol()::status));
         protocol.then(Commands.literal("start")

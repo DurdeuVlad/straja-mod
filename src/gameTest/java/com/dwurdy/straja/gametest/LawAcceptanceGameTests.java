@@ -5,10 +5,12 @@ import com.dwurdy.straja.adapter.out.minecraft.MinecraftPlayerGateway;
 import com.dwurdy.straja.bootstrap.StrajaRuntime;
 import com.dwurdy.straja.domain.model.BoloRecord;
 import com.dwurdy.straja.domain.model.BoloStatus;
+import com.dwurdy.straja.domain.model.Cell;
 import com.dwurdy.straja.domain.model.CheckpointMode;
 import com.dwurdy.straja.domain.model.CrossingOutcome;
 import com.dwurdy.straja.domain.model.InspectionLedgerEntry;
 import com.dwurdy.straja.domain.model.ItemSpec;
+import com.dwurdy.straja.domain.model.LaborCampRecord;
 import com.dwurdy.straja.domain.model.LawBounds;
 import com.dwurdy.straja.domain.model.LawCheckpointRecord;
 import com.dwurdy.straja.domain.model.PrisonerRegisterRecord;
@@ -1537,6 +1539,38 @@ public final class LawAcceptanceGameTests {
         policies.protocolEnabled = true;
         try {
             purgeStaleFixtures(runtime, helper);
+            // Pre-seeded fixtures keep the start-scaffold a no-op — otherwise
+            // protocol_* boxes land around the tester and can overlap a
+            // concurrently-running neighbor batch's site bounds.
+            String fixtureDim = helper.getLevel().dimension().location().toString();
+            var seededSites = runtime.context().lawCheckpoints().read();
+            var denySite = new LawCheckpointRecord();
+            denySite.id = "at11_gate";
+            denySite.dimension = fixtureDim;
+            denySite.mode = CheckpointMode.DENY;
+            denySite.stage1 = LawBounds.of(fixtureDim, 0, -2000, 0, 1, -1998, 1);
+            var arrestSite = new LawCheckpointRecord();
+            arrestSite.id = "at11_intake";
+            arrestSite.dimension = fixtureDim;
+            arrestSite.mode = CheckpointMode.ARREST;
+            arrestSite.stage1 = LawBounds.of(fixtureDim, 0, -2000, 4, 1, -1998, 5);
+            seededSites.put(denySite);
+            seededSites.put(arrestSite);
+            runtime.context().lawCheckpoints().write(seededSites);
+            var seededPrison = runtime.context().prison().read();
+            var cell = new Cell();
+            cell.id = "at11_cell";
+            cell.dimension = fixtureDim;
+            seededPrison.cells.add(cell);
+            runtime.context().prison().write(seededPrison);
+            var seededCamps = runtime.context().laborCamps().read();
+            var camp = new LaborCampRecord();
+            camp.id = "at11_camp";
+            camp.dimension = fixtureDim;
+            camp.boundary = LawBounds.of(fixtureDim, 0, -2000, 8, 4, -1996, 12);
+            seededCamps.put(camp);
+            runtime.context().laborCamps().write(seededCamps);
+
             ServerPlayer tester = mockPlayer(helper);
             var gw = gateway(tester);
 
@@ -1599,6 +1633,10 @@ public final class LawAcceptanceGameTests {
             helper.succeed();
         } finally {
             policies.protocolEnabled = wasEnabled;
+            removeSite(runtime, "at11_gate");
+            removeSite(runtime, "at11_intake");
+            removeCell(runtime, "at11_cell");
+            removeCamp(runtime, "at11_camp");
             // belt-and-braces: drop a leftover suspect if an assert failed mid-run
             purgeStaleFixtures(runtime, helper);
         }

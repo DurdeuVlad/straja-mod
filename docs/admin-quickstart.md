@@ -209,11 +209,19 @@ Tu (Comisarul) vezi cererea în inbox și o aprobi. Detalii complete:
 
 ## 6. Predarea unui build unui tester
 
-Setează `protocol.enabled = true` în `config/straja-server.toml` — doar pe
-lumea de test, nu în producție (protocolul acordă rang de ofițer și invocă un
-suspect fals). Testerul rulează `/straja protocol start` și este ghidat prin
-toate suprafețele: checkpoint, amendă, carieră, arest, datorie, vânătoare,
-administrație. Primește cărți scrise cu pași și rezultate așteptate, iar
-progresul se păstrează la relog. Opțional: protocolul își spawnează un
-suspect fals («Suspectul») pentru capitolele de arest și vânătoare —
-dismis automat la final.
+Testerul are nevoie doar de drepturi de operator (OP pe server, sau cheats
+pornit în singleplayer) — **nu este nevoie de editări de config**. La
+`/straja protocol start` protocolul își construiește singur fixture-urile
+lipsă din jurul testerului: o poartă civilă (`protocol_gate`, mod DENY), o
+poartă de arest (`protocol_intake`, mod ARREST), o celulă (`protocol_cell`)
+și un lagăr (`protocol_camp`) — doar dacă dimensiunea nu are deja echivalente.
+Pe o lume deja provisionată nu se adaugă nimic. Pentru a deschide protocolul
+și testerilor fără OP, `protocol.enabled = true` în
+`config/straja-server.toml` — doar pe lumea de test, nu în producție
+(protocolul acordă rang de ofițer și invocă un suspect fals).
+
+Testerul este ghidat prin toate suprafețele: checkpoint, amendă, carieră,
+arest, datorie, vânătoare, administrație. Primește cărți scrise cu pași și
+rezultate așteptate, iar progresul se păstrează la relog. Suspectul fals
+(«Suspectul») e demis automat la final; fixture-urile `protocol_*` rămân
+(idempotente) — le poți șterge manual după sesiune.

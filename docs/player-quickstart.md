@@ -101,11 +101,13 @@ neachitat în termen → **lagărul de muncă**.
 ## Ești tester? Protocolul ghidat
 
 Pe build-urile de test există **`/straja protocol`** — un dosar oficial care
-te ghidează pas cu pas prin fiecare suprafață a modului. Rulează
-**`/straja protocol start`**: primești dosarul și, capitol cu capitol,
-cărți scrise cu pași exacți și rezultate așteptate — checkpoint, amendă,
-carieră, arestul unui suspect fals invocat de protocol, datorie, vânătoare,
-administrație. Progresul se păstrează la relog.
+te ghidează pas cu pas prin fiecare suprafață a modului. Trebuie să ai drepturi
+de operator (OP pe server, sau cheats pornit în singleplayer) — **fără editări
+de config**. Rulează **`/straja protocol start`**: protocolul pregătește singur
+ce lipsește (poartă de test, celulă, lagăr) în jurul tău, apoi primești dosarul
+și, capitol cu capitol, cărți scrise cu pași exacți și rezultate așteptate —
+checkpoint, amendă, carieră, arestul unui suspect fals invocat de protocol,
+datorie, vânătoare, administrație. Progresul se păstrează la relog.
 
 - `/straja protocol` — status și capitolul curent
 - `/straja protocol next` / `back` — avansează / recitește capitolul
