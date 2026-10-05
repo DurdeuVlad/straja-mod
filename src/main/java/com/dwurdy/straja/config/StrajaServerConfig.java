@@ -653,8 +653,9 @@ public final class StrajaServerConfig {
         PROTOCOL_ENABLED = B.comment(
                         "Guided tester protocol (/straja protocol): a written-book",
                         "walkthrough of every mod surface with a spawned mock suspect.",
-                        "Grants the tester officer rank mid-run — OFF by default;",
-                        "enable it only in tester builds.")
+                        "Operators (or the singleplayer host with cheats on) and",
+                        "commissioners can always run it; this flag additionally",
+                        "opens it to non-op testers on a dedicated server.")
                 .define("enabled", false);
         PROTOCOL_ACTOR_NAME = B.comment(
                         "Display name of the fake suspect the protocol spawns.")

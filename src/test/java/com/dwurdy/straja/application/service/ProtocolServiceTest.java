@@ -5,6 +5,11 @@ import com.dwurdy.straja.application.StrajaContext;
 import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.domain.model.BountyStatus;
 import com.dwurdy.straja.domain.model.BountyRecord;
+import com.dwurdy.straja.domain.model.Cell;
+import com.dwurdy.straja.domain.model.CheckpointMode;
+import com.dwurdy.straja.domain.model.LaborCampRecord;
+import com.dwurdy.straja.domain.model.LawBounds;
+import com.dwurdy.straja.domain.model.LawCheckpointRecord;
 import com.dwurdy.straja.domain.model.Rank;
 import com.dwurdy.straja.support.Fakes;
 import com.dwurdy.straja.support.Fakes.*;
@@ -73,6 +78,80 @@ class ProtocolServiceTest {
         protocol.start(tester);
         assertTrue(tester.messages.contains("straja.protocol.disabled"));
         assertNull(repo.read().find(tester.uuid().toString()));
+    }
+
+    @Test
+    void operatorBypassesConfigGate() {
+        ctx.policies().protocolEnabled = false;
+        tester.op = true;
+        protocol.start(tester);
+        assertNotNull(repo.read().find(tester.uuid().toString()));
+        assertFalse(tester.messages.contains("straja.protocol.disabled"));
+    }
+
+    @Test
+    void scaffoldsFixturesOnFreshWorld() {
+        protocol.start(tester);
+        var sites = ctx.lawCheckpoints().read();
+        var gate = sites.checkpoint("protocol_gate");
+        assertNotNull(gate);
+        assertEquals(CheckpointMode.DENY, gate.mode);
+        assertNotNull(gate.stage1);
+        assertNotNull(gate.stage2);
+        assertNotNull(gate.pushback);
+        var intake = sites.checkpoint("protocol_intake");
+        assertNotNull(intake);
+        assertEquals(CheckpointMode.ARREST, intake.mode);
+        assertNotNull(ctx.prison().read().cell("protocol_cell"));
+        var camp = ctx.laborCamps().read().camp("protocol_camp");
+        assertNotNull(camp);
+        assertNotNull(camp.intakeSpawn);
+        assertNotNull(camp.releaseSpawn);
+        assertNotNull(camp.dormitorySpawn);
+        assertTrue(tester.messages.stream()
+                .anyMatch(m -> m.contains("straja.protocol.fixtures")));
+        // second start re-issues the dossier without re-scaffolding
+        protocol.start(tester);
+        assertEquals(2, ctx.lawCheckpoints().read().checkpoints().size());
+    }
+
+    @Test
+    void scaffoldKeepsProvisionedWorld() {
+        String dim = tester.dimension();
+        var sites = ctx.lawCheckpoints().read();
+        var deny = new LawCheckpointRecord();
+        deny.id = "real_gate";
+        deny.dimension = dim;
+        deny.mode = CheckpointMode.DENY;
+        deny.stage1 = LawBounds.of(dim, 100, 60, 0, 104, 63, 4);
+        var arrest = new LawCheckpointRecord();
+        arrest.id = "real_intake";
+        arrest.dimension = dim;
+        arrest.mode = CheckpointMode.ARREST;
+        arrest.stage1 = LawBounds.of(dim, 100, 60, 10, 104, 63, 14);
+        sites.put(deny);
+        sites.put(arrest);
+        ctx.lawCheckpoints().write(sites);
+        var prisonData = ctx.prison().read();
+        var cell = new Cell();
+        cell.id = "real_cell";
+        cell.dimension = dim;
+        prisonData.cells.add(cell);
+        ctx.prison().write(prisonData);
+        var camps = ctx.laborCamps().read();
+        var camp = new LaborCampRecord();
+        camp.id = "real_camp";
+        camp.dimension = dim;
+        camps.put(camp);
+        ctx.laborCamps().write(camps);
+
+        protocol.start(tester);
+        assertNull(ctx.lawCheckpoints().read().checkpoint("protocol_gate"));
+        assertNull(ctx.lawCheckpoints().read().checkpoint("protocol_intake"));
+        assertNull(ctx.prison().read().cell("protocol_cell"));
+        assertNull(ctx.laborCamps().read().camp("protocol_camp"));
+        assertTrue(tester.messages.stream()
+                .noneMatch(m -> m.contains("straja.protocol.fixtures")));
     }
 
     @Test

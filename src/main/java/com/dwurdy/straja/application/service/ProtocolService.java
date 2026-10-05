@@ -3,11 +3,20 @@ package com.dwurdy.straja.application.service;
 import com.dwurdy.straja.application.StrajaContext;
 import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.application.port.out.ProtocolRepository;
+import com.dwurdy.straja.domain.model.Cell;
+import com.dwurdy.straja.domain.model.CheckpointMode;
+import com.dwurdy.straja.domain.model.CrossingDirection;
 import com.dwurdy.straja.domain.model.Fine;
 import com.dwurdy.straja.domain.model.FineStore;
 import com.dwurdy.straja.domain.model.ItemSpec;
+import com.dwurdy.straja.domain.model.LaborCampRecord;
+import com.dwurdy.straja.domain.model.LawBounds;
+import com.dwurdy.straja.domain.model.LawCheckpointRecord;
+import com.dwurdy.straja.domain.model.LawCheckpointStore;
 import com.dwurdy.straja.domain.model.ProtocolStore;
+import com.dwurdy.straja.domain.model.PushbackPoint;
 import com.dwurdy.straja.domain.model.Rank;
+import com.dwurdy.straja.domain.model.StoragePoint;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -24,8 +33,10 @@ import java.util.UUID;
  * tester paying the suspect's debt directly), and a joined fake player —
  * {@link ActorSpawner} — plays the suspect for the custody and bounty
  * chapters. Everything the protocol grants is test-build material: coins
- * minted for the kit, a fake suspect, a rank grant — which is why the whole
- * surface sits behind {@code protocol.enabled} (default off).
+ * minted for the kit, a fake suspect, a rank grant — which is why the
+ * surface needs operator rights (or {@code protocol.enabled} for non-op
+ * testers). {@link #ensureFixtures} provisions a missing gate/cell/camp
+ * around the tester, so a fresh world needs no manual setup.
  *
  * <p>Hooks run once per chapter per tester (the {@code hooksDone} bitmask):
  * re-reading a chapter via {@code back} + {@code next} never re-issues a
@@ -95,6 +106,7 @@ public final class ProtocolService {
             issueCurrent(tester, entry.chapter);
             return;
         }
+        ensureFixtures(tester);
         entry = store.enroll(uuid(tester), tester.name(), now());
         repo.write(store);
         audit.record("protocol_start", tester.name(), uuid(tester), "", "", "OK",
@@ -227,7 +239,7 @@ public final class ProtocolService {
                             "Dacă un pas nu produce rezultatul așteptat, notează comanda + ce s-a întâmplat.\n\n☑ Gata? §l/straja protocol next"}),
             new Chapter("Punctul de trecere", "Testează filtrul de la checkpoint.", Hook.NONE,
                     new String[]{
-                            "1. Du-te la un checkpoint și treci cu inventarul curat.\n\n→ Trecerea e acceptată (PASS); o înregistrare nouă apare în registru.",
+                            "1. Du-te la {gate} și treci cu inventarul curat.\n\n→ Trecerea e acceptată (PASS); o înregistrare nouă apare în registru.",
                             "2. Pune în inventar un obiect interzis (armă, obiect confiscabil) și treci din nou.\n\n→ Ești respins (DENY); obiectul e confiscat sau returnat la nava de depozitare.",
                             "3. Verifică registrul inspecțiilor.\n\n→ Cele două treceri apar ca PASS și DENY, cu snapshot de inventar.\n\n☑ Gata? §l/straja protocol next"}),
             new Chapter("Amenda", "Primești și achiți o amendă.", Hook.FINE_TESTER,
@@ -244,18 +256,18 @@ public final class ProtocolService {
                     new String[]{
                             "Un suspect fals — «{actor}» — a apărut lângă tine, și ai primit sculele de reținere: funie, cătușe, sac de cap. (Ai pierdut suspectul? /straja protocol actor îl cheamă din nou.)",
                             "1. Leagă {actor} cu funia (click dreapta pe el).\n\n→ Suspectul e legat; funia mușcă doar pe ținte doborâte sau predate — capitolul următor o demonstrează.",
-                            "2. Trage-l printr-un checkpoint de arest.\n\n→ La poartă, {actor} e arestat automat: dosar de reținere, inventar confiscat în lăzi, celulă.\n\n☑ Gata? §l/straja protocol next"}),
+                            "2. Trage-l prin {intake}.\n\n→ La poartă, {actor} e arestat automat: dosar de reținere, inventar confiscat în lăzi, celulă.\n\n☑ Gata? §l/straja protocol next"}),
             new Chapter("Datoria", "Urmărește levierul și plata datoriei.", Hook.FINE_ACTOR,
                     new String[]{
                             "Suspectul a primit o amendă de " + SUSPECT_FINE + " și are monede în inventar — la arestare, statul i le sechestrează pentru datorie.",
-                            "1. Predă pe {actor} din nou la checkpoint dacă a scăpat.\n\n→ Levierul golește monedele lui mai întâi către amendă; primește o carte-chitanță.",
+                            "1. Predă pe {actor} din nou la {intake} dacă a scăpat.\n\n→ Levierul golește monedele lui mai întâi către amendă; primește o carte-chitanță.",
                             "2. Interoghează: §l/straja debt {actor}§r — vezi soldul și contribuțiile.\n\n3. Contribuie ca „un prieten”: §l/straja debt pay {actor} 50§r (ai primit monede).\n\n→ Plata ta apare în ledger; {actor} e înștiințat printr-o carte.",
                             "4. Eliberează-l din celulă.\n\n→ Dacă datoria trece de prag, eliberarea e blocată — transfer la lagăr sau refuz, cu „Refuz de eliberare” primit.\n\n☑ Gata? §l/straja protocol next"}),
             new Chapter("Vânătoarea", "Pune o recompensă și livrează fugarul.", Hook.PREP_BOUNTY,
                     new String[]{
                             "Suspectul a fost eliberat și marcat predat — e pregătit pentru vânătoare.",
                             "1. Postează: §l/straja bounty post {actor} " + BOUNTY_SUGGESTED + " \"test protocol\"§r\n\n→ Recompensa e activă și apare un BOLO legat (wanted-on-sight).",
-                            "2. Leagă pe {actor} cu funia — e „predat” pentru 2 minute.\n\n3. Trage-l prin checkpoint.\n\n→ Arestul la vedere îl predă; statul te plătește recompensa (mesaj de încasare).",
+                            "2. Leagă pe {actor} cu funia — e „predat” pentru 2 minute.\n\n3. Trage-l prin {intake}.\n\n→ Arestul la vedere îl predă; statul te plătește recompensa (mesaj de încasare).",
                             "4. {actor} datorează cauțiune 2× — oricine o plătește cu §l/straja bail {actor}§r. Neachitată 24h → lagăr de muncă.\n\n☑ Gata? §l/straja protocol next"}),
             new Chapter("Comisia", "Parcurge suprafețele de administrare.", Hook.NONE,
                     new String[]{
@@ -393,13 +405,135 @@ public final class ProtocolService {
         ctx.prisonerRegister().write(register);
     }
 
+    // ------------------------------------------------------------ fixtures
+
+    private static final String SITE_GATE = "protocol_gate";
+    private static final String SITE_INTAKE = "protocol_intake";
+    private static final String CELL_ID = "protocol_cell";
+    private static final String CAMP_ID = "protocol_camp";
+
+    /**
+     * Zero-chore provisioning, run once at enrollment: whatever LAW fixture
+     * the tester's dimension lacks, the protocol lays out around the tester —
+     * a DENY walk-through gate (chapter 2's border crossing), an ARREST
+     * intake lane (suspect delivery), a cell, and a labor camp. Pure store
+     * records — the crossing pipeline is position-scanned, so no physical
+     * structure is needed. A world that already has a working fixture of a
+     * kind keeps it; nothing protocol_* is added.
+     */
+    private void ensureFixtures(PlayerGateway tester) {
+        String dim = tester.dimension();
+        int ax = (int) Math.floor(tester.x());
+        int ay = (int) Math.floor(tester.y());
+        int az = (int) Math.floor(tester.z());
+        List<String> built = new ArrayList<>();
+
+        LawCheckpointStore sites = ctx.lawCheckpoints().read();
+        boolean sitesDirty = false;
+        if (sites.checkpoint(SITE_GATE) == null && findSite(sites, dim, false) == null) {
+            sites.put(siteRecord(SITE_GATE, "Poarta de test", dim,
+                    CheckpointMode.DENY, ax, ay, az, 0));
+            sitesDirty = true;
+            built.add(SITE_GATE + " §7(poartă civilă, ~4m est)");
+        }
+        if (sites.checkpoint(SITE_INTAKE) == null && findSite(sites, dim, true) == null) {
+            sites.put(siteRecord(SITE_INTAKE, "Poarta de arest", dim,
+                    CheckpointMode.ARREST, ax, ay, az, 7));
+            sitesDirty = true;
+            built.add(SITE_INTAKE + " §7(preluare suspecți, ~4m est, banda nord)");
+        }
+        if (sitesDirty) ctx.lawCheckpoints().write(sites);
+
+        var prisonData = ctx.prison().read();
+        boolean hasCell = prisonData.cells.stream()
+                .anyMatch(c -> c != null && dim.equals(c.dimension));
+        if (!hasCell && prisonData.cell(CELL_ID) == null) {
+            var cell = new Cell();
+            cell.id = CELL_ID;
+            cell.dimension = dim;
+            cell.minX = ax - 9; cell.maxX = ax - 7;
+            cell.minY = ay - 1; cell.maxY = ay + 2;
+            cell.minZ = az - 3; cell.maxZ = az - 1;
+            cell.doorX = ax - 8; cell.doorY = ay; cell.doorZ = az - 2;
+            cell.createdAt = now();
+            prisonData.cells.add(cell);
+            ctx.prison().write(prisonData);
+            built.add(CELL_ID + " §7(celulă, ~8m vest)");
+        }
+
+        var camps = ctx.laborCamps().read();
+        boolean hasCamp = camps.camps().values().stream()
+                .anyMatch(c -> c != null && dim.equals(c.dimension));
+        if (!hasCamp && camps.camp(CAMP_ID) == null) {
+            var camp = new LaborCampRecord();
+            camp.id = CAMP_ID;
+            camp.name = "Lagăr de test";
+            camp.dimension = dim;
+            camp.boundary = LawBounds.of(dim, ax - 5, ay - 1, az - 18,
+                    ax + 5, ay + 5, az - 12);
+            camp.intakeSpawn = new StoragePoint(dim, ax, ay, az - 14);
+            camp.releaseSpawn = new StoragePoint(dim, ax + 3, ay, az - 15);
+            camp.dormitorySpawn = new StoragePoint(dim, ax - 3, ay, az - 15);
+            camps.put(camp);
+            ctx.laborCamps().write(camps);
+            built.add(CAMP_ID + " §7(lagăr, ~14m sud)");
+        }
+
+        if (!built.isEmpty()) {
+            tell(tester, "straja.protocol.fixtures", String.join("§7, ", built));
+            audit.record("protocol_fixtures", tester.name(), uuid(tester), "", "",
+                    "OK", String.join("; ", built));
+        }
+    }
+
+    /** Two adjacent inspection slabs 4 blocks east of the anchor + a pushback. */
+    private static LawCheckpointRecord siteRecord(String id, String name, String dim,
+                                                  CheckpointMode mode,
+                                                  int ax, int ay, int az, int dz) {
+        var site = new LawCheckpointRecord();
+        site.id = id;
+        site.name = name;
+        site.dimension = dim;
+        site.mode = mode;
+        site.direction = CrossingDirection.BIDIRECTIONAL;
+        site.stage1 = LawBounds.of(dim, ax + 3, ay - 1, az + dz - 2,
+                ax + 6, ay + 3, az + dz + 2);
+        site.stage2 = LawBounds.of(dim, ax + 7, ay - 1, az + dz - 2,
+                ax + 9, ay + 3, az + dz + 2);
+        site.pushback = PushbackPoint.at(dim, ax, ay, az + dz, -90f);
+        site.normalize();
+        return site;
+    }
+
+    /** First usable site of the requested mode in this dimension, else null. */
+    private static LawCheckpointRecord findSite(LawCheckpointStore store,
+                                                String dim, boolean arrest) {
+        for (var site : store.checkpoints().values()) {
+            if (site == null || !dim.equals(site.dimension)) continue;
+            if (site.stage1 == null && site.stage2 == null) continue;
+            if ((site.mode == CheckpointMode.ARREST) == arrest) return site;
+        }
+        return null;
+    }
+
+    /** Book placeholder: the usable site of the requested mode, with coords. */
+    private String siteDesc(PlayerGateway tester, boolean arrest) {
+        LawCheckpointStore sites = ctx.lawCheckpoints().read();
+        var site = sites.checkpoint(arrest ? SITE_INTAKE : SITE_GATE);
+        if (site == null) site = findSite(sites, tester.dimension(), arrest);
+        if (site == null || site.stage1 == null) return "checkpoint-ul Straja";
+        var b = site.stage1;
+        return "§f" + site.name + "§7 (x " + b.minX() + "…" + b.maxX()
+                + ", z " + b.minZ() + "…" + b.maxZ() + ")";
+    }
+
     // ------------------------------------------------------------ books
 
     private void issueCover(PlayerGateway tester) {
         List<String> pages = new ArrayList<>();
         pages.add("PROTOCOL STRAJA\n══════════════\n\nDOSAR DE TESTARE\n\nAcest dosar te ghidează prin fiecare suprafață a modului — un capitol, o carte, un rezultat așteptat la fiecare pas.");
         pages.add("CUM FUNCȚIONEAZĂ\n\n• /straja protocol — starea curentă\n• /straja protocol next — capitolul următor\n• /straja protocol back — recitește capitolul\n• /straja protocol actor — cheamă suspectul\n• /straja protocol stop — abandonează\n• /straja protocol reset — reia de la zero");
-        pages.add("PRERECHIZITE\n\n• un checkpoint Straja construit\n• cel puțin o celulă și un lagăr de muncă\n• drepturi de admin pentru capitolul „Comisia”\n\nProgresele se păstrează la relog.\n\nSemnat,\nComisariatul Straja");
+        pages.add("PREGĂTIRE\n\nLa start, protocolul construiește singur ce lipsește din dimensiunea ta: poarta civilă, poarta de arest, celula și lagărul — la câțiva metri de tine.\n\nCerință unică: OP (cheats pornit în singleplayer) sau protocol.enabled pe server.\n\nProgresele se păstrează la relog.\n\nSemnat,\nComisariatul Straja");
         tester.giveWrittenBook("Dosar de testare — Straja", "Comisariatul Straja", pages);
     }
 
@@ -409,7 +543,14 @@ public final class ProtocolService {
         pages.add("PROTOCOL STRAJA\nCapitolul " + chapterIndex + "/" + CHAPTER_COUNT
                 + "\n══════════════\n\n" + chapter.title + "\n\nScop: " + chapter.objective);
         String actorName = ctx.policies().protocolActorName;
-        for (String page : chapter.pages) pages.add(page.replace("{actor}", actorName));
+        for (String page : chapter.pages) {
+            String resolved = page.replace("{actor}", actorName);
+            if (resolved.contains("{gate}"))
+                resolved = resolved.replace("{gate}", siteDesc(tester, false));
+            if (resolved.contains("{intake}"))
+                resolved = resolved.replace("{intake}", siteDesc(tester, true));
+            pages.add(resolved);
+        }
         tester.giveWrittenBook("Protocol — " + chapter.title, "Comisariatul Straja", pages);
     }
 
@@ -430,8 +571,15 @@ public final class ProtocolService {
 
     // ------------------------------------------------------------ helpers
 
+    /**
+     * Test surface, not a cheat: operators (or the singleplayer host with
+     * cheats on — {@code isOp} covers both) and commissioners may always run
+     * it. The {@code protocol.enabled} flag additionally opens it to non-op
+     * testers on a dedicated server without hand-editing ops.json.
+     */
     private boolean enabled(PlayerGateway tester) {
-        if (ctx.policies().protocolEnabled) return true;
+        if (ctx.policies().protocolEnabled || tester.isOp()
+                || players.isCommissioner(tester)) return true;
         tell(tester, "straja.protocol.disabled");
         return false;
     }
