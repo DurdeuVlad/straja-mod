@@ -129,7 +129,9 @@ public class ForgeryService {
      * claim agree. Note AUTHENTIC here means "claim matches a record",
      * not "legal" — legality is {@link ArtifactRecord#legalAt} (M3 reads it).
      */
-    public enum RegistryCheck { AUTHENTIC, ABSENT, CONFLICT, KNOWN_FORGED }
+    public enum RegistryCheck { AUTHENTIC, ABSENT, CONFLICT, KNOWN_FORGED,
+        /** The serial once existed but its mark was revoked — presenting it is a tell. */
+        RETIRED }
 
     public RegistryCheck checkClaim(String claimedSerial, String itemId) {
         return checkClaim(claimedSerial, itemId, null);
@@ -148,6 +150,7 @@ public class ForgeryService {
                     ? RegistryCheck.KNOWN_FORGED : RegistryCheck.ABSENT;
         }
         if (record.forged()) return RegistryCheck.KNOWN_FORGED;
+        if (record.revoked()) return RegistryCheck.RETIRED;
         if (itemId != null && !record.itemId.equals(itemId)) return RegistryCheck.CONFLICT;
         if (presenterUuid != null && !record.holderUuid.isBlank()
                 && !record.holderUuid.equalsIgnoreCase(presenterUuid)) {

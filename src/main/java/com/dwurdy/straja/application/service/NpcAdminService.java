@@ -23,8 +23,10 @@ public class NpcAdminService implements NpcRegistryUseCase {
     public static final String TRAINER = "trainer";
     public static final String RECRUITER = "recruiter";
     public static final String ARMORER = "armorer";
+    public static final String INSPECTOR = "inspector";
     public static final Set<String> KNOWN_ROLES =
-            Set.of(RECEPTIONIST, SECRETARY, JAILER, ARCHIVIST, TRAINER, RECRUITER, ARMORER);
+            Set.of(RECEPTIONIST, SECRETARY, JAILER, ARCHIVIST, TRAINER, RECRUITER,
+                    ARMORER, INSPECTOR);
     /**
      * Deterministic order for the four physical officials in the current
      * headquarters layout. Recruiter remains accepted as a legacy alias for
@@ -85,6 +87,20 @@ public class NpcAdminService implements NpcRegistryUseCase {
         return Result.pass();
     }
 
+    /** #248: per-NPC inspector ceiling — junior|veteran|expert. */
+    public Result setExpertise(String entityUuid, String expertise) {
+        String tag = expertise == null ? "" : expertise.trim().toLowerCase(java.util.Locale.ROOT);
+        if (!Set.of("junior", "veteran", "expert").contains(tag)) {
+            return Result.fail("expertise_unknown");
+        }
+        NpcRegistry registry = ctx.npcs().read();
+        NpcRegistry.Record record = registry.npcs.get(entityUuid);
+        if (record == null) return Result.fail("unknown_npc");
+        record.expertise = tag;
+        ctx.npcs().write(registry);
+        return Result.pass();
+    }
+
     public Result bindStation(String entityUuid, String stationId) {
         if (stationId == null || stationId.isBlank()) return Result.fail("station_required");
         NpcRegistry registry = ctx.npcs().read();
@@ -111,7 +127,8 @@ public class NpcAdminService implements NpcRegistryUseCase {
         NpcRegistry.Record record = ctx.npcs().read().npcs.get(entityUuid);
         if (record == null) return null;
         return new Registration(record.role, record.skin, record.displayName,
-                record.stationId == null || record.stationId.isBlank() ? "hq" : record.stationId);
+                record.stationId == null || record.stationId.isBlank() ? "hq" : record.stationId,
+                record.expertise);
     }
 
     @Override

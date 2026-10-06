@@ -17,5 +17,11 @@ public interface NpcRegistryUseCase {
      */
     void adopt(String entityUuid, String roleId);
 
-    record Registration(String role, String skin, String displayName, String stationId) {}
+    record Registration(String role, String skin, String displayName, String stationId,
+                        String expertise) {
+        /** Compatibility: callers predating the expertise field. */
+        Registration(String role, String skin, String displayName, String stationId) {
+            this(role, skin, displayName, stationId, "");
+        }
+    }
 }

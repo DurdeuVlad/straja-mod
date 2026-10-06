@@ -217,6 +217,53 @@ public final class BoloService {
         return record;
     }
 
+    /**
+     * #248 — system-side forgery marker. A gate scanner or inspector just
+     * caught the subject carrying a forged/unregistered artifact: the marker
+     * is an arrest warrant ({@link BoloAuthority#ARREST_AUTHORIZED}) with the
+     * standard BOLO expiration. Idempotent per subject while one is active —
+     * a second flag refreshes nothing, which keeps repeated gate hits from
+     * stacking records.
+     */
+    public synchronized BoloRecord flagForgery(String subjectUuid, String subjectName,
+                                               String reason) {
+        if (subjectUuid == null || subjectUuid.isBlank()
+                || !ctx.policies().bolosEnabled) return null;
+        BoloStore data = store();
+        for (BoloRecord record : data.records) {
+            if (record != null && record.status == BoloStatus.ACTIVE
+                    && subjectUuid.equals(record.subjectUuid)) {
+                // Already hunted — the marker stays, but the forgery still
+                // lands on the warrant so the record reflects why (#248).
+                if (record.reason == null || !record.reason.contains("fals")) {
+                    record.reason = clean(
+                            (record.reason == null ? "" : record.reason)
+                                    + "; falsificare depistată",
+                            ctx.policies().boloMaxReasonLength);
+                    ctx.bolos().write(data);
+                }
+                return record;
+            }
+        }
+        BoloRecord record = new BoloRecord();
+        record.id = data.nextBoloId();
+        record.subjectUuid = subjectUuid;
+        record.subjectName = subjectName == null ? subjectUuid : subjectName;
+        record.reason = clean(reason, ctx.policies().boloMaxReasonLength);
+        record.issuerName = "system";
+        record.issuerUuid = "";
+        record.issuerRank = 0;
+        record.createdAt = now();
+        record.expiresAt = now()
+                + Math.max(60L, ctx.policies().boloDefaultExpirationSeconds) * 1_000L;
+        record.authority = BoloAuthority.ARREST_AUTHORIZED;
+        data.records.add(record);
+        ctx.bolos().write(data);
+        audit.record("bolo_create", "system", "", record.id,
+                record.subjectUuid, "SUCCESS", "forgery_detected");
+        return record;
+    }
+
     public synchronized List<BoloRecord> active() {
         expire();
         return store().records.stream()

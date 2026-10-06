@@ -383,6 +383,23 @@ public final class StrajaCommands {
         root.then(transporterNode());
         root.then(artifactNode());
         root.then(licenseNode());
+        root.then(bookNode());
+        // #248 officer-parity: manual document inspection — perm-0 root, the
+        // use case refuses anyone who is not an on-duty officer.
+        root.then(Commands.literal("inspect")
+                .then(Commands.argument("player", EntityArgument.player())
+                        .executes(c -> player(c, officer -> {
+                            var runtime = StrajaRuntime.get();
+                            if (runtime == null) return;
+                            var traveler = target(c, "player");
+                            if (traveler == null) {
+                                officer.refuse("straja.cmd.player_offline",
+                                        "straja.remedy.fix_retry");
+                                return;
+                            }
+                            runtime.forgeryDetection().officerInspect(
+                                    officer, traveler, runtime.seizure(), runtime.bolos());
+                        }))));
 
         // migration from the legacy KubeJS world (console-usable, OP 4 only)
         root.then(migrateNode());
@@ -1304,6 +1321,43 @@ public final class StrajaCommands {
         StrajaRuntime.get().artifactRegistry().registerHeld(actor, holder);
     }
 
+    /**
+     * #248 — the patrol book: admin issues today's anti-forgery guide. The
+     * edition is stamped with the world-day, so yesterday's copies go stale
+     * rather than silently updating; a same-day reissue is refused.
+     */
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> bookNode() {
+        var node = adminOnly(Commands.literal("book"));
+        node.then(Commands.literal("give")
+                .executes(c -> givePatrolBook(c, c.getSource().getPlayer()))
+                .then(Commands.argument("player", EntityArgument.player())
+                        .executes(c -> givePatrolBook(c,
+                                EntityArgument.getPlayer(c, "player")))));
+        return node;
+    }
+
+    private static int givePatrolBook(CommandContext<CommandSourceStack> ctx,
+                                      ServerPlayer target) {
+        var runtime = runtime(ctx.getSource());
+        if (runtime == null) return 0;
+        if (target == null) {
+            ctx.getSource().sendFailure(refusal(
+                    "straja.cmd.player_only", "straja.remedy.fix_retry"));
+            return 0;
+        }
+        long day = ctx.getSource().getLevel().getDayTime() / 24000L;
+        if (!com.dwurdy.straja.adapter.out.minecraft.PatrolBookSurface.issue(
+                target, runtime.patrolGuide(), day)) {
+            ctx.getSource().sendFailure(refusal(
+                    "straja.book.already_issued", "straja.remedy.wait", day));
+            return 0;
+        }
+        ctx.getSource().sendSystemMessage(Component.literal(
+                "Ghid de patrulare (ediția zilei " + day + ") emis către "
+                        + target.getGameProfile().getName() + "."));
+        return 1;
+    }
+
     private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> licenseNode() {
         return Commands.literal("license")
                 .executes(c -> player(c, StrajaRuntime.get().artifactRegistry()::ownLicenses));
@@ -2221,6 +2275,7 @@ public final class StrajaCommands {
                 new PlayerHelpEntry("/straja rules", "straja.help.player.cmd.rules"),
                 new PlayerHelpEntry("/straja regulament", "straja.help.player.cmd.regulament"),
                 new PlayerHelpEntry("/straja license", "straja.help.player.cmd.license"),
+                new PlayerHelpEntry("/straja inspect", "straja.help.player.cmd.inspect"),
                 new PlayerHelpEntry("/straja stop", "straja.help.player.cmd.stop"));
 
         /** Commands advertised by the player orientation — all must stay permission-0. */

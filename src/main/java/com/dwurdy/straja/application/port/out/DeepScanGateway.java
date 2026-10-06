@@ -25,4 +25,15 @@ public interface DeepScanGateway {
     default List<SeizedStack> seizeAll(UUID playerUuid) {
         return List.of();
     }
+
+    /**
+     * Removes and returns the stack living at one deepScan slot path —
+     * {@code craft:N}, {@code cursor:0}, {@code curios:N}, or a top-level
+     * {@code main:N}/{@code armor:N}/{@code offhand:N}. Nested paths address
+     * their top-level parent (the whole container is lifted). Null when the
+     * slot can't be addressed or holds nothing.
+     */
+    default SeizedStack seizeAt(UUID playerUuid, String slotPath) {
+        return null;
+    }
 }

@@ -36,7 +36,7 @@ final class NpcPlayerSurface {
             "duty-checkpoint",
             "trades-enroll");
 
-    enum RoleRoute { RECEPTIONIST, SECRETARY, JAILER, ARCHIVIST, TRAINER, RECRUITER, ARMORER, UNKNOWN }
+    enum RoleRoute { RECEPTIONIST, SECRETARY, JAILER, ARCHIVIST, TRAINER, RECRUITER, ARMORER, INSPECTOR, UNKNOWN }
 
     record ChatAction(String label, String actionId, String labelKey) {
         ChatAction(String label, String actionId) {
@@ -100,6 +100,7 @@ final class NpcPlayerSurface {
             // physical player-facing role is now the Instructor.
             case NpcRoles.TRAINER, NpcRoles.RECRUITER -> RoleRoute.TRAINER;
             case NpcRoles.ARMORER -> RoleRoute.ARMORER;
+            case NpcRoles.INSPECTOR -> RoleRoute.INSPECTOR;
             default -> RoleRoute.UNKNOWN;
         };
     }
@@ -184,6 +185,13 @@ final class NpcPlayerSurface {
                             new ChatAction("Muncă profesională", "v2-professional-work"),
                             new ChatAction("Kit de serviciu", "duty-kit"),
                             faqEntry(RoleRoute.ARMORER)));
+            case INSPECTOR -> new RoleSurface(
+                    RoleRoute.INSPECTOR,
+                    "Inspector de artefacte",
+                    "Verific marcile de serie ale documentelor și artefactelor pe care le porți. Prezintă-te la control.",
+                    List.of(
+                            new ChatAction("Prezint documentele la control", "inspect-documents"),
+                            faqEntry(RoleRoute.INSPECTOR)));
             case UNKNOWN -> new RoleSurface(
                     RoleRoute.UNKNOWN,
                     "Straja",
@@ -266,6 +274,7 @@ final class NpcPlayerSurface {
             case ARCHIVIST -> NpcRoles.ARCHIVIST;
             case TRAINER, RECRUITER -> NpcRoles.TRAINER;
             case ARMORER -> NpcRoles.ARMORER;
+            case INSPECTOR -> NpcRoles.INSPECTOR;
             case UNKNOWN -> "";
         };
     }
@@ -330,6 +339,7 @@ final class NpcPlayerSurface {
                     ? List.of("armory-status", "v2-equipment-status", FAQ_SPEC,
                             "v2-professional-work", "duty-kit")
                     : List.of(FAQ_SPEC, "armory-status");
+            case INSPECTOR -> List.of("inspect-documents", FAQ_SPEC);
             case UNKNOWN -> List.of();
         };
     }

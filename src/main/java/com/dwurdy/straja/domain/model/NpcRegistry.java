@@ -13,6 +13,8 @@ public class NpcRegistry {
         public String displayName = "";
         public String skin = "";
         public String stationId = "hq";
+        /** #248: inspector ceiling — junior|veteran|expert (blank = junior). */
+        public String expertise = "";
         public long createdAt;
     }
 

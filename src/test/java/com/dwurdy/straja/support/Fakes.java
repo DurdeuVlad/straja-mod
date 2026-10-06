@@ -666,6 +666,40 @@ public final class Fakes {
                     inventories.getOrDefault(playerUuid, java.util.List.of()));
         }
 
+        /** #248: lifts the top-level stack at a flat slot path; nested paths take the parent. */
+        @Override
+        public com.dwurdy.straja.domain.model.SeizedStack seizeAt(java.util.UUID playerUuid,
+                                                                String slotPath) {
+            var p = server == null ? null : server.players.get(playerUuid);
+            if (p == null || slotPath == null) return null;
+            String head = slotPath.split(">", 2)[0];
+            int colon = head.indexOf(':');
+            if (colon < 0) return null;
+            int n;
+            try {
+                n = Integer.parseInt(head.substring(colon + 1));
+            } catch (NumberFormatException e) {
+                return null;
+            }
+            int index = switch (head.substring(0, colon)) {
+                case "main" -> n >= 0 && n < 36 ? n : -1;
+                case "armor" -> n >= 0 && n < 4 ? 36 + n : -1;
+                case "offhand" -> 40;
+                default -> -1;
+            };
+            if (index < 0 || index >= p.inventory.slots.size()) return null;
+            var v = p.inventory.slots.get(index);
+            if (v == null || v.isEmpty()) return null;
+            var data = v.customData();
+            String snbt = data == null ? null : data.get("snbt");
+            String contains = data == null ? null : data.get("contains");
+            java.util.List<String> containedIds = contains == null || contains.isBlank()
+                    ? java.util.List.of() : java.util.List.of(contains.split(","));
+            p.inventory.slots.set(index, ItemView.EMPTY);
+            return new com.dwurdy.straja.domain.model.SeizedStack(
+                    head, v.id(), v.count(), snbt, containedIds);
+        }
+
         /** M4: physically empties every carried slot; SNBT/contained ids ride customData. */
         @Override
         public java.util.List<com.dwurdy.straja.domain.model.SeizedStack> seizeAll(java.util.UUID playerUuid) {

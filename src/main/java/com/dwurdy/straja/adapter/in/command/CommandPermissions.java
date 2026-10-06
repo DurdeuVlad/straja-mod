@@ -70,6 +70,8 @@ final class CommandPermissions {
             Map.entry("transporter revoke", ADMIN),
             Map.entry("transporter list", ADMIN),
             Map.entry("license", 0),
+            Map.entry("book", ADMIN),
+            Map.entry("inspect", 0),
             Map.entry("migrate", SETUP),
             Map.entry("emergency", ADMIN),
             Map.entry("npc", SETUP),

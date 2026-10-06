@@ -1182,4 +1182,240 @@ public final class StrajaGameTests {
         }
         helper.succeed();
     }
+
+    /**
+     * #248 — the detection milestone on the live stack: real CUSTOM_DATA
+     * components flow through the real MinecraftDeepScanGateway into
+     * SnapshotItem.data, the machine reads physical marks only, the
+     * inspector ladder cross-checks the registry at expertise ceilings,
+     * enforcement seizes just the flagged stack and raises the system BOLO,
+     * and the patrol book stamps its world-day edition.
+     */
+    @GameTest(template = "empty")
+    public static void forgeryDetectionMachineInspectorAndPatrolBook(GameTestHelper helper) {
+        var runtime = runtime(helper);
+        var detection = runtime.forgeryDetection();
+        var registry = runtime.artifactRegistry();
+        var bolos = runtime.bolos();
+        var policies = runtime.context().policies();
+        var server = helper.getLevel().getServer();
+        var travelerEntity = helper.makeMockServerPlayerInLevel();
+        var traveler = new MinecraftPlayerGateway(server, travelerEntity.getUUID());
+
+        var prevIds = new java.util.ArrayList<>(policies.artifactRegulatedItemIds);
+        boolean prevScan = policies.artifactScanAtGates;
+        boolean prevBolos = policies.bolosEnabled;
+        policies.artifactScanAtGates = true;
+        policies.bolosEnabled = true;
+        String gun = "minecraft:iron_sword";
+        String card = "straja:identity_card";
+        if (!policies.artifactRegulatedItemIds.contains(gun)) {
+            policies.artifactRegulatedItemIds.add(gun);
+        }
+        if (!policies.artifactRegulatedItemIds.contains(card)) {
+            policies.artifactRegulatedItemIds.add(card);
+        }
+        try {
+            // ---- live data bridge: real CUSTOM_DATA → SnapshotItem.data
+            ItemStack markedGun = new ItemStack(Items.IRON_SWORD);
+            var tag = new net.minecraft.nbt.CompoundTag();
+            tag.putString(com.dwurdy.straja.application.service.ArtifactRegistryService.SERIAL_KEY, "RC-999999");
+            tag.putString(com.dwurdy.straja.application.service.ArtifactRegistryService.MARK_KEY, "#RC-999999");
+            markedGun.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA,
+                    net.minecraft.world.item.component.CustomData.of(tag));
+            travelerEntity.getInventory().add(markedGun);
+
+            var snapshot = runtime.context().deepScan().deepScan(travelerEntity.getUUID());
+            helper.assertTrue(snapshot.stream().anyMatch(
+                            i -> i.itemId.equals(gun) && !i.data(
+                                    com.dwurdy.straja.application.service.ArtifactRegistryService.SERIAL_KEY).isBlank()),
+                    "the deep scan must surface flat custom-data keys");
+
+            // ---- machine verdicts: physical marks only
+            var machineClean = detection.machineScan(snapshot);
+            helper.assertTrue(machineClean.clean(),
+                    "a plausible N3-grade mark must pass the machine");
+
+            var absurd = snapshot.stream().filter(i -> i.itemId.equals(gun)).findFirst().orElseThrow();
+            absurd.data.put(com.dwurdy.straja.application.service.ArtifactRegistryService.MARK_KEY, "#GUNS4U-13");
+            helper.assertTrue(
+                    detection.machineScan(snapshot).worst()
+                            == com.dwurdy.straja.application.service.ForgeryDetectionService.Verdict.CRUDE,
+                    "absurd marks must route to the arrest lane");
+
+            absurd.data.put(com.dwurdy.straja.application.service.ArtifactRegistryService.MARK_KEY, "#RC-15_");
+            helper.assertTrue(
+                    detection.machineScan(snapshot).worst()
+                            == com.dwurdy.straja.application.service.ForgeryDetectionService.Verdict.FLAGGED,
+                    "malformed marks must flag without arresting");
+
+            var unmarked = new com.dwurdy.straja.domain.model.SnapshotItem(
+                    "main:9", gun, 1, "", "");
+            var unmarkedScan = detection.machineScan(java.util.List.of(unmarked));
+            helper.assertTrue(unmarkedScan.findings().size() == 1
+                            && unmarkedScan.findings().get(0).verdict()
+                            == com.dwurdy.straja.application.service.ForgeryDetectionService.Verdict.UNREGISTERED,
+                    "unmarked regulated stock reads UNREGISTERED");
+
+            // ---- inspector ceilings: registry cross-checks
+            absurd.data.put(com.dwurdy.straja.application.service.ArtifactRegistryService.MARK_KEY, "#RC-999999");
+            absurd.data.put(com.dwurdy.straja.application.service.ArtifactRegistryService.SERIAL_KEY, "RC-999999");
+            var junior = detection.inspect(snapshot,
+                    travelerEntity.getUUID().toString(),
+                    com.dwurdy.straja.application.service.ForgeryDetectionService.Expertise.JUNIOR);
+            helper.assertTrue(junior.findings().size() == 1,
+                    "a far-fetched claim burns at JUNIOR");
+
+            // Plant an authentic allocation so the near-miss band exists.
+            var admin = new VirtualPlayerGateway("gt_d_admin");
+            admin.setOp(true);
+            var licensed = new VirtualPlayerGateway("gt_d_inspector");
+            if (!registry.isLicensed(licensed,
+                    com.dwurdy.straja.domain.model.ArtifactLicenseType.INSPECTOR)) {
+                helper.assertTrue(registry.grantLicense(admin, licensed, "INSPECTOR"),
+                        "grant the inspector license");
+            }
+            String real = registry.register(licensed, traveler, "minecraft:bow");
+            helper.assertTrue(real != null, "registration must allocate a serial");
+            long next = registry.nextSerialNumber();
+            String nearMiss = "RC-0" + (next + 2); // inside the near-miss band
+            var near = new com.dwurdy.straja.domain.model.SnapshotItem("main:4", card, 1, "", "");
+            near.data.put(com.dwurdy.straja.application.service.ArtifactRegistryService.SERIAL_KEY, nearMiss);
+            near.data.put(com.dwurdy.straja.application.service.ArtifactRegistryService.MARK_KEY, "#" + nearMiss);
+            helper.assertTrue(detection.inspect(java.util.List.of(near),
+                            travelerEntity.getUUID().toString(),
+                            com.dwurdy.straja.application.service.ForgeryDetectionService.Expertise.JUNIOR).clean(),
+                    "a junior cannot read the near-miss");
+            helper.assertTrue(!detection.inspect(java.util.List.of(near),
+                            travelerEntity.getUUID().toString(),
+                            com.dwurdy.straja.application.service.ForgeryDetectionService.Expertise.VETERAN).clean(),
+                    "a veteran reads the near-miss");
+
+            // Conflict: real serial on the wrong item/holder — EXPERT only.
+            var conflict = new com.dwurdy.straja.domain.model.SnapshotItem("main:5", card, 1, "", "");
+            conflict.data.put(com.dwurdy.straja.application.service.ArtifactRegistryService.SERIAL_KEY, real);
+            conflict.data.put(com.dwurdy.straja.application.service.ArtifactRegistryService.MARK_KEY, "#" + real);
+            helper.assertTrue(detection.inspect(java.util.List.of(conflict),
+                            travelerEntity.getUUID().toString(),
+                            com.dwurdy.straja.application.service.ForgeryDetectionService.Expertise.VETERAN).clean(),
+                    "veterans do not read holder conflicts");
+            helper.assertTrue(!detection.inspect(java.util.List.of(conflict),
+                            travelerEntity.getUUID().toString(),
+                            com.dwurdy.straja.application.service.ForgeryDetectionService.Expertise.EXPERT).clean(),
+                    "the expert reads the ledger conflict");
+
+            // ---- live enforcement: npcInspect seizes only the flag + hunts
+            travelerEntity.getInventory().clearContent();
+            ItemStack forged = new ItemStack(Items.IRON_SWORD);
+            var ftag = new net.minecraft.nbt.CompoundTag();
+            ftag.putString(com.dwurdy.straja.application.service.ArtifactRegistryService.SERIAL_KEY, "RC-999999");
+            ftag.putString(com.dwurdy.straja.application.service.ArtifactRegistryService.MARK_KEY, "#RC-999999");
+            forged.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA,
+                    net.minecraft.world.item.component.CustomData.of(ftag));
+            travelerEntity.getInventory().setItem(0, forged);
+            travelerEntity.getInventory().setItem(1, new ItemStack(Items.BREAD));
+
+            var outcome = detection.npcInspect(traveler,
+                    com.dwurdy.straja.application.service.ForgeryDetectionService.Expertise.JUNIOR,
+                    "Inspectorul", runtime.seizure(), bolos);
+            helper.assertTrue(outcome.flagged(), "the booth must flag the far-fetched claim");
+            helper.assertTrue(outcome.seized() == 1, "exactly the flagged stack leaves");
+            helper.assertTrue(travelerEntity.getInventory().getItem(0).isEmpty(),
+                    "the forged sword is confiscated");
+            helper.assertTrue(travelerEntity.getInventory().getItem(1).is(Items.BREAD),
+                    "the bread stays untouched");
+            helper.assertTrue(bolos.active().stream().anyMatch(
+                            b -> travelerEntity.getUUID().toString().equals(b.subjectUuid)),
+                    "the carrier must leave wanted (system BOLO)");
+            helper.assertTrue(runtime.context().audit().tail(20).stream()
+                            .anyMatch(e -> "forgery_detected".equals(e.action)),
+                    "the catch must reach the audit trail");
+            bolos.clearFor(travelerEntity.getUUID());
+
+            // ---- off-grid seizure: flagged stock hidden in the 2x2 craft
+            // grid and on the cursor is detected AND physically lifted —
+            // findings alone never confiscated it (review fix).
+            travelerEntity.getInventory().clearContent();
+            ItemStack craftForge = new ItemStack(Items.IRON_SWORD);
+            var ctag = new net.minecraft.nbt.CompoundTag();
+            ctag.putString(com.dwurdy.straja.application.service.ArtifactRegistryService.MARK_KEY, "#GUNS4U-13");
+            craftForge.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA,
+                    net.minecraft.world.item.component.CustomData.of(ctag));
+            travelerEntity.inventoryMenu.getCraftSlots().setItem(0, craftForge);
+            var craftScan = runtime.context().deepScan().deepScan(travelerEntity.getUUID());
+            helper.assertTrue(craftScan.stream().anyMatch(
+                            i -> i.slot.startsWith("craft:")
+                                    && "#GUNS4U-13".equals(i.data(
+                                    com.dwurdy.straja.application.service.ArtifactRegistryService.MARK_KEY))),
+                    "the scan must see a marked stack inside the craft grid");
+            helper.assertTrue(detection.machineScan(craftScan).worst()
+                            == com.dwurdy.straja.application.service.ForgeryDetectionService.Verdict.CRUDE,
+                    "a crude mark in the craft grid still reads CRUDE");
+            var lifted = runtime.context().deepScan().seizeAt(
+                    travelerEntity.getUUID(), "craft:0");
+            helper.assertTrue(lifted != null && gun.equals(lifted.itemId()),
+                    "seizeAt must lift the flagged craft-grid stack");
+            helper.assertTrue(travelerEntity.inventoryMenu.getCraftSlots()
+                            .getItem(0).isEmpty(),
+                    "the craft slot is emptied by the targeted seizure");
+            travelerEntity.containerMenu.setCarried(craftForge);
+            var liftedCursor = runtime.context().deepScan().seizeAt(
+                    travelerEntity.getUUID(), "cursor:0");
+            helper.assertTrue(liftedCursor != null && gun.equals(liftedCursor.itemId()),
+                    "seizeAt must lift the cursor-carried stack");
+            helper.assertTrue(travelerEntity.containerMenu.getCarried().isEmpty(),
+                    "the cursor is emptied by the targeted seizure");
+
+            // ---- patrol book: stamped edition + same-day refuse
+            long day = helper.getLevel().getDayTime() / 24000L;
+            helper.assertTrue(
+                    com.dwurdy.straja.adapter.out.minecraft.PatrolBookSurface.issue(
+                            travelerEntity, runtime.patrolGuide(), day),
+                    "the first issue of today's edition must succeed");
+            helper.assertTrue(
+                    com.dwurdy.straja.adapter.out.minecraft.PatrolBookSurface
+                            .carriedEditionDay(travelerEntity) == day,
+                    "the book must carry the stamped world-day");
+            helper.assertTrue(
+                    !com.dwurdy.straja.adapter.out.minecraft.PatrolBookSurface.issue(
+                            travelerEntity, runtime.patrolGuide(), day),
+                    "a same-day reissue must be refused");
+            helper.assertTrue(runtime.patrolGuide().stale(day, day + 1),
+                    "yesterday's edition goes stale");
+
+            // ---- expertise registry plumbing
+            var npcUuid = travelerEntity.getUUID().toString();
+            runtime.npcs().assignRole(npcUuid, "inspector");
+            helper.assertTrue(runtime.npcs().setExpertise(npcUuid, "veteran").ok(),
+                    "inspector expertise must persist");
+            helper.assertTrue(
+                    com.dwurdy.straja.application.service.ForgeryDetectionService
+                            .expertiseOf("veteran")
+                            == com.dwurdy.straja.application.service.ForgeryDetectionService.Expertise.VETERAN,
+                    "expertise tags map to ceilings");
+
+            // ---- officer parity on a live GuardState
+            var officerState = runtime.context().players().read(travelerEntity.getUUID());
+            officerState.rank = com.dwurdy.straja.domain.model.Rank.STAGIAR.level();
+            officerState.duty = true;
+            runtime.context().players().write(travelerEntity.getUUID(), officerState);
+            helper.assertTrue(detection.officerExpertise(traveler)
+                            == com.dwurdy.straja.application.service.ForgeryDetectionService.Expertise.JUNIOR,
+                    "a fresh duty guard reads at JUNIOR");
+            officerState.quizPassed = true;
+            runtime.context().players().write(travelerEntity.getUUID(), officerState);
+            helper.assertTrue(detection.officerExpertise(traveler)
+                            == com.dwurdy.straja.application.service.ForgeryDetectionService.Expertise.VETERAN,
+                    "a quiz-trained guard reads at VETERAN");
+            officerState.duty = false;
+            officerState.quizPassed = false;
+            runtime.context().players().write(travelerEntity.getUUID(), officerState);
+        } finally {
+            policies.artifactRegulatedItemIds = prevIds;
+            policies.artifactScanAtGates = prevScan;
+            policies.bolosEnabled = prevBolos;
+            bolos.clearFor(travelerEntity.getUUID());
+        }
+        helper.succeed();
+    }
 }

@@ -330,6 +330,131 @@ public final class SeizureService {
         return seized;
     }
 
+    /**
+     * #248 — targeted forgery seizure: pulls exactly the stacks the
+     * detector flagged, identified by snapshot slot paths. A nested path
+     * seizes its top-level container (the evidence chain keeps the bag
+     * whole); a stack that no longer matches the flagged id is left alone —
+     * the scan is stale the moment hands move. Returns count removed.
+     */
+    public int seizeFlagged(PlayerGateway target, LawCheckpointRecord site,
+                            java.util.List<com.dwurdy.straja.domain.model.SnapshotItem> flagged) {
+        if (target == null || !target.isOnline() || flagged == null || flagged.isEmpty()) {
+            return 0;
+        }
+        var inv = target.inventory();
+        if (inv == null) return 0;
+        var checkpoints = ctx.lawCheckpoints().read();
+        int seized = 0, dropped = 0;
+        java.util.Set<Integer> handled = new java.util.HashSet<>();
+        for (var item : flagged) {
+            if (item == null) continue;
+            int index = topSlotIndex(item.slot);
+            if (index < 0) {
+                // craft:/cursor:/curios: slots live outside the flat
+                // inventory port — the deep-scan adapter lifts them
+                // directly so a flagged stack can't hide off-grid.
+                seized += seizeOffGrid(target, site, checkpoints, item);
+                continue;
+            }
+            if (!handled.add(index)) continue;
+            var stack = inv.stackAt(index);
+            if (stack == null || stack.count() <= 0) continue;
+            // Stale-scan guard: the flagged item id must still live at that
+            // slot — either the stack itself or inside its container SNBT.
+            // The SNBT fallback only applies to nested paths ("main:4>2");
+            // a top-level row must match by id so a stack that merely
+            // quotes the id in text is never lifted by mistake.
+            String snbt = inv.snbtAt(index);
+            boolean nested = item.slot != null && item.slot.contains(">");
+            boolean match = item.itemId.equals(stack.id())
+                    || (nested && snbt != null && snbt.contains(item.itemId));
+            if (!match) continue;
+            var taken = inv.extract(index, stack.count());
+            if (taken == null || taken.count() <= 0) continue;
+            seized += taken.count();
+            var seized_ = new SeizedStack("inv/" + index, taken.id(), taken.count(),
+                    snbt, List.of());
+            int leftover;
+            try {
+                leftover = routeEvidence(site, checkpoints, seized_);
+            } catch (RuntimeException ex) {
+                leftover = taken.count();
+            }
+            if (leftover > 0) {
+                dropped += leftover;
+                try {
+                    dropAtEvidenceOrPlayer(target, site, checkpoints, taken.id(), leftover);
+                } catch (RuntimeException ignored) {}
+            }
+        }
+        if (seized > 0) {
+            audit.record("forgery_seizure", "system", "", target.name(),
+                    uuidOf(target), "SUCCESS",
+                    "site=" + (site == null ? "" : site.id)
+                            + " seized=" + seized + " dropped=" + dropped);
+        }
+        return seized;
+    }
+
+    /**
+     * Lifts a flagged stack whose slot path is outside the flat inventory —
+     * crafting grid, cursor-carried stack, or a Curios slot — through the
+     * deep-scan adapter, then routes it to evidence like any other seizure.
+     * The same stale-scan guard applies: the lifted stack must still carry
+     * the flagged id (itself or, for containers, inside its SNBT).
+     */
+    private int seizeOffGrid(PlayerGateway target, LawCheckpointRecord site,
+                             LawCheckpointStore checkpoints,
+                             com.dwurdy.straja.domain.model.SnapshotItem item) {
+        var taken = ctx.deepScan().seizeAt(target.uuid(), item.slot);
+        if (taken == null || taken.count() <= 0) return 0;
+        if (!item.itemId.equals(taken.itemId())
+                && (taken.snbt() == null || !taken.snbt().contains(item.itemId))) {
+            // The stack moved between scan and seizure — return it to the
+            // carrier rather than misrouting an innocent stack to evidence.
+            try {
+                target.giveStack(taken.itemId(), taken.count(), taken.snbt());
+            } catch (RuntimeException ignored) {}
+            return 0;
+        }
+        var seized = new SeizedStack(taken.slotPath(), taken.itemId(), taken.count(),
+                taken.snbt(), taken.containedIds());
+        int leftover;
+        try {
+            leftover = routeEvidence(site, checkpoints, seized);
+        } catch (RuntimeException ex) {
+            leftover = taken.count();
+        }
+        if (leftover > 0) {
+            try {
+                dropAtEvidenceOrPlayer(target, site, checkpoints, taken.itemId(), leftover);
+            } catch (RuntimeException ignored) {}
+        }
+        return taken.count();
+    }
+
+    /** Parses "main:12", "armor:2", "offhand:0" (and nested "main:4>0" → its
+     * parent) into the flat inventory index, or -1 for unaddressable paths. */
+    private static int topSlotIndex(String slot) {
+        if (slot == null) return -1;
+        String head = slot.split(">", 2)[0];
+        int colon = head.indexOf(':');
+        if (colon < 0) return -1;
+        int n;
+        try {
+            n = Integer.parseInt(head.substring(colon + 1));
+        } catch (NumberFormatException e) {
+            return -1;
+        }
+        return switch (head.substring(0, colon)) {
+            case "main" -> n >= 0 && n < 36 ? n : -1;
+            case "armor" -> n >= 0 && n < 4 ? 36 + n : -1;
+            case "offhand" -> 40;
+            default -> -1;
+        };
+    }
+
     // ------------------------------------------------------------ routing
 
     private boolean containsContraband(SeizedStack stack, LawCheckpointRecord site,

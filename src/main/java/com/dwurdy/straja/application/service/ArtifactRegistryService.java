@@ -41,6 +41,11 @@ public class ArtifactRegistryService {
             "straja:official_instrument", "straja:archive_document",
             "straja:fine_notice", "straja:confiscation_receipt");
 
+    /** Whether the item id is document-class for offense recording (#248). */
+    public static boolean isDocumentItem(String itemId) {
+        return itemId != null && DOCUMENT_ITEMS.contains(itemId);
+    }
+
     private final ArtifactRegistryRepository repository;
     private final Clock clock;
     private final IdGenerator ids;
