@@ -29,6 +29,13 @@ public class StrajaPolicies {
     public boolean identityCardsEnabled = true;
     public int identityCardValidityDays = 30;
 
+    // #246 artifact registry — serial-marked regulated artifacts + licensing
+    public boolean artifactRegistryEnabled = true;
+    public int artifactPendingHours = 24;
+    public String artifactSerialPrefix = "RC-";
+    /** Item ids the checkpoint scanner treats as regulated arms (M3). */
+    public List<String> artifactRegulatedItemIds = new ArrayList<>(List.of());
+
     // deployment gates
     public boolean requireRealCoinProviderOutsideLocal = true;
     public boolean requireCommissionerUuidOutsideLocal = true;

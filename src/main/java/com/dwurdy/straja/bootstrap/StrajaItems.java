@@ -91,6 +91,13 @@ public final class StrajaItems {
     public static final DeferredItem<Item> CONFISCATION_RECEIPT = ITEMS.register("confiscation_receipt",
             () -> new Item(new Item.Properties().stacksTo(16)));
 
+    // #246 artifact registry — the licensed-inspector die and the transporter’s
+    // sealable crate. Same item both sealed and unsealed; the seal is item data.
+    public static final DeferredItem<Item> SEAL_STAMP = ITEMS.register("seal_stamp",
+            () -> new Item(new Item.Properties().stacksTo(1).rarity(Rarity.RARE)));
+    public static final DeferredItem<Item> SEALED_MILITARY_CRATE = ITEMS.register("sealed_military_crate",
+            () -> new Item(new Item.Properties().stacksTo(1).rarity(Rarity.UNCOMMON)));
+
     private StrajaItems() {}
 
     public static void register(IEventBus bus) {

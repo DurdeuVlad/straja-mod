@@ -31,7 +31,7 @@ public final class StrajaDataProvider {
                 "mobilizations", "campaigns", "settlements", "operations", "outbox",
                 "storage_watch", "law_checkpoints", "inspection_ledger",
                 "prisoner_register", "labor_camps", "merchant_desks", "npc_bindings",
-                "protocol");
+                "protocol", "artifact_registry");
 
         private BackupPolicy() {}
     }

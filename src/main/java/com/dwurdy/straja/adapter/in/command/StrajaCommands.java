@@ -378,6 +378,11 @@ public final class StrajaCommands {
         root.then(roomNode());
         root.then(archiveNode());
         root.then(identityCardNode());
+        // #246 artifact registry — licensed professions + serial cross-checks
+        root.then(inspectorNode());
+        root.then(transporterNode());
+        root.then(artifactNode());
+        root.then(licenseNode());
 
         // migration from the legacy KubeJS world (console-usable, OP 4 only)
         root.then(migrateNode());
@@ -1209,6 +1214,88 @@ public final class StrajaCommands {
                                         .revoke(p, StringArgumentType.getString(c, "id"),
                                                 StringArgumentType.getString(c, "reason")))))));
         return node;
+    }
+
+    // #246 licensed professions: grant/revoke/list need OP 3; status/seal are
+    // player-facing verbs the service gates on the license itself.
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> inspectorNode() {
+        var node = Commands.literal("inspector");
+        var grants = Commands.literal("grant")
+                .requires(source -> source.hasPermission(CommandPermissions.ADMIN));
+        grants.then(Commands.argument("player", EntityArgument.player())
+                .executes(c -> adminActor(c, p -> StrajaRuntime.get().artifactRegistry()
+                        .grantLicense(p, target(c, "player"), "INSPECTOR"))));
+        var revokes = Commands.literal("revoke")
+                .requires(source -> source.hasPermission(CommandPermissions.ADMIN));
+        revokes.then(Commands.argument("player", EntityArgument.player())
+                .executes(c -> adminActor(c, p -> StrajaRuntime.get().artifactRegistry()
+                        .revokeLicense(p, target(c, "player"), "INSPECTOR"))));
+        node.then(grants).then(revokes);
+        node.then(Commands.literal("list")
+                .requires(source -> source.hasPermission(CommandPermissions.ADMIN))
+                .executes(c -> adminActor(c, p -> StrajaRuntime.get().artifactRegistry()
+                        .listLicenses(p))));
+        node.then(Commands.literal("status")
+                .executes(c -> player(c, StrajaRuntime.get().artifactRegistry()::ownLicenses)));
+        // #246 — the M1-usable authentic-mark path: a licensed inspector (or an
+        // admin staging) registers the artifact held in their main hand, for
+        // themselves or a client. The anvil strike becomes the verb in M2.
+        var register = Commands.literal("register")
+                .executes(c -> player(c, p -> registerHeld(p, p)));
+        register.then(Commands.argument("player", EntityArgument.player())
+                .executes(c -> player(c, p -> registerHeld(p, target(c, "player")))));
+        node.then(register);
+        return node;
+    }
+
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> transporterNode() {
+        var node = Commands.literal("transporter");
+        var grants = Commands.literal("grant")
+                .requires(source -> source.hasPermission(CommandPermissions.ADMIN));
+        grants.then(Commands.argument("player", EntityArgument.player())
+                .executes(c -> adminActor(c, p -> StrajaRuntime.get().artifactRegistry()
+                        .grantLicense(p, target(c, "player"), "TRANSPORTER"))));
+        var revokes = Commands.literal("revoke")
+                .requires(source -> source.hasPermission(CommandPermissions.ADMIN));
+        revokes.then(Commands.argument("player", EntityArgument.player())
+                .executes(c -> adminActor(c, p -> StrajaRuntime.get().artifactRegistry()
+                        .revokeLicense(p, target(c, "player"), "TRANSPORTER"))));
+        node.then(grants).then(revokes);
+        node.then(Commands.literal("list")
+                .requires(source -> source.hasPermission(CommandPermissions.ADMIN))
+                .executes(c -> adminActor(c, p -> StrajaRuntime.get().artifactRegistry()
+                        .listLicenses(p))));
+        node.then(Commands.literal("status")
+                .executes(c -> player(c, StrajaRuntime.get().artifactRegistry()::ownLicenses)));
+        node.then(Commands.literal("seal")
+                .executes(c -> player(c, p -> StrajaRuntime.get().artifactRegistry()
+                        .sealHeld(p))));
+        node.then(Commands.literal("unseal")
+                .executes(c -> player(c, p -> StrajaRuntime.get().artifactRegistry()
+                        .unsealHeld(p))));
+        return node;
+    }
+
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> artifactNode() {
+        var node = adminOnly(Commands.literal("artifact"));
+        node.then(Commands.literal("check")
+                .then(Commands.argument("serial", StringArgumentType.word())
+                        .executes(c -> adminActor(c, p -> StrajaRuntime.get().artifactRegistry()
+                                .info(p, StringArgumentType.getString(c, "serial"))))));
+        node.then(Commands.literal("revoke")
+                .then(Commands.argument("serial", StringArgumentType.word())
+                        .executes(c -> adminActor(c, p -> StrajaRuntime.get().artifactRegistry()
+                                .revokeArtifact(p, StringArgumentType.getString(c, "serial"))))));
+        return node;
+    }
+
+    private static void registerHeld(PlayerGateway actor, PlayerGateway holder) {
+        StrajaRuntime.get().artifactRegistry().registerHeld(actor, holder);
+    }
+
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> licenseNode() {
+        return Commands.literal("license")
+                .executes(c -> player(c, StrajaRuntime.get().artifactRegistry()::ownLicenses));
     }
 
     /** Resolves a player by name/uuid through the query port (includes test virtuals). */
@@ -2122,6 +2209,7 @@ public final class StrajaCommands {
                 new PlayerHelpEntry("/straja status", "straja.help.player.cmd.status"),
                 new PlayerHelpEntry("/straja rules", "straja.help.player.cmd.rules"),
                 new PlayerHelpEntry("/straja regulament", "straja.help.player.cmd.regulament"),
+                new PlayerHelpEntry("/straja license", "straja.help.player.cmd.license"),
                 new PlayerHelpEntry("/straja stop", "straja.help.player.cmd.stop"));
 
         /** Commands advertised by the player orientation — all must stay permission-0. */
@@ -2162,6 +2250,7 @@ public final class StrajaCommands {
                     "/straja start|special|resign|demisie|rejoin | salary|coins|food|kit|merit",
                     "/straja report|message|request <text> | inbox",
                     "/straja mission|cuffs|prison|fine|complaint|room|archive|identity",
+                    "/straja inspector|transporter grant|revoke|list | artifact check|revoke [OP 3]",
                     "/straja emergency ...",
                     "/straja checkpoint add|remove ... | set-checkpoint | set-mission-time | set-location [OP 4]",
                     "/straja setup ... | policy ... | migrate ... | npc ... | debug ... | test ... [OP 4]");

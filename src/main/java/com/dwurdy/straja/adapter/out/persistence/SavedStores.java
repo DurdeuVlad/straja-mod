@@ -287,6 +287,14 @@ public final class SavedStores {
         @Override public void write(OperationStore store) { writeJson(store); }
     }
 
+    public static class ArtifactRegistry extends JsonBackedStore implements ArtifactRegistryRepository {
+        public ArtifactRegistry(StoreAccess access) { super(access, "artifact_registry"); }
+        @Override public ArtifactRegistryStore read() {
+            return readJsonVersioned(ArtifactRegistryStore.class, ArtifactRegistryStore::new, ArtifactRegistryStore.CURRENT_SCHEMA);
+        }
+        @Override public void write(ArtifactRegistryStore store) { writeJson(store); }
+    }
+
     public static class Outbox extends JsonBackedStore implements OutboxRepository {
         public Outbox(StoreAccess access) { super(access, "outbox"); }
         @Override public List<OutboxEvent> read() {
