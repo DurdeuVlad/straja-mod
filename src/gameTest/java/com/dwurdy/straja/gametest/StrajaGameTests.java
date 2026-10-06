@@ -99,7 +99,8 @@ public final class StrajaGameTests {
                 "room_marker", "prison_marker", "npc_wand", "patrol_wand", "survey_rod",
                 "npc_cloner", "cuffs", "cuff_key", "bolt_cutters", "crowbar", "rope",
                 "head_sack", "baton", "whip", "keychain", "fine_book", "fine_notice",
-                "training_manual", "identity_card")) {
+                "training_manual", "identity_card", "seal_stamp",
+                "sealed_military_crate")) {
             helper.assertTrue(BuiltInRegistries.ITEM.get(straja(id)) != Items.AIR,
                     "missing item registration straja:" + id);
         }
@@ -1018,6 +1019,54 @@ public final class StrajaGameTests {
         runtime.context().prisonerRegister().write(reg);
         helper.assertTrue(!runtime.wanted().isWanted(prisoner.getUUID()),
                 "release must clear wanted state");
+        helper.succeed();
+    }
+
+    /**
+     * #246 — the artifact registry is the shared source of truth for the
+     * forgery milestones: licenses gate registration, serials allocate in
+     * order, and the pending window is what separates "registered" from
+     * "legal".
+     */
+    @GameTest(template = "empty")
+    public static void artifactRegistryLicensesAndPendingWindow(GameTestHelper helper) {
+        var runtime = runtime(helper);
+        var admin = new VirtualPlayerGateway("gt_admin");
+        admin.setOp(true);
+        var inspector = new VirtualPlayerGateway("gt_inspector");
+        var holder = new VirtualPlayerGateway("gt_holder");
+        var registry = runtime.artifactRegistry();
+        boolean previousEnabled = runtime.context().policies().artifactRegistryEnabled;
+        runtime.context().policies().artifactRegistryEnabled = true;
+        try {
+        // Idempotent on persistent test worlds: the license may already exist
+        // from an earlier run of this suite.
+        if (!registry.isLicensed(inspector,
+                com.dwurdy.straja.domain.model.ArtifactLicenseType.INSPECTOR)) {
+            helper.assertTrue(registry.grantLicense(admin, inspector, "INSPECTOR"),
+                    "an admin must grant the inspector license");
+        }
+        helper.assertTrue(registry.register(holder, holder, "minecraft:iron_sword") == null,
+                "unlicensed registration must be refused");
+
+        String serial = registry.register(inspector, holder, "minecraft:iron_sword");
+        helper.assertTrue(serial != null && serial.startsWith("RC-"),
+                "a licensed inspector must receive an allocated serial, got: " + serial);
+        helper.assertTrue(!registry.isLegal(serial),
+                "a freshly registered artifact sits pending for the maturation window");
+
+        int previous = runtime.context().policies().artifactPendingHours;
+        runtime.context().policies().artifactPendingHours = 0;
+        try {
+            String instant = registry.register(inspector, holder, "minecraft:bow");
+            helper.assertTrue(registry.isLegal(instant),
+                    "a zero maturation window must register straight to legal");
+        } finally {
+            runtime.context().policies().artifactPendingHours = previous;
+        }
+        } finally {
+            runtime.context().policies().artifactRegistryEnabled = previousEnabled;
+        }
         helper.succeed();
     }
 }

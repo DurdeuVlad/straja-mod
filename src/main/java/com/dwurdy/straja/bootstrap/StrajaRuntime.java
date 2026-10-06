@@ -55,6 +55,7 @@ public final class StrajaRuntime {
     private final com.dwurdy.straja.application.service.RoomService rooms;
     private final com.dwurdy.straja.application.service.ArchiveService archive;
     private final com.dwurdy.straja.application.service.IdentityCardService identityCards;
+    private final com.dwurdy.straja.application.service.ArtifactRegistryService artifactRegistry;
     private final com.dwurdy.straja.application.service.SecretaryService secretary;
     private final com.dwurdy.straja.application.service.MigrationService migration;
     private final com.dwurdy.straja.application.service.FormSessionService formSessions;
@@ -336,6 +337,9 @@ public final class StrajaRuntime {
         this.rooms = new com.dwurdy.straja.application.service.RoomService(ctx, players, audit, ctx.world());
         this.archive = new com.dwurdy.straja.application.service.ArchiveService(ctx, players, audit);
         this.identityCards = new com.dwurdy.straja.application.service.IdentityCardService(ctx, players, audit);
+        this.artifactRegistry = new com.dwurdy.straja.application.service.ArtifactRegistryService(
+                new SavedStores.ArtifactRegistry(stores), ctx.clock(), ids,
+                ctx.policies(), players, audit);
         this.secretary = new com.dwurdy.straja.application.service.SecretaryService();
         this.migration = new com.dwurdy.straja.application.service.MigrationService(ctx, audit);
         this.formSessions = new com.dwurdy.straja.application.service.FormSessionService(clock, ids, v2Documents);
@@ -561,6 +565,7 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.port.in.RoomRoleplayUseCase roomRoleplay() { return rooms; }
     public com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase archiveRoleplay() { return archive; }
     public com.dwurdy.straja.application.port.in.IdentityCardRoleplayUseCase identityCards() { return identityCards; }
+    public com.dwurdy.straja.application.service.ArtifactRegistryService artifactRegistry() { return artifactRegistry; }
     public com.dwurdy.straja.application.port.in.SecretaryRoleplayUseCase secretaryRoleplay() { return secretary; }
     public com.dwurdy.straja.application.port.in.RoleplayExpansionUseCase expansionRoleplay() { return expansion; }
     public com.dwurdy.straja.application.service.RpExpansionService expansion() { return expansion; }

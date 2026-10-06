@@ -246,6 +246,10 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.BooleanValue REQUIRE_DEBUG_DISABLED_OUTSIDE_LOCAL;
 
     public static final ModConfigSpec.BooleanValue IDENTITY_CARDS_ENABLED;
+    public static final ModConfigSpec.BooleanValue ARTIFACT_REGISTRY_ENABLED;
+    public static final ModConfigSpec.IntValue ARTIFACT_PENDING_HOURS;
+    public static final ModConfigSpec.ConfigValue<String> ARTIFACT_SERIAL_PREFIX;
+    public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> ARTIFACT_REGULATED_ITEMS;
     public static final ModConfigSpec.IntValue IDENTITY_CARD_VALIDITY_DAYS;
 
     public static final ModConfigSpec.BooleanValue ENVELOPE_ENABLED;
@@ -364,6 +368,26 @@ public final class StrajaServerConfig {
                 .define("enabled", defaults.identityCardsEnabled);
         IDENTITY_CARD_VALIDITY_DAYS = B.comment("Real-time validity period for a newly issued buletin.")
                 .defineInRange("validityDays", defaults.identityCardValidityDays, 1, 3650);
+        B.pop();
+
+        B.push("artifactRegistry");
+        ARTIFACT_REGISTRY_ENABLED = B.comment(
+                        "Central registry of serial-marked regulated artifacts plus",
+                        "the Inspector/Transporter licensing surfaces.")
+                .define("enabled", defaults.artifactRegistryEnabled);
+        ARTIFACT_PENDING_HOURS = B.comment(
+                        "Real-time maturation window: a freshly registered artifact",
+                        "stays PENDING this long before it counts as legal.")
+                .defineInRange("pendingMaturationHours", defaults.artifactPendingHours, 0, 8760);
+        ARTIFACT_SERIAL_PREFIX = B.comment(
+                        "Serial prefix for authentic registry marks (displayed as #<prefix><n>).")
+                .define("serialPrefix", defaults.artifactSerialPrefix, StrajaServerConfig::isNonBlankString);
+        ARTIFACT_REGULATED_ITEMS = B.comment(
+                        "Item ids classified as regulated weapons on registration and",
+                        "(in a later milestone) required to be registered at checkpoints.")
+                .defineListAllowEmpty(List.of("regulatedItemIds"),
+                        new java.util.ArrayList<>(defaults.artifactRegulatedItemIds),
+                        () -> "examplemod:rifle", StrajaServerConfig::isNonBlankString);
         B.pop();
 
         B.push("timers");
@@ -1329,6 +1353,10 @@ public final class StrajaServerConfig {
 
         p.identityCardsEnabled = IDENTITY_CARDS_ENABLED.get();
         p.identityCardValidityDays = IDENTITY_CARD_VALIDITY_DAYS.get();
+        p.artifactRegistryEnabled = ARTIFACT_REGISTRY_ENABLED.get();
+        p.artifactPendingHours = ARTIFACT_PENDING_HOURS.get();
+        p.artifactSerialPrefix = ARTIFACT_SERIAL_PREFIX.get();
+        p.artifactRegulatedItemIds = new java.util.ArrayList<>(ARTIFACT_REGULATED_ITEMS.get());
 
         p.envelopeEnabled = ENVELOPE_ENABLED.get();
         p.envelopeFallbackToChat = ENVELOPE_FALLBACK_TO_CHAT.get();

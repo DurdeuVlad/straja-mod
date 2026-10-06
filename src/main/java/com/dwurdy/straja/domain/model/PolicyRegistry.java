@@ -81,6 +81,11 @@ public final class PolicyRegistry {
         // identity cards
         k("identityCards.enabled", "identityCardsEnabled", Kind.BOOL);
         k("identityCards.validityDays", "identityCardValidityDays", Kind.INT);
+        // artifact registry
+        k("artifactRegistry.enabled", "artifactRegistryEnabled", Kind.BOOL);
+        k("artifactRegistry.pendingMaturationHours", "artifactPendingHours", Kind.INT);
+        k("artifactRegistry.serialPrefix", "artifactSerialPrefix", Kind.STRING);
+        k("artifactRegistry.regulatedItemIds", "artifactRegulatedItemIds", Kind.STRING_LIST);
         // cuffs
         k("cuffs.requestTimeoutSeconds", "cuffRequestTimeoutSeconds", Kind.INT);
         k("cuffs.surrenderTimeoutSeconds", "surrenderTimeoutSeconds", Kind.INT);
