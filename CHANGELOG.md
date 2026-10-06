@@ -2,6 +2,78 @@
 
 ## Unreleased
 
+## 0.4.0 — 2026-10-06
+
+The Papers-Please forgery epic (#245): a server-authoritative artifact
+registry, physical black-market forging, and a two-layer detection and
+enforcement pipeline. All persisted stores upgrade in place; no world
+migration is required over 0.3.1.
+
+### Central artifact registry + licensing (M1, #246)
+
+- `ArtifactRegistryStore` — schema-versioned `SavedData` covered by
+  `/straja backup`; records carry serial `RC-<n>`, marking `#RC-<n>`,
+  itemId, classified kind, holder, issuing inspector, `pendingUntil`,
+  status
+- 24h pending maturation (`artifactRegistry.pendingMaturationHours`):
+  a pending mark is not yet legal — legality costs a day
+- `/straja inspector register [player]` binds the held item and stamps
+  `ArtifactSerial`/`ArtifactMark`; already-marked items refuse, and a
+  failed mark burns the serial as REVOKED so no unbound serial exists
+- INSPECTOR and TRANSPORTER licenses — authority grant/revoke (OP 3),
+  audited, self-view via `/straja license`, `inspector status`,
+  `transporter status`
+- Sealed military crates: `sealed_military_crate` + `seal_stamp`;
+  `/straja transporter seal|unseal` writes `SealBy`/`SealId`/`SealAt`,
+  transporters unseal only their own
+- `/straja artifact check|revoke <mark>` admin surface,
+  `[artifactRegistry]` config section, `artifactRegistry.*`
+  `/straja policy` overrides
+
+### Forging engine (M2, #247)
+
+- Physical forging verbs only — anvil strikes and smithing copies, no
+  commands, no menus: a forgery kit is materials + a station
+- Locked 5-tier roll N1=3 / N2=7 / N3=15 / N4=30 / N5=45 via
+  `forgery.tierWeights`; malformed values fall back to the pyramid
+- Anvil: `seal_stamp` + regulated item — licensed inspectors strike
+  authentic pending registrations, unlicensed strikes roll on the take
+- Smithing: `straja:exemplar` template ingredient (only data-carrying
+  documents match — can't fake a doc class never held) + blank stock +
+  `carbon_paper`; exemplar returned, only carbon consumed
+- The roll happens only at the take — UI previews show unmarked copies,
+  no reroll-on-refresh vector
+- Forged items carry the claimed serial, the physical malformed mark,
+  and the `ArtifactForgery` tier; the registry keeps `FRG-n` FORGED
+  shadow records that never mature legal
+- One `artifact_forge` audit record per attempt
+- `/straja identity forge <player> [N1..N5]` stages forged identity
+  cards for scenario testing
+
+### Mark detection + enforcement pipeline (M3, #248)
+
+- Gate scanners read physical marks only — a barcode scanner, not an
+  archivist: `UNREGISTERED`, `FLAGGED` (malformed), `CRUDE` (absurd) →
+  arrest lane; a plausible `#RC-<digits>` walks through by design
+- Trained eyes add the registry cross-check: JUNIOR catches
+  known-forged + far-fetched claims, VETERAN adds near-miss serials,
+  EXPERT adds holder/item conflicts + retired marks
+- `/straja inspect <player>` officer parity — comisar→EXPERT,
+  quiz-trained/sergent+→VETERAN, on-duty→JUNIOR; duty-gated,
+  proximity-bound (~8m hands-on)
+- One enforcement path everywhere: targeted seizure to evidence
+  (craft grid, cursor, and Curios via `DeepScanGateway.seizeAt`),
+  `document_forgery`/`artifact_forgery` offense, `forgery_detected`
+  audit row, idempotent system BOLO appending `falsificare`
+- Every control surface scans: stage-1 inspect, stage-2 arrest,
+  deny-stage, board checks, linked-gate arrivals, wrong-way repels,
+  escorted camp exits
+
+### Release pipeline
+
+- Retry release-asset uploads over the create/upload race — follow-up
+  to the 0.3.1 prerelease-rollback fix
+
 ## 0.3.1 — 2026-10-05
 
 Patch release: tester-protocol onboarding and release-pipeline fixes over
