@@ -27,18 +27,22 @@ public final class StrajaItems {
     public static final DeferredItem<Item> ARCHIVE_DOCUMENT = ITEMS.register("archive_document",
             () -> new Item(new Item.Properties().stacksTo(1)));
     public static final DeferredItem<Item> IDENTITY_CARD = ITEMS.register("identity_card",
-            () -> new Item(new Item.Properties().stacksTo(1).rarity(Rarity.UNCOMMON)));
+            () -> new com.dwurdy.straja.adapter.in.item.ForgeableDocumentItem(
+                    new Item.Properties().stacksTo(1).rarity(Rarity.UNCOMMON)));
     public static final DeferredItem<Item> CARBON_PAPER = ITEMS.register("carbon_paper",
             () -> new Item(new Item.Properties().stacksTo(16)));
     public static final DeferredItem<Item> ARCHIVE_STAMP = ITEMS.register("archive_stamp",
             () -> new Item(new Item.Properties().stacksTo(1)));
     public static final DeferredItem<Item> OFFICIAL_ENVELOPE = ITEMS.register("official_envelope",
             () -> new Item(new Item.Properties().stacksTo(16)));
-    /** Generic physical projections for V2 document/instrument records. */
+    /** Generic physical projections for V2 document/instrument records.
+     * Forgeable: also the result items of the #247 smithing-table copies. */
     public static final DeferredItem<Item> OFFICIAL_DOCUMENT = ITEMS.register("official_document",
-            () -> new Item(new Item.Properties().stacksTo(1).rarity(Rarity.UNCOMMON)));
+            () -> new com.dwurdy.straja.adapter.in.item.ForgeableDocumentItem(
+                    new Item.Properties().stacksTo(1).rarity(Rarity.UNCOMMON)));
     public static final DeferredItem<Item> OFFICIAL_INSTRUMENT = ITEMS.register("official_instrument",
-            () -> new Item(new Item.Properties().stacksTo(16).rarity(Rarity.UNCOMMON)));
+            () -> new com.dwurdy.straja.adapter.in.item.ForgeableDocumentItem(
+                    new Item.Properties().stacksTo(16).rarity(Rarity.UNCOMMON)));
 
     public static final DeferredItem<Item> ROOM_MARKER = ITEMS.register("room_marker",
             () -> new Item(new Item.Properties().stacksTo(1).rarity(Rarity.UNCOMMON)));

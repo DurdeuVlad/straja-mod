@@ -1,0 +1,17 @@
+{
+  "type": "straja:smithing_forge",
+  "template": {
+    "type": "straja:exemplar",
+    "kind": "instrument"
+  },
+  "base": {
+    "item": "straja:official_envelope"
+  },
+  "addition": {
+    "item": "straja:carbon_paper"
+  },
+  "result": {
+    "id": "straja:official_instrument",
+    "count": 1
+  }
+}

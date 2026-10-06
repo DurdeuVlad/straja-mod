@@ -5,7 +5,9 @@ import com.dwurdy.straja.adapter.in.event.StrajaEvents;
 import com.dwurdy.straja.adapter.in.form.FormPayloads;
 import com.dwurdy.straja.adapter.in.network.CustodyVisualPayload;
 import com.dwurdy.straja.adapter.in.npc.StrajaNpcEntity;
+import com.dwurdy.straja.bootstrap.StrajaIngredients;
 import com.dwurdy.straja.bootstrap.StrajaItems;
+import com.dwurdy.straja.bootstrap.StrajaRecipes;
 import com.dwurdy.straja.bootstrap.StrajaMenus;
 import com.dwurdy.straja.bootstrap.NpcPresentationRuntime;
 import com.dwurdy.straja.bootstrap.StrajaRuntime;
@@ -35,6 +37,8 @@ public class StrajaMod {
     public StrajaMod(IEventBus modBus, ModContainer container) {
         container.registerConfig(ModConfig.Type.SERVER, StrajaServerConfig.SPEC);
         StrajaItems.register(modBus);
+        StrajaIngredients.register(modBus);
+        StrajaRecipes.register(modBus);
         modBus.addListener(StrajaMod::addCreativeItems);
         StrajaMenus.register(modBus);
         StrajaNpcEntity.register(modBus);

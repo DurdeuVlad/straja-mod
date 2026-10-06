@@ -11,6 +11,12 @@ public class ArtifactRecord {
     public String serial = "";
     /** Physical mark displayed on the item, e.g. "#RC-15". */
     public String marking = "";
+    /**
+     * The serial the item claims to carry. For authentic records this equals
+     * {@link #serial}; for forged shadow records it is the spoofed or plausible
+     * serial the item presents (the shadow record itself is keyed "FRG-n").
+     */
+    public String claimedSerial = "";
     /** Registry item id, e.g. "minecraft:iron_sword" or "straja:identity_card". */
     public String itemId = "";
     /** "weapon" | "document" | "instrument" — classified from item id at registration. */
@@ -31,14 +37,22 @@ public class ArtifactRecord {
         return ArtifactStatus.REVOKED.name().equals(status);
     }
 
-    /** Effective legal state at {@code now}: PENDING | ACTIVE | REVOKED. */
+    /** Shadow records (forgeries) are never legal regardless of timing. */
+    public boolean forged() {
+        return ArtifactStatus.FORGED.name().equals(status)
+                || (forgeryTier != null && !forgeryTier.isBlank());
+    }
+
+    /** Effective legal state at {@code now}: PENDING | ACTIVE | REVOKED | FORGED. */
     public String statusAt(long now) {
         if (revoked()) return ArtifactStatus.REVOKED.name();
+        if (forged()) return ArtifactStatus.FORGED.name();
         return now >= pendingUntil ? ArtifactStatus.ACTIVE.name() : ArtifactStatus.PENDING.name();
     }
 
-    /** Counts as a legal registered artifact only after maturation. */
+    /** Counts as a legal registered artifact only after maturation — and never
+     * when the record is a known forgery. */
     public boolean legalAt(long now) {
-        return !revoked() && now >= pendingUntil;
+        return !revoked() && !forged() && now >= pendingUntil;
     }
 }

@@ -11,6 +11,12 @@ public interface IdentityCardRoleplayUseCase {
     /** Creates a deliberately imperfect but usable counterfeit for roleplay. */
     boolean forge(PlayerGateway actor, PlayerGateway target);
 
+    /** #247 — tier-selectable staging forge; default keeps untiered behaviour. */
+    default boolean forge(PlayerGateway actor, PlayerGateway target,
+                          com.dwurdy.straja.domain.model.ForgeryTier tier) {
+        return forge(actor, target);
+    }
+
     void read(PlayerGateway viewer, String cardId);
 
     /** Reads a physical item, including the item-side authenticity marker. */

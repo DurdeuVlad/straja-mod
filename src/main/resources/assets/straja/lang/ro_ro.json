@@ -131,6 +131,7 @@
   "straja.artifact.exhausted": "Spațiul de serii ale registrului este epuizat.",
   "straja.artifact.item_invalid": "Obiectul ținut în mână nu poate fi înregistrat.",
   "straja.artifact.mark_failed": "Marca %s nu a putut fi aplicată pe obiect; înregistrarea a fost anulată.",
+  "straja.forge.tier_invalid": "Nivel de fals necunoscut. Folosește unul dintre: N1, N2, N3, N4, N5.",
   "straja.artifact.need_crate": "Trebuie să ții o ladă militară în mână.",
   "straja.artifact.need_inspector": "Baterea mărcilor autentice cere licența de Inspector.",
   "straja.artifact.need_transporter": "Sigilarea lăzilor militare cere licența de Transportator.",

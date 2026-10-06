@@ -1206,7 +1206,18 @@ public final class StrajaCommands {
         node.then(Commands.literal("forge")
                 .then(Commands.argument("player", EntityArgument.player())
                         .executes(c -> adminActor(c, p -> StrajaRuntime.get().identityCards()
-                                .forge(p, target(c, "player"))))));
+                                .forge(p, target(c, "player"))))
+                        .then(Commands.argument("tier", StringArgumentType.word())
+                                .executes(c -> adminActor(c, p -> {
+                                    var tier = com.dwurdy.straja.domain.model.ForgeryTier
+                                            .parse(StringArgumentType.getString(c, "tier"));
+                                    if (tier == null) {
+                                        p.refuse("straja.forge.tier_invalid", "straja.remedy.fix_retry");
+                                        return;
+                                    }
+                                    StrajaRuntime.get().identityCards()
+                                            .forge(p, target(c, "player"), tier);
+                                })))));
         node.then(Commands.literal("revoke")
                 .then(Commands.argument("id", StringArgumentType.word())
                         .then(Commands.argument("reason", StringArgumentType.greedyString())

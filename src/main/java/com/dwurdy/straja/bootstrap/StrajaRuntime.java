@@ -12,6 +12,7 @@ import com.dwurdy.straja.adapter.in.compat.OptionalModCompatibility;
 import com.dwurdy.straja.application.StrajaContext;
 import com.dwurdy.straja.application.port.out.Clock;
 import com.dwurdy.straja.application.port.out.IdGenerator;
+import com.dwurdy.straja.application.port.out.RollSource;
 import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.application.service.AuditService;
 import com.dwurdy.straja.application.service.EquipmentService;
@@ -56,6 +57,7 @@ public final class StrajaRuntime {
     private final com.dwurdy.straja.application.service.ArchiveService archive;
     private final com.dwurdy.straja.application.service.IdentityCardService identityCards;
     private final com.dwurdy.straja.application.service.ArtifactRegistryService artifactRegistry;
+    private final com.dwurdy.straja.application.service.ForgeryService forgery;
     private final com.dwurdy.straja.application.service.SecretaryService secretary;
     private final com.dwurdy.straja.application.service.MigrationService migration;
     private final com.dwurdy.straja.application.service.FormSessionService formSessions;
@@ -340,6 +342,9 @@ public final class StrajaRuntime {
         this.artifactRegistry = new com.dwurdy.straja.application.service.ArtifactRegistryService(
                 new SavedStores.ArtifactRegistry(stores), ctx.clock(), ids,
                 ctx.policies(), players, audit);
+        this.forgery = new com.dwurdy.straja.application.service.ForgeryService(
+                ctx.policies(), RollSource.system(), ctx.clock(),
+                artifactRegistry, players, audit);
         this.secretary = new com.dwurdy.straja.application.service.SecretaryService();
         this.migration = new com.dwurdy.straja.application.service.MigrationService(ctx, audit);
         this.formSessions = new com.dwurdy.straja.application.service.FormSessionService(clock, ids, v2Documents);
@@ -566,6 +571,7 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase archiveRoleplay() { return archive; }
     public com.dwurdy.straja.application.port.in.IdentityCardRoleplayUseCase identityCards() { return identityCards; }
     public com.dwurdy.straja.application.service.ArtifactRegistryService artifactRegistry() { return artifactRegistry; }
+    public com.dwurdy.straja.application.service.ForgeryService forgery() { return forgery; }
     public com.dwurdy.straja.application.port.in.SecretaryRoleplayUseCase secretaryRoleplay() { return secretary; }
     public com.dwurdy.straja.application.port.in.RoleplayExpansionUseCase expansionRoleplay() { return expansion; }
     public com.dwurdy.straja.application.service.RpExpansionService expansion() { return expansion; }

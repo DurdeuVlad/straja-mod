@@ -250,6 +250,11 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.IntValue ARTIFACT_PENDING_HOURS;
     public static final ModConfigSpec.ConfigValue<String> ARTIFACT_SERIAL_PREFIX;
     public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> ARTIFACT_REGULATED_ITEMS;
+    public static final ModConfigSpec.BooleanValue FORGERY_ENABLED;
+    public static final ModConfigSpec.ConfigValue<java.util.List<? extends Integer>> FORGERY_TIER_WEIGHTS;
+    public static final ModConfigSpec.IntValue FORGERY_ANVIL_XP_LICENSED;
+    public static final ModConfigSpec.IntValue FORGERY_ANVIL_XP_UNLICENSED;
+    public static final ModConfigSpec.BooleanValue FORGERY_EXEMPLAR_REQUIRED;
     public static final ModConfigSpec.IntValue IDENTITY_CARD_VALIDITY_DAYS;
 
     public static final ModConfigSpec.BooleanValue ENVELOPE_ENABLED;
@@ -380,14 +385,41 @@ public final class StrajaServerConfig {
                         "stays PENDING this long before it counts as legal.")
                 .defineInRange("pendingMaturationHours", defaults.artifactPendingHours, 0, 8760);
         ARTIFACT_SERIAL_PREFIX = B.comment(
-                        "Serial prefix for authentic registry marks (displayed as #<prefix><n>).")
-                .define("serialPrefix", defaults.artifactSerialPrefix, StrajaServerConfig::isNonBlankString);
+                        "Serial prefix for authentic registry marks (displayed as #<prefix><n>).",
+                        "Must not be FRG- — that namespace belongs to forged shadow records.")
+                .define("serialPrefix", defaults.artifactSerialPrefix,
+                        StrajaServerConfig::isSafeSerialPrefix);
         ARTIFACT_REGULATED_ITEMS = B.comment(
                         "Item ids classified as regulated weapons on registration and",
                         "(in a later milestone) required to be registered at checkpoints.")
                 .defineListAllowEmpty(List.of("regulatedItemIds"),
                         new java.util.ArrayList<>(defaults.artifactRegulatedItemIds),
                         () -> "examplemod:rifle", StrajaServerConfig::isNonBlankString);
+        B.pop();
+
+        B.push("forgery");
+        FORGERY_ENABLED = B.comment(
+                        "Black-market forging engine: unlicensed mark strikes roll",
+                        "the quality pyramid and produce visibly defective marks.")
+                .define("enabled", defaults.forgeryEnabled);
+        FORGERY_TIER_WEIGHTS = B.comment(
+                        "Roll weights for forgery tiers N1..N5 (locked pyramid:",
+                        "3 near-perfect / 7 fine / 15 passable / 30 rough / 45 crude).",
+                        "Non-positive or malformed values fall back to the pyramid.")
+                .defineListAllowEmpty(List.of("tierWeights"),
+                        new java.util.ArrayList<>(defaults.forgeryTierWeights),
+                        () -> 10, o -> o instanceof Integer i && i > 0 && i <= 1000);
+        FORGERY_ANVIL_XP_LICENSED = B.comment(
+                        "XP levels the anvil charges a licensed inspector per mark strike.")
+                .defineInRange("anvilXpLicensed", defaults.forgeryAnvilXpLicensed, 0, 30);
+        FORGERY_ANVIL_XP_UNLICENSED = B.comment(
+                        "XP levels the anvil charges an unlicensed striker per attempt.")
+                .defineInRange("anvilXpUnlicensed", defaults.forgeryAnvilXpUnlicensed, 0, 30);
+        FORGERY_EXEMPLAR_REQUIRED = B.comment(
+                        "Document forgery requires a genuine registered document in",
+                        "the smithing table's template slot — can't fake what's never",
+                        "been held. Disable to allow free-form copying.")
+                .define("exemplarRequired", defaults.forgeryExemplarRequired);
         B.pop();
 
         B.push("timers");
@@ -1357,6 +1389,11 @@ public final class StrajaServerConfig {
         p.artifactPendingHours = ARTIFACT_PENDING_HOURS.get();
         p.artifactSerialPrefix = ARTIFACT_SERIAL_PREFIX.get();
         p.artifactRegulatedItemIds = new java.util.ArrayList<>(ARTIFACT_REGULATED_ITEMS.get());
+        p.forgeryEnabled = FORGERY_ENABLED.get();
+        p.forgeryTierWeights = new java.util.ArrayList<>(FORGERY_TIER_WEIGHTS.get());
+        p.forgeryAnvilXpLicensed = FORGERY_ANVIL_XP_LICENSED.get();
+        p.forgeryAnvilXpUnlicensed = FORGERY_ANVIL_XP_UNLICENSED.get();
+        p.forgeryExemplarRequired = FORGERY_EXEMPLAR_REQUIRED.get();
 
         p.envelopeEnabled = ENVELOPE_ENABLED.get();
         p.envelopeFallbackToChat = ENVELOPE_FALLBACK_TO_CHAT.get();
@@ -1458,6 +1495,12 @@ public final class StrajaServerConfig {
 
     private static boolean isNonBlankString(Object o) {
         return o instanceof String s && !s.isBlank();
+    }
+
+    /** Authentic serials must never share the FRG- shadow-record namespace. */
+    private static boolean isSafeSerialPrefix(Object o) {
+        return o instanceof String s && !s.isBlank()
+                && !s.trim().toUpperCase(java.util.Locale.ROOT).startsWith("FRG-");
     }
 
     private static boolean isNpcProviderMode(Object o) {

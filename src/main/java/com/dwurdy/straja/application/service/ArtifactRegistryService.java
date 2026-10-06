@@ -78,8 +78,10 @@ public class ArtifactRegistryService {
         if (store == null) store = new ArtifactRegistryStore();
         if (store.artifacts == null) store.artifacts = new LinkedHashMap<>();
         if (store.licenses == null) store.licenses = new LinkedHashMap<>();
+        if (store.claimedIndex == null) store.claimedIndex = new LinkedHashMap<>();
         if (store.nextSerial < 1) store.nextSerial = 1;
         if (store.nextLicense < 1) store.nextLicense = 1;
+        if (store.nextForgery < 1) store.nextForgery = 1;
         return store;
     }
 
@@ -277,6 +279,7 @@ public class ArtifactRegistryService {
         ArtifactRecord record = new ArtifactRecord();
         record.serial = serial;
         record.marking = "#" + serial;
+        record.claimedSerial = serial;
         record.itemId = itemId.trim();
         record.artifactKind = classify(record.itemId);
         record.holderUuid = uuid(holder);
@@ -340,6 +343,83 @@ public class ArtifactRegistryService {
                 holder.name(), uuid(holder), "FAIL", "serial=" + serial);
         actor.refuse("straja.artifact.mark_failed", "straja.remedy.retry", "#" + serial);
         return null;
+    }
+
+    /* ---- #247 forging surface ---- */
+
+    /** Serials the N1 tier may spoof: live numbers of authentic records. */
+    public List<String> authenticSerials() {
+        ArtifactRegistryStore store = normalized(repository.read());
+        List<String> serials = new ArrayList<>();
+        for (ArtifactRecord record : store.artifacts.values()) {
+            if (!record.forged() && !record.revoked() && !record.serial.isBlank()) {
+                serials.add(record.serial);
+            }
+        }
+        return serials;
+    }
+
+    /** The next unallocated authentic number — forging reads the serial space. */
+    public long nextSerialNumber() {
+        return normalized(repository.read()).nextSerial;
+    }
+
+    /**
+     * Writes a forge shadow record keyed {@code FRG-n}: the registry keeps
+     * truth about a fake it has seen being struck. Shadow records never count
+     * as legal registrations ({@link ArtifactRecord#legalAt}) and never leak
+     * into the authentic serial space — but the audit trail of who forged what
+     * is exactly what lets a garrison hunt a forger ring later.
+     */
+    public ArtifactRecord recordForgery(PlayerGateway forger, String itemId,
+                                        String marking, String claimedSerial,
+                                        com.dwurdy.straja.domain.model.ForgeryTier tier) {
+        ArtifactRegistryStore store = normalized(repository.read());
+        ArtifactRecord record = new ArtifactRecord();
+        record.serial = "FRG-" + store.nextForgery;
+        record.marking = marking == null ? "" : marking.trim();
+        record.claimedSerial = claimedSerial == null ? "" : claimedSerial.trim();
+        record.itemId = itemId == null ? "" : itemId.trim();
+        record.artifactKind = classify(record.itemId);
+        record.holderUuid = uuid(forger);
+        record.holderName = safeName(forger);
+        record.issuerUuid = uuid(forger);
+        record.issuerName = safeName(forger);
+        record.registeredAt = now();
+        record.pendingUntil = 0;
+        record.status = ArtifactStatus.FORGED.name();
+        record.forgeryTier = tier == null ? "" : tier.name();
+        String key = record.serial;
+        // Defensive: a serial prefix of "FRG-" must never let a shadow
+        // overwrite an authentic record — skip to the next free key.
+        while (store.artifacts.containsKey(key)
+                && store.nextForgery < Long.MAX_VALUE) {
+            store.nextForgery++;
+            key = "FRG-" + store.nextForgery;
+            record.serial = key;
+        }
+        store.artifacts.put(key, record);
+        if (!record.claimedSerial.isBlank()) {
+            store.claimedIndex.put(record.claimedSerial, key);
+        }
+        if (store.nextForgery < Long.MAX_VALUE) store.nextForgery++;
+        store.storeRevision++;
+        repository.write(store);
+        return record;
+    }
+
+    /** True when at least one FORGED shadow presented this claimed serial —
+     * evidence that a claim resolving to no authentic record was still
+     * produced by a forge attempt, not a hypothetical registration. */
+    public boolean hasShadowForClaim(String claimedSerial) {
+        if (claimedSerial == null || claimedSerial.isBlank()) return false;
+        return normalized(repository.read()).claimedIndex.containsKey(claimedSerial.trim());
+    }
+
+    /** Registry truth for a claimed serial (detection surface, used by M3). */
+    public ArtifactRecord recordForClaim(String claimedSerial) {
+        if (claimedSerial == null || claimedSerial.isBlank()) return null;
+        return normalized(repository.read()).artifacts.get(claimedSerial.trim());
     }
 
     /** Officer tool: registry truth for a serial — the cross-check that burns forgeries. */

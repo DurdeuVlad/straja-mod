@@ -782,6 +782,19 @@ public final class StrajaEvents {
         }
     }
 
+    /** #247 — anvil stamp strike preview: regulated item + seal_stamp. */
+    @SubscribeEvent
+    public void onAnvilUpdate(net.neoforged.neoforge.event.AnvilUpdateEvent event) {
+        com.dwurdy.straja.adapter.in.crafting.AnvilForgeSurface.onAnvilUpdate(event);
+    }
+
+    /** #247 — anvil strike take: the only moment a forgery roll is legal. */
+    @SubscribeEvent
+    public void onAnvilRepair(net.neoforged.neoforge.event.entity.player.AnvilRepairEvent event) {
+        if (event.getEntity().level().isClientSide()) return;
+        com.dwurdy.straja.adapter.in.crafting.AnvilForgeSurface.onAnvilRepair(event);
+    }
+
     /** Occupied room blocks cannot be modified by placed blocks. */
     @SubscribeEvent
     public void onBlockPlace(net.neoforged.neoforge.event.level.BlockEvent.EntityPlaceEvent event) {
