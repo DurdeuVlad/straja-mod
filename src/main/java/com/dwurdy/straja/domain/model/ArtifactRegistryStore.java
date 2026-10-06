@@ -13,4 +13,7 @@ public class ArtifactRegistryStore {
     public Map<String, ArtifactLicense> licenses = new LinkedHashMap<>();
     public long nextSerial = 1;
     public long nextLicense = 1;
+    /** Forge-shadow sequence: forged records key as "FRG-n" so they can never
+     * collide with authentic serials of any prefix. */
+    public long nextForgery = 1;
 }

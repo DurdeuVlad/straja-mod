@@ -36,6 +36,16 @@ public class StrajaPolicies {
     /** Item ids the checkpoint scanner treats as regulated arms (M3). */
     public List<String> artifactRegulatedItemIds = new ArrayList<>(List.of());
 
+    // #247 forging engine — unlicensed strikes roll the locked pyramid
+    public boolean forgeryEnabled = true;
+    /** N1..N5 weights; non-positive/malformed values fall back to the pyramid. */
+    public List<Integer> forgeryTierWeights = new ArrayList<>(List.of(3, 7, 15, 30, 45));
+    /** XP levels the anvil charges for a mark strike. */
+    public int forgeryAnvilXpLicensed = 3;
+    public int forgeryAnvilXpUnlicensed = 5;
+    /** Whether document forgery requires a genuine exemplar in the template slot. */
+    public boolean forgeryExemplarRequired = true;
+
     // deployment gates
     public boolean requireRealCoinProviderOutsideLocal = true;
     public boolean requireCommissionerUuidOutsideLocal = true;

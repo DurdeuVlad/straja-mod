@@ -1069,4 +1069,86 @@ public final class StrajaGameTests {
         }
         helper.succeed();
     }
+
+    /**
+     * #247 — the forging engine on a live server: the anvil plan splits
+     * licensed/unlicensed strikers, the exemplar ingredient only matches
+     * data-carrying documents, and an unlicensed forge writes a FORGED
+     * shadow record that can never pass as a legal registration.
+     */
+    @GameTest(template = "empty")
+    public static void forgeryEngineAnvilPlanAndShadowRecords(GameTestHelper helper) {
+        var runtime = runtime(helper);
+        var admin = new VirtualPlayerGateway("gt_f_admin");
+        admin.setOp(true);
+        var inspector = new VirtualPlayerGateway("gt_f_inspector");
+        var forger = new VirtualPlayerGateway("gt_forger");
+        var registry = runtime.artifactRegistry();
+        var forgery = runtime.forgery();
+        var policies = runtime.context().policies();
+        boolean prevRegistry = policies.artifactRegistryEnabled;
+        boolean prevForgery = policies.forgeryEnabled;
+        var prevArms = new java.util.ArrayList<>(policies.artifactRegulatedItemIds);
+        policies.artifactRegistryEnabled = true;
+        policies.forgeryEnabled = true;
+        if (!policies.artifactRegulatedItemIds.contains("minecraft:iron_sword")) {
+            policies.artifactRegulatedItemIds.add("minecraft:iron_sword");
+        }
+        try {
+            if (!registry.isLicensed(inspector,
+                    com.dwurdy.straja.domain.model.ArtifactLicenseType.INSPECTOR)) {
+                helper.assertTrue(registry.grantLicense(admin, inspector, "INSPECTOR"),
+                        "an admin must grant the inspector license");
+            }
+
+            // The anvil plan: unregulated items and unlicensed-vs-licensed split.
+            helper.assertTrue(
+                    forgery.planAnvilStrike(forger, "minecraft:stick", false) == null,
+                    "unregulated items are not a forging operation");
+            helper.assertTrue(
+                    forgery.planAnvilStrike(forger, "minecraft:iron_sword", true) == null,
+                    "a marked item cannot be re-struck");
+            var forgedPlan = forgery.planAnvilStrike(forger, "minecraft:iron_sword", false);
+            helper.assertTrue(forgedPlan != null && !forgedPlan.authentic(),
+                    "an unlicensed striker must get the forged plan");
+            var authenticPlan = forgery.planAnvilStrike(inspector, "minecraft:iron_sword", false);
+            helper.assertTrue(authenticPlan != null && authenticPlan.authentic(),
+                    "a licensed inspector must get the authentic strike");
+
+            // The exemplar ingredient: blank items never teach a serial's shape.
+            var ingredient = new com.dwurdy.straja.adapter.in.crafting.ExemplarIngredient("card");
+            ItemStack blank = new ItemStack(StrajaItems.IDENTITY_CARD.get());
+            helper.assertTrue(!ingredient.test(blank),
+                    "a blank card must never pass as an exemplar");
+            ItemStack genuine = blank.copy();
+            var tag = new net.minecraft.nbt.CompoundTag();
+            tag.putString("IdentityCardId", "ID-1");
+            genuine.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA,
+                    net.minecraft.world.item.component.CustomData.of(tag));
+            helper.assertTrue(ingredient.test(genuine),
+                    "an issued card must pass as an exemplar");
+
+            // Unlicensed forge: shadow record, authentic-space isolation.
+            var outcome = forgery.forge(forger, "minecraft:iron_sword");
+            helper.assertTrue(outcome != null && outcome.shadowSerial().startsWith("FRG-"),
+                    "a forge attempt must write an FRG shadow record");
+            var shadow = registry.find(outcome.shadowSerial());
+            helper.assertTrue(shadow != null && !shadow.legalAt(Long.MAX_VALUE),
+                    "a forged shadow record can never be legal");
+            helper.assertTrue(outcome.marking().startsWith("#"),
+                    "forged items carry a physical mark, got: " + outcome.marking());
+
+            // The three smithing recipes loaded — proves the JSONs parsed.
+            var recipes = helper.getLevel().getRecipeManager().getRecipes();
+            long forgeRecipes = recipes.stream().filter(r -> r.id().getNamespace().equals("straja")
+                    && r.id().getPath().startsWith("forge_")).count();
+            helper.assertTrue(forgeRecipes == 3,
+                    "expected 3 forge recipes loaded, found: " + forgeRecipes);
+        } finally {
+            policies.artifactRegistryEnabled = prevRegistry;
+            policies.forgeryEnabled = prevForgery;
+            policies.artifactRegulatedItemIds = prevArms;
+        }
+        helper.succeed();
+    }
 }

@@ -131,6 +131,7 @@
   "straja.artifact.exhausted": "The artifact serial space is exhausted.",
   "straja.artifact.item_invalid": "The held item cannot be registered.",
   "straja.artifact.mark_failed": "The mark %s could not be applied to the item; the registration was revoked.",
+  "straja.forge.tier_invalid": "Unknown forgery tier. Use one of N1, N2, N3, N4, N5.",
   "straja.artifact.need_crate": "You must hold a military crate.",
   "straja.artifact.need_inspector": "Striking authentic marks requires an Inspector license.",
   "straja.artifact.need_transporter": "Sealing military crates requires a Transporter license.",

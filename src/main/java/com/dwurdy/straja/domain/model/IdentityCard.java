@@ -12,6 +12,8 @@ public class IdentityCard {
     public String status = IdentityCardStatus.VALID.name();
     public String authenticity = IdentityCardAuthenticity.AUTHENTIC.name();
     public String forgeryClue = "";
+    /** Blank for authentic cards; "N1".."N5" when staged as a tiered forgery (#247). */
+    public String forgeryTier = "";
     public Long revokedAt;
     public String revokedByUuid = "";
     public String revokedByName = "";

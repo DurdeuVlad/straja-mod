@@ -86,6 +86,12 @@ public final class PolicyRegistry {
         k("artifactRegistry.pendingMaturationHours", "artifactPendingHours", Kind.INT);
         k("artifactRegistry.serialPrefix", "artifactSerialPrefix", Kind.STRING);
         k("artifactRegistry.regulatedItemIds", "artifactRegulatedItemIds", Kind.STRING_LIST);
+        // forging engine
+        k("forgery.enabled", "forgeryEnabled", Kind.BOOL);
+        k("forgery.tierWeights", "forgeryTierWeights", Kind.INT_LIST);
+        k("forgery.anvilXpLicensed", "forgeryAnvilXpLicensed", Kind.INT);
+        k("forgery.anvilXpUnlicensed", "forgeryAnvilXpUnlicensed", Kind.INT);
+        k("forgery.exemplarRequired", "forgeryExemplarRequired", Kind.BOOL);
         // cuffs
         k("cuffs.requestTimeoutSeconds", "cuffRequestTimeoutSeconds", Kind.INT);
         k("cuffs.surrenderTimeoutSeconds", "surrenderTimeoutSeconds", Kind.INT);

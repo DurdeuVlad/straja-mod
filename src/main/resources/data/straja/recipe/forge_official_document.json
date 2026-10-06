@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:smithing_transform",
+  "template": {
+    "type": "straja:exemplar",
+    "kind": "document"
+  },
+  "base": {
+    "item": "straja:official_envelope"
+  },
+  "addition": {
+    "item": "straja:carbon_paper"
+  },
+  "result": {
+    "id": "straja:official_document",
+    "count": 1
+  }
+}

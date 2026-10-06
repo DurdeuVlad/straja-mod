@@ -30,6 +30,15 @@ public class IdentityCardService implements IdentityCardRoleplayUseCase {
             "cerneala de pe serie pare puțin retușată",
             "hârtia are o textură neobișnuită");
 
+    /** Tier-keyed staging clues — N1 near-invisible, N5 blatant (#247). */
+    private static final java.util.Map<com.dwurdy.straja.domain.model.ForgeryTier, String> TIER_CLUES =
+            java.util.Map.of(
+                    com.dwurdy.straja.domain.model.ForgeryTier.N1, "seria nu corespunde registrului la verificare amănunțită",
+                    com.dwurdy.straja.domain.model.ForgeryTier.N2, "tiparul seriei e cu o nuanță mai deschis",
+                    com.dwurdy.straja.domain.model.ForgeryTier.N3, "seria pare trasă din alt culoar de numărare",
+                    com.dwurdy.straja.domain.model.ForgeryTier.N4, "separatorii seriei sunt greșit formați",
+                    com.dwurdy.straja.domain.model.ForgeryTier.N5, "sigiliul e o schiță caraghioasă — fals evident");
+
     private final StrajaContext ctx;
     private final PlayerService players;
     private final AuditService audit;
@@ -197,6 +206,17 @@ public class IdentityCardService implements IdentityCardRoleplayUseCase {
 
     @Override
     public boolean forge(PlayerGateway actor, PlayerGateway target) {
+        return forge(actor, target, null);
+    }
+
+    /**
+     * #247 — tier-selectable staging forge: the optional tier pins the clue
+     * subtlety (N1 near-invisible … N5 obvious) and stamps
+     * {@code card.forgeryTier} for scenario bookkeeping. Null tier keeps the
+     * legacy rotating-clue behaviour.
+     */
+    public boolean forge(PlayerGateway actor, PlayerGateway target,
+                       com.dwurdy.straja.domain.model.ForgeryTier tier) {
         if (actor == null) return false;
         if (!p().identityCardsEnabled) {
             actor.refuse("straja.idcard.disabled", "straja.remedy.ask_comisar");
@@ -222,7 +242,9 @@ public class IdentityCardService implements IdentityCardRoleplayUseCase {
             number++;
             id = "ID-" + number;
         }
-        String clue = FORGERY_CLUES.get(Math.floorMod(number, FORGERY_CLUES.size()));
+        String clue = tier == null
+                ? FORGERY_CLUES.get(Math.floorMod(number, FORGERY_CLUES.size()))
+                : TIER_CLUES.get(tier);
         var itemData = new LinkedHashMap<String, String>();
         itemData.put("IdentityCardId", id);
         itemData.put("IdentityCardHolder", target.uuid().toString());
@@ -245,12 +267,14 @@ public class IdentityCardService implements IdentityCardRoleplayUseCase {
         card.expiresAt = card.issuedAt + (long) validityDays * DAY_MS;
         card.authenticity = IdentityCardAuthenticity.FORGED.name();
         card.forgeryClue = clue;
+        card.forgeryTier = tier == null ? "" : tier.name();
         store.cards.put(id, card);
         store.nextCardNumber = number == Integer.MAX_VALUE ? number : number + 1;
         ctx.identityCards().write(store);
 
         audit.record("identity_card_forge", actor.name(), uuid(actor),
-                target.name(), uuid(target), "SUCCESS", "cardId=" + id);
+                target.name(), uuid(target), "SUCCESS",
+                "cardId=" + id + (tier == null ? "" : " tier=" + tier.name()));
         actor.tell("Buletin contrafăcut " + id + " pregătit pentru " + target.name() + ".");
         return true;
     }

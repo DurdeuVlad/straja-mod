@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:smithing_transform",
+  "template": {
+    "type": "straja:exemplar",
+    "kind": "card"
+  },
+  "base": {
+    "item": "straja:archive_document"
+  },
+  "addition": {
+    "item": "straja:carbon_paper"
+  },
+  "result": {
+    "id": "straja:identity_card",
+    "count": 1
+  }
+}

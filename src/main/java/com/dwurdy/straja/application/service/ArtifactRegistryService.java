@@ -80,6 +80,7 @@ public class ArtifactRegistryService {
         if (store.licenses == null) store.licenses = new LinkedHashMap<>();
         if (store.nextSerial < 1) store.nextSerial = 1;
         if (store.nextLicense < 1) store.nextLicense = 1;
+        if (store.nextForgery < 1) store.nextForgery = 1;
         return store;
     }
 
@@ -277,6 +278,7 @@ public class ArtifactRegistryService {
         ArtifactRecord record = new ArtifactRecord();
         record.serial = serial;
         record.marking = "#" + serial;
+        record.claimedSerial = serial;
         record.itemId = itemId.trim();
         record.artifactKind = classify(record.itemId);
         record.holderUuid = uuid(holder);
@@ -340,6 +342,61 @@ public class ArtifactRegistryService {
                 holder.name(), uuid(holder), "FAIL", "serial=" + serial);
         actor.refuse("straja.artifact.mark_failed", "straja.remedy.retry", "#" + serial);
         return null;
+    }
+
+    /* ---- #247 forging surface ---- */
+
+    /** Serials the N1 tier may spoof: allocated numbers of authentic records. */
+    public List<String> authenticSerials() {
+        ArtifactRegistryStore store = normalized(repository.read());
+        List<String> serials = new ArrayList<>();
+        for (ArtifactRecord record : store.artifacts.values()) {
+            if (!record.forged() && !record.serial.isBlank()) serials.add(record.serial);
+        }
+        return serials;
+    }
+
+    /** The next unallocated authentic number — forging reads the serial space. */
+    public long nextSerialNumber() {
+        return normalized(repository.read()).nextSerial;
+    }
+
+    /**
+     * Writes a forge shadow record keyed {@code FRG-n}: the registry keeps
+     * truth about a fake it has seen being struck. Shadow records never count
+     * as legal registrations ({@link ArtifactRecord#legalAt}) and never leak
+     * into the authentic serial space — but the audit trail of who forged what
+     * is exactly what lets a garrison hunt a forger ring later.
+     */
+    public ArtifactRecord recordForgery(PlayerGateway forger, String itemId,
+                                        String marking, String claimedSerial,
+                                        com.dwurdy.straja.domain.model.ForgeryTier tier) {
+        ArtifactRegistryStore store = normalized(repository.read());
+        ArtifactRecord record = new ArtifactRecord();
+        record.serial = "FRG-" + store.nextForgery;
+        record.marking = marking == null ? "" : marking.trim();
+        record.claimedSerial = claimedSerial == null ? "" : claimedSerial.trim();
+        record.itemId = itemId == null ? "" : itemId.trim();
+        record.artifactKind = classify(record.itemId);
+        record.holderUuid = uuid(forger);
+        record.holderName = safeName(forger);
+        record.issuerUuid = uuid(forger);
+        record.issuerName = safeName(forger);
+        record.registeredAt = now();
+        record.pendingUntil = 0;
+        record.status = ArtifactStatus.FORGED.name();
+        record.forgeryTier = tier == null ? "" : tier.name();
+        store.artifacts.put(record.serial, record);
+        store.nextForgery++;
+        store.storeRevision++;
+        repository.write(store);
+        return record;
+    }
+
+    /** Registry truth for a claimed serial (detection surface, used by M3). */
+    public ArtifactRecord recordForClaim(String claimedSerial) {
+        if (claimedSerial == null || claimedSerial.isBlank()) return null;
+        return normalized(repository.read()).artifacts.get(claimedSerial.trim());
     }
 
     /** Officer tool: registry truth for a serial — the cross-check that burns forgeries. */
