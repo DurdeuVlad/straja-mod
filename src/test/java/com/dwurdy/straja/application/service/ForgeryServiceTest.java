@@ -127,7 +127,7 @@ class ForgeryServiceTest {
                     ForgeryMarking.markingFor(ForgeryTier.N2, rng::nextInt, "RC-", 40, real), "RC-"));
             assertEquals(MarkClass.PLAUSIBLE, ForgeryMarking.classify(
                     ForgeryMarking.markingFor(ForgeryTier.N3, rng::nextInt, "RC-", 40, real), "RC-"));
-            assertNotEquals(MarkClass.PLAUSIBLE, ForgeryMarking.classify(
+            assertEquals(MarkClass.MALFORMED, ForgeryMarking.classify(
                     ForgeryMarking.markingFor(ForgeryTier.N4, rng::nextInt, "RC-", 40, real), "RC-"));
             assertEquals(MarkClass.ABSURD, ForgeryMarking.classify(
                     ForgeryMarking.markingFor(ForgeryTier.N5, rng::nextInt, "RC-", 40, real), "RC-"));
@@ -149,11 +149,44 @@ class ForgeryServiceTest {
                 // Expert: the claimed serial exists — but describes a different
                 // item than the forger struck, so a registry cross-check burns it.
             } else {
-                // Fresh-registry fallback: one step beyond allocation.
-                assertEquals("RC-41", claimed);
+                // Fresh-registry fallback: zero-padded — never allocatable.
+                assertEquals("RC-041", claimed);
             }
         }
         assertTrue(spoofedReal, "N1 should sometimes spoof a genuine serial");
+    }
+
+    @Test
+    void everyN4VariantClassifiesMalformedNotAbsurd() {
+        // A mangled-but-recognizable prefix is a format error, not a crude mark.
+        assertEquals(MarkClass.MALFORMED, ForgeryMarking.classify("#RC-15_", "RC-"));
+        assertEquals(MarkClass.MALFORMED, ForgeryMarking.classify("#RC15", "RC-"));
+        assertEquals(MarkClass.MALFORMED, ForgeryMarking.classify("#RC-15A", "RC-"));
+        assertEquals(MarkClass.MALFORMED, ForgeryMarking.classify("#rc-15", "RC-"));
+        assertEquals(MarkClass.MALFORMED, ForgeryMarking.classify("#RC--15", "RC-"));
+        assertEquals(MarkClass.ABSURD, ForgeryMarking.classify("#RUSTY-GUN-99", "RC-"));
+        assertEquals(MarkClass.PLAUSIBLE, ForgeryMarking.classify("#RC-15", "RC-"));
+    }
+
+    @Test
+    void forgedClaimsCanNeverRipenIntoRealSerials() {
+        // Every forged claim is zero-padded or absurd: register() only ever
+        // emits plain "<prefix><number>" serials, so no future authentic
+        // allocation can validate a forged claim.
+        RollSource rng = seeded(31L);
+        for (ForgeryTier tier : ForgeryTier.values()) {
+            if (tier == ForgeryTier.N1) continue; // N1 spoofs real serials by design
+            for (int i = 0; i < 200; i++) {
+                String mark = ForgeryMarking.markingFor(tier, rng::nextInt,
+                        "RC-", 40, List.of());
+                String claimed = ForgeryMarking.claimedSerialFor(mark);
+                if (claimed.startsWith("RC-")) {
+                    String digits = claimed.substring(3);
+                    assertTrue(digits.startsWith("0") || !digits.chars().allMatch(Character::isDigit),
+                            "forged claim must never be a plain allocatable serial: " + claimed);
+                }
+            }
+        }
     }
 
     @Test
@@ -208,36 +241,39 @@ class ForgeryServiceTest {
     @Test
     void checkClaimReadsRegistryTruth() {
         // Authentic record claims itself.
-        String serial = registry.register(admin, citizen(), "minecraft:iron_sword");
+        var holder = citizen();
+        String serial = registry.register(admin, holder, "minecraft:iron_sword");
         assertNotNull(serial);
         assertEquals(ForgeryService.RegistryCheck.AUTHENTIC,
                 forgery.checkClaim(serial, "minecraft:iron_sword"));
         assertEquals(ForgeryService.RegistryCheck.CONFLICT,
                 forgery.checkClaim(serial, "minecraft:bow"));
+        // The holder-mismatch conflict — the tell that burns N1 spoofs.
+        assertEquals(ForgeryService.RegistryCheck.CONFLICT,
+                forgery.checkClaim(serial, "minecraft:iron_sword", "someone-else"));
+        assertEquals(ForgeryService.RegistryCheck.AUTHENTIC,
+                forgery.checkClaim(serial, "minecraft:iron_sword", holder.uuid().toString()));
         assertEquals(ForgeryService.RegistryCheck.ABSENT,
                 forgery.checkClaim("RC-99999", "minecraft:bow"));
 
-        // Shadow record surface.
+        // A claim that only shadows ever presented is evidence, not absence.
         ForgeryService.ForgeOutcome out = forgery.forge(forger, "minecraft:bow");
+        assertEquals(ForgeryService.RegistryCheck.KNOWN_FORGED,
+                forgery.checkClaim(out.claimedSerial(), "minecraft:bow"));
         assertEquals(ForgeryService.RegistryCheck.KNOWN_FORGED,
                 forgery.checkClaim(out.shadowSerial(), "minecraft:bow"));
     }
 
     @Test
-    void exemplarRuleRecognizesOnlyRegisteredDocuments() {
-        assertTrue(ForgeryService.isExemplarData(Map.of("IdentityCardId", "ID-3")));
-        assertTrue(ForgeryService.isExemplarData(Map.of("DocumentId", "DOC-9")));
-        assertTrue(ForgeryService.isExemplarData(Map.of("InstrumentId", "INS-2")));
-        assertTrue(ForgeryService.isExemplarData(Map.of("ArtifactSerial", "RC-4")));
-        assertFalse(ForgeryService.isExemplarData(Map.of()));
-        assertFalse(ForgeryService.isExemplarData(Map.of("IdentityCardId", " ")));
-        assertFalse(ForgeryService.isExemplarData(null));
-        assertEquals("card", ForgeryService.exemplarKind(
-                "straja:identity_card", Map.of("IdentityCardId", "ID-3")));
-        assertNull(ForgeryService.exemplarKind(
-                "straja:identity_card", Map.of("DocumentId", "DOC-1")));
-        assertNull(ForgeryService.exemplarKind("minecraft:paper",
-                Map.of("IdentityCardId", "ID-1")));
+    void oversizedWeightsFallBackToThePyramid() {
+        // In-game policy edits can hold values the TOML validator would reject;
+        // a sum that overflows int must never throw inside a take.
+        ctx.policies().forgeryTierWeights =
+                List.of(Integer.MAX_VALUE, 1, 1, 1, 1);
+        ForgeryService svc = new ForgeryService(ctx.policies(), seeded(5L), clock,
+                registry, players, new AuditService(ctx));
+        // Falls back to the locked pyramid instead of throwing.
+        assertDoesNotThrow(svc::rollTier);
     }
 
     @Test

@@ -16,9 +16,12 @@ calitate — și fiecare fals poartă defectul lui pe marca fizică.
 - **Oricine altcineva** → se lansează piramida. Cost:
   `forgery.anvilXpUnlicensed` niveluri XP + 1 `seal_stamp` consumat per lovitură.
 
-Un obiect care poartă deja `ArtifactSerial` nu poate fi re-bătut — rezultatul
-nu apare deloc în nicovală. Zarul se aruncă DOAR în momentul în care jucătorul
-ia rezultatul; previzualizarea nu dezvăluie nimic.
+Fiecare lovitură produce **exact 1** obiect marcat (o stivă de intrare nu se
+multiplică), iar costul efectiv este minim 1 nivel — nicovala vanilla refuză
+ridicarea rezultatului la cost zero. Un obiect care poartă deja
+`ArtifactSerial` nu poate fi re-bătut — rezultatul nu apare deloc în
+nicovală. Zarul se aruncă DOAR în momentul în care jucătorul ia rezultatul;
+previzualizarea nu dezvăluie nimic.
 
 ### Masa de faurire — documente și cărți
 
@@ -35,9 +38,14 @@ Regula exemplarului este fizică: nu poți falsifica o clasă de document pe
 care n-ai ținut-o niciodată în mână. Se dezactivează cu
 `forgery.exemplarRequired = false` (doar pentru scenarii admin).
 
+Rezultatul asamblat poartă un marcaj *în așteptare*; zarul se rezolvă în
+momentul în care obiectul ajunge real în inventar — clic, shift-clic sau
+orice altă cale de livrare — iar exemplarul se întoarce intact din copia de
+rezervă inclusă în marcaj. O mișcare greșită a mouse-ului nu arde referința.
+
 Pe traseul de faurire și inspectorii licențiați produc copii — dar copia lor
-oglindește datele exemplarului (nu e "fals", e o copie autorizată, încă
-vizibil distinctă de original prin registrul din spate).
+poartă datele de emitere ale exemplarului (nu e "fals", e o copie autorizată,
+încă vizibil distinctă de original prin registrul din spate).
 
 ## Piramida calității (locked)
 
@@ -69,7 +77,16 @@ pretinsă (furată sau inventată), `ArtifactMark` poartă marca vizibilă
 Registrul ține adevărul separat: fiecare încercare scrie o **înregistrare
 umbră** `FRG-n` cu `status=FORGED` — niciodată legală, niciodată în spațiul
 seriilor autentice, dar păstrată ca pistă de audit: cine a falsificat, ce
-marcă a produs, când. Fiecare lovitură emite și `artifact_forge` în audit.
+marcă a produs, când. Fiecare serie pretinsă este indexată: un claim care
+nu rezolvă spre o înregistrare autentică dar a fost prezentat de umbre este
+`KNOWN_FORGED`, nu `ABSENT`. Fiecare lovitură emite și `artifact_forge` în
+audit.
+
+La cross-check (`checkClaim`): `AUTHENTIC` = claimul și înregistrarea se
+potrivesc; `CONFLICT` = înregistrarea există dar descrie alt obiect **sau
+alt deținător** — exact nepotrivirea care arde falsurile N1 (seria e reală,
+proprietarul nu); `KNOWN_FORGED` = doar umbre au prezentat seria;
+`ABSENT` = nimeni n-a pretins-o vreodată.
 
 ## Staging pentru administratori
 
@@ -87,6 +104,10 @@ anvilXpLicensed = 3
 anvilXpUnlicensed = 5
 exemplarRequired = true
 ```
+
+Notă: `artifactRegistry.serialPrefix` nu poate fi `FRG-` — prefixul este
+rezervat înregistrărilor umbră, iar configurația care l-ar folosi este
+respinsă la încărcare.
 
 ## Ce NU face M2 (vine în #248 / M3)
 

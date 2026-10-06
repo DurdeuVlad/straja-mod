@@ -40,6 +40,9 @@ public final class AnvilForgeSurface {
     }
 
     public static void onAnvilUpdate(AnvilUpdateEvent event) {
+        // createResult runs on both logical sides; only the server plan is
+        // authoritative — the client recomputation has no runtime gateway.
+        if (event.getPlayer().level().isClientSide()) return;
         StrajaRuntime runtime = StrajaRuntime.get();
         if (runtime == null) return;
         ItemStack left = event.getLeft();
@@ -61,9 +64,12 @@ public final class AnvilForgeSurface {
             return;
         }
         ItemStack output = left.copy();
+        output.setCount(1);
         event.setOutput(output);
         event.setMaterialCost(1);
-        event.setCost(plan.xpLevels());
+        // mayPickup requires a positive cost — a zero-XP config would make
+        // the result physically untakeable.
+        event.setCost(Math.max(1, plan.xpLevels()));
     }
 
     public static void onAnvilRepair(AnvilRepairEvent event) {
@@ -75,9 +81,12 @@ public final class AnvilForgeSurface {
         if (output.isEmpty() || !STAMP.equals(idOf(right))) return;
         String leftId = idOf(left);
         if (!runtime.policies().artifactRegulatedItemIds.contains(leftId)) return;
+        // Re-check the mark at take-time: the input actually consumed gets
+        // the final say, not the preview's assumption.
+        boolean marked = !dataOf(left, ArtifactRegistryService.SERIAL_KEY).isBlank();
         var actor = new MinecraftPlayerGateway(
                 event.getEntity().getServer(), event.getEntity().getUUID());
-        var plan = runtime.forgery().planAnvilStrike(actor, leftId, false);
+        var plan = runtime.forgery().planAnvilStrike(actor, leftId, marked);
         if (plan == null) return;
 
         if (plan.authentic()) {

@@ -54,9 +54,14 @@ public enum ForgeryTier {
     public static int[] validWeights(java.util.List<Integer> weights) {
         if (weights == null || weights.size() != values().length) return DEFAULT_WEIGHTS;
         int[] w = new int[values().length];
+        long sum = 0;
         for (int i = 0; i < w.length; i++) {
             Integer v = weights.get(i);
-            if (v == null || v <= 0) return DEFAULT_WEIGHTS;
+            // Reject non-positive entries AND sums that would overflow the
+            // draw bound — a bad override must never throw mid-take.
+            if (v == null || v <= 0 || (sum += v) > Integer.MAX_VALUE) {
+                return DEFAULT_WEIGHTS;
+            }
             w[i] = v;
         }
         return w;

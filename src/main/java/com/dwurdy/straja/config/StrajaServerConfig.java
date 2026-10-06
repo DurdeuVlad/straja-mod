@@ -385,8 +385,10 @@ public final class StrajaServerConfig {
                         "stays PENDING this long before it counts as legal.")
                 .defineInRange("pendingMaturationHours", defaults.artifactPendingHours, 0, 8760);
         ARTIFACT_SERIAL_PREFIX = B.comment(
-                        "Serial prefix for authentic registry marks (displayed as #<prefix><n>).")
-                .define("serialPrefix", defaults.artifactSerialPrefix, StrajaServerConfig::isNonBlankString);
+                        "Serial prefix for authentic registry marks (displayed as #<prefix><n>).",
+                        "Must not be FRG- — that namespace belongs to forged shadow records.")
+                .define("serialPrefix", defaults.artifactSerialPrefix,
+                        StrajaServerConfig::isSafeSerialPrefix);
         ARTIFACT_REGULATED_ITEMS = B.comment(
                         "Item ids classified as regulated weapons on registration and",
                         "(in a later milestone) required to be registered at checkpoints.")
@@ -1493,6 +1495,12 @@ public final class StrajaServerConfig {
 
     private static boolean isNonBlankString(Object o) {
         return o instanceof String s && !s.isBlank();
+    }
+
+    /** Authentic serials must never share the FRG- shadow-record namespace. */
+    private static boolean isSafeSerialPrefix(Object o) {
+        return o instanceof String s && !s.isBlank()
+                && !s.trim().toUpperCase(java.util.Locale.ROOT).startsWith("FRG-");
     }
 
     private static boolean isNpcProviderMode(Object o) {

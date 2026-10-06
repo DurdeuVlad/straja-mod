@@ -1144,6 +1144,37 @@ public final class StrajaGameTests {
                     && r.id().getPath().startsWith("forge_")).count();
             helper.assertTrue(forgeRecipes == 3,
                     "expected 3 forge recipes loaded, found: " + forgeRecipes);
+
+            // Pending-marker resolution: a forged smithing result carries the
+            // marker until the take-hook or first inventory tick resolves it.
+            var forgerEntity = helper.makeMockServerPlayerInLevel();
+            ItemStack pending = new ItemStack(StrajaItems.IDENTITY_CARD.get());
+            var pendingTag = new net.minecraft.nbt.CompoundTag();
+            pendingTag.putString(
+                    com.dwurdy.straja.adapter.in.crafting.SmithingForgeRecipe.PENDING_KEY, "1");
+            ItemStack exemplarStack = new ItemStack(StrajaItems.IDENTITY_CARD.get());
+            var exTag = new net.minecraft.nbt.CompoundTag();
+            exTag.putString("IdentityCardId", "ID-77");
+            exemplarStack.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA,
+                    net.minecraft.world.item.component.CustomData.of(exTag));
+            pendingTag.put(com.dwurdy.straja.adapter.in.crafting.SmithingForgeRecipe.EXEMPLAR_KEY,
+                    exemplarStack.save(forgerEntity.registryAccess(), new net.minecraft.nbt.CompoundTag()));
+            pending.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA,
+                    net.minecraft.world.item.component.CustomData.of(pendingTag));
+            com.dwurdy.straja.adapter.in.crafting.ForgeCrafting.resolveIfPending(
+                    pending, forgerEntity);
+            var resolved = pending.get(net.minecraft.core.component.DataComponents.CUSTOM_DATA);
+            helper.assertTrue(resolved != null
+                            && !resolved.copyTag().contains(
+                                    com.dwurdy.straja.adapter.in.crafting.SmithingForgeRecipe.PENDING_KEY),
+                    "the pending marker must clear on resolution");
+            helper.assertTrue(resolved != null
+                            && !resolved.copyTag().getString(
+                                    com.dwurdy.straja.application.service.ForgeryService.MARK_KEY).isBlank(),
+                    "a resolved forge must carry a physical mark");
+            helper.assertTrue(forgerEntity.getInventory().countItem(
+                    StrajaItems.IDENTITY_CARD.get()) >= 1,
+                    "the exemplar snapshot must be refunded to the forger");
         } finally {
             policies.artifactRegistryEnabled = prevRegistry;
             policies.forgeryEnabled = prevForgery;

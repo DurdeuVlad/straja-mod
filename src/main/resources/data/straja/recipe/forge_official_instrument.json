@@ -1,5 +1,5 @@
 {
-  "type": "minecraft:smithing_transform",
+  "type": "straja:smithing_forge",
   "template": {
     "type": "straja:exemplar",
     "kind": "instrument"

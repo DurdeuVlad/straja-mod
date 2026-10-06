@@ -59,7 +59,9 @@ public final class ForgeryMarking {
             case N1 -> {
                 // Spoof a genuine allocated serial when the registry has one —
                 // the only catch is item-vs-record mismatch. Fresh worlds fall
-                // back to a serial one step beyond allocation.
+                // back to a zero-padded number: register() never emits padded
+                // serials, so the claim is plausible forever and never ripens
+                // into a real allocation.
                 if (authenticSerials != null && !authenticSerials.isEmpty()) {
                     List<String> clean = new ArrayList<>();
                     for (String s : authenticSerials) {
@@ -69,10 +71,10 @@ public final class ForgeryMarking {
                         yield "#" + clean.get(nextInt.applyAsInt(clean.size()));
                     }
                 }
-                yield "#" + prefix + (next + 1);
+                yield "#" + prefix + "0" + (next + 1);
             }
-            case N2 -> "#" + prefix + (next + 1 + nextInt.applyAsInt(9));
-            case N3 -> "#" + prefix + Math.max(1,
+            case N2 -> "#" + prefix + "0" + (next + 1 + nextInt.applyAsInt(9));
+            case N3 -> "#" + prefix + "0" + Math.max(1,
                     (next * (10L + nextInt.applyAsInt(40)) + nextInt.applyAsInt(97))
                             % 1_000_000_000_000L);
             case N4 -> "#" + malform(prefix + (1 + nextInt.applyAsInt((int) Math.min(next, 98) + 1)),
@@ -99,11 +101,25 @@ public final class ForgeryMarking {
         String prefix = serialPrefix == null || serialPrefix.isBlank() ? "RC-" : serialPrefix;
         if (!marking.startsWith("#")) return MarkClass.ABSURD;
         String body = marking.substring(1);
-        if (!body.startsWith(prefix)) return MarkClass.ABSURD;
-        String digits = body.substring(prefix.length());
-        if (digits.isEmpty()) return MarkClass.MALFORMED;
-        for (char c : digits.toCharArray()) if (!Character.isDigit(c)) return MarkClass.MALFORMED;
-        return MarkClass.PLAUSIBLE;
+        if (body.startsWith(prefix)) {
+            String digits = body.substring(prefix.length());
+            if (digits.isEmpty()) return MarkClass.MALFORMED;
+            for (char c : digits.toCharArray()) if (!Character.isDigit(c)) return MarkClass.MALFORMED;
+            return MarkClass.PLAUSIBLE;
+        }
+        // Prefix mangled but still recognizable (wrong case, lost separator,
+        // doubled dash): a format error, not an absurd mark. Compare the
+        // alphanumeric skeletons — "RC15"/"rc-15"/"RC--15" all read as RC-.
+        if (alnum(body).regionMatches(true, 0, alnum(prefix), 0, alnum(prefix).length())) {
+            return MarkClass.MALFORMED;
+        }
+        return MarkClass.ABSURD;
+    }
+
+    private static String alnum(String s) {
+        StringBuilder b = new StringBuilder(s.length());
+        for (char c : s.toCharArray()) if (Character.isLetterOrDigit(c)) b.append(c);
+        return b.toString();
     }
 
     private ForgeryMarking() {}

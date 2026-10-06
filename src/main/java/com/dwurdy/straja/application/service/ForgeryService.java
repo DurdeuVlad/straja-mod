@@ -81,7 +81,7 @@ public class ForgeryService {
      * record. Called once, at the physical take — never on a UI preview.
      */
     public ForgeOutcome forge(PlayerGateway actor, String itemId) {
-        if (actor == null) return null;
+        if (actor == null || !enabled()) return null;
         ForgeryTier tier = rollTier();
         String marking = ForgeryMarking.markingFor(tier, rng::nextInt,
                 policies.artifactSerialPrefix, registry.nextSerialNumber(),
@@ -122,52 +122,42 @@ public class ForgeryService {
 
     /**
      * Second-pass truth: what the registry says about the claimed serial.
-     * ABSENT = no record at all (unregistered), CONFLICT = record exists but
-     * describes a different item or holder, KNOWN_FORGED = shadow record.
+     * ABSENT = nothing ever claimed it; KNOWN_FORGED = only forge shadows
+     * presented it (or the claim IS a shadow key); CONFLICT = a real record
+     * exists but describes a different item class or a different holder —
+     * exactly the mismatch that burns N1 spoofs; AUTHENTIC = record and
+     * claim agree. Note AUTHENTIC here means "claim matches a record",
+     * not "legal" — legality is {@link ArtifactRecord#legalAt} (M3 reads it).
      */
     public enum RegistryCheck { AUTHENTIC, ABSENT, CONFLICT, KNOWN_FORGED }
 
     public RegistryCheck checkClaim(String claimedSerial, String itemId) {
+        return checkClaim(claimedSerial, itemId, null);
+    }
+
+    /**
+     * @param presenterUuid the holder presenting the item, when known — a
+     *                      claim matching a different holder's record is a
+     *                      CONFLICT (the N1 spoof tell).
+     */
+    public RegistryCheck checkClaim(String claimedSerial, String itemId,
+                                    String presenterUuid) {
         ArtifactRecord record = registry.recordForClaim(claimedSerial);
-        if (record == null) return RegistryCheck.ABSENT;
+        if (record == null) {
+            return registry.hasShadowForClaim(claimedSerial)
+                    ? RegistryCheck.KNOWN_FORGED : RegistryCheck.ABSENT;
+        }
         if (record.forged()) return RegistryCheck.KNOWN_FORGED;
-        if (!record.itemId.equals(itemId)) return RegistryCheck.CONFLICT;
+        if (itemId != null && !record.itemId.equals(itemId)) return RegistryCheck.CONFLICT;
+        if (presenterUuid != null && !record.holderUuid.isBlank()
+                && !record.holderUuid.equalsIgnoreCase(presenterUuid)) {
+            return RegistryCheck.CONFLICT;
+        }
         return RegistryCheck.AUTHENTIC;
     }
 
     private static String uuid(PlayerGateway player) {
         return player == null || player.uuid() == null ? "" : player.uuid().toString();
-    }
-
-    /**
-     * The exemplar rule: does this stack count as a genuine reference a forger
-     * can copy? Only items already carrying registry/issuance data — a blank
-     * item can never teach a serial's shape. Consumed by the smithing
-     * ingredient predicate.
-     */
-    public static boolean isExemplarData(java.util.Map<String, String> data) {
-        if (data == null) return false;
-        for (String key : List.of("IdentityCardId", "DocumentId",
-                "InstrumentId", ArtifactRegistryService.SERIAL_KEY)) {
-            String value = data.get(key);
-            if (value != null && !value.isBlank()) return true;
-        }
-        return false;
-    }
-
-    /** Which document class an exemplar stack represents (id -> kind). */
-    public static String exemplarKind(String itemId,
-                                      java.util.Map<String, String> data) {
-        if (itemId == null || !isExemplarData(data)) return null;
-        return switch (itemId) {
-            case "straja:identity_card" ->
-                    data.get("IdentityCardId") != null ? "card" : null;
-            case "straja:official_document" ->
-                    data.get("DocumentId") != null ? "document" : null;
-            case "straja:official_instrument" ->
-                    data.get("InstrumentId") != null ? "instrument" : null;
-            default -> null;
-        };
     }
 
 }

@@ -40,7 +40,7 @@ public class ArtifactRecord {
     /** Shadow records (forgeries) are never legal regardless of timing. */
     public boolean forged() {
         return ArtifactStatus.FORGED.name().equals(status)
-                || !forgeryTier.isBlank();
+                || (forgeryTier != null && !forgeryTier.isBlank());
     }
 
     /** Effective legal state at {@code now}: PENDING | ACTIVE | REVOKED | FORGED. */
