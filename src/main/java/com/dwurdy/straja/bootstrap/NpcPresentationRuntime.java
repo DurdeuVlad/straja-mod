@@ -174,9 +174,10 @@ public final class NpcPresentationRuntime {
                 && !"secretary".equals(role)
                 && !"jailer".equals(role)
                 && !"armorer".equals(role)
-                && !"archivist".equals(role)) {
+                && !"archivist".equals(role)
+                && !"inspector".equals(role)) {
             return NpcProviderResult.rejected(
-                    "unsupported-role", "supported CustomNPC roles are receptionist, trainer, secretary, jailer, armorer, and archivist");
+                    "unsupported-role", "supported CustomNPC roles are receptionist, trainer, secretary, jailer, armorer, archivist, and inspector");
         }
         NpcContentId profile = "receptionist".equals(role)
                 ? NpcContentId.of("straja.reception.admission")
@@ -188,6 +189,8 @@ public final class NpcPresentationRuntime {
                         ? NpcContentId.of("straja.armorer.orders")
                         : "archivist".equals(role)
                         ? NpcContentId.of("straja.archivist.archive")
+                        : "inspector".equals(role)
+                        ? NpcContentId.of("straja.inspector.documents")
                         : NpcContentId.of("straja.instructor.admission");
         String normalizedUuid;
         try {
@@ -403,6 +406,9 @@ public final class NpcPresentationRuntime {
                 ? true
                 : binding != null && admissionAction(binding.roleId(), request.actionId().value())
                 ? dispatchAdmissionAction(player, request)
+                : binding != null && "inspector".equals(binding.roleId())
+                && dispatchInspectorAction(player, request, binding)
+                ? true
                 : com.dwurdy.straja.adapter.in.npc.NpcRoles.performAction(
                         request.actionId().value(), player, player.serverLevel());
         return handled
@@ -411,6 +417,30 @@ public final class NpcPresentationRuntime {
                         NpcActionResult.Status.REJECTED,
                         "action-rejected",
                         "the action is no longer available");
+    }
+
+    /**
+     * #248 — the inspector booth. The NPC's own expertise ceiling comes from
+     * its registry record ({@code expertise} tag set by
+     * {@code /straja npc expertise}); the traveler is the interacting player.
+     */
+    private static boolean dispatchInspectorAction(ServerPlayer player,
+                                                   NpcActionRequest request,
+                                                   NpcBinding binding) {
+        if (!"inspect-documents".equals(request.actionId().value())) return false;
+        var runtime = com.dwurdy.straja.bootstrap.StrajaRuntime.get();
+        if (runtime == null) return false;
+        var gw = new com.dwurdy.straja.adapter.out.minecraft.MinecraftPlayerGateway(
+                player.getServer(), player.getUUID());
+        var registration = runtime.npcRegistry() != null
+                ? runtime.npcRegistry().registration(binding.hostEntityUuid()) : null;
+        var expertise = com.dwurdy.straja.application.service.ForgeryDetectionService
+                .expertiseOf(registration == null ? "" : registration.expertise());
+        String npcName = registration == null || registration.displayName() == null
+                || registration.displayName().isBlank() ? "Inspectorul" : registration.displayName();
+        runtime.forgeryDetection().npcInspect(gw, expertise, npcName,
+                runtime.seizure(), runtime.bolos());
+        return true;
     }
 
     private static boolean admissionAction(String roleId, String actionId) {

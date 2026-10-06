@@ -109,8 +109,74 @@ Notă: `artifactRegistry.serialPrefix` nu poate fi `FRG-` — prefixul este
 rezervat înregistrărilor umbră, iar configurația care l-ar folosi este
 respinsă la încărcare.
 
-## Ce NU face M2 (vine în #248 / M3)
+## Detectarea — scannerul de poartă (#248)
 
-Scanere la porți, inspectori NPC, cărțile de patrulă și pipeline-ul
-ofensă→BOLO→arest. M2 produce falsurile și adevărul din registru; M3 le
-prinde.
+Poarta (checkpoint) citește **doar marca fizică** — un scanner, nu un
+arhivist:
+
+- **fără marcă** pe obiect reglementat → `UNREGISTERED` → confiscare + flag
+- **marcă absurdă** (`#GUNS4U-13`) → `CRUDE` → **arest la linia de arest**
+- **marcă malformată** (`#RC-15_`, `#rc-15`, `#RC--15`) → `FLAGGED` →
+  confiscare + BOLO
+- **format plauzibil** (`#RC-<cifre>`) → **trece** — mașina nu vede N1–N3,
+  exact cum e gândită piramida
+
+Obiectele marcate pe sloturi nereglementate sunt ele înseși probe — marca
+nu există decât prin registru sau prin făurărie.
+
+Flag-urile pun în mișcare pipeline-ul complet: confiscare țintită pe
+slotul exact — inclusiv gridul de crafting 2×2, itemul de pe cursor și
+sloturile Curios — (evidence bag + chain), înregistrarea ofensei
+`document_forgery`/`artifact_forgery`, intrarea de audit `forgery_detected`
+(detector + verdict + item + seria reclamată), și un BOLO de sistem
+`ARREST_AUTHORIZED` care vânează purtătorul. Flag-ul e idempotent — o
+a doua lovire nu stivuiește BOLO-uri (dar falsul încă ajunge pe motivul
+mandatului existent). Scanarea rulează pe toate suprafețele de control:
+stage-1, stage-2, deny, îmbarcare, sosirea pe poarta legată, sensul
+interzis și ieșirea escortată din lagăr. Poarta se poate opri prin
+`artifactScanAtGates` / `forgery.scanAtGates` (override de policy).
+
+Două excepții la regula „fără marcă = neînregistrat”: lada militară
+sigilată (sigiliul Transportatorului **este** înregistrarea ei — dar doar
+pe `straja:sealed_military_crate`, nu pe orice item cu un tag SealBy
+aruncat peste) și rândurile `>deep` din stocări străine care nu își
+expun datele (lipsa probei ≠ proba lipsei — scannerul nu confiscă ce
+nu poate citi).
+
+## Inspectorul NPC
+
+Rol nou `inspector` — staționat ca orice NPC (`/straja npc assign` +
+`bind-*`), cu plafon de expertiză propriu:
+
+```text
+/straja npc expertise <npc> <junior|veteran|expert>
+```
+
+Jucătorul apasă **„Prezint documentele la control”** în interfața NPC-ului;
+inspectorul nararează indiciul văzut la fiecare obiect prins, confiscă,
+înregistrează ofensa și ridică BOLO-ul. Curatul primește „Totul e în regulă”.
+
+**Paritatea ofițerilor:** `/straja inspect <player>` — aceeași logică, dar
+plafonul vine din rangul ofițerului jucător (permis 0, serviciul refuză
+civilii și ofițerii care nu sunt în serviciu). Inspecția e hands-on:
+ofițerul trebuie să stea lângă călător (~8 blocuri), iar Comisarul citește
+la nivel EXPERT indiferent de starea de serviciu.
+
+| Cine | Plafon | Ce prinde |
+|------|--------|-----------|
+| NPC junior / Străjer în serviciu | JUNIOR | claim-uri absurde de serie + falsuri cunoscute |
+| NPC veteran / Străjer cu quiz trecut (sau Sergent+) | VETERAN | + serii „aproape emise” (următoarele 9 deasupra alocării, inclusiv chiar următorul număr) |
+| NPC expert / Comisar | EXPERT | + conflicte de registru (serie reală, obiect/deținător greșit) |
+
+## Ghidul de patrulă
+
+```text
+/straja book give [player]
+```
+
+Emite cartea zilei: tiparul autentic `#<PREFIX>-NNN`, semnele sigure de
+fals, și **3 exemplare de defect rotativ pe zi** (determinist — aceeași zi
+arată aceleași exemple peste tot). Cartea e ștampilată `StrajaPatrolDay`;
+edițiile vechi rămân lizibile dar datate — nu se actualizează niciodată.
+Reemiterea aceleiași ediții e refuzată. Ghidul descrie indicii vizibile,
+niciodată nume de trepte sau ponderi.

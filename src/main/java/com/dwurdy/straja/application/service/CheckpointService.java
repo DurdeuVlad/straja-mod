@@ -47,6 +47,8 @@ public final class CheckpointService {
     private SeizureService seizure;
     /** LAW-007: the authoritative wanted surface once wired. */
     private WantedService wanted;
+    /** #248: the marking scanner — machine reads marks at every stage. */
+    private com.dwurdy.straja.application.service.ForgeryDetectionService forgeryDetection;
 
     private final Map<UUID, PrevPos> prevPositions = new ConcurrentHashMap<>();
     // Deliberate deviation: stamps are session-scoped, not persisted like the
@@ -80,6 +82,12 @@ public final class CheckpointService {
     /** LAW-007: late-bound (wanted consolidates bolos+register after build). */
     public void useWanted(WantedService service) {
         this.wanted = service;
+    }
+
+    /** #248: late-bound (detection reads the M2 registry/forgery services). */
+    public void useForgeryDetection(
+            com.dwurdy.straja.application.service.ForgeryDetectionService service) {
+        this.forgeryDetection = service;
     }
 
     /** Officer escort (cuffs) only — #231: a bounty-bound captive is NOT an
@@ -246,16 +254,34 @@ public final class CheckpointService {
         List<String> found = contraband(snapshot, site, store);
         List<String> carry = carryBanHits(snapshot, site, roles);
         found.addAll(carry);
+        var artifactScan = artifactScan(snapshot);
         String roleBan = bannedRole(roles, site);
-        // Custody/hunted first: a wanted or fugitive player is arrested on sight
-        // even when they would also match a ban list — repelling them keeps them free.
-        if (inCustody(p)) {
+        // Snapshot custody/hunted BEFORE enforcement — the BOLO
+        // enforceArtifactFlags raises would otherwise make a freshly
+        // flagged carrier read as "hunted" and get arrested on the spot,
+        // instead of walking through stage 1 seized + wanted (the warn
+        // contract). A carrier who was already wanted still arrests.
+        boolean jailed = inCustody(p);
+        boolean hunted = isHunted(p);
+        // #248: flagged stock rides the evidence chain BEFORE any arrest
+        // assessment — a fugitive's forged papers still land in evidence
+        // (arrest's seizeAll would otherwise send them to the personal
+        // locker and back to the forger on release), the forgery_detected
+        // audit rows stand, and the BOLO marker resolves with custody.
+        enforceArtifactFlags(p, site, artifactScan, found);
+        if (jailed) {
             arrest(p, site, "fugitiv prins la punctul de control", snapshot, found, dir);
             return true;
         }
-        if (isHunted(p)) {
+        if (hunted) {
             // AT6: wanted on-sight at ANY arresting gate — clean pockets don't protect.
             arrest(p, site, "vânat de Straja prins la frontieră", snapshot, found, dir);
+            return true;
+        }
+        // A crude mark arrests on sight at this lane — a forger pushed
+        // back walks free with the evidence still in hand.
+        if (artifactScan.worst() == com.dwurdy.straja.application.service.ForgeryDetectionService.Verdict.CRUDE) {
+            arrest(p, site, "fals grosolan prins la frontieră", snapshot, found, dir);
             return true;
         }
         if (isBanned(p, site, store) || roleBan != null) {
@@ -287,16 +313,25 @@ public final class CheckpointService {
         List<SnapshotItem> snapshot = ctx.deepScan().deepScan(p.uuid());
         List<String> found = contraband(snapshot, site, store);
         found.addAll(carryBanHits(snapshot, site, roles));
+        var artifactScan = artifactScan(snapshot);
         boolean banned = isBanned(p, site, store);
         String roleBan = bannedRole(roles, site);
         boolean jailed = inCustody(p);
         boolean hunted = isHunted(p);
-        if (!banned && roleBan == null && !jailed && !hunted && found.isEmpty()) {
+        // #248: flagged items go to evidence and the holder goes wanted BEFORE
+        // the arrest assessment — a marked carrier never walks out clean.
+        enforceArtifactFlags(p, site, artifactScan, found);
+        if (!banned && roleBan == null && !jailed && !hunted && found.isEmpty()
+                && artifactScan.worst()
+                        != com.dwurdy.straja.application.service.ForgeryDetectionService.Verdict.CRUDE) {
             ledger(site, p, dir, CrossingOutcome.PASS, snapshot, found, "curat — a trecut frontiera");
             return false;
         }
         String reason = jailed ? "fugitiv prins la punctul de control"
                 : hunted ? "vânat de Straja prins la frontieră"
+                : artifactScan.worst()
+                        == com.dwurdy.straja.application.service.ForgeryDetectionService.Verdict.CRUDE
+                        ? "fals grosolan prins la frontieră"
                 : banned ? "interdicție la punctul de control (ban activ)"
                 : roleBan != null ? "rol interzis la frontieră: " + roleBan
                 : "marfă interzisă la frontieră";
@@ -310,12 +345,20 @@ public final class CheckpointService {
         List<String> found = contraband(snapshot, site, store);
         List<String> carry = carryBanHits(snapshot, site, roles);
         found.addAll(carry);
+        // #248: even a repel gate strips the forged stock and marks the
+        // carrier — a deny gate has no arrest authority, so the BOLO does
+        // the hunting downstream.
+        var artifactScan = artifactScan(snapshot);
+        enforceArtifactFlags(p, site, artifactScan, found);
         String roleBan = bannedRole(roles, site);
         String violation = null;
         if (isBanned(p, site, store)) violation = "interzis (ban)";
         else if (roleBan != null) violation = "rol interzis: " + roleBan;
         else if (inCustody(p)) violation = "deținut la poartă";
-        else if (!found.isEmpty()) violation = carry.isEmpty() ? "marfă interzisă" : "restricție rol — marfă de vândut";
+        else if (!found.isEmpty()) violation = carry.isEmpty()
+                ? (artifactScan.worst() == com.dwurdy.straja.application.service.ForgeryDetectionService.Verdict.CRUDE
+                        ? "fals grosolan reperat la poartă" : "marfă interzisă")
+                : "restricție rol — marfă de vândut";
         else if (isHunted(p)) violation = "vânat reperat la poartă";
         if (violation == null) {
             ledger(site, p, dir, CrossingOutcome.PASS, snapshot, found, "curat");
@@ -410,6 +453,10 @@ public final class CheckpointService {
         var ids = bannedItemIds(snapshot, exit, store, rolesOf(p));
         int n = seizure.confiscateItems(p, exit, ids);
         if (n > 0) p.tellKey("straja.camp.confiscated", n);
+        // #248: an escorted prisoner can't smuggle forged stock out of the
+        // camp — flagged items ride to evidence and the carrier is wanted.
+        enforceArtifactFlags(p, exit, artifactScan(snapshot),
+                new java.util.ArrayList<>());
     }
 
     private static boolean insideSite(LawCheckpointRecord site, String dim,
@@ -421,12 +468,18 @@ public final class CheckpointService {
 
     /** Wrong-way lane crossing — back to the position they crossed FROM, never to 'from'. */
     private void gateDeny(PlayerGateway p, LawCheckpointRecord site, PrevPos prev) {
+        // #248: a wrong-way runner still gets scanned — flagged stock rides
+        // to evidence and the runner is wanted, matching the deny-lane
+        // contract (repelled, never arrested, never keeping contraband).
+        List<SnapshotItem> snapshot = ctx.deepScan().deepScan(p.uuid());
+        List<String> found = new java.util.ArrayList<>();
+        enforceArtifactFlags(p, site, artifactScan(snapshot), found);
         p.teleport(prev.dim(), prev.x(), prev.y(), prev.z());
         closeDoors(site);
         p.tellKey("straja.checkpoint.wrongway");
         playSound(p, DENY_SOUND);
         ledger(site, p, CrossingDirection.INCOMING, CrossingOutcome.DENY,
-                ctx.deepScan().deepScan(p.uuid()), List.of(), "sens interzis la poartă");
+                snapshot, found, "sens interzis la poartă");
         audit.record("checkpoint_deny", "checkpoint", "", p.name(), p.uuid().toString(),
                 "DENY", "wrong-way " + site.id);
     }
@@ -453,13 +506,20 @@ public final class CheckpointService {
         List<SnapshotItem> snapshot = ctx.deepScan().deepScan(p.uuid());
         List<String> found = contraband(snapshot, site, store);
         found.addAll(carryBanHits(snapshot, site, roles));
+        var artifactScan = artifactScan(snapshot);
         String roleBan = bannedRole(roles, site);
+        boolean jailed = inCustody(p);
+        boolean hunted = isHunted(p);
+        // #248: linked-gate arrivals run the same marking scan — flagged
+        // stock rides to evidence and the carrier is wanted before the
+        // arrest assessment, exactly like the stage-1 lane.
+        enforceArtifactFlags(p, site, artifactScan, found);
         // Custody/hunted before bans — arrest on sight beats repelling a fugitive.
-        if (inCustody(p)) {
+        if (jailed) {
             return arrest(p, site, "fugitiv prins la punctul de control",
                     snapshot, found, CrossingDirection.OUTGOING);
         }
-        if (isHunted(p)) {
+        if (hunted) {
             return arrest(p, site, "vânat de Straja prins la frontieră",
                     snapshot, found, CrossingDirection.OUTGOING);
         }
@@ -488,12 +548,21 @@ public final class CheckpointService {
         List<SnapshotItem> snapshot = ctx.deepScan().deepScan(p.uuid());
         List<String> found = contraband(snapshot, site, store);
         found.addAll(carryBanHits(snapshot, site, roles));
+        var artifactScan = artifactScan(snapshot);
         boolean jailed = inCustody(p);
         boolean banned = isBanned(p, site, store);
         String roleBan = bannedRole(roles, site);
         boolean hunted = isHunted(p);
-        if (!found.isEmpty() || banned || roleBan != null || jailed || hunted) {
+        // #248: docks run the same marking scan — flagged cargo goes to
+        // evidence and a marked carrier boards into an arrest, not a stamp.
+        enforceArtifactFlags(p, site, artifactScan, found);
+        if (!found.isEmpty() || banned || roleBan != null || jailed || hunted
+                || artifactScan.worst()
+                        == com.dwurdy.straja.application.service.ForgeryDetectionService.Verdict.CRUDE) {
             String reason = jailed ? "fugitiv la îmbarcare"
+                    : artifactScan.worst()
+                            == com.dwurdy.straja.application.service.ForgeryDetectionService.Verdict.CRUDE
+                            ? "fals grosolan la îmbarcare"
                     : banned ? "interzis la îmbarcare (ban activ)"
                     : roleBan != null ? "rol interzis la îmbarcare: " + roleBan
                     : hunted ? "vânat la îmbarcare"
@@ -627,6 +696,64 @@ public final class CheckpointService {
             if (uuid.equals(bolo.subjectUuid)) return true;
         }
         return false;
+    }
+
+    // ------------------------------------------------------------ #248 artifact scan
+
+    /** The machine read: physical marks only — never the registry. */
+    private com.dwurdy.straja.application.service.ForgeryDetectionService.ScanResult
+            artifactScan(List<SnapshotItem> snapshot) {
+        if (!ctx.policies().artifactScanAtGates || forgeryDetection == null) {
+            return new com.dwurdy.straja.application.service.ForgeryDetectionService.ScanResult(
+                    List.of(), com.dwurdy.straja.application.service.ForgeryDetectionService.Verdict.CLEAN);
+        }
+        return forgeryDetection.machineScan(snapshot);
+    }
+
+    /** Clue lines for the warn/arrest list — what the machine actually saw. */
+    private List<String> artifactClues(
+            com.dwurdy.straja.application.service.ForgeryDetectionService.ScanResult scan) {
+        List<String> lines = new ArrayList<>();
+        for (var f : scan.findings()) {
+            String id = f.item() != null && f.item().name != null && !f.item().name.isBlank()
+                    ? f.item().name : (f.item() == null ? "?" : f.item().itemId);
+            lines.add(id + " — " + f.clue());
+        }
+        return lines;
+    }
+
+    /**
+     * Seize flagged items to evidence + offense audit + system BOLO, then
+     * append the clue lines to {@code found}. A flagged carrier leaves this
+     * gate already wanted — the next arresting contact finishes the job.
+     */
+    private void enforceArtifactFlags(PlayerGateway p, LawCheckpointRecord site,
+                                      com.dwurdy.straja.application.service.ForgeryDetectionService.ScanResult scan,
+                                      List<String> found) {
+        if (scan == null || scan.findings().isEmpty()) return;
+        var flagged = scan.findings().stream()
+                .map(com.dwurdy.straja.application.service.ForgeryDetectionService.Finding::item)
+                .toList();
+        if (seizure != null) seizure.seizeFlagged(p, site, flagged);
+        StringBuilder offenses = new StringBuilder();
+        for (var f : scan.findings()) {
+            offenses.append(f.offense()).append(' ');
+            // The presented claim rides the audit row — an N1 detection is
+            // traceable to the exact series the forger showed (#248 AC5).
+            String claim = f.item() == null ? ""
+                    : f.item().data(com.dwurdy.straja.application.service.ArtifactRegistryService.SERIAL_KEY).isBlank()
+                            ? f.item().data(com.dwurdy.straja.application.service.ArtifactRegistryService.MARK_KEY)
+                            : f.item().data(com.dwurdy.straja.application.service.ArtifactRegistryService.SERIAL_KEY);
+            audit.record("forgery_detected", "checkpoint", "", p.name(),
+                    p.uuid().toString(), "SUCCESS",
+                    "site=" + site.id + " offense=" + f.offense()
+                            + " item=" + (f.item() == null ? "" : f.item().itemId)
+                            + " verdict=" + f.verdict()
+                            + (claim.isBlank() ? "" : " claim=" + claim));
+        }
+        bolos.flagForgery(p.uuid().toString(), p.name(),
+                "falsificare la " + site.id + ": " + offenses.toString().trim());
+        found.addAll(artifactClues(scan));
     }
 
     /** Contraband = snapshot items whose id the site (or global list) marks illegal. */

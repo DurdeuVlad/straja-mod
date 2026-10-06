@@ -46,6 +46,10 @@ public class StrajaPolicies {
     /** Whether document forgery requires a genuine exemplar in the template slot. */
     public boolean forgeryExemplarRequired = true;
 
+    // #248 detection & enforcement — the keen-eye ladder + teeth
+    /** Gate scanners validate carried artifact markings on every crossing. */
+    public boolean artifactScanAtGates = true;
+
     // deployment gates
     public boolean requireRealCoinProviderOutsideLocal = true;
     public boolean requireCommissionerUuidOutsideLocal = true;

@@ -92,6 +92,7 @@ public final class PolicyRegistry {
         k("forgery.anvilXpLicensed", "forgeryAnvilXpLicensed", Kind.INT);
         k("forgery.anvilXpUnlicensed", "forgeryAnvilXpUnlicensed", Kind.INT);
         k("forgery.exemplarRequired", "forgeryExemplarRequired", Kind.BOOL);
+        k("forgery.scanAtGates", "artifactScanAtGates", Kind.BOOL);
         // cuffs
         k("cuffs.requestTimeoutSeconds", "cuffRequestTimeoutSeconds", Kind.INT);
         k("cuffs.surrenderTimeoutSeconds", "surrenderTimeoutSeconds", Kind.INT);

@@ -13,6 +13,9 @@ public class SnapshotItem {
     public String componentsTag;
     /** Display name for ledger readability (optional). */
     public String name;
+    /** Flat string keys from the stack's custom-data component — lets the
+     * domain read artifact markings without depending on SNBT parsing. */
+    public java.util.Map<String, String> data = new java.util.LinkedHashMap<>();
 
     public SnapshotItem() {}
 
@@ -22,5 +25,14 @@ public class SnapshotItem {
         this.count = count;
         this.componentsTag = componentsTag;
         this.name = name;
+    }
+
+    /** Custom-data string value, or "" when the key is absent. */
+    public String data(String key) {
+        // `data` stays null on snapshots deserialized from pre-M3 ledger
+        // rows — GSON bypasses the field initializer.
+        if (key == null || data == null) return "";
+        String v = data.get(key);
+        return v == null ? "" : v;
     }
 }

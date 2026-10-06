@@ -255,6 +255,7 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.IntValue FORGERY_ANVIL_XP_LICENSED;
     public static final ModConfigSpec.IntValue FORGERY_ANVIL_XP_UNLICENSED;
     public static final ModConfigSpec.BooleanValue FORGERY_EXEMPLAR_REQUIRED;
+    public static final ModConfigSpec.BooleanValue ARTIFACT_SCAN_AT_GATES;
     public static final ModConfigSpec.IntValue IDENTITY_CARD_VALIDITY_DAYS;
 
     public static final ModConfigSpec.BooleanValue ENVELOPE_ENABLED;
@@ -420,6 +421,15 @@ public final class StrajaServerConfig {
                         "the smithing table's template slot — can't fake what's never",
                         "been held. Disable to allow free-form copying.")
                 .define("exemplarRequired", defaults.forgeryExemplarRequired);
+        B.pop();
+
+        B.push("detection");
+        ARTIFACT_SCAN_AT_GATES = B.comment(
+                        "Gate scanners validate carried artifact markings: unmarked",
+                        "regulated items, malformed marks, and crude forgeries get",
+                        "flagged/seized and their holders flagged wanted. Plausible-",
+                        "format marks still pass — only trained eyes catch those.")
+                .define("artifactScanAtGates", defaults.artifactScanAtGates);
         B.pop();
 
         B.push("timers");
@@ -1394,6 +1404,7 @@ public final class StrajaServerConfig {
         p.forgeryAnvilXpLicensed = FORGERY_ANVIL_XP_LICENSED.get();
         p.forgeryAnvilXpUnlicensed = FORGERY_ANVIL_XP_UNLICENSED.get();
         p.forgeryExemplarRequired = FORGERY_EXEMPLAR_REQUIRED.get();
+        p.artifactScanAtGates = ARTIFACT_SCAN_AT_GATES.get();
 
         p.envelopeEnabled = ENVELOPE_ENABLED.get();
         p.envelopeFallbackToChat = ENVELOPE_FALLBACK_TO_CHAT.get();

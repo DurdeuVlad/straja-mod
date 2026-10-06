@@ -344,6 +344,7 @@ final class NpcFaqSurface {
             case ARMORER -> "Armuriera gestionează echipamentul și rezervele autorizate";
             case JAILER -> "Custodia gestionează închisoarea și eliberările autorizate";
             case ARCHIVIST -> "Arhiva gestionează dosarele și documentele oficiale";
+            case INSPECTOR -> "Inspectorul verifică marcile de serie ale documentelor și artefactelor";
             case UNKNOWN -> "Acest punct nu are încă un rol configurat";
         };
         return role + ". Statutul tău afișat este " + context.status() + ".";
@@ -389,6 +390,7 @@ final class NpcFaqSurface {
             case ARMORER -> "armorer";
             case JAILER -> "jailer";
             case ARCHIVIST -> "archivist";
+            case INSPECTOR -> "inspector";
             case UNKNOWN -> "unknown";
         };
     }
@@ -401,6 +403,7 @@ final class NpcFaqSurface {
             case "armorer" -> NpcPlayerSurface.RoleRoute.ARMORER;
             case "jailer" -> NpcPlayerSurface.RoleRoute.JAILER;
             case "archivist" -> NpcPlayerSurface.RoleRoute.ARCHIVIST;
+            case "inspector" -> NpcPlayerSurface.RoleRoute.INSPECTOR;
             default -> NpcPlayerSurface.RoleRoute.UNKNOWN;
         };
     }

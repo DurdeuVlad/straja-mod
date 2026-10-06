@@ -73,6 +73,7 @@ final class AdminCommandHelp {
             new RootEntry("/straja inspector ...", "Administrează licențele de Inspector; register este deschis inspectorilor licențiați.", ADMIN_PERMISSION, "IDENTITATE — OP 3"),
             new RootEntry("/straja transporter ...", "Administrează licențele de Transportator; seal|unseal sunt deschise transportatorilor licențiați.", ADMIN_PERMISSION, "IDENTITATE — OP 3"),
             new RootEntry("/straja artifact ...", "Verifică sau revocă marcile de serie din registrul central.", ADMIN_PERMISSION, "IDENTITATE — OP 3"),
+            new RootEntry("/straja book give [player]", "Emite ghidul de patrulare al zilei (detectarea falsurilor).", ADMIN_PERMISSION, "IDENTITATE — OP 3"),
             new RootEntry("/straja emergency ...", "Pornește sau închide procedura de urgență; autoritatea finală rămâne în serviciu.", ADMIN_PERMISSION, "OPERAȚIUNI — OP 3"),
 
             new RootEntry("/straja checkpoint add|remove ...", "Modifică lista persistentă de checkpoint-uri.", SETUP_PERMISSION, "SETUP ȘI OPERARE — OP 4"),
@@ -252,6 +253,8 @@ final class AdminCommandHelp {
             Map.entry("artifact check", "Afișează adevărul din registru pentru o marcă serială."),
             Map.entry("artifact revoke", "Revocă o marcă serială după identificator."),
             Map.entry("license", "Afișează licențele Straja pe care le deții."),
+            Map.entry("book", "Emite ghidul de patrulare al zilei cu exemplele curente de fals."),
+            Map.entry("book give", "Înmânează ghidul de patrulare al zilei; reemiterea aceleiași ediții e refuzată."),
             Map.entry("emergency", "Gestionează starea de urgență operațională."),
             Map.entry("emergency alert", "Publică o alertă de urgență."),
             Map.entry("emergency clear", "Șterge urgența activă."),
@@ -282,6 +285,7 @@ final class AdminCommandHelp {
             Map.entry("npc set-name", "Schimbă numele unui NPC."),
             Map.entry("npc set-skin", "Schimbă skin-ul unui NPC."),
             Map.entry("npc remove", "Elimină un NPC din registru și din lume."),
+            Map.entry("npc expertise", "Setează expertiza inspectorului: junior, veteran sau expert."),
             Map.entry("debug", "Rulează diagnostice locale controlate de politică."),
             Map.entry("test", "Rulează scenarii cu jucători virtuali în mediul local.")
     );

@@ -23,6 +23,7 @@ import static com.dwurdy.straja.adapter.in.StrajaText.refusal;
  */
 public final class NpcRoles {
     public static final String RECEPTIONIST = "receptionist";
+    public static final String INSPECTOR = "inspector";
     public static final String SECRETARY = "secretary";
     public static final String JAILER = "jailer";
     public static final String ARCHIVIST = "archivist";
@@ -31,7 +32,8 @@ public final class NpcRoles {
     public static final String ARMORER = "armorer";
 
     private static final Set<String> KNOWN =
-            Set.of(RECEPTIONIST, SECRETARY, JAILER, ARCHIVIST, TRAINER, RECRUITER, ARMORER);
+            Set.of(RECEPTIONIST, SECRETARY, JAILER, ARCHIVIST, TRAINER, RECRUITER,
+                    ARMORER, INSPECTOR);
 
     private NpcRoles() {}
 
@@ -252,8 +254,42 @@ public final class NpcRoles {
             case "admin-emergency-end" -> runtime.adminRoleplay().emergencyEnd(gw);
             case "tool-cell-confirm" -> runtime.adminTools().cellConfirm(gw);
             case "tool-survey-all" -> runtime.adminTools().surveyStampAllMissing(gw);
+            // #248 — the native inspector booth: the clicked surface carried
+            // no entity reference, so the nearest inspector NPC in range owns
+            // the ceiling (its registry expertise tag + display name).
+            case "inspect-documents" -> inspectDocumentsAt(player, level, runtime, gw);
             default -> { return false; }
         }
+        return true;
+    }
+
+    /**
+     * #248 — resolves the clicked "Prezint documentele la control" action to
+     * the nearest inspector NPC within booth range; that NPC's registry
+     * expertise tag sets the detection ceiling. Returns false when no
+     * inspector is close enough to be the NPC the player just talked to.
+     */
+    private static boolean inspectDocumentsAt(Player player, ServerLevel level,
+                                              com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                              com.dwurdy.straja.application.port.out.PlayerGateway gw) {
+        double radius = 8.0;
+        var box = player.getBoundingBox().inflate(radius);
+        StrajaNpcEntity nearest = null;
+        double best = radius * radius;
+        for (StrajaNpcEntity npc : level.getEntitiesOfClass(
+                StrajaNpcEntity.class, box, e -> INSPECTOR.equals(e.getRoleId()))) {
+            double d = npc.distanceToSqr(player);
+            if (d < best) { best = d; nearest = npc; }
+        }
+        if (nearest == null) return false;
+        var registration = runtime.npcRegistry() != null
+                ? runtime.npcRegistry().registration(nearest.getStringUUID()) : null;
+        var expertise = com.dwurdy.straja.application.service.ForgeryDetectionService
+                .expertiseOf(registration == null ? "" : registration.expertise());
+        String npcName = registration == null || registration.displayName() == null
+                || registration.displayName().isBlank() ? "Inspectorul" : registration.displayName();
+        runtime.forgeryDetection().npcInspect(gw, expertise, npcName,
+                runtime.seizure(), runtime.bolos());
         return true;
     }
 

@@ -12,6 +12,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.item.component.CustomData;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
@@ -102,6 +103,84 @@ public final class MinecraftDeepScanGateway implements DeepScanGateway {
         return out;
     }
 
+    /**
+     * #248 targeted seizure: lifts exactly the stack a deepScan row addressed.
+     * Crafting-grid, cursor, and Curios stacks live outside the flat inventory
+     * port, so a flagged item hidden there would otherwise be convicted but
+     * never confiscated. Nested paths lift the whole top-level parent.
+     */
+    @Override
+    public SeizedStack seizeAt(UUID playerUuid, String slotPath) {
+        ServerPlayer player = server.getPlayerList().getPlayer(playerUuid);
+        if (player == null || slotPath == null) return null;
+        String head = slotPath.split(">", 2)[0];
+        int colon = head.indexOf(':');
+        if (colon < 0) return null;
+        int n;
+        try {
+            n = Integer.parseInt(head.substring(colon + 1));
+        } catch (NumberFormatException e) {
+            return null;
+        }
+        return switch (head.substring(0, colon)) {
+            case "main" -> n >= 0 && n < 36 ? take(player.getInventory(), n, head) : null;
+            case "armor" -> n >= 0 && n < 4 ? take(player.getInventory(), 36 + n, head) : null;
+            case "offhand" -> take(player.getInventory(), 40, head);
+            case "craft" -> takeCraft(player, n, head);
+            case "cursor" -> takeCursor(player, head);
+            case "curios" -> takeCurio(player, n, head);
+            default -> null;
+        };
+    }
+
+    private SeizedStack take(Inventory inv, int index, String slotPath) {
+        ItemStack stack = inv.getItem(index);
+        if (stack == null || stack.isEmpty()) return null;
+        inv.setItem(index, ItemStack.EMPTY);
+        inv.setChanged();
+        return seized(slotPath, stack);
+    }
+
+    private SeizedStack takeCraft(ServerPlayer player, int index, String slotPath) {
+        var craft = player.inventoryMenu.getCraftSlots();
+        if (index < 0 || index >= craft.getContainerSize()) return null;
+        ItemStack stack = craft.getItem(index);
+        if (stack == null || stack.isEmpty()) return null;
+        craft.setItem(index, ItemStack.EMPTY);
+        craft.setChanged();
+        return seized(slotPath, stack);
+    }
+
+    private SeizedStack takeCursor(ServerPlayer player, String slotPath) {
+        ItemStack carried = player.containerMenu.getCarried();
+        if (carried == null || carried.isEmpty()) return null;
+        player.containerMenu.setCarried(ItemStack.EMPTY);
+        return seized(slotPath, carried);
+    }
+
+    /** Reflective single-slot Curios lift — sibling of {@link #seizeCurios}. */
+    private SeizedStack takeCurio(ServerPlayer player, int index, String slotPath) {
+        try {
+            if (!net.neoforged.fml.ModList.get().isLoaded("curios")) return null;
+            var api = Class.forName("top.theillusivec4.curios.api.CuriosApi");
+            Object opt = api.getMethod("getCuriosInventory",
+                    net.minecraft.world.entity.LivingEntity.class).invoke(null, player);
+            if (!(opt instanceof java.util.Optional<?> present) || present.isEmpty()) return null;
+            Object equipped = present.get().getClass()
+                    .getMethod("getEquippedCurios").invoke(present.get());
+            int slots = (int) equipped.getClass().getMethod("getSlots").invoke(equipped);
+            if (index < 0 || index >= slots) return null;
+            Object stack = equipped.getClass()
+                    .getMethod("getStackInSlot", int.class).invoke(equipped, index);
+            if (!(stack instanceof ItemStack s) || s.isEmpty()) return null;
+            equipped.getClass().getMethod("setStackInSlot",
+                    int.class, ItemStack.class).invoke(equipped, index, ItemStack.EMPTY);
+            return seized(slotPath, s);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
     /** Reflective Curios extraction — mirrors {@link #scanCurios}; failures mean no extra slots. */
     private void seizeCurios(ServerPlayer player, List<SeizedStack> out) {
         try {
@@ -175,8 +254,18 @@ public final class MinecraftDeepScanGateway implements DeepScanGateway {
     private void scan(ItemStack stack, String slotPath, int depth, List<SnapshotItem> out) {
         if (stack == null || stack.isEmpty() || depth > MAX_DEPTH) return;
         String id = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
-        out.add(new SnapshotItem(slotPath, id, stack.getCount(),
-                componentsTag(stack), stack.getHoverName().getString()));
+        SnapshotItem row = new SnapshotItem(slotPath, id, stack.getCount(),
+                componentsTag(stack), stack.getHoverName().getString());
+        CustomData custom = stack.get(DataComponents.CUSTOM_DATA);
+        if (custom != null) {
+            for (String key : custom.copyTag().getAllKeys()) {
+                Tag value = custom.copyTag().get(key);
+                if (value instanceof net.minecraft.nbt.StringTag st) {
+                    row.data.put(key, st.getAsString());
+                }
+            }
+        }
+        out.add(row);
         List<ItemStack> subs = subStacks(stack);
         if (subs.isEmpty()) {
             // No enumerable contents — structural NBT walk over the components
@@ -232,8 +321,19 @@ public final class MinecraftDeepScanGateway implements DeepScanGateway {
             String countKey = compound.contains("count") ? "count"
                     : (compound.contains("Count") ? "Count" : null);
             if (!id.isEmpty() && countKey != null && isNumericTag(compound.getTagType(countKey))) {
-                out.add(new SnapshotItem(slotPath + ">deep", id, compound.getInt(countKey),
-                        null, id + " (în container)"));
+                SnapshotItem row = new SnapshotItem(slotPath + ">deep", id,
+                        compound.getInt(countKey), null, id + " (în container)");
+                // Foreign storage formats still serialize vanilla components —
+                // lift custom_data strings when visible so a physically marked
+                // deep item validates instead of reading as unmarked stock.
+                var components = compound.getCompound("components");
+                var customData = components.getCompound("minecraft:custom_data");
+                for (String key : customData.getAllKeys()) {
+                    if (customData.get(key) instanceof net.minecraft.nbt.StringTag st) {
+                        row.data.put(key, st.getAsString());
+                    }
+                }
+                out.add(row);
             }
             for (String key : compound.getAllKeys()) {
                 walkTag(compound.get(key), slotPath, depth + 1, out);

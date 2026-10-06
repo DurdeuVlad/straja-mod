@@ -58,6 +58,9 @@ public final class StrajaRuntime {
     private final com.dwurdy.straja.application.service.IdentityCardService identityCards;
     private final com.dwurdy.straja.application.service.ArtifactRegistryService artifactRegistry;
     private final com.dwurdy.straja.application.service.ForgeryService forgery;
+    private final com.dwurdy.straja.application.service.ForgeryDetectionService forgeryDetection;
+    private final com.dwurdy.straja.application.service.PatrolGuideService patrolGuide;
+    private com.dwurdy.straja.application.service.SeizureService seizure;
     private final com.dwurdy.straja.application.service.SecretaryService secretary;
     private final com.dwurdy.straja.application.service.MigrationService migration;
     private final com.dwurdy.straja.application.service.FormSessionService formSessions;
@@ -317,7 +320,7 @@ public final class StrajaRuntime {
         this.missions = new com.dwurdy.straja.application.service.MissionService(ctx, players, audit);
         this.custody = new com.dwurdy.straja.application.service.CustodyService(ctx, players, audit);
         this.prison = new com.dwurdy.straja.application.service.PrisonService(ctx, players, audit, custody);
-        var seizure = new com.dwurdy.straja.application.service.SeizureService(ctx, audit);
+        this.seizure = new com.dwurdy.straja.application.service.SeizureService(ctx, audit);
         this.prison.useSeizure(seizure);
         // #234: the debt ledger — late-bound into fines (FINE_PAY) and prison
         // (pending book notices drained beside locker belongings at login).
@@ -345,6 +348,9 @@ public final class StrajaRuntime {
         this.forgery = new com.dwurdy.straja.application.service.ForgeryService(
                 ctx.policies(), RollSource.system(), ctx.clock(),
                 artifactRegistry, players, audit);
+        this.forgeryDetection = new com.dwurdy.straja.application.service.ForgeryDetectionService(
+                ctx, forgery, artifactRegistry, players, audit);
+        this.patrolGuide = new com.dwurdy.straja.application.service.PatrolGuideService(ctx.policies());
         this.secretary = new com.dwurdy.straja.application.service.SecretaryService();
         this.migration = new com.dwurdy.straja.application.service.MigrationService(ctx, audit);
         this.formSessions = new com.dwurdy.straja.application.service.FormSessionService(clock, ids, v2Documents);
@@ -388,6 +394,7 @@ public final class StrajaRuntime {
         // LAW-006: camp exits confiscate repelled prisoners' banned cargo.
         this.checkpoints.useSeizure(seizure);
         this.checkpoints.useWanted(this.wanted);
+        this.checkpoints.useForgeryDetection(forgeryDetection);
         // #231: state-issued bounties — civilian captures, bail-or-mines.
         this.bounties = new com.dwurdy.straja.application.service.BountyService(
                 ctx, players, audit);
@@ -572,6 +579,9 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.port.in.IdentityCardRoleplayUseCase identityCards() { return identityCards; }
     public com.dwurdy.straja.application.service.ArtifactRegistryService artifactRegistry() { return artifactRegistry; }
     public com.dwurdy.straja.application.service.ForgeryService forgery() { return forgery; }
+    public com.dwurdy.straja.application.service.ForgeryDetectionService forgeryDetection() { return forgeryDetection; }
+    public com.dwurdy.straja.application.service.PatrolGuideService patrolGuide() { return patrolGuide; }
+    public com.dwurdy.straja.application.service.SeizureService seizure() { return seizure; }
     public com.dwurdy.straja.application.port.in.SecretaryRoleplayUseCase secretaryRoleplay() { return secretary; }
     public com.dwurdy.straja.application.port.in.RoleplayExpansionUseCase expansionRoleplay() { return expansion; }
     public com.dwurdy.straja.application.service.RpExpansionService expansion() { return expansion; }

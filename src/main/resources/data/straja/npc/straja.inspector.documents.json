@@ -1,0 +1,24 @@
+{
+  "contentProfileId": "straja.inspector.documents",
+  "npcProfileId": "straja:inspector",
+  "schemaVersion": 1,
+  "title": "Straja document inspector",
+  "body": "The inspector checks artifact serial marks against the central registry. Present your documents at the booth — expertise decides how deep the check reads.",
+  "requiredCapabilities": ["DIALOGUE", "GUI", "ACTION_INPUT"],
+  "optionalCapabilities": ["RICH_TEXT", "PORTRAITS"],
+  "actions": [
+    {"id": "inspect-documents", "label": "Present documents for inspection", "enabled": true}
+  ],
+  "dialogue": [
+    {
+      "id": "straja.inspector.documents",
+      "text": "Hand over your regulated artifacts and documents for a registry check.",
+      "choices": [
+        {"actionId": "inspect-documents", "label": "Present documents for inspection", "enabled": true}
+      ]
+    }
+  ],
+  "quests": [
+    {"id": "document-inspection", "title": "Document inspection", "state": "AVAILABLE"}
+  ]
+}

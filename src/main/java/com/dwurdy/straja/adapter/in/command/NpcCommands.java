@@ -87,6 +87,28 @@ final class NpcCommands {
                                     return 1;
                                 }))));
 
+        npc.then(Commands.literal("expertise")
+                .then(Commands.argument("npc", StringArgumentType.word())
+                .then(Commands.argument("level", StringArgumentType.word())
+                        .executes(ctx -> {
+                            String level = StringArgumentType.getString(ctx, "level");
+                            var runtime = StrajaRuntime.get();
+                            if (runtime == null) return 0;
+                            var record = record(ctx, runtime);
+                            if (record == null) return 0;
+                            var result = runtime.npcs().setExpertise(record.entityUuid, level);
+                            if (!result.ok()) {
+                                ctx.getSource().sendFailure(refusal(
+                                        "straja.npc.expertise_unknown",
+                                        "straja.remedy.fix_retry", level));
+                                return 0;
+                            }
+                            ctx.getSource().sendSystemMessage(Component.literal(
+                                    "NPC " + record.entityUuid
+                                            + " are acum expertiza " + level + "."));
+                            return 1;
+                        }))));
+
         npc.then(Commands.literal("bind-custom")
                 .then(Commands.argument("host", StringArgumentType.word())
                         .then(Commands.argument("role", StringArgumentType.word())
