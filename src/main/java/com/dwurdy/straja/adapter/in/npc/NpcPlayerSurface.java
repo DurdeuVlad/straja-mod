@@ -24,6 +24,7 @@ final class NpcPlayerSurface {
             "more", "main",
             "report-review", "audience-review",
             "petition-read", "petition-review",
+            "join-read", "join-review",
             "incident-accept", "incident-join", "incident-leave", "incident-resolve",
             "bolo-cancel", "evidence-deposit", "evidence-return", "evidence-transfer",
             "evidence-destroy",
@@ -774,6 +775,30 @@ final class NpcPlayerSurface {
                                 "Decide " + application.applicationId + " → "
                                         + gradeName.apply(application.targetGrade), id)));
             }
+        }
+        return List.copyOf(actions);
+    }
+
+    /**
+     * Work petitions for the chat surface: one read/decide pair per pending
+     * join request (reviewers only — callers pass an empty list for anyone
+     * else).
+     */
+    static List<ChatAction> joinActions(
+            List<com.dwurdy.straja.domain.model.JoinRequest> requests,
+            java.util.function.Function<String, String> subjectName) {
+        if (requests == null || requests.isEmpty()) return List.of();
+        var actions = new java.util.ArrayList<ChatAction>();
+        for (var request : requests) {
+            if (request == null) continue;
+            String name = subjectName.apply(request.subjectUuid);
+            parameterizedActionId("join-read", request.requestId)
+                    .ifPresent(id -> actions.add(new ChatAction(
+                            "Citește cererea " + request.requestId + " (" + name + ")", id)));
+            parameterizedActionId("join-review", request.requestId)
+                    .ifPresent(id -> actions.add(new ChatAction(
+                            "Decide " + request.requestId + " — "
+                                    + request.profession.toLowerCase(java.util.Locale.ROOT), id)));
         }
         return List.copyOf(actions);
     }

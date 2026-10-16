@@ -336,6 +336,19 @@ public final class PersonnelService implements com.dwurdy.straja.application.por
      * member only adds the newly chosen profession.
      */
     public synchronized PersonnelRecord enrollProfessional(String subjectUuid, String profession) {
+        return enrollProfessional(subjectUuid, subjectUuid, profession,
+                "TRADES_ENROLLMENT", "trades-enroll:" + subjectUuid);
+    }
+
+    /**
+     * Approval-attributed enrollment used by the join-petition review path:
+     * the reviewer is recorded as the actor and the join request id becomes
+     * the idempotency key, so a retried approval converges instead of
+     * double-writing.
+     */
+    public synchronized PersonnelRecord enrollProfessional(String actorUuid, String subjectUuid,
+                                                           String profession, String source,
+                                                           String idempotencyKey) {
         if (subjectUuid == null || subjectUuid.isBlank()) throw new IllegalArgumentException("subject required");
         if (profession == null || profession.isBlank()) throw new IllegalArgumentException("profession required");
         PersonnelStore store = repository.read();
@@ -350,9 +363,9 @@ public final class PersonnelService implements com.dwurdy.straja.application.por
                 || existing.membershipStatus == PersonnelStatus.TERMINATED)) {
             throw new IllegalStateException("TRADES_ENROLL_DENIED_" + existing.membershipStatus);
         }
-        authorizeUnchecked(subjectUuid, subjectUuid,
+        authorizeUnchecked(actorUuid == null || actorUuid.isBlank() ? subjectUuid : actorUuid, subjectUuid,
                 CareerGrade.PROFESSIONAL_ZILIER, EmploymentMode.PART_TIME,
-                "TRADES_ENROLLMENT", "hq", "trades-enroll:" + subjectUuid);
+                source, "hq", idempotencyKey == null ? "trades-enroll:" + subjectUuid : idempotencyKey);
         // authorizeUnchecked wrote its own store snapshot; repositories may
         // round-trip through serialization, so re-read and mutate the persisted
         // instance rather than the copy authorizeUnchecked returned.

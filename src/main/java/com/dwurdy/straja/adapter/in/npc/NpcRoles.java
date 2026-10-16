@@ -417,6 +417,11 @@ public final class NpcRoles {
                     Component.translatable("straja.trades.enroll.button"),
                     "trades-enroll:" + profession);
         }
+        var open = runtime.v2JoinRequests().findOpen(gw.uuid().toString());
+        if (open != null) {
+            serverPlayer.sendSystemMessage(Component.translatable(
+                    "straja.trades.pending", open.requestId));
+        }
     }
 
     /**
@@ -461,27 +466,90 @@ public final class NpcRoles {
         }
     }
 
-    private static void enrollTrades(String profession, Player player,
-                                     com.dwurdy.straja.application.port.out.PlayerGateway gw,
-                                     com.dwurdy.straja.bootstrap.StrajaRuntime runtime) {
+    /**
+     * Trades enrollment is petition-gated: clicking a profession opens the
+     * work-petition form instead of enrolling directly. The Comisar reviews
+     * it at this same desk; approval creates the part-time Zilier record.
+     */
+    private static void openJoinRequestForm(Player player,
+                                            com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                            com.dwurdy.straja.application.port.out.PlayerGateway gw,
+                                            String profession) {
         String normalized = profession == null ? ""
                 : profession.trim().toUpperCase(java.util.Locale.ROOT);
         if (!runtime.v2Generators().professions().contains(normalized)) {
             gw.refuse("straja.trades.refused.unknown", "straja.remedy.fix_retry");
             return;
         }
-        try {
-            runtime.v2Personnel().enrollProfessional(gw.uuid().toString(), normalized);
-            String trade = normalized.toLowerCase(java.util.Locale.ROOT);
-            if (player instanceof ServerPlayer serverPlayer) {
-                serverPlayer.sendSystemMessage(Component.translatable(
-                        "straja.trades.enrolled", trade));
-            } else {
-                gw.tellKey("straja.trades.enrolled");
-            }
-        } catch (RuntimeException error) {
-            gw.refuse("straja.npc.enroll_refused", "straja.remedy.reception", error.getMessage());
+        if (!(player instanceof ServerPlayer serverPlayer)) return;
+        com.dwurdy.straja.adapter.in.form.FormSessionBridge.open(serverPlayer,
+                new com.dwurdy.straja.application.port.in.FormSessionUseCase.Request(
+                        com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.JOIN_REQUEST,
+                        normalized,
+                        "Cerere de muncă — " + normalized.toLowerCase(java.util.Locale.ROOT),
+                        "Scrie motivul pentru care vrei să te înscrii la meseriași (opțional).",
+                        java.util.List.of(new com.dwurdy.straja.application.port.in.FormSessionUseCase.Field(
+                                "reason", "Motiv", 500, true))));
+    }
+
+    /** Hands the reviewer a written book with the work-petition text. */
+    private static boolean readJoinRequest(Player player,
+                                           com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                           com.dwurdy.straja.application.port.out.PlayerGateway gw,
+                                           String recordId) {
+        if (!runtime.playerQueries().isCommissioner(gw)) {
+            player.sendSystemMessage(refusal("straja.audience.decide_comisar", "straja.remedy.ask_comisar"));
+            return true;
         }
+        var request = runtime.v2JoinRequests().find(recordId);
+        if (request == null || request.status
+                != com.dwurdy.straja.domain.model.JoinRequestStatus.PENDING) {
+            player.sendSystemMessage(refusal("straja.join.gone", "straja.remedy.retry"));
+            return true;
+        }
+        String subjectName = subjectName(runtime, request.subjectUuid);
+        gw.giveWrittenBook("Cerere " + request.requestId, "Recepția Straja",
+                java.util.List.of(
+                        "Cerere de muncă\n\n"
+                                + "ID: " + request.requestId + "\n"
+                                + "Solicitant: " + subjectName + "\n"
+                                + "Meserie: " + request.profession.toLowerCase(java.util.Locale.ROOT),
+                        "Motivul solicitantului:\n\n"
+                                + (request.reason.isBlank()
+                                        ? "(fără motiv scris)" : request.reason)));
+        return true;
+    }
+
+    private static boolean openJoinReviewForm(Player player,
+                                              com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                              com.dwurdy.straja.application.port.out.PlayerGateway gw,
+                                              String recordId) {
+        if (!runtime.playerQueries().isCommissioner(gw)) {
+            player.sendSystemMessage(refusal("straja.audience.decide_comisar", "straja.remedy.ask_comisar"));
+            return true;
+        }
+        var request = runtime.v2JoinRequests().find(recordId);
+        if (request == null || request.status
+                != com.dwurdy.straja.domain.model.JoinRequestStatus.PENDING) {
+            player.sendSystemMessage(refusal("straja.join.gone", "straja.remedy.retry"));
+            return true;
+        }
+        if (!(player instanceof ServerPlayer serverPlayer)) return true;
+        // Same click contract as promotion petitions: book first, then the
+        // decision form bound to the version just read.
+        readJoinRequest(player, runtime, gw, recordId);
+        com.dwurdy.straja.adapter.in.form.FormSessionBridge.open(serverPlayer,
+                new com.dwurdy.straja.application.port.in.FormSessionUseCase.Request(
+                        com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.JOIN_REVIEW,
+                        request.requestId + "_" + request.version,
+                        "Decide cererea " + request.requestId,
+                        "Decizie: aproba sau respinge (motiv opțional, trimis solicitantului).",
+                        java.util.List.of(
+                                new com.dwurdy.straja.application.port.in.FormSessionUseCase.Field(
+                                        "decision", "Decizie", 16, false),
+                                new com.dwurdy.straja.application.port.in.FormSessionUseCase.Field(
+                                        "note", "Motiv pentru solicitant", 500, true))));
+        return true;
     }
 
     private static boolean performParameterizedAction(NpcPlayerSurface.ActionRef action,
@@ -509,7 +577,9 @@ public final class NpcRoles {
             case "mission-fail" -> openMissionForm(player, runtime, gw,
                     com.dwurdy.straja.application.port.in.MissionRoleplayUseCase.Action.FAIL, id);
             case "mission-template-issue" -> runtime.missionRoleplay().draftFromTemplate(gw, id);
-            case "trades-enroll" -> enrollTrades(id, player, gw, runtime);
+            case "trades-enroll" -> openJoinRequestForm(player, runtime, gw, id);
+            case "join-read" -> readJoinRequest(player, runtime, gw, id);
+            case "join-review" -> openJoinReviewForm(player, runtime, gw, id);
             case "complaint-report" -> openComplaintForm(player, runtime, gw,
                     com.dwurdy.straja.application.port.in.ComplaintRoleplayUseCase.Action.REPORT, id);
             case "complaint-review" -> openComplaintForm(player, runtime, gw,
@@ -1525,6 +1595,14 @@ public final class NpcRoles {
                     .stream().anyMatch(a -> a.action()
                             == com.dwurdy.straja.application.port.in.AudienceUseCase.Action.REVIEW
                             && id.equals(a.requestId()));
+            case "join-read", "join-review" -> {
+                // Same reviewer binding as promotion petitions: the clicker
+                // must be the Comisar and the request must still be pending.
+                var request = runtime.v2JoinRequests().find(id);
+                yield runtime.playerQueries().isCommissioner(player)
+                        && request != null && request.status
+                        == com.dwurdy.straja.domain.model.JoinRequestStatus.PENDING;
+            }
             case "petition-read", "petition-review" -> {
                 // Reviewer-bound and record-live: only the Comisar may open a
                 // petition, and only while it still awaits a decision.
@@ -1726,6 +1804,11 @@ public final class NpcRoles {
                         NpcPlayerSurface.RoleRoute.RECEPTIONIST));
                 actions.addAll(NpcPlayerSurface.roomActions(
                         runtime.roomRoleplay().canRelease(gateway)));
+                actions.addAll(NpcPlayerSurface.joinActions(
+                        runtime.playerQueries().isCommissioner(gateway)
+                                ? runtime.v2JoinRequests().pending()
+                                : java.util.List.of(),
+                        uuid -> subjectName(runtime, uuid)));
             }
             default -> {}
         }

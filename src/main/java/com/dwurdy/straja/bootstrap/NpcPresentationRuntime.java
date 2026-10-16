@@ -362,13 +362,40 @@ public final class NpcPresentationRuntime {
                     runtime.complaintRoleplay().availableActions(player),
                     runtime.fineRoleplay().availableActions(player),
                     runtime.complaintRoleplay().limits(),
-                    runtime.fineRoleplay().limits());
+                    runtime.fineRoleplay().limits(),
+                    joinProfessions(runtime, player),
+                    runtime.playerQueries().isCommissioner(player)
+                            ? runtime.v2JoinRequests().pending().stream()
+                                    .map(request -> new NpcCivicSurfaceService.JoinEntry(
+                                            request.requestId,
+                                            subjectName(runtime, request.subjectUuid),
+                                            request.profession))
+                                    .toList()
+                            : java.util.List.of());
         }
         if ("trainer".equals(binding.roleId()) || "recruiter".equals(binding.roleId())) {
             return CAREER_SURFACE.resolve(
                     admission, state, runtime.guardRecruitment().trainingView(player));
         }
         return admission;
+    }
+
+    /**
+     * Professions the viewer may petition for at the Receptionist. Sworn
+     * members and suspended/terminated records get an empty list — the
+     * service still re-checks eligibility authoritatively at submit.
+     */
+    private static java.util.List<String> joinProfessions(StrajaRuntime runtime, PlayerGateway player) {
+        var record = runtime.v2Personnel().find(player.uuid().toString());
+        boolean eligible = record == null
+                || !(record.membershipStatus
+                        == com.dwurdy.straja.domain.model.PersonnelStatus.SUSPENDED
+                        || record.membershipStatus
+                                == com.dwurdy.straja.domain.model.PersonnelStatus.TERMINATED
+                        || (record.active() && record.careerGrade != null
+                                && !record.careerGrade.isProfessional()));
+        if (!eligible) return java.util.List.of();
+        return new java.util.ArrayList<>(runtime.v2Generators().professions());
     }
 
     /** Display name for a petition subject; falls back to the raw uuid. */
@@ -523,6 +550,8 @@ public final class NpcPresentationRuntime {
             case "complaint-withdraw" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.COMPLAINT_WITHDRAW;
             case "fine-appeal" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.FINE_APPEAL;
             case "fine-appeal-review" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.FINE_APPEAL_REVIEW;
+            case "join-request" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.JOIN_REQUEST;
+            case "join-review" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.JOIN_REVIEW;
             default -> null;
         };
         if (action == null) return false;

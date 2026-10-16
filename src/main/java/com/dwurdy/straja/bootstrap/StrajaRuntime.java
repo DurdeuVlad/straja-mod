@@ -83,6 +83,7 @@ public final class StrajaRuntime {
     private final com.dwurdy.straja.application.service.PersonnelService v2Personnel;
     private final com.dwurdy.straja.application.service.AuthorizationService v2Authorization;
     private final com.dwurdy.straja.application.service.PromotionService v2Promotions;
+    private final com.dwurdy.straja.application.service.JoinRequestService v2JoinRequests;
     private final com.dwurdy.straja.application.service.StationService v2Stations;
     private final com.dwurdy.straja.application.service.DocumentService v2Documents;
     private final com.dwurdy.straja.application.service.EquipmentLedgerService v2EquipmentLedger;
@@ -218,6 +219,7 @@ public final class StrajaRuntime {
         this.v2Personnel.useAuthorization(this.v2Authorization);
         this.v2Promotions = new com.dwurdy.straja.application.service.PromotionService(
                 promotionRepository, personnelRepository, v2Authorization, clock, ids);
+
         this.v2Stations = new com.dwurdy.straja.application.service.StationService(
                 stationRepository, clock, ids);
         this.v2Personnel.useStationService(v2Stations);
@@ -242,6 +244,9 @@ public final class StrajaRuntime {
         this.v2Missions.useCampaignService(v2Campaigns);
         this.v2Generators = new com.dwurdy.straja.application.service.MissionGeneratorService();
         this.v2Generators.registerDefaults();
+        this.v2JoinRequests = new com.dwurdy.straja.application.service.JoinRequestService(
+                new SavedStores.JoinRequests(stores), v2Personnel, v2Authorization,
+                () -> v2Generators.professions(), clock, ids);
         this.v2Outbox = new com.dwurdy.straja.application.service.OutboxService(
                 outboxRepository, clock, ids);
         this.v2OutboxDispatcher = new com.dwurdy.straja.application.service.OutboxDispatcher();
@@ -502,7 +507,8 @@ public final class StrajaRuntime {
         instance.npcFormRouter = new com.dwurdy.straja.adapter.in.form.FormSubmissionRouter(
                 instance.guards, instance.missions, instance.complaints, instance.fines,
                 instance.archive, instance.reports, instance.audiences, instance.admin,
-                instance.adminTools, instance.custody, instance.expansion, instance.v2Promotions);
+                instance.adminTools, instance.custody, instance.expansion, instance.v2Promotions,
+                instance.v2JoinRequests);
         // This is the reusable equivalent of the original
         // instance.adminTools, instance.custody, instance.expansion)::submit
         // wiring; NPC and native forms now share the same authenticated route.
@@ -605,6 +611,7 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.service.PersonnelService v2Personnel() { return v2Personnel; }
     public com.dwurdy.straja.application.service.AuthorizationService v2Authorization() { return v2Authorization; }
     public com.dwurdy.straja.application.service.PromotionService v2Promotions() { return v2Promotions; }
+    public com.dwurdy.straja.application.service.JoinRequestService v2JoinRequests() { return v2JoinRequests; }
     public com.dwurdy.straja.application.service.StationService v2Stations() { return v2Stations; }
 
     /**

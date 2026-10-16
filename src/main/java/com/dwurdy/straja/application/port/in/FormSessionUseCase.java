@@ -47,6 +47,8 @@ public interface FormSessionUseCase {
         AUDIENCE_REVIEW("audience-review"),
         PETITION_REQUEST("petition-request"),
         PETITION_REVIEW("petition-review"),
+        JOIN_REQUEST("join-request"),
+        JOIN_REVIEW("join-review"),
         ADMIN_AUTHORIZE("admin-authorize"),
         ADMIN_POLICY_SET("admin-policy-set"),
         ADMIN_EMERGENCY_ALERT("admin-emergency-alert"),

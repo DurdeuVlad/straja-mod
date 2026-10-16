@@ -29,6 +29,7 @@ public final class FormSubmissionRouter {
     private final com.dwurdy.straja.application.port.in.CustodyRoleplayUseCase custody;
     private final com.dwurdy.straja.application.port.in.RoleplayExpansionUseCase expansion;
     private final com.dwurdy.straja.application.port.in.PromotionV2UseCase v2Promotions;
+    private final com.dwurdy.straja.application.port.in.JoinRequestUseCase v2JoinRequests;
 
     public FormSubmissionRouter(GuardRecruitmentUseCase guards, MissionRoleplayUseCase missions,
             ComplaintRoleplayUseCase complaints, FineRoleplayUseCase fines,
@@ -39,7 +40,8 @@ public final class FormSubmissionRouter {
             com.dwurdy.straja.application.port.in.AdminToolsUseCase adminTools,
             com.dwurdy.straja.application.port.in.CustodyRoleplayUseCase custody,
             com.dwurdy.straja.application.port.in.RoleplayExpansionUseCase expansion,
-            com.dwurdy.straja.application.port.in.PromotionV2UseCase v2Promotions) {
+            com.dwurdy.straja.application.port.in.PromotionV2UseCase v2Promotions,
+            com.dwurdy.straja.application.port.in.JoinRequestUseCase v2JoinRequests) {
         this.guards = guards;
         this.missions = missions;
         this.complaints = complaints;
@@ -52,6 +54,7 @@ public final class FormSubmissionRouter {
         this.custody = custody;
         this.expansion = expansion;
         this.v2Promotions = v2Promotions;
+        this.v2JoinRequests = v2JoinRequests;
     }
 
     public void submit(ServerPlayer player, FormSessionUseCase.Submission submission) {
@@ -226,6 +229,81 @@ public final class FormSubmissionRouter {
                     var subject = java.util.UUID.fromString(application.subjectUuid);
                     if (player.getServer().getPlayerList().getPlayer(subject) != null) {
                         v2Promotions.deliverOutcome(
+                                new MinecraftPlayerGateway(player.getServer(), subject));
+                    }
+                } catch (IllegalArgumentException ignored) {}
+            }
+            case JOIN_REQUEST -> {
+                // recordId carries the profession chosen on the trades list —
+                // the service revalidates it against the configured set.
+                try {
+                    var request = v2JoinRequests.submit(gateway.uuid().toString(),
+                            submission.recordId(), values.get("reason"));
+                    player.sendSystemMessage(net.minecraft.network.chat.Component.translatable(
+                            "straja.join.submitted", request.requestId));
+                } catch (RuntimeException refused) {
+                    player.sendSystemMessage(refusal("straja.join.refused", "straja.remedy.retry"));
+                }
+            }
+            case JOIN_REVIEW -> {
+                // recordId carries "<requestId>_<version>" — the version the
+                // reviewer actually read; a changed petition fails closed.
+                String raw = submission.recordId() == null ? "" : submission.recordId();
+                String requestId = raw;
+                Long expected = null;
+                int cut = raw.lastIndexOf('_');
+                if (cut > 0) {
+                    try {
+                        expected = Long.parseLong(raw.substring(cut + 1));
+                        requestId = raw.substring(0, cut);
+                    } catch (NumberFormatException ignored) {
+                        requestId = raw;
+                        expected = null;
+                    }
+                }
+                var request = v2JoinRequests.find(requestId);
+                if (request == null || request.status
+                        != com.dwurdy.straja.domain.model.JoinRequestStatus.PENDING) {
+                    player.sendSystemMessage(refusal("straja.join.gone", "straja.remedy.retry"));
+                    return;
+                }
+                if (expected != null && expected.longValue() != request.version) {
+                    player.sendSystemMessage(refusal("straja.join.gone", "straja.remedy.retry"));
+                    return;
+                }
+                String normalized = values.getOrDefault("decision", "").trim().toLowerCase();
+                boolean approve = java.util.List.of(
+                        "aproba", "aprobă", "approve", "accept", "accepta", "acceptă")
+                        .contains(normalized);
+                boolean deny = java.util.List.of("respinge", "reject", "deny", "refuza", "refuză")
+                        .contains(normalized);
+                if (!approve && !deny) {
+                    player.sendSystemMessage(refusal("straja.petition.bad_decision", "straja.remedy.fix_retry"));
+                    return;
+                }
+                String note = values.getOrDefault("note", "");
+                try {
+                    if (approve) {
+                        v2JoinRequests.approve(gateway.uuid().toString(),
+                                request.requestId, request.version);
+                        player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                                "Cererea " + request.requestId + " a fost aprobată."));
+                    } else {
+                        v2JoinRequests.reject(gateway.uuid().toString(),
+                                request.requestId, request.version, note);
+                        player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                                "Cererea " + request.requestId + " a fost respinsă."));
+                    }
+                } catch (IllegalStateException denied) {
+                    player.sendSystemMessage(refusal("straja.petition.denied", "straja.remedy.retry"));
+                    return;
+                }
+                // Tell the subject immediately when they are online; the
+                // login sweep in deliverOutcome covers offline members.
+                try {
+                    var subject = java.util.UUID.fromString(request.subjectUuid);
+                    if (player.getServer().getPlayerList().getPlayer(subject) != null) {
+                        v2JoinRequests.deliverOutcome(
                                 new MinecraftPlayerGateway(player.getServer(), subject));
                     }
                 } catch (IllegalArgumentException ignored) {}

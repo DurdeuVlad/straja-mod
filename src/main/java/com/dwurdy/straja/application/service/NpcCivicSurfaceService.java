@@ -28,6 +28,18 @@ public final class NpcCivicSurfaceService {
             List<FineRoleplayUseCase.AvailableAction> fines,
             ComplaintRoleplayUseCase.Limits complaintLimits,
             FineRoleplayUseCase.Limits fineLimits) {
+        return resolve(published, complaints, fines, complaintLimits, fineLimits,
+                List.of(), List.of());
+    }
+
+    public NpcSurfaceSnapshot resolve(
+            NpcSurfaceSnapshot published,
+            List<ComplaintRoleplayUseCase.AvailableAction> complaints,
+            List<FineRoleplayUseCase.AvailableAction> fines,
+            ComplaintRoleplayUseCase.Limits complaintLimits,
+            FineRoleplayUseCase.Limits fineLimits,
+            List<String> joinProfessions,
+            List<JoinEntry> joinRequests) {
         Objects.requireNonNull(published, "published");
         complaints = List.copyOf(Objects.requireNonNull(complaints, "complaints"));
         fines = List.copyOf(Objects.requireNonNull(fines, "fines"));
@@ -46,6 +58,7 @@ public final class NpcCivicSurfaceService {
             if (entry == null || entry.action() == null) continue;
             addFine(actions, entry, fineLimits);
         }
+        addJoinRequests(actions, joinProfessions, joinRequests);
 
         List<NpcSurfaceAction> result = List.copyOf(actions.values());
         boolean civicAvailable = !complaints.isEmpty() || !fines.isEmpty();
@@ -125,6 +138,42 @@ public final class NpcCivicSurfaceService {
                     ARREST_TASK, CLAIM_TASK_REWARD, HEARING_WARRANT -> { }
         }
     }
+
+    /**
+     * Work petitions: an eligible viewer files "Depune cerere de muncă" per
+     * profession (reason form), and the Comisar sees one read/decide pair per
+     * pending request.
+     */
+    private static void addJoinRequests(
+            Map<NpcContentId, NpcSurfaceAction> actions,
+            List<String> joinProfessions,
+            List<JoinEntry> joinRequests) {
+        if (joinProfessions != null) {
+            for (String profession : joinProfessions) {
+                if (profession == null) continue;
+                String normalized = profession.trim().toUpperCase(java.util.Locale.ROOT);
+                add(actions, parameterized("join-request", normalized),
+                        "Depune cerere de muncă — "
+                                + normalized.toLowerCase(java.util.Locale.ROOT),
+                        List.of(field("reason", "Motiv (opțional)", 500, false)));
+            }
+        }
+        if (joinRequests != null) {
+            for (JoinEntry request : joinRequests) {
+                if (request == null) continue;
+                add(actions, parameterized("join-read", request.requestId()),
+                        "Citește cererea " + request.requestId() + " ("
+                                + bounded(request.subjectName(), 40) + ")", List.of());
+                add(actions, parameterized("join-review", request.requestId()),
+                        "Decide " + request.requestId() + " — "
+                                + request.profession().toLowerCase(java.util.Locale.ROOT),
+                        List.of(field("decision", "Decizie (aproba / respinge)", 16, true),
+                                field("note", "Motiv pentru solicitant", 500, false)));
+            }
+        }
+    }
+
+    public record JoinEntry(String requestId, String subjectName, String profession) {}
 
     private static void add(
             Map<NpcContentId, NpcSurfaceAction> actions,

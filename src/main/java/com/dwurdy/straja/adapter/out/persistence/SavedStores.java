@@ -240,6 +240,12 @@ public final class SavedStores {
         @Override public void write(PromotionStore store) { writeJson(store); }
     }
 
+    public static class JoinRequests extends JsonBackedStore implements JoinRequestRepository {
+        public JoinRequests(StoreAccess access) { super(access, "join_requests"); }
+        @Override public JoinRequestStore read() { return readJsonVersioned(JoinRequestStore.class, JoinRequestStore::new, JoinRequestStore.CURRENT_SCHEMA_VERSION); }
+        @Override public void write(JoinRequestStore store) { writeJson(store); }
+    }
+
     public static class Stations extends JsonBackedStore implements StationRepository {
         public Stations(StoreAccess access) { super(access, "stations"); }
         @Override public StationStore read() { return readJsonVersioned(StationStore.class, StationStore::defaults, StationStore.CURRENT_SCHEMA_VERSION); }
