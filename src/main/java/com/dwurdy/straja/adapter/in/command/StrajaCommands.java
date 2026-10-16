@@ -40,6 +40,12 @@ public final class StrajaCommands {
         // Legacy prototype surface: live CustomNPCs quest commands still call
         // /strajastorage deposit — keep the alias alive (perm 2, as scripted).
         dispatcher.register(storageAlias());
+        // KJS-1: the remaining deployed legacy roots — plates, command blocks
+        // and NPC scripts keep working over the native services (perm 2).
+        dispatcher.register(goldAlias());
+        dispatcher.register(checkpointAlias());
+        dispatcher.register(prisonAlias());
+        dispatcher.register(salaryAlias());
         AdminCommandHelp.attach(dispatcher);
     }
 
@@ -1561,13 +1567,13 @@ public final class StrajaCommands {
             node.then(Commands.literal("hunted")
                     .executes(c -> player(c, StrajaRuntime.get().storage()::hunted)));
         }
-        attachStorageBridge(node, adminSurface);
+        attachStorageBridge(node, adminSurface, adminSurface ? "straja storage" : "strajastorage");
         return node;
     }
 
-    /** The deposit bridge + help — shared by the admin subtree and the perm-2 alias. */
+    /** The deposit bridge + help — shared by the admin subtree and the perm-2 aliases. */
     private static void attachStorageBridge(LiteralArgumentBuilder<CommandSourceStack> node,
-            boolean adminSurface) {
+            boolean adminSurface, String usage) {
         node.then(Commands.literal("deposit")
                 .then(Commands.argument("player", EntityArgument.player())
                 .then(Commands.argument("item", StringArgumentType.word())
@@ -1608,12 +1614,232 @@ public final class StrajaCommands {
                         "/straja storage status — show picked configuration",
                         "/straja storage hunted — list flagged thieves and their debt",
                         "/straja storage resetcfg — drop all picked configuration")
-                    : List.of("/strajastorage deposit <player> <item> <count> — merchant deposit bridge");
+                    : List.of("/" + usage + " deposit <player> <item> <count> — merchant deposit bridge");
             for (String line : lines) {
                 c.getSource().sendSystemMessage(Component.literal(line));
             }
             return 1;
         }));
+    }
+
+    /**
+     * /strajagold — perm-2 bridge root for CNPC gold-quest turn-ins. The
+     * prototype's deposit verb is the same merchant pipeline as
+     * /strajastorage deposit (storage is the generalized successor of gold).
+     */
+    private static LiteralArgumentBuilder<CommandSourceStack> goldAlias() {
+        var node = Commands.literal("strajagold")
+                .requires(source -> source.hasPermission(2));
+        attachStorageBridge(node, false, "strajagold");
+        return node;
+    }
+
+    /**
+     * /strajacheckpoint — perm-2 bridge root for pressure-plate command
+     * blocks and NPC dialogue actions. Only the live stage verbs survive;
+     * administration stays on /straja checkpoint at level 3.
+     */
+    private static LiteralArgumentBuilder<CommandSourceStack> checkpointAlias() {
+        var node = Commands.literal("strajacheckpoint")
+                .requires(source -> source.hasPermission(2));
+        for (String verb : List.of("inspect", "arrest", "deny")) {
+            node.then(Commands.literal(verb)
+                    .then(Commands.argument("player", EntityArgument.player())
+                            .executes(c -> {
+                                var t = target(c, "player");
+                                if (t == null) {
+                                    c.getSource().sendFailure(refusal(
+                                            "straja.cmd.offline", "straja.remedy.retry"));
+                                    return 0;
+                                }
+                                var pos = c.getSource().getPosition();
+                                String dim = c.getSource().getLevel()
+                                        .dimension().location().toString();
+                                return StrajaRuntime.get().checkpoints()
+                                        .legacyStage(t, verb, dim, pos.x, pos.y, pos.z) ? 1 : 0;
+                            })));
+        }
+        node.then(Commands.literal("info")
+                .then(Commands.argument("player", EntityArgument.player())
+                        .executes(c -> {
+                            var t = target(c, "player");
+                            if (t == null) {
+                                c.getSource().sendFailure(refusal(
+                                        "straja.cmd.offline", "straja.remedy.retry"));
+                                return 0;
+                            }
+                            var pos = c.getSource().getPosition();
+                            String dim = c.getSource().getLevel()
+                                    .dimension().location().toString();
+                            var found = StrajaRuntime.get().checkpoints()
+                                    .legacyInfo(t, dim, pos.x, pos.y, pos.z);
+                            if (found.isEmpty()) {
+                                c.getSource().sendSystemMessage(
+                                        Component.literal("curat — fără contraband"));
+                            } else {
+                                for (String line : found) {
+                                    c.getSource().sendSystemMessage(
+                                            Component.literal("§7- §f" + line));
+                                }
+                            }
+                            return 1;
+                        })));
+        node.then(Commands.literal("aggressive")
+                .then(Commands.argument("player", EntityArgument.player())
+                        .executes(c -> {
+                            var t = target(c, "player");
+                            if (t == null) {
+                                c.getSource().sendFailure(refusal(
+                                        "straja.cmd.offline", "straja.remedy.retry"));
+                                return 0;
+                            }
+                            return StrajaRuntime.get().checkpoints().legacyAggressive(t) ? 1 : 0;
+                        })));
+        node.then(Commands.literal("help").executes(c -> {
+            for (String line : List.of(
+                    "/strajacheckpoint inspect|arrest|deny <player> — stage verbs at the nearest site",
+                    "/strajacheckpoint info <player> — contraband list at the nearest site",
+                    "/strajacheckpoint aggressive <player> — mark wanted (system BOLO)")) {
+                c.getSource().sendSystemMessage(Component.literal(line));
+            }
+            return 1;
+        }));
+        return node;
+    }
+
+    /**
+     * /strajaprison — perm-2 bridge root for the cross-script custody
+     * contract: command blocks and scripts book and release prisoners
+     * through the same verbs the prototype exposed.
+     */
+    private static LiteralArgumentBuilder<CommandSourceStack> prisonAlias() {
+        var node = Commands.literal("strajaprison")
+                .requires(source -> source.hasPermission(2));
+        var arrest = Commands.literal("arrest")
+                .then(Commands.argument("player", EntityArgument.player())
+                        .executes(c -> legacyPrisonArrest(c, "arest strajaprison"))
+                        .then(Commands.argument("reason", StringArgumentType.greedyString())
+                                .executes(c -> legacyPrisonArrest(c,
+                                        StringArgumentType.getString(c, "reason")))));
+        node.then(arrest);
+        var release = Commands.literal("release")
+                .then(Commands.argument("name", StringArgumentType.word())
+                        .executes(c -> legacyPrisonRelease(c, 0))
+                        .then(Commands.argument("fine", IntegerArgumentType.integer(1))
+                                .executes(c -> legacyPrisonRelease(c,
+                                        IntegerArgumentType.getInteger(c, "fine")))));
+        node.then(release);
+        node.then(Commands.literal("jailed").executes(c -> legacyPrintRegister(c, null)));
+        node.then(Commands.literal("record")
+                .then(Commands.argument("name", StringArgumentType.word())
+                        .executes(c -> legacyPrintRegister(c,
+                                StringArgumentType.getString(c, "name")))));
+        node.then(Commands.literal("help").executes(c -> {
+            for (String line : List.of(
+                    "/strajaprison arrest <player> [reason…] — book into custody",
+                    "/strajaprison release <name> [fine] — free + optional release fine",
+                    "/strajaprison jailed — register · /strajaprison record <name> — one row")) {
+                c.getSource().sendSystemMessage(Component.literal(line));
+            }
+            return 1;
+        }));
+        return node;
+    }
+
+    private static int legacyPrisonArrest(CommandContext<CommandSourceStack> c, String reason) {
+        var t = target(c, "player");
+        if (t == null) {
+            c.getSource().sendFailure(refusal("straja.cmd.offline", "straja.remedy.retry"));
+            return 0;
+        }
+        var sentence = StrajaRuntime.get().prison().arrest(t, null, 0, actor(c), null,
+                reason == null || reason.isBlank() ? "arest strajaprison" : reason, null);
+        if (sentence == null) return 0;
+        c.getSource().sendSystemMessage(Component.literal(
+                "Sentință " + sentence.id + " (" + sentence.status + ")."));
+        return 1;
+    }
+
+    private static int legacyPrisonRelease(CommandContext<CommandSourceStack> c, int fine) {
+        String name = StringArgumentType.getString(c, "name");
+        var runtime = StrajaRuntime.get();
+        if (!runtime.prison().releaseById(actor(c), name)) return 0;
+        if (fine > 0) {
+            var target = runtime.playerQueries().findPlayer(name);
+            if (target == null) {
+                c.getSource().sendSystemMessage(Component.literal(
+                        "Eliberat — amenda de " + fine
+                                + " a rămas neemisă (jucător deconectat)."));
+            } else {
+                runtime.fines().issueSystem(actor(c), target, fine, "custodie",
+                        "amendă la eliberare");
+            }
+        }
+        return 1;
+    }
+
+    private static int legacyPrintRegister(CommandContext<CommandSourceStack> c, String name) {
+        var lines = StrajaRuntime.get().prison().registerLines(name);
+        if (lines.isEmpty()) {
+            c.getSource().sendSystemMessage(Component.literal(
+                    "Registrul e gol" + (name == null ? "." : " pentru '" + name + "'.")));
+            return 1;
+        }
+        for (String line : lines) c.getSource().sendSystemMessage(Component.literal(line));
+        return 1;
+    }
+
+    /**
+     * /strajasalary — the bridge root stays ungated: the prototype gave
+     * {@code claim}/{@code status} to every soldier while admin verbs were
+     * op-level. Per-verb gates preserve both.
+     */
+    private static LiteralArgumentBuilder<CommandSourceStack> salaryAlias() {
+        var node = Commands.literal("strajasalary");
+        node.then(Commands.literal("pay")
+                .requires(source -> source.hasPermission(2))
+                .then(Commands.argument("player", EntityArgument.player())
+                        .then(Commands.argument("amount", IntegerArgumentType.integer(1))
+                                .executes(c -> {
+                                    var t = target(c, "player");
+                                    if (t == null) {
+                                        c.getSource().sendFailure(refusal(
+                                                "straja.cmd.offline", "straja.remedy.retry"));
+                                        return 0;
+                                    }
+                                    int amount = IntegerArgumentType.getInteger(c, "amount");
+                                    var settlements = StrajaRuntime.get().v2Settlements();
+                                    var settled = settlements.payout(settlements.create(
+                                            t.uuid().toString(),
+                                            com.dwurdy.straja.domain.model.Settlement.SettlementCategory.LEGACY_SALARY,
+                                            amount,
+                                            "legacy_salary:" + t.uuid() + ":"
+                                                    + java.util.UUID.randomUUID(),
+                                            "legacy_pay"), t);
+                                    String outcome = settled.status
+                                            == com.dwurdy.straja.domain.model.Settlement.SettlementStatus.PAID
+                                            ? "achitată"
+                                            : settled.status == com.dwurdy.straja.domain.model.Settlement.SettlementStatus.REVIEW
+                                                    ? "marcată pentru revizie"
+                                                    : "înregistrată — plata se reîncearcă";
+                                    c.getSource().sendSystemMessage(Component.literal(
+                                            "Plată " + amount + " alamă către " + t.name()
+                                                    + " " + outcome + "."));
+                                    return 1;
+                                }))));
+        node.then(Commands.literal("claim")
+                .executes(c -> player(c, StrajaRuntime.get().guards()::salary)));
+        node.then(Commands.literal("status")
+                .executes(c -> player(c, StrajaRuntime.get().guards()::showStatus)));
+        node.then(Commands.literal("help").executes(c -> {
+            for (String line : List.of(
+                    "/strajasalary pay <player> <alamă> — queue a payout [OP 2]",
+                    "/strajasalary claim — collect your pay · /strajasalary status — your record")) {
+                c.getSource().sendSystemMessage(Component.literal(line));
+            }
+            return 1;
+        }));
+        return node;
     }
 
     private static LiteralArgumentBuilder<CommandSourceStack> v2PersonnelCommands() {

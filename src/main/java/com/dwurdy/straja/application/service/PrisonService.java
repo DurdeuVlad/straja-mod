@@ -482,7 +482,7 @@ public class PrisonService implements PrisonRoleplayUseCase {
             actor.refuse("straja.common.target_offline", "straja.remedy.wait");
             return false;
         }
-        if (!players.hasCapability(actor, Capability.EXECUTE_ARRESTS)) {
+        if (!actor.isOp() && !players.hasCapability(actor, Capability.EXECUTE_ARRESTS)) {
             actor.refuse("straja.prison.release_rank", "straja.remedy.jailer");
             audit.record("prison_release", actor.name(), uuidOf(actor),
                     target.name(), uuidOf(target),
@@ -946,7 +946,7 @@ public class PrisonService implements PrisonRoleplayUseCase {
      * the rest of the release finishes at their next login.
      */
     public boolean releaseById(PlayerGateway actor, String targetId) {
-        if (!players.hasCapability(actor, Capability.EXECUTE_ARRESTS)) {
+        if (!actor.isOp() && !players.hasCapability(actor, Capability.EXECUTE_ARRESTS)) {
             actor.refuse("straja.prison.release_rank", "straja.remedy.jailer");
             audit.record("prison_release", actor.name(), uuidOf(actor),
                     targetId, "", "REFUSED", "missing_authority");
@@ -1041,6 +1041,40 @@ public class PrisonService implements PrisonRoleplayUseCase {
         player.tell("Detenție: " + sentence.status + " | celulă: "
                 + (sentence.cellId.isEmpty() ? "așteptare" : sentence.cellId)
                 + " | timp activ rămas: " + Math.ceil(sentence.remainingActiveMs / 60000.0) + " minute.");
+    }
+
+    /**
+     * KJS-1 — legacy {@code strajaprison jailed|record} output: register rows
+     * as display lines for a command source (console-safe, no player context).
+     * {@code nameFilter} null/blank returns every row; otherwise matches
+     * detainee name (substring, case-insensitive) or exact uuid.
+     */
+    public java.util.List<String> registerLines(String nameFilter) {
+        var register = ctx.prisonerRegister().read();
+        String filter = nameFilter == null ? ""
+                : nameFilter.trim().toLowerCase(java.util.Locale.ROOT);
+        var lines = new java.util.ArrayList<String>();
+        for (var rec : register.prisoners().values()) {
+            if (rec == null) continue;
+            if (!filter.isEmpty()) {
+                boolean nameMatch = rec.detaineeName != null
+                        && rec.detaineeName.toLowerCase(java.util.Locale.ROOT).contains(filter);
+                boolean uuidMatch = rec.detaineeUuid != null
+                        && rec.detaineeUuid.equalsIgnoreCase(filter);
+                if (!nameMatch && !uuidMatch) continue;
+            }
+            lines.add((blank(rec.detaineeName) ? rec.detaineeUuid : rec.detaineeName)
+                    + " — " + rec.status
+                    + (rec.detentionReason == null || rec.detentionReason.isBlank()
+                            ? "" : " (" + rec.detentionReason + ")")
+                    + (rec.assignedCellId == null || rec.assignedCellId.isBlank()
+                            ? "" : " celulă=" + rec.assignedCellId)
+                    + (rec.assignedCampId == null || rec.assignedCampId.isBlank()
+                            ? "" : " lagăr=" + rec.assignedCampId)
+                    + " amenzi=" + rec.outstandingFines
+                    + " areste=" + rec.arrestCount);
+        }
+        return lines;
     }
 
     /**

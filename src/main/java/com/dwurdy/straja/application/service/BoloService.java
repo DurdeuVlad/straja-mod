@@ -191,6 +191,7 @@ public final class BoloService {
                                                 String reason, String sentenceId) {
         if (subjectUuid == null || subjectUuid.isBlank()
                 || !ctx.policies().bolosEnabled) return null;
+        expire();
         BoloStore data = store();
         for (BoloRecord record : data.records) {
             if (record != null && record.status == BoloStatus.ACTIVE
@@ -229,6 +230,7 @@ public final class BoloService {
                                                String reason) {
         if (subjectUuid == null || subjectUuid.isBlank()
                 || !ctx.policies().bolosEnabled) return null;
+        expire();
         BoloStore data = store();
         for (BoloRecord record : data.records) {
             if (record != null && record.status == BoloStatus.ACTIVE
@@ -261,6 +263,44 @@ public final class BoloService {
         ctx.bolos().write(data);
         audit.record("bolo_create", "system", "", record.id,
                 record.subjectUuid, "SUCCESS", "forgery_detected");
+        return record;
+    }
+
+    /**
+     * KJS-1 — generic system wanted marker for the legacy command bridges
+     * (prototype {@code strajaWantedUntil} / the {@code aggressive} verb). An
+     * arrest-authority warrant with the standard BOLO expiration, idempotent
+     * per subject while one is active — no player issuer exists behind a
+     * command block or NPC script.
+     */
+    public synchronized BoloRecord flagSystem(String subjectUuid, String subjectName,
+                                              String reason) {
+        if (subjectUuid == null || subjectUuid.isBlank()
+                || !ctx.policies().bolosEnabled) return null;
+        expire();
+        BoloStore data = store();
+        for (BoloRecord record : data.records) {
+            if (record != null && record.status == BoloStatus.ACTIVE
+                    && subjectUuid.equals(record.subjectUuid)) {
+                return record; // already hunted — do not stack markers
+            }
+        }
+        BoloRecord record = new BoloRecord();
+        record.id = data.nextBoloId();
+        record.subjectUuid = subjectUuid;
+        record.subjectName = subjectName == null ? subjectUuid : subjectName;
+        record.reason = clean(reason, ctx.policies().boloMaxReasonLength);
+        record.issuerName = "system";
+        record.issuerUuid = "";
+        record.issuerRank = 0;
+        record.createdAt = now();
+        record.expiresAt = now()
+                + Math.max(60L, ctx.policies().boloDefaultExpirationSeconds) * 1_000L;
+        record.authority = BoloAuthority.ARREST_AUTHORIZED;
+        data.records.add(record);
+        ctx.bolos().write(data);
+        audit.record("bolo_create", "system", "", record.id,
+                record.subjectUuid, "SUCCESS", "legacy_bridge");
         return record;
     }
 

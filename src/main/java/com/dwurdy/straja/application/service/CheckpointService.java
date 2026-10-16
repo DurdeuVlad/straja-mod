@@ -1086,6 +1086,97 @@ public final class CheckpointService {
         policy(admin, scopeName, (add ? "+exempt " : "-exempt ") + subject);
     }
 
+    // ------------------------------------------------------------ legacy strajacheckpoint bridge (KJS-1)
+
+    /** Prototype {@code CP_SITE_RADIUS} — command context resolves the post within 24 blocks. */
+    private static final double LEGACY_SITE_RADIUS = 24.0;
+
+    /**
+     * Prototype {@code strajacheckpoint inspect|arrest|deny} — run a stage
+     * pipeline against {@code target} at the site nearest the command source
+     * position (plates and NPC scripts sit beside the gate they drive).
+     * Returns true when the pipeline pushed the player back or arrested them.
+     */
+    public boolean legacyStage(PlayerGateway target, String verb,
+                               String dimension, double x, double y, double z) {
+        if (target == null || verb == null || dimension == null) return false;
+        var store = ctx.lawCheckpoints().read();
+        var site = nearestSite(store, dimension, x, y, z);
+        if (site == null) {
+            target.refuse("straja.checkpoint.no_site_near", "straja.remedy.checkpoint_site");
+            return false;
+        }
+        Set<String> roles = rolesOf(target);
+        CrossingDirection dir = site.direction != null
+                ? site.direction : CrossingDirection.BIDIRECTIONAL;
+        return switch (verb) {
+            case "inspect" -> inspect(target, site, store, roles, dir);
+            case "arrest" -> arrestStage2(target, site, store, roles, dir);
+            case "deny" -> denyStage(target, site, store, roles, dir);
+            default -> false;
+        };
+    }
+
+    /** Prototype {@code strajacheckpoint info} — the target's contraband lines, no state change. */
+    public List<String> legacyInfo(PlayerGateway target,
+                                   String dimension, double x, double y, double z) {
+        if (target == null || dimension == null) return List.of();
+        var store = ctx.lawCheckpoints().read();
+        var site = nearestSite(store, dimension, x, y, z);
+        if (site == null) return List.of();
+        List<SnapshotItem> snapshot = ctx.deepScan().deepScan(target.uuid());
+        List<String> found = contraband(snapshot, site, store);
+        found.addAll(carryBanHits(snapshot, site, rolesOf(target)));
+        return found;
+    }
+
+    /** Prototype {@code strajacheckpoint aggressive} — alarm + arrest-authority wanted mark. */
+    public boolean legacyAggressive(PlayerGateway target) {
+        if (target == null || target.uuid() == null) return false;
+        boolean flagged = bolos.flagSystem(target.uuid().toString(), target.name(),
+                "marcat agresiv la punctul de control") != null;
+        audit.record("checkpoint_aggressive", "checkpoint", "", target.name(),
+                target.uuid().toString(), flagged ? "WANTED" : "REFUSED", "legacy aggressive");
+        return flagged;
+    }
+
+    /** Nearest active site within {@link #LEGACY_SITE_RADIUS} of the source position. */
+    private LawCheckpointRecord nearestSite(LawCheckpointStore store, String dimension,
+                                            double x, double y, double z) {
+        LawCheckpointRecord best = null;
+        double bestDist = LEGACY_SITE_RADIUS;
+        for (var site : store.checkpoints().values()) {
+            if (site == null || !site.active
+                    || site.dimension == null || !site.dimension.equals(dimension)) continue;
+            double dist = siteDistance(site, x, y, z);
+            if (dist <= bestDist) {
+                bestDist = dist;
+                best = site;
+            }
+        }
+        return best;
+    }
+
+    /** Distance to the closest post anchor: pushback point or either stage box edge. */
+    private static double siteDistance(LawCheckpointRecord site, double x, double y, double z) {
+        double best = Double.MAX_VALUE;
+        if (site.pushback != null) {
+            double dx = site.pushback.x() - x, dy = site.pushback.y() - y, dz = site.pushback.z() - z;
+            best = Math.min(best, Math.sqrt(dx * dx + dy * dy + dz * dz));
+        }
+        if (site.stage1 != null) best = Math.min(best, boundsDistance(site.stage1, x, y, z));
+        if (site.stage2 != null) best = Math.min(best, boundsDistance(site.stage2, x, y, z));
+        return best;
+    }
+
+    private static double boundsDistance(com.dwurdy.straja.domain.model.LawBounds bounds,
+                                         double x, double y, double z) {
+        double dx = Math.max(Math.max(bounds.minX() - x, x - bounds.maxX()), 0);
+        double dy = Math.max(Math.max(bounds.minY() - y, y - bounds.maxY()), 0);
+        double dz = Math.max(Math.max(bounds.minZ() - z, z - bounds.maxZ()), 0);
+        return Math.sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
     /** Linked-gate policy sharing: the site plus its link partner(s), both directions. */
     private List<LawCheckpointRecord> linkedScope(LawCheckpointStore store, LawCheckpointRecord site) {
         List<LawCheckpointRecord> scope = new ArrayList<>();

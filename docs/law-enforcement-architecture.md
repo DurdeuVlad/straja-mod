@@ -394,8 +394,19 @@ no combat goals by design.
    recommend keeping 5 (prototype-tuned, cheaper).
 3. **Boarding detection**: `EntityMountEvent` preferred; fall back to tick
    poll if modded boats bypass the event.
-4. **`strajacheckpoint`/`strajaprison` aliases**: keep as restricted roots
-   (deposit/action bridge only) for live pressure plates & NPC quest data —
-   `strajastorage` precedent.
+4. **`strajacheckpoint`/`strajaprison`/`strajagold`/`strajasalary` aliases**:
+   keep as restricted roots for live pressure plates & NPC quest data —
+   `strajastorage` precedent. **Implemented** (perm 2 roots, typed service
+   calls only): `strajacheckpoint inspect|arrest|deny|info|aggressive`
+   resolves the nearest active site within 24 blocks (prototype
+   `CP_SITE_RADIUS`) and runs the native stage pipelines — `aggressive`
+   raises a system `ARREST_AUTHORIZED` BOLO; `strajaprison
+   arrest|release|jailed|record` delegates to `PrisonService`
+   (`releaseById` now admits op/console sources, matching the
+   commissioner/op forced-release bypass) and the optional release fine
+   issues through `FineService.issueSystem` — no officer ledger required;
+   `strajagold` shares the
+   storage `deposit` bridge; `strajasalary pay` queues a `LEGACY_SALARY`
+   settlement payout while `claim`/`status` stay ungated for soldiers.
 5. **Economy denomination source**: Ady's Decorations coins by default
    (per #219), tier ratios in `[economy]` TOML — confirm item IDs at M5.

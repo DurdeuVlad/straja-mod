@@ -326,23 +326,8 @@ public class FineService implements FineRoleplayUseCase {
             issuer.refuse("straja.fine.duplicate", "straja.remedy.fix_retry", existing.id);
             return true;
         }
-        long issuedAt = now();
-        Fine fine = new Fine();
-        fine.id = data.nextFineId();
-        fine.target = target.name();
-        fine.targetUuid = target.uuid().toString();
-        fine.issuer = issuer.name();
-        fine.issuerUuid = issuer.uuid().toString();
-        fine.law = draft.law;
-        fine.description = draft.description;
-        fine.amount = draft.amount;
-        fine.status = "ISSUED";
-        fine.issuedAt = issuedAt;
-        fine.onlineDays = onlineDays();
-        fine.onlineGraceMs = onlineGraceMs();
-        fine.onlineElapsedMs = 0;
-        fine.onlineLastTickAt = issuedAt;
-        fine.recoveryCycle = 1;
+        Fine fine = newIssuedFine(data, issuer.name(), issuer.uuid().toString(), target,
+                draft.amount, draft.law, draft.description);
         data.fines.add(fine);
         if (!target.giveVerified(noticeStack(fine))) {
             fine.status = "DELIVERY_FAILED";
@@ -359,6 +344,76 @@ public class FineService implements FineRoleplayUseCase {
         // DEBT-2: a fine landing on an in-custody prisoner triggers the levy.
         levyIfInCustody(fine.targetUuid);
         return true;
+    }
+
+    /**
+     * KJS-1 — system-side issuance for the legacy command bridges: a release
+     * fine scripted by a command block has no officer holding the fine ledger,
+     * so the draft/rank/allowed-amount gates do not apply. The record, notice
+     * delivery, escalation clocks and custody levy are identical to an
+     * officer-issued fine — a notice that cannot fit the inventory keeps the
+     * fine ISSUED: the debt stands on the books either way and stays payable
+     * at the Receptionist ({@code DELIVERY_FAILED} is the officer-retry path,
+     * unreachable for a fire-and-forget script).
+     */
+    public boolean issueSystem(PlayerGateway issuer, PlayerGateway target,
+                               int amount, String law, String description) {
+        if (!p().finesEnabled) {
+            issuer.refuse("straja.fine.disabled", "straja.remedy.ask_comisar");
+            return false;
+        }
+        if (target == null || target.uuid() == null) {
+            issuer.refuse("straja.fine.citizen_offline", "straja.remedy.wait");
+            return false;
+        }
+        if (amount <= 0) {
+            issuer.refuse("straja.cmd.failed", "straja.remedy.fix_retry", "amount<=0");
+            return false;
+        }
+        if (law == null || law.isBlank() || law.length() > p().fineMaxLawLength) {
+            issuer.refuse("straja.fine.law_required", "straja.remedy.fix_retry", p().fineMaxLawLength);
+            return false;
+        }
+        FineStore data = ctx.fines().read();
+        Fine fine = newIssuedFine(data, issuer.name(), issuer.uuid().toString(), target,
+                amount, law.trim(), description == null ? "" : description.trim());
+        data.fines.add(fine);
+        boolean delivered = target.giveVerified(noticeStack(fine));
+        ctx.fines().write(data);
+        audit.record("fine_issue", issuer.name(), issuer.uuid().toString(), target.name(),
+                target.uuid().toString(), "SUCCESS",
+                "system_issue fineId=" + fine.id + " amount=" + fine.amount
+                        + (delivered ? "" : " notice_undelivered"));
+        target.tell("Ai primit amenda " + fine.id + ": " + fine.amount + " monede pentru "
+                + fine.law + ". Plata se face la recepționistă.");
+        issuer.tell("Amenda " + fine.id + " a fost emisă către " + target.name()
+                + (delivered ? "." : " (înștiințarea a rămas în registru)."));
+        levyIfInCustody(fine.targetUuid);
+        return true;
+    }
+
+    /** Shared issued-fine construction: status, issue clock, grace and cycle. */
+    private Fine newIssuedFine(FineStore data, String issuer, String issuerUuid,
+                               PlayerGateway target, int amount, String law,
+                               String description) {
+        long issuedAt = now();
+        Fine fine = new Fine();
+        fine.id = data.nextFineId();
+        fine.target = target.name();
+        fine.targetUuid = target.uuid().toString();
+        fine.issuer = issuer;
+        fine.issuerUuid = issuerUuid;
+        fine.law = law;
+        fine.description = description;
+        fine.amount = amount;
+        fine.status = "ISSUED";
+        fine.issuedAt = issuedAt;
+        fine.onlineDays = onlineDays();
+        fine.onlineGraceMs = onlineGraceMs();
+        fine.onlineElapsedMs = 0;
+        fine.onlineLastTickAt = issuedAt;
+        fine.recoveryCycle = 1;
+        return fine;
     }
 
     /** DEBT-2: a fine set on an in-custody prisoner sweeps custody coins at once. */
