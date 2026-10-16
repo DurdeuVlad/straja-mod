@@ -36,6 +36,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
     private final java.util.function.Supplier<String> bootId;
     private java.util.function.Predicate<PlayerGateway> recruitmentEligibility = player -> true;
     private PromotionService v2PromotionService;
+    private com.dwurdy.straja.application.service.PersonnelService v2PersonnelService;
     private SettlementService v2SettlementService;
     private java.util.function.Consumer<PlayerGateway> v2PersonnelProjection = player -> {};
     @FunctionalInterface
@@ -81,6 +82,9 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
 
     /** Installed by the V2 composition root; absent in legacy/unit compatibility contexts. */
     public void useV2Promotions(PromotionService service) { this.v2PromotionService = service; }
+    public void useV2Personnel(com.dwurdy.straja.application.service.PersonnelService service) {
+        this.v2PersonnelService = service;
+    }
     public void useV2Settlements(SettlementService service) { this.v2SettlementService = service; }
     public void useV2PersonnelProjection(java.util.function.Consumer<PlayerGateway> projection) {
         this.v2PersonnelProjection = projection == null ? player -> {} : projection;
@@ -768,12 +772,11 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         Integer required = null;
         boolean canPromote = false;
         if (promotableState(state)) {
-            int candidate = state.rank + 1;
-            if (ctx.policies().promotionServiceBlocks.containsKey(candidate)) {
-                nextRank = candidate;
-                required = ctx.policies().promotionServiceBlocks.get(candidate);
-                canPromote = state.serviceBlocks >= required && pendingModules(state).isEmpty();
-            }
+            // Petition model: the next rank is always petitionable; service
+            // blocks and module counts stay advisory for the reviewer.
+            nextRank = state.rank + 1;
+            required = ctx.policies().promotionServiceBlocks.get(nextRank);
+            canPromote = true;
         }
         return new TrainingView(state.rank, state.serviceBlocks, nextRank, required, canPromote,
                 hasManual(player), state.rank >= Rank.STAGIAR.level() ? pendingModules(state).size() : 0);
@@ -807,96 +810,67 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
                 ? "Instruire teoretică: completă pentru rangul tău."
                 : "Instruire teoretică: " + pending.size() + " module rămase la rangul tău.");
         if (view.nextRank() == null) {
-            if (promotableState(state)) {
-                player.refuse("straja.duty.promotion_comisar", "straja.remedy.ask_comisar",
-                        ctx.policies().rankName(state.rank + 1));
-            } else {
-                player.refuse("straja.duty.no_promotion", "straja.remedy.instructor");
-            }
+            player.refuse("straja.duty.no_promotion", "straja.remedy.instructor");
         } else {
-            player.refuse("straja.duty.promotion_points", "straja.remedy.duty", ctx.policies().rankName(view.nextRank()), view.requiredBlocks(), Math.max(0, view.requiredBlocks() - state.serviceBlocks));
+            player.tell("Următorul rang: " + ctx.policies().rankName(view.nextRank())
+                    + " — depune cererea de avansare la Secretară (blocuri de serviciu: "
+                    + state.serviceBlocks + (view.requiredBlocks() != null
+                            ? "/" + view.requiredBlocks() : "") + ").");
         }
     }
 
     @Override
     public void requestPromotion(PlayerGateway player) {
-        if (v2PromotionService != null) {
-            requestV2Promotion(player);
-            return;
-        }
-        GuardState state = players.state(player);
-        if (!promotableState(state)) {
-            player.refuse("straja.duty.promotion_state", "straja.remedy.ask_comisar");
-            return;
-        }
-        int nextRank = state.rank + 1;
-        Integer required = ctx.policies().promotionServiceBlocks.get(nextRank);
-        if (required == null) {
-            player.refuse("straja.duty.promotion_comisar", "straja.remedy.ask_comisar", ctx.policies().rankName(nextRank));
-            return;
-        }
-        if (state.serviceBlocks < required) {
-            player.refuse("straja.duty.points_short", "straja.remedy.duty", (required - state.serviceBlocks));
-            return;
-        }
-        var pending = pendingModules(state);
-        if (!pending.isEmpty()) {
-            player.refuse("straja.duty.finish_training", "straja.remedy.instructor", pending.size());
-            return;
-        }
-        state.rank = nextRank;
-        players.save(player.uuid(), state);
-        roomAutoAssign.onPromotedToGuard(player);
-        audit.record("promotion", player.name(), player.uuid().toString(),
-                player.name(), player.uuid().toString(), "SUCCESS",
-                "trainer_rank_up:" + nextRank);
-        grantRankUp(player, state, nextRank);
-        player.tell("Avansare: " + ctx.policies().rankName(nextRank)
-                + ". Instructorul te-a confirmat; echipamentul nou este al tău.");
+        requestPetition(player, "");
     }
 
-    private void requestV2Promotion(PlayerGateway player) {
+    /**
+     * The next legal petition grade for the member, if any. Derived from the
+     * V2 personnel record — the legacy rank int projects professionals as
+     * CIVIL, so it cannot express a ZILIER → MESTER petition.
+     */
+    @Override
+    public java.util.Optional<com.dwurdy.straja.domain.model.CareerGrade> petitionTarget(PlayerGateway player) {
         GuardState state = players.state(player);
+        if (state.fired || state.suspended || state.resigned || state.resignationPending
+                || v2PersonnelService == null) {
+            return java.util.Optional.empty();
+        }
+        var record = v2PersonnelService.find(player.uuid().toString());
+        if (record == null || !record.active() || record.careerGrade == null) {
+            return java.util.Optional.empty();
+        }
+        return java.util.Optional.ofNullable(record.careerGrade.nextGrade());
+    }
+
+    /**
+     * Petition promotion: the request goes straight to the Comisar's review
+     * queue (READY_FOR_APPROVAL) with an optional reason. Service blocks and
+     * training modules stay advisory for the reviewer — they no longer gate
+     * the request itself.
+     */
+    @Override
+    public void requestPetition(PlayerGateway player, String reason) {
+        if (v2PromotionService == null) {
+            player.refuse("straja.duty.promotion_comisar", "straja.remedy.ask_comisar", "");
+            return;
+        }
+        // The petition target comes from the V2 record — materialize it from
+        // legacy state first so a freshly-quizzed member can petition at once.
         v2PersonnelProjection.accept(player);
-        if (!promotableState(state)) {
+        var target = petitionTarget(player).orElse(null);
+        if (target == null) {
             player.refuse("straja.duty.promotion_state", "straja.remedy.ask_comisar");
-            return;
-        }
-        var target = switch (Rank.of(state.rank + 1)) {
-            case GUARD -> com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STRAJER;
-            case LOCOTENENT -> com.dwurdy.straja.domain.model.CareerGrade.OFFICER_LOCOTENENT;
-            case CAPITAN -> com.dwurdy.straja.domain.model.CareerGrade.OFFICER_CAPITAN;
-            case COLONEL -> com.dwurdy.straja.domain.model.CareerGrade.OFFICER_COLONEL;
-            default -> null;
-        };
-        if (target == null) { player.refuse("straja.duty.no_promotion", "straja.remedy.instructor"); return; }
-        Integer requiredBlocks = ctx.policies().promotionServiceBlocks.get(state.rank + 1);
-        if (requiredBlocks == null) {
-            player.refuse("straja.duty.promotion_comisar", "straja.remedy.ask_comisar", ctx.policies().rankName(state.rank + 1));
-            return;
-        }
-        if (state.serviceBlocks < requiredBlocks) {
-            player.refuse("straja.duty.points_short", "straja.remedy.duty", (requiredBlocks - state.serviceBlocks));
-            return;
-        }
-        if (!pendingModules(state).isEmpty()) {
-            player.refuse("straja.duty.finish_training", "straja.remedy.instructor",
-                    pendingModules(state).size());
             return;
         }
         try {
-            var application = v2PromotionService.findOpen(player.uuid().toString(), target);
-            if (application == null) application = v2PromotionService.submit(player.uuid().toString(), target);
-            if (application.status != com.dwurdy.straja.domain.model.PromotionStatus.READY_FOR_APPROVAL) {
-                if (pendingModules(state).isEmpty()) {
-                    v2PromotionService.recordServerTrainingEvidence(application.applicationId,
-                            player.uuid().toString(), "SERVICE_AND_TRAINING", true, null,
-                            "legacy:" + player.uuid() + ":" + target);
-                    application = v2PromotionService.markReady(application.applicationId);
-                }
-            }
-            player.tell("Cererea de avansare " + application.applicationId
-                    + " este pregătită pentru aprobarea Comisarului.");
+            var application = v2PromotionService.submitPetition(
+                    player.uuid().toString(), target, reason);
+            audit.record("promotion_petition", player.name(), player.uuid().toString(),
+                    player.name(), player.uuid().toString(), "SUCCESS",
+                    "target=" + target + " app=" + application.applicationId);
+            player.tell("Cererea de avansare " + application.applicationId + " ("
+                    + ctx.policies().rankName(target) + ") a ajuns la Comisar pentru decizie.");
         } catch (RuntimeException error) {
             player.refuse("straja.duty.promotion_fail", "straja.remedy.ask_comisar", error.getMessage());
         }

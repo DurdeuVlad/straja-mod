@@ -34,6 +34,23 @@ public enum CareerGrade {
     public boolean isProfessional() { return track == CareerTrack.PROFESSIONAL; }
     public boolean isOfficer() { return track == CareerTrack.OFFICER; }
 
+    /**
+     * Next petitionable grade, or null at the top of the ladder. The two
+     * part-time tracks both feed OFFICER_LOCOTENENT; officers climb
+     * LT → CPT → COL. Single source of truth for promotion transitions.
+     */
+    public CareerGrade nextGrade() {
+        return switch (this) {
+            case MILITARY_STAGIAR -> MILITARY_STRAJER;
+            case MILITARY_STRAJER -> OFFICER_LOCOTENENT;
+            case PROFESSIONAL_ZILIER -> PROFESSIONAL_MESTER;
+            case PROFESSIONAL_MESTER -> OFFICER_LOCOTENENT;
+            case OFFICER_LOCOTENENT -> OFFICER_CAPITAN;
+            case OFFICER_CAPITAN -> OFFICER_COLONEL;
+            case OFFICER_COLONEL -> null;
+        };
+    }
+
     /** Resolves a persisted enum name, mapping pre-remodel grade names. */
     public static CareerGrade of(String name) {
         if (name == null) return null;

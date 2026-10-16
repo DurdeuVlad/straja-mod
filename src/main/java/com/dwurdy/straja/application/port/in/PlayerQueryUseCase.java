@@ -15,6 +15,12 @@ public interface PlayerQueryUseCase {
     /** Read-only projection source for contextual player-facing surfaces. */
     GuardState readState(PlayerGateway player);
 
+    /**
+     * Read-only state by raw uuid — for offline subjects (e.g. the Comisar
+     * reading a petitioner's name/service data while they are offline).
+     */
+    GuardState readState(java.util.UUID uuid);
+
     boolean isCommissioner(PlayerGateway player);
 
     boolean hasCapability(PlayerGateway player, Capability capability);

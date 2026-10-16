@@ -968,5 +968,8 @@
   "straja.ui.back": "[« Back]",
   "straja.ui.more": "[More…]",
   "straja.ui.more.header": "[Straja] More actions:",
-  "straja.v2.redeem_failed": "Redemption was refused: %s"
+  "straja.v2.redeem_failed": "Redemption was refused: %s",
+  "straja.petition.gone": "That petition is no longer awaiting a decision.",
+  "straja.petition.bad_decision": "Unknown decision — write aproba or respinge.",
+  "straja.petition.denied": "You cannot decide this petition."
 }

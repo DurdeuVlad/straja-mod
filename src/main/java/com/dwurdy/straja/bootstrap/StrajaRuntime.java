@@ -288,6 +288,7 @@ public final class StrajaRuntime {
         this.equipment = new EquipmentService(ctx);
         this.guards = new GuardService(ctx, players, audit, equipment, this::bootId);
         this.guards.useV2Promotions(v2Promotions);
+        this.guards.useV2Personnel(v2Personnel);
         this.guards.useV2Settlements(v2Settlements);
         this.guards.useV2PersonnelProjection(player -> {
             try {
@@ -501,7 +502,7 @@ public final class StrajaRuntime {
         instance.npcFormRouter = new com.dwurdy.straja.adapter.in.form.FormSubmissionRouter(
                 instance.guards, instance.missions, instance.complaints, instance.fines,
                 instance.archive, instance.reports, instance.audiences, instance.admin,
-                instance.adminTools, instance.custody, instance.expansion);
+                instance.adminTools, instance.custody, instance.expansion, instance.v2Promotions);
         // This is the reusable equivalent of the original
         // instance.adminTools, instance.custody, instance.expansion)::submit
         // wiring; NPC and native forms now share the same authenticated route.

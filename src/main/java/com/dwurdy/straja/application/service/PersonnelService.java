@@ -389,9 +389,20 @@ public final class PersonnelService implements com.dwurdy.straja.application.por
             default -> null;
         };
         if (grade == null || !"AUTHORIZED".equals(legacy.applicationState)) return find(playerUuid.toString());
-        return authorizeInternal(actorUuid, playerUuid.toString(), grade,
+        PersonnelRecord created = authorizeInternal(actorUuid, playerUuid.toString(), grade,
                 grade.fullTimeRequired() ? EmploymentMode.FULL_TIME : EmploymentMode.PART_TIME,
                 "LEGACY_PROJECTION", "hq", "legacy:" + playerUuid);
+        // First projection must carry the legacy discipline state — otherwise a
+        // suspended or dismissed member wakes up with an active V2 record and
+        // the projection immediately clears the suspension back in GuardState.
+        if (created != null && (legacy.fired || legacy.resigned || legacy.suspended)) {
+            changeStatus(playerUuid.toString(),
+                    legacy.fired ? PersonnelStatus.TERMINATED
+                            : legacy.resigned ? PersonnelStatus.RESIGNED : PersonnelStatus.SUSPENDED,
+                    "LEGACY_PROJECTION");
+            return find(playerUuid.toString());
+        }
+        return created;
     }
 
     private PersonnelRecord changeStatus(String subjectUuid, PersonnelStatus status, String reason) {

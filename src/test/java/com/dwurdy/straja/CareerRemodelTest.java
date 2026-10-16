@@ -274,4 +274,81 @@ class CareerRemodelTest {
         assertEquals(CareerGrade.PROFESSIONAL_ZILIER, record.careerGrade);
         assertEquals(EmploymentMode.PART_TIME, record.employmentMode);
     }
+
+    // ------------------------------------------------------------ petitions (RANK-4)
+
+    @Test
+    void petitionLandsReadyForApprovalSkippingEvidence() {
+        authorize("mil", CareerGrade.MILITARY_STRAJER, EmploymentMode.PART_TIME);
+        var application = promotions.submitPetition("mil", CareerGrade.OFFICER_LOCOTENENT,
+                "vreau în corpul ofițeresc");
+        assertEquals(PromotionStatus.READY_FOR_APPROVAL, application.status);
+        assertEquals("vreau în corpul ofițeresc", application.petitionReason);
+        assertEquals(java.util.List.of(application.applicationId),
+                promotions.pendingPetitions().stream().map(a -> a.applicationId).toList());
+    }
+
+    @Test
+    void petitionResubmissionUpdatesOpenReasonAndBumpsVersion() {
+        authorize("mil", CareerGrade.MILITARY_STRAJER, EmploymentMode.PART_TIME);
+        var first = promotions.submitPetition("mil", CareerGrade.OFFICER_LOCOTENENT, "motiv vechi");
+        var second = promotions.submitPetition("mil", CareerGrade.OFFICER_LOCOTENENT, "motiv nou");
+        assertEquals(first.applicationId, second.applicationId);
+        assertEquals("motiv nou", second.petitionReason);
+        // The version bump invalidates any review opened against the old text.
+        assertTrue(second.version > first.version);
+        assertEquals(1, promotions.pendingPetitions().size());
+    }
+
+    @Test
+    void petitionApproveFlipsGradeWithoutEvidence() {
+        authorize("zilier", CareerGrade.PROFESSIONAL_ZILIER, EmploymentMode.PART_TIME);
+        var application = promotions.submitPetition("zilier", CareerGrade.PROFESSIONAL_MESTER,
+                "pricep meseria");
+        promotions.approve("commissioner", application.applicationId, application.version);
+        assertEquals(CareerGrade.PROFESSIONAL_MESTER, personnel.find("zilier").careerGrade);
+    }
+
+    @Test
+    void petitionOfficerApprovalConfersFullTime() {
+        authorize("pro", CareerGrade.PROFESSIONAL_MESTER, EmploymentMode.PART_TIME);
+        var application = promotions.submitPetition("pro", CareerGrade.OFFICER_LOCOTENENT, "");
+        promotions.approve("commissioner", application.applicationId, application.version);
+        var record = personnel.find("pro");
+        assertEquals(CareerGrade.OFFICER_LOCOTENENT, record.careerGrade);
+        assertEquals(EmploymentMode.FULL_TIME, record.employmentMode);
+    }
+
+    @Test
+    void petitionDenyRecordsReasonAndLocksTheDecision() {
+        authorize("stagiar", CareerGrade.MILITARY_STAGIAR, EmploymentMode.PART_TIME);
+        var application = promotions.submitPetition("stagiar", CareerGrade.MILITARY_STRAJER, "");
+        promotions.reject("commissioner", application.applicationId, "mai exersează");
+        var persisted = promotions.find(application.applicationId);
+        assertEquals(PromotionStatus.REJECTED, persisted.status);
+        assertEquals("mai exersează", persisted.decisionReason);
+        // A decided application must not be silently flipped back either way.
+        assertThrows(IllegalStateException.class,
+                () -> promotions.reject("commissioner", application.applicationId, "din nou"));
+        assertThrows(IllegalStateException.class,
+                () -> promotions.approve("commissioner", application.applicationId, persisted.version));
+    }
+
+    @Test
+    void petitionOutcomeReachesTheSubjectOnce() {
+        // TestPlayer derives uuid = nameUUIDFromBytes(name) — the subject id.
+        var gateway = new Fakes.TestPlayer("zilier", 1);
+        String zilier = gateway.uuid().toString();
+        authorize(zilier, CareerGrade.PROFESSIONAL_ZILIER, EmploymentMode.PART_TIME);
+        var application = promotions.submitPetition(zilier, CareerGrade.PROFESSIONAL_MESTER, "");
+        promotions.reject("commissioner", application.applicationId, "insuficient");
+
+        promotions.deliverOutcome(gateway);
+        assertEquals(1, gateway.messages.size());
+        assertTrue(gateway.messages.get(0).contains("respinsă"));
+        assertTrue(gateway.messages.get(0).contains("insuficient"));
+        // Delivered once — a second sweep stays silent.
+        promotions.deliverOutcome(gateway);
+        assertEquals(1, gateway.messages.size());
+    }
 }

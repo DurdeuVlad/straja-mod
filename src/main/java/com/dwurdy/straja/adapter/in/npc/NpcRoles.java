@@ -236,6 +236,7 @@ public final class NpcRoles {
             case "report-submit" -> openReportSubmitForm(player, runtime, gw);
             case "report-status" -> runtime.reportRoleplay().status(gw);
             case "report-review-list" -> runtime.reportRoleplay().listForReview(gw);
+            case "petition-request" -> openPetitionRequestForm(player, runtime, gw);
             case "audience-request" -> openAudienceRequestForm(player, runtime, gw);
             case "audience-status" -> runtime.audienceRoleplay().status(gw);
             case "audience-review-list" -> runtime.audienceRoleplay().listForReview(gw);
@@ -316,9 +317,13 @@ public final class NpcRoles {
             player.refuse("straja.npc.no_promotion", "straja.remedy.ask_comisar");
             return;
         }
-        applications.forEach(application -> player.tell("Promovare V2 " + application.applicationId
-                + ": " + application.fromGrade + " → " + application.targetGrade
-                + " | " + application.status));
+        applications.forEach(application -> {
+            player.tell("Promovare V2 " + application.applicationId
+                    + ": " + application.fromGrade + " → " + application.targetGrade
+                    + " | " + application.status
+                    + (application.decisionReason.isBlank() ? ""
+                            : " | motiv: " + application.decisionReason));
+        });
     }
 
     private static void tellV2Documents(com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
@@ -441,7 +446,9 @@ public final class NpcRoles {
             return;
         }
         try {
-            var application = runtime.v2Promotions().submit(gw.uuid().toString(), next);
+            // Trades shortcut files a petition (no reason field) — it lands
+            // READY_FOR_APPROVAL for the Comisar, same as the Secretary form.
+            var application = runtime.v2Promotions().submitPetition(gw.uuid().toString(), next, "");
             String gradeName = runtime.policies().rankName(next);
             if (player instanceof ServerPlayer serverPlayer) {
                 serverPlayer.sendSystemMessage(Component.translatable(
@@ -547,6 +554,8 @@ public final class NpcRoles {
             case "archive-sheet-issue" -> openArchiveForm(player, runtime, gw,
                     com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase.Action.ISSUE_DOCUMENT, id);
             case "report-review" -> openReportReviewForm(player, runtime, gw, id);
+            case "petition-read" -> readPetition(player, runtime, gw, id);
+            case "petition-review" -> openPetitionReviewForm(player, runtime, gw, id);
             case "audience-review" -> openAudienceReviewForm(player, runtime, gw, id);
             case "admin-dossier" -> runtime.adminRoleplay().dossier(gw, id);
             case "admin-promote" -> runtime.adminRoleplay().promote(gw, id);
@@ -1229,6 +1238,106 @@ public final class NpcRoles {
         return true;
     }
 
+    private static boolean openPetitionRequestForm(Player player,
+                                                   com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                                   com.dwurdy.straja.application.port.out.PlayerGateway gw) {
+        var target = runtime.guardRecruitment().petitionTarget(gw).orElse(null);
+        if (target == null) {
+            player.sendSystemMessage(refusal("straja.duty.promotion_state", "straja.remedy.ask_comisar"));
+            return true;
+        }
+        if (!(player instanceof ServerPlayer serverPlayer)) return true;
+        FormSessionBridge.open(serverPlayer, new FormSessionUseCase.Request(
+                FormSessionUseCase.Action.PETITION_REQUEST, "",
+                "Cerere de avansare", "Scrie motivul pentru care ceri avansarea la "
+                        + runtime.policies().rankName(target) + " (opțional).",
+                java.util.List.of(new FormSessionUseCase.Field(
+                        "reason", "Motiv", 500, true))));
+        return true;
+    }
+
+    /** Hands the reviewer a written book with the petition text + advisory stats. */
+    private static boolean readPetition(Player player,
+                                        com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                        com.dwurdy.straja.application.port.out.PlayerGateway gw,
+                                        String recordId) {
+        if (!runtime.playerQueries().isCommissioner(gw)) {
+            player.sendSystemMessage(refusal("straja.audience.decide_comisar", "straja.remedy.ask_comisar"));
+            return true;
+        }
+        var application = runtime.v2Promotions().find(recordId);
+        if (application == null || application.status
+                != com.dwurdy.straja.domain.model.PromotionStatus.READY_FOR_APPROVAL) {
+            player.sendSystemMessage(refusal("straja.petition.gone", "straja.remedy.retry"));
+            return true;
+        }
+        String advisory = "";
+        try {
+            var subjectState = runtime.playerQueries().readState(
+                    java.util.UUID.fromString(application.subjectUuid));
+            advisory = "Blocuri de serviciu: " + subjectState.serviceBlocks
+                    + "\nRang actual: " + runtime.policies().rankName(subjectState.rank);
+        } catch (IllegalArgumentException ignored) {}
+        String subjectName = subjectName(runtime, application.subjectUuid);
+        java.util.List<String> pages = new java.util.ArrayList<>(java.util.List.of(
+                "Cerere de avansare\n\n"
+                        + "ID: " + application.applicationId + "\n"
+                        + "Solicitant: " + subjectName + "\n"
+                        + "De la: " + runtime.policies().rankName(application.fromGrade) + "\n"
+                        + "Spre: " + runtime.policies().rankName(application.targetGrade),
+                "Motivul solicitantului:\n\n"
+                        + (application.petitionReason.isBlank()
+                                ? "(fără motiv scris)" : application.petitionReason)));
+        if (!advisory.isBlank()) {
+            pages.add("Date de serviciu (orientative):\n\n" + advisory);
+        }
+        gw.giveWrittenBook("Cerere " + application.applicationId,
+                "Secretariatul Straja", pages);
+        return true;
+    }
+
+    private static boolean openPetitionReviewForm(Player player,
+                                                  com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                                  com.dwurdy.straja.application.port.out.PlayerGateway gw,
+                                                  String recordId) {
+        if (!runtime.playerQueries().isCommissioner(gw)) {
+            player.sendSystemMessage(refusal("straja.audience.decide_comisar", "straja.remedy.ask_comisar"));
+            return true;
+        }
+        var application = runtime.v2Promotions().find(recordId);
+        if (application == null || application.status
+                != com.dwurdy.straja.domain.model.PromotionStatus.READY_FOR_APPROVAL) {
+            player.sendSystemMessage(refusal("straja.petition.gone", "straja.remedy.retry"));
+            return true;
+        }
+        if (!(player instanceof ServerPlayer serverPlayer)) return true;
+        // The request text travels in the same click: book first, then the
+        // decision form. The record id carries the opened version so a
+        // reason edited meanwhile fails the decision as stale.
+        readPetition(player, runtime, gw, recordId);
+        FormSessionBridge.open(serverPlayer, new FormSessionUseCase.Request(
+                FormSessionUseCase.Action.PETITION_REVIEW,
+                application.applicationId + "_" + application.version,
+                "Decide cererea " + application.applicationId,
+                "Decizie: aproba sau respinge (motiv opțional, trimis solicitantului).",
+                java.util.List.of(
+                        new FormSessionUseCase.Field("decision", "Decizie", 16, false),
+                        new FormSessionUseCase.Field("note", "Motiv pentru solicitant", 500, true))));
+        return true;
+    }
+
+    /** Display name for a subject uuid; falls back to the raw identifier. */
+    private static String subjectName(com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                      String subjectUuid) {
+        try {
+            var state = runtime.playerQueries().readState(java.util.UUID.fromString(subjectUuid));
+            if (state != null && state.lastKnownName != null && !state.lastKnownName.isBlank()) {
+                return state.lastKnownName;
+            }
+        } catch (IllegalArgumentException ignored) {}
+        return subjectUuid;
+    }
+
     private static boolean openAdminForm(Player player,
                                          com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
                                          com.dwurdy.straja.application.port.out.PlayerGateway gw,
@@ -1416,6 +1525,14 @@ public final class NpcRoles {
                     .stream().anyMatch(a -> a.action()
                             == com.dwurdy.straja.application.port.in.AudienceUseCase.Action.REVIEW
                             && id.equals(a.requestId()));
+            case "petition-read", "petition-review" -> {
+                // Reviewer-bound and record-live: only the Comisar may open a
+                // petition, and only while it still awaits a decision.
+                if (!runtime.playerQueries().isCommissioner(player)) yield false;
+                var application = runtime.v2Promotions().find(id);
+                yield application != null && application.status
+                        == com.dwurdy.straja.domain.model.PromotionStatus.READY_FOR_APPROVAL;
+            }
             case "incident-accept", "incident-join", "incident-leave", "incident-resolve" ->
                     runtime.expansionRoleplay().activeIncidents(player).stream()
                             .anyMatch(incident -> id.equals(incident.id()));
@@ -1561,6 +1678,13 @@ public final class NpcRoles {
                         NpcPlayerSurface.RoleRoute.SECRETARY));
                 actions.addAll(NpcPlayerSurface.adminActions(
                         runtime.adminRoleplay().availableActions(gateway)));
+                actions.addAll(NpcPlayerSurface.petitionActions(
+                        runtime.guardRecruitment().petitionTarget(gateway),
+                        runtime.playerQueries().isCommissioner(gateway)
+                                ? runtime.v2Promotions().pendingPetitions()
+                                : java.util.List.of(),
+                        grade -> runtime.policies().rankName(grade),
+                        uuid -> subjectName(runtime, uuid)));
                 if (runtime.playerQueries().isCommissioner(gateway)) {
                     actions.add(new NpcPlayerSurface.ChatAction("Istoric reputație", "reputation-view"));
                     actions.add(new NpcPlayerSurface.ChatAction("Corectează reputația", "reputation-correction"));

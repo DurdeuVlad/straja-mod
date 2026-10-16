@@ -68,7 +68,10 @@ class NpcSecretarySurfaceTest {
                                 false, true, "checkpoint_1", false, false, true,
                                 false, false, false, false, false, false),
                         new ComplaintRoleplayUseCase.Limits(120, 240, 180),
-                        new FineRoleplayUseCase.Limits(80, 240, 200, 160, 180)));
+                        new FineRoleplayUseCase.Limits(80, 240, 200, 160, 180),
+                        "Locotenent",
+                        List.of(new NpcSecretarySurfaceService.PetitionEntry(
+                                "PROM-9", "Applicant Nine", "Locotenent"))));
 
         assertTrue(action(surface, "mission-draft-write").enabled());
         assertEquals(4, action(surface, "mission-draft-write").inputs().size());
@@ -82,6 +85,9 @@ class NpcSecretarySurfaceTest {
         assertTrue(action(surface, "bolo-cancel:B-1").enabled());
         assertTrue(action(surface, "admin-promote:member-1").enabled());
         assertTrue(action(surface, "duty-start").enabled());
+        assertTrue(action(surface, "petition-request").enabled());
+        assertTrue(action(surface, "petition-read:PROM-9").enabled());
+        assertTrue(action(surface, "petition-review:PROM-9").enabled());
         assertFalse(surface.actions().stream()
                 .anyMatch(candidate -> candidate.actionId().value().contains("bad:key")));
         assertTrue(surface.actions().size() <= 64);

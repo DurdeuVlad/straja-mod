@@ -335,7 +335,18 @@ public final class NpcPresentationRuntime {
                     runtime.adminRoleplay().availableActions(player),
                     runtime.guardDuty().dutyView(player),
                     runtime.complaintRoleplay().limits(),
-                    runtime.fineRoleplay().limits()));
+                    runtime.fineRoleplay().limits(),
+                    runtime.guardRecruitment().petitionTarget(player)
+                            .map(grade -> runtime.policies().rankName(grade)).orElse(null),
+                    runtime.playerQueries().isCommissioner(player)
+                            ? runtime.v2Promotions().pendingPetitions().stream()
+                                    .map(application -> new NpcSecretarySurfaceService.PetitionEntry(
+                                            application.applicationId,
+                                            subjectName(runtime, application.subjectUuid),
+                                            application.targetGrade == null ? "?"
+                                                    : runtime.policies().rankName(application.targetGrade)))
+                                    .toList()
+                            : java.util.List.of()));
         }
         java.util.Optional<com.dwurdy.straja.application.port.in.GuardRecruitmentUseCase.QuizPrompt> prompt =
                 java.util.Optional.empty();
@@ -358,6 +369,18 @@ public final class NpcPresentationRuntime {
                     admission, state, runtime.guardRecruitment().trainingView(player));
         }
         return admission;
+    }
+
+    /** Display name for a petition subject; falls back to the raw uuid. */
+    private static String subjectName(StrajaRuntime runtime, String subjectUuid) {
+        String name = "";
+        try {
+            var state = runtime.playerQueries().readState(java.util.UUID.fromString(subjectUuid));
+            if (state != null && state.lastKnownName != null) name = state.lastKnownName;
+        } catch (IllegalArgumentException ignored) {
+            // Non-uuid subject ids fall back to the raw identifier.
+        }
+        return name.isBlank() ? subjectUuid : name;
     }
 
     private static boolean playerAtBinding(MinecraftServer server, UUID playerId, NpcBinding binding) {
@@ -474,6 +497,8 @@ public final class NpcPresentationRuntime {
             case "audience-review" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.AUDIENCE_REVIEW;
             case "bolo-create" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.BOLO_CREATE;
             case "incident-resolve" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.INCIDENT_RESOLVE;
+            case "petition-request" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.PETITION_REQUEST;
+            case "petition-review" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.PETITION_REVIEW;
             case "admin-authorize" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.ADMIN_AUTHORIZE;
             case "admin-policy-set" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.ADMIN_POLICY_SET;
             case "admin-emergency-alert" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.ADMIN_EMERGENCY_ALERT;

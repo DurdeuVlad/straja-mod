@@ -28,6 +28,7 @@ public final class FormSubmissionRouter {
     private final com.dwurdy.straja.application.port.in.AdminToolsUseCase adminTools;
     private final com.dwurdy.straja.application.port.in.CustodyRoleplayUseCase custody;
     private final com.dwurdy.straja.application.port.in.RoleplayExpansionUseCase expansion;
+    private final com.dwurdy.straja.application.port.in.PromotionV2UseCase v2Promotions;
 
     public FormSubmissionRouter(GuardRecruitmentUseCase guards, MissionRoleplayUseCase missions,
             ComplaintRoleplayUseCase complaints, FineRoleplayUseCase fines,
@@ -37,7 +38,8 @@ public final class FormSubmissionRouter {
             com.dwurdy.straja.application.port.in.AdminRoleplayUseCase admin,
             com.dwurdy.straja.application.port.in.AdminToolsUseCase adminTools,
             com.dwurdy.straja.application.port.in.CustodyRoleplayUseCase custody,
-            com.dwurdy.straja.application.port.in.RoleplayExpansionUseCase expansion) {
+            com.dwurdy.straja.application.port.in.RoleplayExpansionUseCase expansion,
+            com.dwurdy.straja.application.port.in.PromotionV2UseCase v2Promotions) {
         this.guards = guards;
         this.missions = missions;
         this.complaints = complaints;
@@ -49,6 +51,7 @@ public final class FormSubmissionRouter {
         this.adminTools = adminTools;
         this.custody = custody;
         this.expansion = expansion;
+        this.v2Promotions = v2Promotions;
     }
 
     public void submit(ServerPlayer player, FormSessionUseCase.Submission submission) {
@@ -161,6 +164,72 @@ public final class FormSubmissionRouter {
             case AUDIENCE_REVIEW ->
                     audiences.resolve(gateway, submission.recordId(), values.get("decision"),
                             values.get("note"));
+            case PETITION_REQUEST ->
+                    guards.requestPetition(gateway, values.get("reason"));
+            case PETITION_REVIEW -> {
+                // recordId carries "<appId>_<version>" from the review form —
+                // the version the reviewer actually read. Provider surfaces
+                // pass the bare id, which resolves the current version.
+                String raw = submission.recordId() == null ? "" : submission.recordId();
+                String appId = raw;
+                Long expected = null;
+                int cut = raw.lastIndexOf('_');
+                if (cut > 0) {
+                    try {
+                        expected = Long.parseLong(raw.substring(cut + 1));
+                        appId = raw.substring(0, cut);
+                    } catch (NumberFormatException ignored) {
+                        appId = raw;
+                        expected = null;
+                    }
+                }
+                var application = v2Promotions.find(appId);
+                if (application == null || application.status
+                        != com.dwurdy.straja.domain.model.PromotionStatus.READY_FOR_APPROVAL) {
+                    player.sendSystemMessage(refusal("straja.petition.gone", "straja.remedy.retry"));
+                    return;
+                }
+                if (expected != null && expected.longValue() != application.version) {
+                    player.sendSystemMessage(refusal("straja.petition.gone", "straja.remedy.retry"));
+                    return;
+                }
+                String normalized = values.getOrDefault("decision", "").trim().toLowerCase();
+                boolean approve = java.util.List.of(
+                        "aproba", "aprobă", "approve", "accept", "accepta", "acceptă")
+                        .contains(normalized);
+                boolean deny = java.util.List.of("respinge", "reject", "deny", "refuza", "refuză")
+                        .contains(normalized);
+                if (!approve && !deny) {
+                    player.sendSystemMessage(refusal("straja.petition.bad_decision", "straja.remedy.fix_retry"));
+                    return;
+                }
+                String note = values.getOrDefault("note", "");
+                try {
+                    if (approve) {
+                        v2Promotions.approve(gateway.uuid().toString(),
+                                application.applicationId, application.version);
+                        player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                                "Cererea " + application.applicationId + " a fost aprobată."));
+                    } else {
+                        v2Promotions.reject(gateway.uuid().toString(),
+                                application.applicationId, note);
+                        player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                                "Cererea " + application.applicationId + " a fost respinsă."));
+                    }
+                } catch (IllegalStateException denied) {
+                    player.sendSystemMessage(refusal("straja.petition.denied", "straja.remedy.retry"));
+                    return;
+                }
+                // Tell the subject immediately when they are online; the
+                // login sweep in deliverOutcome covers offline members.
+                try {
+                    var subject = java.util.UUID.fromString(application.subjectUuid);
+                    if (player.getServer().getPlayerList().getPlayer(subject) != null) {
+                        v2Promotions.deliverOutcome(
+                                new MinecraftPlayerGateway(player.getServer(), subject));
+                    }
+                } catch (IllegalArgumentException ignored) {}
+            }
             case ADMIN_AUTHORIZE -> {
                 String rankOrGrade = values.get("rank");
                 if (rankOrGrade == null || rankOrGrade.isBlank()) {

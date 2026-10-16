@@ -240,6 +240,7 @@ public final class StrajaEvents {
         runtime.roomRoleplay().assignAutomatically(gateway);
         runtime.roomRoleplay().processWaitlist();
         runtime.audienceRoleplay().deliverOutcome(gateway);
+        runtime.v2Promotions().deliverOutcome(gateway);
         runtime.storage().onLogin(gateway);
         // Stale crossing/board state from a previous session must not seed M2.
         runtime.checkpoints().clearPlayer(gateway.uuid());

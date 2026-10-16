@@ -66,6 +66,7 @@ public final class NpcSecretarySurfaceService {
             if (entry == null || entry.action() == null) continue;
             addAdministration(actions, entry);
         }
+        addPetitions(actions, inputs);
         addDuty(actions, inputs.duty());
         List<NpcSurfaceAction> result = List.copyOf(actions.values());
         List<NpcSurfaceSnapshot.DialogueNode> dialogue = published.dialogue().stream()
@@ -284,6 +285,31 @@ public final class NpcSecretarySurfaceService {
         }
     }
 
+    /**
+     * Promotion petitions: the member files "Cere avansarea" here (optional
+     * reason form), and the reviewer sees one "Cerere …" action per pending
+     * petition, each opening the request text plus the approve/deny form.
+     */
+    private static void addPetitions(
+            Map<NpcContentId, NpcSurfaceAction> actions,
+            Inputs inputs) {
+        if (inputs.petitionTargetName() != null && !inputs.petitionTargetName().isBlank()) {
+            add(actions, "petition-request",
+                    "Cere avansarea la " + inputs.petitionTargetName(),
+                    List.of(field("reason", "Motiv (opțional)", 500, false)));
+        }
+        for (PetitionEntry petition : inputs.petitions()) {
+            if (petition == null) continue;
+            add(actions, parameterized("petition-read", petition.applicationId()),
+                    "Citește cererea " + petition.applicationId() + " ("
+                            + bounded(petition.subjectName(), 40) + ")");
+            add(actions, parameterized("petition-review", petition.applicationId()),
+                    "Decide " + petition.applicationId() + " → " + petition.targetName(),
+                    List.of(field("decision", "Decizie (aproba / respinge)", 16, true),
+                            field("note", "Motiv pentru solicitant", 500, false)));
+        }
+    }
+
     private static void addDuty(
             Map<NpcContentId, NpcSurfaceAction> actions, GuardDutyUseCase.DutyView view) {
         if (view == null) return;
@@ -358,7 +384,12 @@ public final class NpcSecretarySurfaceService {
             List<AdminRoleplayUseCase.AvailableAction> administration,
             GuardDutyUseCase.DutyView duty,
             ComplaintRoleplayUseCase.Limits complaintLimits,
-            FineRoleplayUseCase.Limits fineLimits) {
+            FineRoleplayUseCase.Limits fineLimits,
+            /** Petition target grade display name for the member, or null when
+             *  they cannot petition (top rank, ineligible state). */
+            String petitionTargetName,
+            /** Open promotion petitions — populated only for reviewers. */
+            List<PetitionEntry> petitions) {
         public Inputs {
             missions = List.copyOf(Objects.requireNonNull(missions, "missions"));
             complaints = List.copyOf(Objects.requireNonNull(complaints, "complaints"));
@@ -368,6 +399,7 @@ public final class NpcSecretarySurfaceService {
             incidents = List.copyOf(Objects.requireNonNull(incidents, "incidents"));
             bolos = List.copyOf(Objects.requireNonNull(bolos, "bolos"));
             administration = List.copyOf(Objects.requireNonNull(administration, "administration"));
+            petitions = List.copyOf(Objects.requireNonNull(petitions, "petitions"));
             Objects.requireNonNull(complaintLimits, "complaintLimits");
             Objects.requireNonNull(fineLimits, "fineLimits");
         }
@@ -444,4 +476,7 @@ public final class NpcSecretarySurfaceService {
             };
         }
     }
+
+    /** Petition summary for the reviewer list; names are resolved inbound. */
+    public record PetitionEntry(String applicationId, String subjectName, String targetName) {}
 }

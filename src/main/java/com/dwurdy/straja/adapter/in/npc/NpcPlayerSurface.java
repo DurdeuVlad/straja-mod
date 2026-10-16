@@ -23,6 +23,7 @@ final class NpcPlayerSurface {
             "archive-sheet-envelope", "archive-sheet-issue", "archive-sheet-revoke",
             "more", "main",
             "report-review", "audience-review",
+            "petition-read", "petition-review",
             "incident-accept", "incident-join", "incident-leave", "incident-resolve",
             "bolo-cancel", "evidence-deposit", "evidence-return", "evidence-transfer",
             "evidence-destroy",
@@ -743,6 +744,35 @@ final class NpcPlayerSurface {
                 case REVIEW_LIST -> actions.add(new ChatAction("Cereri de audiență", "audience-review-list"));
                 case REVIEW -> parameterizedActionId("audience-review", id)
                         .ifPresent(a -> actions.add(new ChatAction("Decide cererea " + id, a)));
+            }
+        }
+        return List.copyOf(actions);
+    }
+
+    /**
+     * Promotion petitions for the chat surface: the member's own "Cere
+     * avansarea" plus one read/decide pair per pending petition (reviewers
+     * only — callers pass an empty list for anyone else).
+     */
+    static List<ChatAction> petitionActions(
+            java.util.Optional<com.dwurdy.straja.domain.model.CareerGrade> petitionTarget,
+            List<com.dwurdy.straja.domain.model.PromotionApplication> petitions,
+            java.util.function.Function<com.dwurdy.straja.domain.model.CareerGrade, String> gradeName,
+            java.util.function.Function<String, String> subjectName) {
+        var actions = new java.util.ArrayList<ChatAction>();
+        petitionTarget.ifPresent(target -> actions.add(new ChatAction(
+                "Cere avansarea la " + gradeName.apply(target), "petition-request")));
+        if (petitions != null) {
+            for (var application : petitions) {
+                if (application == null) continue;
+                String name = subjectName.apply(application.subjectUuid);
+                parameterizedActionId("petition-read", application.applicationId)
+                        .ifPresent(id -> actions.add(new ChatAction(
+                                "Citește " + application.applicationId + " (" + name + ")", id)));
+                parameterizedActionId("petition-review", application.applicationId)
+                        .ifPresent(id -> actions.add(new ChatAction(
+                                "Decide " + application.applicationId + " → "
+                                        + gradeName.apply(application.targetGrade), id)));
             }
         }
         return List.copyOf(actions);

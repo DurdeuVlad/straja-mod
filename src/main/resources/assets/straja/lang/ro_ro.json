@@ -968,5 +968,8 @@
   "straja.ui.back": "[« Înapoi]",
   "straja.ui.more": "[Mai multe…]",
   "straja.ui.more.header": "[Straja] Mai multe acțiuni:",
-  "straja.v2.redeem_failed": "Rascumpărarea a fost refuzată: %s"
+  "straja.v2.redeem_failed": "Rascumpărarea a fost refuzată: %s",
+  "straja.petition.gone": "Cererea respectivă nu mai așteaptă o decizie.",
+  "straja.petition.bad_decision": "Decizie necunoscută — scrie aproba sau respinge.",
+  "straja.petition.denied": "Nu poți decide această cerere."
 }

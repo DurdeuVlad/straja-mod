@@ -61,6 +61,86 @@ public final class PromotionService implements com.dwurdy.straja.application.por
         return application;
     }
 
+    /**
+     * Petition promotions: a member's request lands directly in
+     * READY_FOR_APPROVAL — the Comisar reads and stamps it, no evidence or
+     * readiness pipeline stands between the request and the decision.
+     * Submitting twice returns the still-open petition instead of duplicating.
+     */
+    public synchronized PromotionApplication submitPetition(String subjectUuid, CareerGrade targetGrade,
+                                                             String reason) {
+        PromotionApplication application = submit(subjectUuid, targetGrade);
+        String normalized = reason == null ? "" : reason.trim();
+        if (!isOpen(application.status)) return application;
+        if (application.status == PromotionStatus.READY_FOR_APPROVAL
+                && normalized.equals(application.petitionReason)) {
+            return application; // identical open petition — idempotent
+        }
+        // A still-open request flips to ready (and refreshes its reason) —
+        // petitions skip the evidence/readiness pipeline entirely.
+        PromotionStore store = promotions.read();
+        PromotionApplication persisted = requireApplication(store, application.applicationId);
+        persisted.status = PromotionStatus.READY_FOR_APPROVAL;
+        persisted.petitionReason = normalized;
+        persisted.readinessAt = clock.nowMillis();
+        persisted.version++;
+        store.storeRevision++;
+        promotions.write(store);
+        return persisted;
+    }
+
+    /**
+     * Delivers the subject's latest undelivered petition decision. Called on
+     * login and right after a live review so the member learns the outcome —
+     * and on denial, the reason — without watching Discord.
+     */
+    public synchronized void deliverOutcome(
+            com.dwurdy.straja.application.port.out.PlayerGateway player) {
+        if (player == null) return;
+        PromotionStore store = promotions.read();
+        if (store.applications == null) return;
+        PromotionApplication decided = null;
+        for (PromotionApplication application : store.applications.values()) {
+            if (application == null || application.outcomeDelivered
+                    || !player.uuid().toString().equals(application.subjectUuid)) continue;
+            if (application.status == PromotionStatus.APPROVED
+                    || application.status == PromotionStatus.REJECTED) {
+                if (decided == null || (application.decisionAt != null
+                        && (decided.decisionAt == null || application.decisionAt > decided.decisionAt))) {
+                    decided = application;
+                }
+            }
+        }
+        if (decided == null) return;
+        if (decided.status == PromotionStatus.APPROVED) {
+            player.tell("[Straja] Cererea " + decided.applicationId + " a fost aprobată — noul tău grad: "
+                    + display(decided.targetGrade) + ".");
+        } else {
+            player.tell("[Straja] Cererea " + decided.applicationId + " a fost respinsă"
+                    + (decided.decisionReason.isBlank() ? "." : ": " + decided.decisionReason));
+        }
+        decided.outcomeDelivered = true;
+        store.storeRevision++;
+        promotions.write(store);
+    }
+
+    private static String display(CareerGrade grade) {
+        String name = grade == null ? "?" : grade.name();
+        int underscore = name.indexOf('_');
+        return underscore < 0 ? name : name.substring(underscore + 1);
+    }
+
+    /** Open petitions awaiting the Comisar's decision, oldest first. */
+    public synchronized java.util.List<PromotionApplication> pendingPetitions() {
+        PromotionStore store = promotions.read();
+        if (store.applications == null) return java.util.List.of();
+        return store.applications.values().stream()
+                .filter(application -> application != null
+                        && application.status == PromotionStatus.READY_FOR_APPROVAL)
+                .sorted(java.util.Comparator.comparingLong(a -> a.submittedAt))
+                .toList();
+    }
+
     /** Legacy caller-asserted evidence is deliberately rejected. */
     public synchronized QualificationEvidence addEvidence(String applicationId, String actorUuid, String kind,
                                                            String source, String result, Double score,
@@ -289,6 +369,9 @@ public final class PromotionService implements com.dwurdy.straja.application.por
     public synchronized PromotionApplication reject(String actorUuid, String applicationId, String reason) {
         PromotionStore store = promotions.read();
         PromotionApplication application = requireApplication(store, applicationId);
+        // A decided application must not be silently flipped back — the
+        // personnel projection may already have applied an approval.
+        if (!isOpen(application.status)) throw new IllegalStateException("application is closed");
         if (authorization != null) {
             AuthorizationContext context = AuthorizationContext.of(actorUuid, "APPROVE_PROMOTION");
             context.subjectUuid = application.subjectUuid;
@@ -339,14 +422,6 @@ public final class PromotionService implements com.dwurdy.straja.application.por
     /** Two part-time ladders feed the shared officer corps; officers climb
      *  LT → CPT → COL. No skipped rungs, no cross-track enlisted hops. */
     private static boolean validTransition(CareerGrade from, CareerGrade target) {
-        return switch (from) {
-            case MILITARY_STAGIAR -> target == CareerGrade.MILITARY_STRAJER;
-            case MILITARY_STRAJER -> target == CareerGrade.OFFICER_LOCOTENENT;
-            case PROFESSIONAL_ZILIER -> target == CareerGrade.PROFESSIONAL_MESTER;
-            case PROFESSIONAL_MESTER -> target == CareerGrade.OFFICER_LOCOTENENT;
-            case OFFICER_LOCOTENENT -> target == CareerGrade.OFFICER_CAPITAN;
-            case OFFICER_CAPITAN -> target == CareerGrade.OFFICER_COLONEL;
-            case OFFICER_COLONEL -> false;
-        };
+        return from != null && target == from.nextGrade();
     }
 }

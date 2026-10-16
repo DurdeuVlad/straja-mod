@@ -52,6 +52,11 @@ public class PlayerService implements com.dwurdy.straja.application.port.in.Play
         return state;
     }
 
+    @Override
+    public GuardState readState(UUID uuid) {
+        return state(uuid);
+    }
+
     public GuardState state(UUID uuid) {
         GuardState state = ctx.players().read(uuid);
         applyV2Projection(uuid, state);

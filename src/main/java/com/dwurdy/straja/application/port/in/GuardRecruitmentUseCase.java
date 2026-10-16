@@ -45,9 +45,22 @@ public interface GuardRecruitmentUseCase {
     void showProgress(PlayerGateway player);
 
     /**
-     * Self-service rank-up at the trainer: succeeds only when the configured
-     * service-block threshold is met; ranks without a configured threshold
-     * stay a commissioner decision.
+     * Files a promotion petition: the request goes straight to the Comisar's
+     * review queue (no evidence or service-block gate — those stay advisory
+     * on the review). Empty when the member has no legal next grade.
+     */
+    Optional<com.dwurdy.straja.domain.model.CareerGrade> petitionTarget(PlayerGateway player);
+
+    /**
+     * Self-service promotion petition (Secretary "Cere avansarea" / trainer
+     * shortcut). Files the next legal grade as a petition with an optional
+     * free-text reason for the Comisar.
+     */
+    void requestPetition(PlayerGateway player, String reason);
+
+    /**
+     * Self-service rank-up at the trainer: files the next-rank petition
+     * without a reason (kept for surfaces that predate the petition form).
      */
     void requestPromotion(PlayerGateway player);
 
