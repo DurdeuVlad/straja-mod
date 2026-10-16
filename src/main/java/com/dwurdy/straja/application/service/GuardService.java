@@ -280,6 +280,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         state.suspended = false;
         if (state.rank < Rank.STAGIAR.level()) {
             state.quizIndex = 0;
+            state.quizCorrect = 0;
             state.quizPassed = false;
             state.quizCooldownAt = null;
             state.quizOrder = new java.util.ArrayList<>();
@@ -358,7 +359,8 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         }
         var question = ensureQuizOrder(state);
         players.save(player.uuid(), state);
-        player.tell("Examenul se susține la Instructor, pas cu pas. "
+        player.tell("Examenul la Instructor are " + ctx.policies().quiz.size()
+                + " întrebări; promovezi cu cel puțin " + quizPassThreshold() + " răspunsuri corecte. "
                 + (question != null ? question.question() : "Revino la Instructor pentru următoarea întrebare."));
     }
 
@@ -446,21 +448,30 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         return true;
     }
 
+    /**
+     * Admission quiz order is the configured bank order — the exam is
+     * deliberately learnable on the spot, so there is no shuffle. Any stored
+     * order that no longer matches the bank (config edit, pre-remodel save)
+     * restarts the attempt.
+     */
     private StrajaPolicies.QuizQuestion ensureQuizOrder(GuardState state) {
         List<StrajaPolicies.QuizQuestion> quiz = ctx.policies().quiz;
-        boolean valid = state.quizOrder != null && state.quizOrder.size() == quiz.size()
-                && new java.util.HashSet<>(state.quizOrder).size() == quiz.size()
+        var bankOrder = new java.util.ArrayList<String>(quiz.size());
+        for (StrajaPolicies.QuizQuestion q : quiz) bankOrder.add(q.id());
+        boolean valid = bankOrder.equals(state.quizOrder)
                 && state.quizIndex >= 0 && state.quizIndex < quiz.size();
         if (!valid) {
-            var order = new java.util.ArrayList<String>();
-            for (StrajaPolicies.QuizQuestion q : quiz) order.add(q.id());
-            java.util.Collections.shuffle(order);
-            state.quizOrder = order;
+            state.quizOrder = bankOrder;
             state.quizIndex = 0;
+            state.quizCorrect = 0;
         }
-        return state.quizIndex < state.quizOrder.size()
-                ? quiz.stream().filter(q -> q.id().equals(state.quizOrder.get(state.quizIndex))).findFirst().orElse(null)
-                : null;
+        return state.quizIndex < quiz.size() ? quiz.get(state.quizIndex) : null;
+    }
+
+    /** Correct answers needed to pass the current admission bank. */
+    private int quizPassThreshold() {
+        int size = ctx.policies().quiz.size();
+        return Math.max(1, Math.min(ctx.policies().quizPassThreshold, size));
     }
 
     /** /straja quiz <answer>: admission quiz below Stagiar, training modules after. */
@@ -596,31 +607,51 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         if (state.kitClaimedRank < rank) equipment.giveKit(player, state);
     }
 
+    /**
+     * Scored admission answer: each question is answered once, right or wrong,
+     * with immediate feedback. Passing needs {@code quizPassThreshold} correct
+     * out of the whole bank; the attempt ends early once the threshold is
+     * unreachable, and a failed attempt applies the cooldown and a full retake.
+     */
     private void applyInitialAnswer(PlayerGateway player, GuardState state,
                                     StrajaPolicies.QuizQuestion item, String answer) {
+        List<StrajaPolicies.QuizQuestion> quiz = ctx.policies().quiz;
+        int total = quiz.size();
         if (item.accepts(answer)) {
-            state.quizIndex += 1;
-            state.quizCooldownAt = null;
-            if (state.quizIndex >= ctx.policies().quiz.size()) {
-                state.quizPassed = true;
-                state.rank = Rank.STAGIAR.level();
-                state.applicationState = "AUTHORIZED";
-                state.invited = true;
-                players.save(player.uuid(), state);
-                roomAutoAssign.onPromotedToGuard(player);
-                grantRankUp(player, state, Rank.STAGIAR.level());
-                player.tell("Quiz promovat. Ai devenit Stagiar. Poți începe serviciul; echipamentul este al tău.");
-            } else {
-                players.save(player.uuid(), state);
-                var next = ctx.policies().quiz.stream()
-                        .filter(q -> q.id().equals(state.quizOrder.get(state.quizIndex))).findFirst().orElse(null);
-                player.tell("Răspuns corect. Întrebarea următoare: " + (next != null ? next.question() : "—"));
-            }
+            state.quizCorrect += 1;
+            player.tell("Răspuns corect (" + state.quizCorrect + "/" + total + ").");
         } else {
-            state.quizCooldownAt = now() + ctx.policies().quizCooldownMinutes * DutyEngine.MINUTE_MS;
-            players.save(player.uuid(), state);
-            player.tell("Răspuns greșit. Poți încerca din nou peste " + ctx.policies().quizCooldownMinutes + " minute.");
+            player.tell("Răspuns greșit — răspunsul corect era: " + item.answers().get(0)
+                    + " (" + state.quizCorrect + "/" + total + ").");
         }
+        state.quizIndex += 1;
+        state.quizCooldownAt = null;
+        int need = quizPassThreshold();
+        boolean finished = state.quizIndex >= total;
+        boolean hopeless = state.quizCorrect + (total - state.quizIndex) < need;
+        if (finished && state.quizCorrect >= need) {
+            int score = state.quizCorrect;
+            promoteToStagiar(player, state);
+            player.tell("Examen promovat: " + score + "/" + total + " răspunsuri corecte.");
+            return;
+        }
+        if (finished || hopeless) {
+            int score = state.quizCorrect;
+            state.quizCooldownAt = now() + ctx.policies().quizCooldownMinutes * DutyEngine.MINUTE_MS;
+            state.quizIndex = 0;
+            state.quizCorrect = 0;
+            state.quizOrder = new java.util.ArrayList<>();
+            players.save(player.uuid(), state);
+            player.tell("Examen picat: " + score + "/" + total + " corecte, ai nevoie de " + need
+                    + ". Poți reîncepe peste " + ctx.policies().quizCooldownMinutes + " minute.");
+            audit.record("quiz", player.name(), player.uuid().toString(),
+                    player.name(), player.uuid().toString(), "REFUSED",
+                    "score=" + score + "/" + total + " need=" + need);
+            return;
+        }
+        players.save(player.uuid(), state);
+        var next = quiz.get(state.quizIndex);
+        player.tell("Întrebarea " + (state.quizIndex + 1) + "/" + total + ": " + next.question());
     }
 
     private Optional<QuizPrompt> currentTrainingPrompt(PlayerGateway player, GuardState state) {

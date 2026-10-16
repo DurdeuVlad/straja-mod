@@ -163,10 +163,10 @@ class FormSessionServiceTest {
 
     @Test
     void quizAnswerBindsServerQuestionId() {
-        var view = forms.open(owner, request(Action.QUIZ_ANSWER, "juramant")).orElseThrow();
+        var view = forms.open(owner, request(Action.QUIZ_ANSWER, "comisar")).orElseThrow();
         var submission = forms.submit(owner, view.sessionId(), Map.of("details", "x")).orElseThrow();
         assertEquals(Action.QUIZ_ANSWER, submission.action());
-        assertEquals("juramant", submission.recordId());
+        assertEquals("comisar", submission.recordId());
     }
 
     @Test

@@ -114,9 +114,9 @@ class StrajaPoliciesTest {
         var defaults = new StrajaPolicies();
         var parsed = StrajaPolicies.parseQuiz(StrajaPolicies.formatQuiz(defaults.quiz));
         assertEquals(defaults.quiz.size(), parsed.size());
-        var oath = parsed.stream().filter(q -> q.id().equals("juramant")).findFirst().orElseThrow();
-        assertTrue(oath.accepts("disciplina"));
-        assertTrue(oath.accepts("DISCIPLINA"), "answers normalize case");
+        var oath = parsed.stream().filter(q -> q.id().equals("comisar")).findFirst().orElseThrow();
+        assertTrue(oath.accepts("comisarul"));
+        assertTrue(oath.accepts("COMISARUL"), "answers normalize case");
         assertFalse(oath.accepts("onoare"));
 
         // malformed entries are skipped, not fatal

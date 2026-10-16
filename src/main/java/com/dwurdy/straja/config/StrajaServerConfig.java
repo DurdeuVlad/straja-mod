@@ -202,6 +202,7 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.IntValue EMERGENCY_MAX_PATROL_ROUNDS;
 
 
+    public static final ModConfigSpec.IntValue QUIZ_PASS_THRESHOLD;
     public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> QUIZ_QUESTIONS;
     public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> TRAINING_QUIZ_QUESTIONS;
 
@@ -901,8 +902,14 @@ public final class StrajaServerConfig {
         B.pop();
 
         B.push("quiz");
+        QUIZ_PASS_THRESHOLD = B.comment(
+                        "Correct answers needed to pass the admission quiz.",
+                        "Questions are asked in the configured order; a failed",
+                        "attempt applies quizCooldownMinutes and restarts from the",
+                        "first question. Clamped to the configured bank size.")
+                .defineInRange("passThreshold", defaults.quizPassThreshold, 1, 64);
         QUIZ_QUESTIONS = B.comment(
-                        "Recruitment quiz questions asked by the trainer.",
+                        "Recruitment quiz questions asked by the trainer, in order.",
                         "Entries: \"id|minRank|question|answer1;answer2\" — any listed answer accepts.")
                 .defineListAllowEmpty(List.of("questions"),
                         StrajaPolicies.formatQuiz(defaults.quiz),
@@ -1352,6 +1359,7 @@ public final class StrajaServerConfig {
         p.emergencyMaxPayMultiplier = EMERGENCY_MAX_PAY_MULTIPLIER.get();
         p.emergencyPatrolRounds = EMERGENCY_PATROL_ROUNDS.get();
         p.emergencyMaxPatrolRounds = EMERGENCY_MAX_PATROL_ROUNDS.get();
+        p.quizPassThreshold = QUIZ_PASS_THRESHOLD.get();
         p.quiz = listOrDefault(StrajaPolicies.parseQuiz(QUIZ_QUESTIONS.get()), defaults().quiz);
         p.trainingQuiz = listOrDefault(StrajaPolicies.parseQuiz(TRAINING_QUIZ_QUESTIONS.get()),
                 defaults().trainingQuiz);

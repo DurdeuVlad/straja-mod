@@ -329,17 +329,29 @@ public class StrajaPolicies {
     public int emergencyPatrolRounds = 2;
     public int emergencyMaxPatrolRounds = 10;
 
-    // quiz
+    // quiz — admission exam: fixed-order questions, pass needs quizPassThreshold
+    // correct answers out of the whole bank (default 5/6); a failed attempt
+    // triggers quizCooldownMinutes and the next try restarts from question one.
+    public int quizPassThreshold = 5;
     public List<QuizQuestion> quiz = new ArrayList<>(List.of(
-            new QuizQuestion("juramant", 0,
-                    "Care este regula de bază a Străjii? (scrie: disciplina)",
-                    List.of("disciplina")),
+            new QuizQuestion("comisar", 0,
+                    "Cine conduce Straja? (scrie: comisarul)",
+                    List.of("comisarul", "comisar")),
+            new QuizQuestion("tura", 0,
+                    "La cine începi serviciul? (scrie: secretara)",
+                    List.of("secretara", "secretară", "la secretara", "la secretară", "secretariat")),
             new QuizQuestion("checkpoint", 0,
-                    "Câte minute ai pentru a ajunge la următorul checkpoint? (scrie: 30)",
-                    List.of("30", "30 minute", "30 de minute")),
+                    "Unde îți petreci tura? (scrie: la checkpoint)",
+                    List.of("la checkpoint", "checkpoint")),
+            new QuizQuestion("uniforma", 0,
+                    "Ce porți în timpul turei? (scrie: uniforma)",
+                    List.of("uniforma", "uniformă")),
+            new QuizQuestion("ordine", 0,
+                    "Asculți ordinele ofițerilor și ale comisarului? (scrie: da)",
+                    List.of("da")),
             new QuizQuestion("raport", 0,
-                    "Cui trimiți raportul final? (scrie: comisaru)",
-                    List.of("comisaru", "dwurdy"))));
+                    "Cui dai raportul la final de tură? (scrie: comisarului)",
+                    List.of("comisarului", "comisar"))));
     public List<QuizQuestion> trainingQuiz = new ArrayList<>(List.of(
             new QuizQuestion("junior_fines_standard", 1,
                     "Cum alegi cuantumul unei amenzi? (scrie: tarif standard)",
@@ -354,7 +366,7 @@ public class StrajaPolicies {
                     "Ce condiție trebuie înaintea arestării? (scrie: misiune)",
                     List.of("misiune", "mandat", "misiune sau mandat")),
             new QuizQuestion("senior_orders_lower", 3,
-                    "Ce face un Sergent într-o plângere? (scrie: investigheaza)",
+                    "Ce face un Locotenent într-o plângere? (scrie: investigheaza)",
                     List.of("investigheaza", "investighează", "investigatie", "investigație"))));
 
     // trainer

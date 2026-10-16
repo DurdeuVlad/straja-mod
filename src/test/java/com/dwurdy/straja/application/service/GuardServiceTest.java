@@ -114,25 +114,62 @@ class GuardServiceTest {
     }
 
     @Test
-    void wrongAnswerAppliesCooldown() {
+    void wrongAnswerAdvancesWithoutCooldownUntilAttemptIsHopeless() {
         TestPlayer c = commissioner();
         TestPlayer p = server.add("recruit");
         guards.invite(c, p);
+        // first miss: index advances, no cooldown, immediate feedback
         guards.quiz(p, "răspuns greșit");
         var state = players.state(p.uuid());
+        assertEquals(1, state.quizIndex);
+        assertEquals(0, state.quizCorrect);
+        assertNull(state.quizCooldownAt, "one affordable miss must not cooldown the attempt");
+        assertTrue(p.told("Răspuns greșit"));
+        // second miss: threshold (5/6) is unreachable -> fail fast, cooldown, reset
+        guards.quiz(p, "tot greșit");
+        state = players.state(p.uuid());
         assertNotNull(state.quizCooldownAt);
         assertTrue(state.quizCooldownAt > clock.nowMillis());
-        // still cooling down -> next answer refused silently
-        guards.quiz(p, "disciplina");
-        assertTrue(p.told("Mai încearcă"));
-        // after cooldown the right answer works
+        assertEquals(0, state.quizIndex, "failed attempt restarts from the first question");
+        assertEquals(0, state.quizCorrect);
+        assertTrue(p.told("Examen picat"));
+        // cooling down: further answers are refused
+        guards.quiz(p, "comisarul");
+        assertEquals(0, players.state(p.uuid()).quizIndex);
+        // after cooldown the retake starts clean at the first question
         clock.advance(ctx.policies().quizCooldownMinutes * 60_000L + 1);
-        var fresh = players.state(p.uuid());
-        String currentId = fresh.quizOrder.get(fresh.quizIndex);
-        var question = ctx.policies().quiz.stream()
-                .filter(q -> q.id().equals(currentId)).findFirst().orElseThrow();
-        guards.quiz(p, question.answers().get(0));
-        assertEquals(1, players.state(p.uuid()).quizIndex);
+        guards.quiz(p, ctx.policies().quiz.get(0).answers().get(0));
+        state = players.state(p.uuid());
+        assertEquals(1, state.quizIndex);
+        assertEquals(1, state.quizCorrect);
+    }
+
+    @Test
+    void fiveOfSixPassesTheAdmissionQuiz() {
+        TestPlayer c = commissioner();
+        TestPlayer p = server.add("recruit");
+        guards.invite(c, p);
+        guards.recruit(p);
+        var quiz = ctx.policies().quiz;
+        for (int i = 0; i < quiz.size(); i++) {
+            var state = players.state(p.uuid());
+            var question = quiz.stream()
+                    .filter(q -> q.id().equals(state.quizOrder.get(state.quizIndex))).findFirst().orElseThrow();
+            guards.quiz(p, i == 0 ? "greșit" : question.answers().get(0));
+        }
+        var state = players.state(p.uuid());
+        assertEquals(quiz.size() - 1, state.quizCorrect, "one miss out of six still passes");
+        assertEquals(Rank.STAGIAR.level(), state.rank);
+        assertTrue(state.quizPassed);
+        assertTrue(p.told("Examen promovat"));
+    }
+
+    @Test
+    void admissionQuizRunsInConfiguredOrder() {
+        TestPlayer p = invitedRecruit();
+        var prompt = guards.currentQuizPrompt(p).orElseThrow();
+        assertEquals(ctx.policies().quiz.get(0).id(), prompt.questionId(),
+                "the first question is the first configured bank entry — no shuffle");
     }
 
     @Test
@@ -186,17 +223,26 @@ class GuardServiceTest {
     }
 
     @Test
-    void wrongBoundAnswerAppliesCooldownAndBlocksPrompt() {
+    void wrongBoundAnswerAdvancesTheScoredAttempt() {
         TestPlayer p = invitedRecruit();
         var prompt = guards.currentQuizPrompt(p).orElseThrow();
         assertTrue(guards.answerQuiz(p, prompt.questionId(), "sigur greșit"),
                 "a processed wrong answer still reports true");
         var state = players.state(p.uuid());
+        assertEquals(1, state.quizIndex);
+        assertEquals(0, state.quizCorrect);
+        assertNull(state.quizCooldownAt, "one affordable miss must not block the attempt");
+        var next = guards.currentQuizPrompt(p).orElseThrow();
+        assertNotEquals(prompt.questionId(), next.questionId());
+        assertEquals(ctx.policies().quiz.get(1).id(), next.questionId());
+        // a second miss makes 5/6 unreachable: fail fast, cooldown, reset
+        assertTrue(guards.answerQuiz(p, next.questionId(), "tot greșit"));
+        state = players.state(p.uuid());
         assertNotNull(state.quizCooldownAt);
         assertTrue(state.quizCooldownAt > clock.nowMillis());
+        assertEquals(0, state.quizIndex);
         assertTrue(guards.currentQuizPrompt(p).isEmpty());
-        assertTrue(p.told("Mai încearcă"));
-        assertFalse(guards.answerQuiz(p, prompt.questionId(), "disciplina"),
+        assertFalse(guards.answerQuiz(p, next.questionId(), "comisarul"),
                 "answers during cooldown must fail closed");
     }
 

@@ -17,6 +17,7 @@ public class GuardState {
     public Long appliedAt = null;
     public String applicationRecordedBy = null;
     public int quizIndex = 0;
+    public int quizCorrect = 0;
     public boolean quizPassed = false;
     public Long quizCooldownAt = null;
     public List<String> quizOrder = new ArrayList<>();
