@@ -157,10 +157,10 @@ class PlayerServiceTest {
         st.rank = 3;
         ctx.players().write(p.uuid(), st);
         // Off duty → still prefixed.
-        assertEquals("[Sergent]", players.rankPrefixFor(p));
+        assertEquals("[Locotenent]", players.rankPrefixFor(p));
         st.suspended = true;
         ctx.players().write(p.uuid(), st);
-        assertEquals("[Sergent]", players.rankPrefixFor(p));
+        assertEquals("[Locotenent]", players.rankPrefixFor(p));
     }
 
     @Test

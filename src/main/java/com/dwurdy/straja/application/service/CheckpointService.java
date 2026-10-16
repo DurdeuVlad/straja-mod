@@ -2,6 +2,7 @@ package com.dwurdy.straja.application.service;
 
 import com.dwurdy.straja.application.StrajaContext;
 import com.dwurdy.straja.application.port.out.PlayerGateway;
+import com.dwurdy.straja.domain.model.CareerTrack;
 import com.dwurdy.straja.domain.model.CrossingDirection;
 import com.dwurdy.straja.domain.model.CrossingOutcome;
 import com.dwurdy.straja.domain.model.GateLane;
@@ -589,7 +590,14 @@ public final class CheckpointService {
         if (inCustody(p)) roles.add("PRISONER");
         PersonnelRecord rec = personnel.find(p.uuid().toString());
         if (rec != null && rec.active()) {
-            if (rec.careerGrade != null) roles.add(rec.careerGrade.name());
+            if (rec.careerGrade != null) {
+                roles.add(rec.careerGrade.name());
+                // Rank remodel: keep answering pre-remodel role names so
+                // existing role bans still catch migrated members. Officers
+                // sat on the MILITARY track before the remodel.
+                roles.addAll(rec.careerGrade.legacyRoleNames());
+                if (rec.careerGrade.isOfficer()) roles.add(CareerTrack.MILITARY.name());
+            }
             if (rec.careerTrack != null) roles.add(rec.careerTrack.name());
             for (String prof : rec.professions) {
                 if (prof != null && !prof.isBlank()) roles.add(prof.trim().toUpperCase(Locale.ROOT));

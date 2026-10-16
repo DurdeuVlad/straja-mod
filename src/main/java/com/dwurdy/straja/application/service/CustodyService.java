@@ -295,7 +295,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
         var issuerState = players.state(issuer.uuid());
         if (targetState.rank >= Rank.STAGIAR.level()
                 && !players.isCommissioner(issuer)
-                && issuerState.rank < Rank.INSPECTOR.level()) {
+                && issuerState.rank < Rank.LOCOTENENT.level()) {
             return new Policy(false, "guard_target_policy");
         }
         return new Policy(true, "");

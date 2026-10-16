@@ -69,8 +69,9 @@ public final class AuthorizationService {
                 return AuthorizationDecision.deny(AuthorizationDecision.ReasonCode.DENIED_APPOINTMENT);
         }
         if ("ROUTINE_PATROL".equals(capability)
-                && (actor.careerGrade != null && actor.careerGrade.isProfessional()
-                    || (actor.careerGrade == CareerGrade.INSPECTOR
+                && actor.careerGrade != null
+                && (actor.careerGrade.isProfessional()
+                    || (actor.careerGrade.isOfficer()
                     && actor.careerOrigin == com.dwurdy.straja.domain.model.CareerTrack.PROFESSIONAL))) {
             if (!hasActiveMobilization(actor.playerUuid, context.stationId, context.jurisdiction, now))
                 return AuthorizationDecision.deny(AuthorizationDecision.ReasonCode.DENIED_MOBILIZATION_REQUIRED);
@@ -104,6 +105,8 @@ public final class AuthorizationService {
             return true;
         }
         if (grade == null) return false;
+        // Every officer grade (LT/CPT/COL) holds the full non-comisar set:
+        // specialties are RP flavor, not capability gates.
         return switch (requested) {
             case SELF_SERVICE_FORMS -> true;
             // Professional careers may use the same capability only while
@@ -112,26 +115,15 @@ public final class AuthorizationService {
             case ROUTINE_PATROL -> !grade.isProfessional();
             case ISSUE_FINES -> !grade.isProfessional();
             case USE_CUFFS, USE_BATON, EXECUTE_ARRESTS, ASSIST_COMPLAINTS ->
-                    grade == CareerGrade.MILITARY_STRAJER
-                            || grade == CareerGrade.MILITARY_SERGENT
-                            || grade == CareerGrade.INSPECTOR
+                    grade == CareerGrade.MILITARY_STRAJER || grade.isOfficer()
                             || scopedSpecialist(actor, context, now);
             case INVESTIGATE_COMPLAINTS, MOBILIZE_PLAYERS ->
-                    grade == CareerGrade.MILITARY_SERGENT || grade == CareerGrade.INSPECTOR
-                            || (requested == Capability.INVESTIGATE_COMPLAINTS
+                    grade.isOfficer() || (requested == Capability.INVESTIGATE_COMPLAINTS
                             && scopedSpecialist(actor, context, now));
-            case VERIFY_REPORTS ->
-                    grade == CareerGrade.MILITARY_SERGENT || grade == CareerGrade.INSPECTOR;
-            case CREATE_MISSIONS, APPROVE_REWARDS, REVIEW_APPEALS -> grade == CareerGrade.INSPECTOR;
-            case PROFESSIONAL_JOBS -> grade == CareerGrade.PROFESSIONAL_SPECIALIST
-                    || grade == CareerGrade.PROFESSIONAL_STAGIAR_SPECIALIST
-                    || grade == CareerGrade.PROFESSIONAL_MAISTRU
-                    || (grade == CareerGrade.INSPECTOR && actor.careerOrigin == CareerTrack.PROFESSIONAL);
-            case MOBILIZE_SPECIALISTS ->
-                    grade == CareerGrade.MILITARY_SERGENT || grade == CareerGrade.INSPECTOR;
-            case ISSUE_DOCUMENTS -> grade == CareerGrade.MILITARY_SERGENT || grade == CareerGrade.INSPECTOR;
-            case WAIVE_EQUIPMENT_DEBT -> grade == CareerGrade.INSPECTOR;
-            case MANAGE_CAMPAIGNS -> grade == CareerGrade.INSPECTOR;
+            case VERIFY_REPORTS, MOBILIZE_SPECIALISTS, ISSUE_DOCUMENTS -> grade.isOfficer();
+            case CREATE_MISSIONS, APPROVE_REWARDS, REVIEW_APPEALS,
+                    WAIVE_EQUIPMENT_DEBT, MANAGE_CAMPAIGNS -> grade.isOfficer();
+            case PROFESSIONAL_JOBS -> grade.isProfessional() || grade.isOfficer();
             case AUTHORIZE_PERSONNEL, APPROVE_PROMOTION -> false;
         };
     }

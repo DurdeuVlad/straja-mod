@@ -143,7 +143,7 @@ public class MissionService implements MissionRoleplayUseCase {
     }
 
     private boolean scopeValid(PlayerGateway issuer, int minimumRank, int maxAssignees) {
-        if (minimumRank < Rank.STAGIAR.level() || minimumRank > Rank.INSPECTOR.level()) {
+        if (minimumRank < Rank.STAGIAR.level() || minimumRank > Rank.COLONEL.level()) {
             issuer.refuse("straja.mission.min_rank_invalid", "straja.remedy.fix_retry");
             return false;
         }
@@ -340,8 +340,10 @@ public class MissionService implements MissionRoleplayUseCase {
         return switch (PlayerService.canon(name)) {
             case "junior", "civil" -> Rank.STAGIAR.level();
             case "guard", "strajer", "străjer" -> Rank.GUARD.level();
-            case "senior" -> Rank.SERGENT.level();
-            case "lieutenant", "locotenent" -> Rank.INSPECTOR.level();
+            case "senior", "sergent" -> Rank.LOCOTENENT.level();
+            case "lieutenant", "locotenent" -> Rank.LOCOTENENT.level();
+            case "captain", "capitan", "căpitan" -> Rank.CAPITAN.level();
+            case "colonel" -> Rank.COLONEL.level();
             default -> {
                 try {
                     yield Integer.parseInt(name.trim());

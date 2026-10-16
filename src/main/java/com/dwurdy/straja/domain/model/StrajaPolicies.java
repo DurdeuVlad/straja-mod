@@ -249,9 +249,10 @@ public class StrajaPolicies {
     }
 
     // salary — hourly wage per docs/gameplay-decisions.md §10:
-    // Stagiar 16, Străjer 24, Sergent 36, Inspector 64, Comisar 128 Bronze/h,
-    // accrued continuously at salaryGranularitySeconds with sub-coin carry.
-    public Map<Integer, Integer> salaryPerHour = new LinkedHashMap<>(Map.of(1, 16, 2, 24, 3, 36, 4, 64));
+    // Stagiar 16, Străjer 24, Locotenent 36, Căpitan 64, Colonel 96,
+    // Comisar 128 Bronze/h, accrued continuously at salaryGranularitySeconds
+    // with sub-coin carry.
+    public Map<Integer, Integer> salaryPerHour = new LinkedHashMap<>(Map.of(1, 16, 2, 24, 3, 36, 4, 64, 5, 96));
     public int salaryCommissionerPerHour = 128;
     public int salaryGranularitySeconds = 60;
     public int serviceBlockMinutes = 10;
@@ -267,15 +268,16 @@ public class StrajaPolicies {
     public long weeklyStipendRequiredServiceBlocks = 0;
     public long mobilizationPay = 0;
 
-    // rank display names (§2 ladder: Stagiar → Străjer → Sergent → Inspector;
+    // rank display names (§2 ladder: Stagiar → Străjer enlisted, then the
+    // officer corps Locotenent → Căpitan → Colonel;
     // Comisar is a personnel flag, not a ladder step)
     public Map<Integer, String> rankNames = new LinkedHashMap<>(Map.of(
-            1, "Stagiar", 2, "Străjer", 3, "Sergent", 4, "Inspector"));
+            1, "Stagiar", 2, "Străjer", 3, "Locotenent", 4, "Căpitan", 5, "Colonel"));
 
-    // trades (Meseriași) path display names — 1=Ziler (part-time day-hand),
-    // 2=Meseriaș and 3=Maistru (full-time, Comisar-approved advancement).
+    // trades (Meseriași) path display names — 1=Zilier (part-time day-hand),
+    // 2=Meșter (experienced tradesman; petitions into the officer corps).
     public Map<Integer, String> meseriasRankNames = new LinkedHashMap<>(Map.of(
-            1, "Ziler", 2, "Meseriaș", 3, "Maistru"));
+            1, "Zilier", 2, "Meșter"));
 
     // promotions
     public Map<Integer, Integer> promotionServiceBlocks = new LinkedHashMap<>(Map.of(2, 60, 3, 180));
@@ -564,20 +566,20 @@ public class StrajaPolicies {
     }
 
     /**
-     * Display name for a V2 career grade across both tracks: the sworn
-     * (Străjer) ladder uses {@link #rankNames}; the trades (Meseriași) ladder
-     * uses {@link #meseriasRankNames}.
+     * Display name for a V2 career grade across all tracks: the sworn
+     * enlisted ladder and the officer corps use {@link #rankNames}; the
+     * trades (Meseriași) ladder uses {@link #meseriasRankNames}.
      */
     public String rankName(CareerGrade grade) {
         if (grade == null) return "";
         return switch (grade) {
             case MILITARY_STAGIAR -> rankName(1);
             case MILITARY_STRAJER -> rankName(2);
-            case MILITARY_SERGENT -> rankName(3);
-            case INSPECTOR -> rankName(4);
-            case PROFESSIONAL_STAGIAR_SPECIALIST -> meseriasRankName(1);
-            case PROFESSIONAL_SPECIALIST -> meseriasRankName(2);
-            case PROFESSIONAL_MAISTRU -> meseriasRankName(3);
+            case OFFICER_LOCOTENENT -> rankName(3);
+            case OFFICER_CAPITAN -> rankName(4);
+            case OFFICER_COLONEL -> rankName(5);
+            case PROFESSIONAL_ZILIER -> meseriasRankName(1);
+            case PROFESSIONAL_MESTER -> meseriasRankName(2);
         };
     }
 

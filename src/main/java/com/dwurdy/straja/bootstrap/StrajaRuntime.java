@@ -277,7 +277,7 @@ public final class StrajaRuntime {
                 settlementRepository, campaignRepository, outboxRepository);
         this.v2ComplaintEscalation = new com.dwurdy.straja.application.service.ComplaintEscalationService(
                 this.ctx.complaints(), clock, ids, v2Authorization,
-                jurisdiction -> v2Personnel.findFirstByGrade(com.dwurdy.straja.domain.model.CareerGrade.INSPECTOR,
+                jurisdiction -> v2Personnel.findFirstByGrade(com.dwurdy.straja.domain.model.CareerGrade.OFFICER_CAPITAN,
                         jurisdiction, clock.nowMillis()), policies.complaintSlaMillis);
         this.v2Stations.ensureDefault(this.ctx.setup().read());
 
@@ -302,8 +302,9 @@ public final class StrajaRuntime {
                 var grade = switch (com.dwurdy.straja.domain.model.Rank.of(rank)) {
                     case STAGIAR -> com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STAGIAR;
                     case GUARD -> com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STRAJER;
-                    case SERGENT -> com.dwurdy.straja.domain.model.CareerGrade.MILITARY_SERGENT;
-                    case INSPECTOR -> com.dwurdy.straja.domain.model.CareerGrade.INSPECTOR;
+                    case LOCOTENENT -> com.dwurdy.straja.domain.model.CareerGrade.OFFICER_LOCOTENENT;
+                    case CAPITAN -> com.dwurdy.straja.domain.model.CareerGrade.OFFICER_CAPITAN;
+                    case COLONEL -> com.dwurdy.straja.domain.model.CareerGrade.OFFICER_COLONEL;
                     default -> com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STAGIAR;
                 };
                 v2Personnel.authorize(actor.uuid().toString(), target.uuid().toString(), grade,

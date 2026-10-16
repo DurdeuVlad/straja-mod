@@ -330,7 +330,7 @@ class ForgeryDetectionServiceTest {
         var civilian = server.add("civilian");
         enlist(duty, com.dwurdy.straja.domain.model.Rank.STAGIAR.level(), false);
         enlist(trained, com.dwurdy.straja.domain.model.Rank.STAGIAR.level(), true);
-        enlist(comisar, com.dwurdy.straja.domain.model.Rank.INSPECTOR.level(), true);
+        enlist(comisar, com.dwurdy.straja.domain.model.Rank.CAPITAN.level(), true);
         assertEquals(ForgeryDetectionService.Expertise.JUNIOR,
                 detection.officerExpertise(duty));
         assertEquals(ForgeryDetectionService.Expertise.VETERAN,
@@ -347,7 +347,7 @@ class ForgeryDetectionServiceTest {
         // whenever they run the check.
         policies.commissionerName = "comisar";
         var comisar = server.add("comisar");
-        enlist(comisar, com.dwurdy.straja.domain.model.Rank.INSPECTOR.level(), true);
+        enlist(comisar, com.dwurdy.straja.domain.model.Rank.CAPITAN.level(), true);
         var state = ctx.players().read(comisar.uuid);
         state.duty = false;
         ctx.players().write(comisar.uuid, state);
@@ -359,7 +359,7 @@ class ForgeryDetectionServiceTest {
     void inspectionRefusesWhenTheTravelerIsOutOfReach() {
         policies.commissionerName = "comisar";
         var comisar = server.add("comisar");
-        enlist(comisar, com.dwurdy.straja.domain.model.Rank.INSPECTOR.level(), true);
+        enlist(comisar, com.dwurdy.straja.domain.model.Rank.CAPITAN.level(), true);
         comisar.x = 0; comisar.z = 0;
         traveler.x = 500; traveler.z = 500;
         var outcome = detection.officerInspect(comisar, traveler, seizure, bolos);

@@ -53,7 +53,7 @@ class BountyServiceTest {
         hunter = server.add("hunter1");
         crook = server.add("crook1");
         var ist = players.state(inspector.uuid());
-        ist.rank = Rank.INSPECTOR.level();
+        ist.rank = Rank.CAPITAN.level();
         players.save(inspector.uuid(), ist);
         var cst = players.state(civil.uuid());
         cst.rank = Rank.CIVIL.level();
@@ -80,7 +80,7 @@ class BountyServiceTest {
         assertNotNull(record, "inspector post must succeed");
         assertEquals(BountyStatus.ACTIVE, record.status);
         assertEquals(128, record.amount);
-        assertEquals(Rank.INSPECTOR.level(), record.postedByRank);
+        assertEquals(Rank.CAPITAN.level(), record.postedByRank);
         assertNotNull(bounties.activeFor(crook.uuid().toString()));
         assertFalse(record.linkedBoloId.isBlank(), "post must link a BOLO");
         var bolo = ctx.bolos().read().find(record.linkedBoloId);

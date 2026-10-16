@@ -92,7 +92,7 @@ class RoleplayExpansionServiceTest {
 
     @Test
     void boloIsInformationalUntilAnAuthoritativeTaskExists() {
-        TestPlayer issuer = addDuty("sergeant", Rank.SERGENT);
+        TestPlayer issuer = addDuty("sergeant", Rank.LOCOTENENT);
         TestPlayer subject = server.add("subject");
 
         var info = bolos.create(issuer, subject, "Caută pentru declarații", "",
@@ -200,7 +200,7 @@ class RoleplayExpansionServiceTest {
 
     @Test
     void boloCancellationFailsClosedForActorWithoutGuardState() {
-        TestPlayer issuer = addDuty("bolo-issuer", Rank.SERGENT);
+        TestPlayer issuer = addDuty("bolo-issuer", Rank.LOCOTENENT);
         TestPlayer subject = server.add("bolo-subject");
         var bolo = bolos.create(issuer, subject, "Verificare", "",
                 BoloAuthority.INFORMATION_ONLY, "");

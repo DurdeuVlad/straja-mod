@@ -159,16 +159,15 @@ public class PlayerService implements com.dwurdy.straja.application.port.in.Play
         PersonnelRecord v2Record = v2Record(player == null ? null : player.uuid());
         if (v2Record != null) {
             if (!v2Record.active()) return PermissionLevel.PUBLIC;
-            if (v2Record.careerGrade == com.dwurdy.straja.domain.model.CareerGrade.INSPECTOR)
+            if (v2Record.careerGrade != null && v2Record.careerGrade.isOfficer())
                 return PermissionLevel.LIEUTENANT;
             if (v2Record.careerGrade == com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STAGIAR
-                    || v2Record.careerGrade == com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STRAJER
-                    || v2Record.careerGrade == com.dwurdy.straja.domain.model.CareerGrade.MILITARY_SERGENT)
+                    || v2Record.careerGrade == com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STRAJER)
                 return PermissionLevel.GUARD;
             return PermissionLevel.PUBLIC;
         }
         Rank rank = Rank.of(state.rank);
-        if (rank == Rank.INSPECTOR) return PermissionLevel.LIEUTENANT;
+        if (rank.atLeast(Rank.LOCOTENENT)) return PermissionLevel.LIEUTENANT;
         if (rank.atLeast(Rank.STAGIAR)) return PermissionLevel.GUARD;
         return PermissionLevel.PUBLIC;
     }
@@ -250,9 +249,9 @@ public class PlayerService implements com.dwurdy.straja.application.port.in.Play
         GuardState actorState = state(actor);
         Rank actorRank = Rank.of(actorState.rank);
         Rank targetRank = Rank.of(target.rank);
-        if (actorRank != Rank.INSPECTOR) return Result.fail("forbidden");
+        if (!actorRank.atLeast(Rank.LOCOTENENT)) return Result.fail("forbidden");
         if (canon(actor.name()).equals(canon(targetName))) return Result.fail("self_forbidden");
-        if (targetRank.atLeast(Rank.INSPECTOR)) return Result.fail("peer_forbidden");
+        if (targetRank.level() >= actorRank.level()) return Result.fail("peer_forbidden");
         return Result.pass();
     }
 
@@ -272,10 +271,10 @@ public class PlayerService implements com.dwurdy.straja.application.port.in.Play
         state.rank = record.careerGrade == null ? Rank.CIVIL.level() : switch (record.careerGrade) {
             case MILITARY_STAGIAR -> Rank.STAGIAR.level();
             case MILITARY_STRAJER -> Rank.GUARD.level();
-            case MILITARY_SERGENT -> Rank.SERGENT.level();
-            case INSPECTOR -> Rank.INSPECTOR.level();
-            case PROFESSIONAL_STAGIAR_SPECIALIST, PROFESSIONAL_SPECIALIST, PROFESSIONAL_MAISTRU ->
-                    Rank.CIVIL.level();
+            case OFFICER_LOCOTENENT -> Rank.LOCOTENENT.level();
+            case OFFICER_CAPITAN -> Rank.CAPITAN.level();
+            case OFFICER_COLONEL -> Rank.COLONEL.level();
+            case PROFESSIONAL_ZILIER, PROFESSIONAL_MESTER -> Rank.CIVIL.level();
         };
         state.applicationState = record.membershipStatus == com.dwurdy.straja.domain.model.PersonnelStatus.AUTHORIZED_ACTIVE
                 ? "AUTHORIZED" : state.applicationState;

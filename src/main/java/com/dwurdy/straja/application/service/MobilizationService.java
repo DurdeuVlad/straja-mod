@@ -38,9 +38,8 @@ public final class MobilizationService {
                                                      String jurisdiction, long durationMillis,
                                                      String missionId, String campaignId, String source) {
         PersonnelRecord person = personnel.read().records.get(specialistUuid);
-        if (person == null || !person.active() || (person.careerGrade != CareerGrade.PROFESSIONAL_SPECIALIST
-                && person.careerGrade != CareerGrade.PROFESSIONAL_STAGIAR_SPECIALIST
-                && person.careerGrade != CareerGrade.PROFESSIONAL_MAISTRU))
+        if (person == null || !person.active() || person.careerGrade == null
+                || !person.careerGrade.isProfessional())
             throw new IllegalStateException("specialist required");
         AuthorizationContext context = AuthorizationContext.of(actorUuid, "MOBILIZE_SPECIALISTS");
         context.subjectUuid = specialistUuid;

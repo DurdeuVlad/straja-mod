@@ -430,10 +430,10 @@ public final class NpcRoles {
             return;
         }
         var next = switch (personnel.careerGrade) {
-            case PROFESSIONAL_STAGIAR_SPECIALIST ->
-                    com.dwurdy.straja.domain.model.CareerGrade.PROFESSIONAL_SPECIALIST;
-            case PROFESSIONAL_SPECIALIST ->
-                    com.dwurdy.straja.domain.model.CareerGrade.PROFESSIONAL_MAISTRU;
+            case PROFESSIONAL_ZILIER ->
+                    com.dwurdy.straja.domain.model.CareerGrade.PROFESSIONAL_MESTER;
+            case PROFESSIONAL_MESTER ->
+                    com.dwurdy.straja.domain.model.CareerGrade.OFFICER_LOCOTENENT;
             default -> null;
         };
         if (next == null) {
@@ -1244,7 +1244,7 @@ public final class NpcRoles {
         FormSessionUseCase.Request request = switch (required) {
             case AUTHORIZE -> new FormSessionUseCase.Request(
                     FormSessionUseCase.Action.ADMIN_AUTHORIZE, "",
-                    "Autorizare directă", "Numele jucătorului și rangul (1=Stagiar … 4=Inspector).",
+                    "Autorizare directă", "Numele jucătorului și rangul (1=Stagiar … 5=Colonel).",
                     java.util.List.of(
                             new FormSessionUseCase.Field("name", "Nume jucător", 32, false),
                             new FormSessionUseCase.Field("rank", "Rang (1-4)", 2, false)));

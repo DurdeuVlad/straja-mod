@@ -1587,11 +1587,11 @@ public final class LawAcceptanceGameTests {
             helper.assertTrue(testerFines.size() == 1,
                     "chapter 3 must script a fine on the tester");
 
-            runtime.protocol().next(gw); // ch4 — Inspector rank + duty
+            runtime.protocol().next(gw); // ch4 — officer rank + duty
             var state = runtime.players().state(gw);
-            helper.assertTrue(state.rank == com.dwurdy.straja.domain.model.Rank.INSPECTOR.level()
+            helper.assertTrue(state.rank == com.dwurdy.straja.domain.model.Rank.COLONEL.level()
                             && state.duty,
-                    "chapter 4 must grant Inspector rank and duty");
+                    "chapter 4 must grant officer rank and duty");
 
             runtime.protocol().next(gw); // ch5 — suspect spawn + restraint kit
             helper.assertTrue(countItem(tester, "straja:rope") >= 1

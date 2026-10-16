@@ -62,7 +62,7 @@ class DebtContributionTest {
         st.duty = true;
         players.save(guard.uuid(), st);
         var ist = players.state(inspector.uuid());
-        ist.rank = Rank.INSPECTOR.level();
+        ist.rank = Rank.CAPITAN.level();
         players.save(inspector.uuid(), ist);
     }
 

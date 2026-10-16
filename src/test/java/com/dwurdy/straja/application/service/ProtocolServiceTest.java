@@ -193,7 +193,7 @@ class ProtocolServiceTest {
 
         protocol.next(tester); // ch4 — rank grant
         var state = players.state(tester);
-        assertEquals(Rank.INSPECTOR.level(), state.rank);
+        assertEquals(Rank.COLONEL.level(), state.rank);
         assertTrue(state.duty);
 
         protocol.next(tester); // ch5 — suspect spawn + restraint kit

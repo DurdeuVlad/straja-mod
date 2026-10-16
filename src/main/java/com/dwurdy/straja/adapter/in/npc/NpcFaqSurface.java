@@ -228,7 +228,7 @@ final class NpcFaqSurface {
             case "about:what" ->
                     "Straja protejează Castelul, face patrule, răspunde la incidente și ține evidența oficială a activității.";
             case "about:ranks" ->
-                    "Parcursul este Civil → Stagiar → Străjer → Sergent → Inspector. Comisarul este o funcție de autoritate, nu o treaptă obișnuită.";
+                    "Parcursul este Civil → Stagiar → Străjer → Locotenent → Căpitan → Colonel. Comisarul este o funcție de autoritate, nu o treaptă obișnuită.";
             case "about:faction" ->
                     "Da. Facțiunea nativă rămâne înregistrată, iar în timpul serviciului acționezi temporar ca membru al Străjii.";
             case "entry:join" -> entryAnswer(context);
@@ -323,8 +323,9 @@ final class NpcFaqSurface {
             case CIVIL -> "Ca Civil poți citi regulile și depune cererea, dar nu poți începe serviciul.";
             case STAGIAR -> "Ca Stagiar urmezi instruirea și poți începe serviciul dacă îndeplinești condițiile configurate.";
             case GUARD -> "Ca Străjer poți face patrule și operațiuni de teren în limitele capacităților tale.";
-            case SERGENT -> "Ca Sergent primești atribuții extinse de coordonare și investigație, după regulile serverului.";
-            case INSPECTOR -> "Ca Inspector ai atribuții superioare de administrare operațională și revizuire.";
+            case LOCOTENENT -> "Ca Locotenent conduci operațiunile și supraveghiezi subalternii, după regulile serverului.";
+            case CAPITAN -> "Ca Căpitan ai atribuții superioare de administrare operațională și revizuire.";
+            case COLONEL -> "Ca Colonel ești vârful ierarhiei de teren sub Comisar.";
         };
     }
 

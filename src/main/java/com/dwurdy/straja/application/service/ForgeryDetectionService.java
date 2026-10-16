@@ -250,7 +250,7 @@ public final class ForgeryDetectionService {
         if (!players.isOnDutyGuard(officer)) return Expertise.NONE;
         var state = players.state(officer);
         if (state != null && (state.quizPassed
-                || state.rank >= com.dwurdy.straja.domain.model.Rank.SERGENT.level())) {
+                || state.rank >= com.dwurdy.straja.domain.model.Rank.LOCOTENENT.level())) {
             return Expertise.VETERAN;
         }
         return Expertise.JUNIOR;

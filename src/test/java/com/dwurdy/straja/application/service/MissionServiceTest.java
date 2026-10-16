@@ -38,7 +38,7 @@ class MissionServiceTest {
         lt = server.add("lt1");
         g1 = server.add("g1");
         g2 = server.add("g2");
-        setRank(lt, Rank.INSPECTOR);
+        setRank(lt, Rank.CAPITAN);
         setRank(g1, Rank.GUARD);
         setRank(g2, Rank.STAGIAR);
     }
@@ -90,7 +90,7 @@ class MissionServiceTest {
     @Test
     void createRejectsPeerTarget() {
         TestPlayer lt2 = server.add("lt2");
-        setRank(lt2, Rank.INSPECTOR);
+        setRank(lt2, Rank.CAPITAN);
         missions.createMission(lt, lt2, 30, "x", 10);
         assertTrue(lt.told("rang inferior"));
     }

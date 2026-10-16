@@ -297,7 +297,7 @@ class AdminServiceTest {
 
         admin.authorize(comisar, "worker1", "meserias");
 
-        assertEquals(com.dwurdy.straja.domain.model.CareerGrade.PROFESSIONAL_SPECIALIST,
+        assertEquals(com.dwurdy.straja.domain.model.CareerGrade.PROFESSIONAL_MESTER,
                 captured.get());
         assertTrue(comisar.told("autorizat la gradul"));
     }

@@ -25,9 +25,9 @@ import java.util.ArrayList;
 public final class BountyService {
     /** Bound-record reason marking a bounty escort (set at applyRope time). */
     public static final String BOUNTY_CAPTURE_REASON = "bounty_capture";
-    /** Minimum posting rank: Inspector. Comisar is above. */
+    /** Minimum posting rank: officer corps (Locotenent+). Comisar is above. */
     public static final int MIN_POSTER_RANK =
-            com.dwurdy.straja.domain.model.Rank.INSPECTOR.level();
+            com.dwurdy.straja.domain.model.Rank.LOCOTENENT.level();
 
     private final StrajaContext ctx;
     private final PlayerService players;

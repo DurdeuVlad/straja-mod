@@ -181,7 +181,7 @@ class NpcInteractionSurfaceTest {
     @Test
     void faqRootAddsMemberAndCommissionerBranchesOnlyWhenEligible() {
         var state = new com.dwurdy.straja.domain.model.GuardState();
-        state.rank = com.dwurdy.straja.domain.model.Rank.SERGENT.level();
+        state.rank = com.dwurdy.straja.domain.model.Rank.LOCOTENENT.level();
         var member = NpcFaqSurface.Context.from(state, false, "Sergent");
         var memberIds = NpcFaqSurface.root(NpcPlayerSurface.RoleRoute.SECRETARY, member)
                 .actions().stream().map(NpcPlayerSurface.ChatAction::actionId).toList();
@@ -252,7 +252,7 @@ class NpcInteractionSurfaceTest {
         contexts.add(NpcFaqSurface.Context.from(active, false, "Stagiar"));
 
         var commissioner = new com.dwurdy.straja.domain.model.GuardState();
-        commissioner.rank = com.dwurdy.straja.domain.model.Rank.INSPECTOR.level();
+        commissioner.rank = com.dwurdy.straja.domain.model.Rank.CAPITAN.level();
         contexts.add(NpcFaqSurface.Context.from(commissioner, true, "Inspector"));
 
         for (var context : contexts) {

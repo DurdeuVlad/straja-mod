@@ -188,7 +188,7 @@ public final class DutyEngine {
         if (state.fired) return Result.fail("fired");
         if (state.duty) return Result.fail("already_on_duty");
         if (state.suspended) return Result.fail("suspended");
-        int minRank = policies != null ? policies.freeDutyMinRank : Rank.SERGENT.level();
+        int minRank = policies != null ? policies.freeDutyMinRank : Rank.LOCOTENENT.level();
         if (!commissioner && state.rank < minRank) return Result.fail("free_duty_rank_required");
 
         state.duty = true;
@@ -445,9 +445,9 @@ public final class DutyEngine {
         if (commissioner) return true;
         if ("special_duty".equals(action) || "resume_special".equals(action)
                 || "complete_special".equals(action)) {
-            return actorRank == Rank.INSPECTOR.level()
+            return actorRank >= Rank.LOCOTENENT.level()
                     && !canon(targetName).equals(canon(actorName))
-                    && targetRank < Rank.INSPECTOR.level();
+                    && targetRank < actorRank;
         }
         return false;
     }

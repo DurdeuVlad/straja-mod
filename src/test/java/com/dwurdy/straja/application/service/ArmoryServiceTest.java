@@ -66,7 +66,7 @@ class ArmoryServiceTest {
         assertTrue(offers.stream().noneMatch(o -> o.key().equals("armor_diamond")),
                 "rank-4 stock is hidden from a Stagiar");
 
-        TestPlayer inspector = guardAtRank(Rank.INSPECTOR.level());
+        TestPlayer inspector = guardAtRank(Rank.CAPITAN.level());
         assertTrue(armory.offers(inspector).stream().anyMatch(o -> o.key().equals("armor_diamond")));
 
         TestPlayer civil = server.add("civil");

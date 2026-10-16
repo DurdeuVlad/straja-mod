@@ -1,0 +1,277 @@
+package com.dwurdy.straja;
+
+import com.dwurdy.straja.adapter.out.persistence.SavedStores;
+import com.dwurdy.straja.adapter.out.persistence.StoreAccess;
+import com.dwurdy.straja.application.service.AuthorizationService;
+import com.dwurdy.straja.application.service.PersonnelService;
+import com.dwurdy.straja.application.service.PromotionService;
+import com.dwurdy.straja.domain.model.AppointmentType;
+import com.dwurdy.straja.domain.model.AuthorizationContext;
+import com.dwurdy.straja.domain.model.CareerGrade;
+import com.dwurdy.straja.domain.model.CareerTrack;
+import com.dwurdy.straja.domain.model.EmploymentMode;
+import com.dwurdy.straja.domain.model.PersonnelRecord;
+import com.dwurdy.straja.domain.model.PromotionStatus;
+import com.dwurdy.straja.domain.model.Rank;
+import com.dwurdy.straja.support.Fakes;
+import com.dwurdy.straja.support.MemoryStore;
+import java.util.HashMap;
+import java.util.Map;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * Rank remodel (RANK-1): two part-time ladders — enlisted
+ * STAGIAR→STRAJER, trades ZILIER→MESTER — feeding a shared full-time
+ * officer corps LOCOTENENT→CAPITAN→COLONEL. Old enum names migrate on
+ * store read; approving an officer petition upgrades to FULL_TIME from
+ * either origin track.
+ */
+class CareerRemodelTest {
+    private final Map<String, MemoryStore> raw = new HashMap<>();
+    private final StoreAccess access = name -> raw.computeIfAbsent(name, ignored -> new MemoryStore());
+    private Fakes.FixedClock clock;
+    private Fakes.SeqIds ids;
+    private SavedStores.Personnel people;
+    private PersonnelService personnel;
+    private PromotionService promotions;
+
+    @BeforeEach
+    void setup() {
+        clock = new Fakes.FixedClock(1_000);
+        ids = new Fakes.SeqIds();
+        people = new SavedStores.Personnel(access);
+        personnel = new PersonnelService(people, clock, ids);
+        promotions = new PromotionService(new SavedStores.Promotions(access), people,
+                new AuthorizationService(people, clock), clock, ids);
+        personnel.authorize("bootstrap", "commissioner", CareerGrade.OFFICER_COLONEL,
+                EmploymentMode.FULL_TIME, "TEST", "hq", "auth:commissioner");
+        personnel.appoint("bootstrap", "commissioner", AppointmentType.COMMISSIONER, "hq", "", null);
+    }
+
+    private PersonnelRecord authorize(String subject, CareerGrade grade, EmploymentMode mode) {
+        return personnel.authorize("commissioner", subject, grade, mode,
+                "TEST", "hq", "auth:" + subject + ":" + grade);
+    }
+
+    private void petitionToReady(String subject, CareerGrade target) {
+        var application = promotions.submit(subject, target);
+        promotions.recordServerTrainingEvidence(application.applicationId, "instructor",
+                "PETITION", true, null, "petition:" + subject + ":" + target);
+        promotions.markReady(application.applicationId);
+    }
+
+    // ------------------------------------------------------------ migration
+
+    @Test
+    void legacyGradeNamesRemapOnPersonnelStoreRead() {
+        access.store("personnel").put("json",
+                "{\"schemaVersion\":1,\"storeRevision\":7,\"records\":{"
+                        + "\"s\":{\"playerUuid\":\"s\",\"membershipStatus\":\"AUTHORIZED_ACTIVE\","
+                        + "\"careerTrack\":\"MILITARY\",\"careerOrigin\":\"MILITARY\","
+                        + "\"careerGrade\":\"MILITARY_SERGENT\",\"employmentMode\":\"FULL_TIME\"},"
+                        + "\"i\":{\"playerUuid\":\"i\",\"membershipStatus\":\"AUTHORIZED_ACTIVE\","
+                        + "\"careerTrack\":\"MILITARY\",\"careerOrigin\":\"MILITARY\","
+                        + "\"careerGrade\":\"INSPECTOR\",\"employmentMode\":\"FULL_TIME\"},"
+                        + "\"z\":{\"playerUuid\":\"z\",\"membershipStatus\":\"AUTHORIZED_ACTIVE\","
+                        + "\"careerTrack\":\"PROFESSIONAL\",\"careerOrigin\":\"PROFESSIONAL\","
+                        + "\"careerGrade\":\"PROFESSIONAL_STAGIAR_SPECIALIST\",\"employmentMode\":\"PART_TIME\"},"
+                        + "\"m\":{\"playerUuid\":\"m\",\"membershipStatus\":\"AUTHORIZED_ACTIVE\","
+                        + "\"careerTrack\":\"PROFESSIONAL\",\"careerOrigin\":\"PROFESSIONAL\","
+                        + "\"careerGrade\":\"PROFESSIONAL_MAISTRU\",\"employmentMode\":\"FULL_TIME\"}"
+                        + "}}");
+
+        var store = people.read();
+        assertEquals(CareerGrade.OFFICER_LOCOTENENT, store.get("s").careerGrade);
+        assertEquals(CareerGrade.OFFICER_CAPITAN, store.get("i").careerGrade);
+        assertEquals(CareerGrade.PROFESSIONAL_ZILIER, store.get("z").careerGrade);
+        assertEquals(CareerGrade.PROFESSIONAL_MESTER, store.get("m").careerGrade);
+        // Track coherence: migrated records read back on their grade's
+        // track while origin keeps the entry path (military vs professional).
+        assertEquals(CareerTrack.OFFICER, store.get("s").careerTrack);
+        assertEquals(CareerTrack.PROFESSIONAL, store.get("z").careerTrack);
+        assertEquals(CareerTrack.PROFESSIONAL, store.get("m").careerTrack);
+        assertEquals(CareerTrack.PROFESSIONAL, store.get("m").careerOrigin);
+    }
+
+    @Test
+    void legacyGradeNamesRemapOnPromotionStoreRead() {
+        access.store("promotions").put("json",
+                "{\"applications\":{\"a1\":{\"applicationId\":\"a1\",\"subjectUuid\":\"s\","
+                        + "\"fromGrade\":\"PROFESSIONAL_SPECIALIST\",\"targetGrade\":\"PROFESSIONAL_MAISTRU\","
+                        + "\"status\":\"SUBMITTED\"}},\"evidence\":{}}");
+        var store = new SavedStores.Promotions(access).read();
+        assertEquals(CareerGrade.PROFESSIONAL_MESTER, store.applications.get("a1").fromGrade);
+        assertEquals(CareerGrade.PROFESSIONAL_MESTER, store.applications.get("a1").targetGrade);
+    }
+
+    @Test
+    void unknownGradeNameFailsClosedIntoCorruptBackup() {
+        access.store("personnel").put("json",
+                "{\"schemaVersion\":1,\"records\":{\"x\":{\"playerUuid\":\"x\","
+                        + "\"careerGrade\":\"TOTALLY_MADE_UP\"}}}");
+        var store = people.read();
+        assertTrue(store.records.isEmpty()); // fail-closed default, raw payload preserved
+        assertTrue(raw.get("personnel").raw().containsKey("corrupt_backup"));
+    }
+
+    @Test
+    void gradeParserAcceptsCurrentAndLegacyNames() {
+        assertEquals(CareerGrade.PROFESSIONAL_ZILIER, CareerGrade.of("PROFESSIONAL_ZILIER"));
+        assertEquals(CareerGrade.PROFESSIONAL_ZILIER, CareerGrade.of("PROFESSIONAL_STAGIAR_SPECIALIST"));
+        assertEquals(CareerGrade.OFFICER_LOCOTENENT, CareerGrade.of("MILITARY_SERGENT"));
+        assertNull(CareerGrade.of("CIVIL"));
+        assertNull(CareerGrade.of(null));
+    }
+
+    // ------------------------------------------------------------ ladder shape
+
+    @Test
+    void ladderShapeHoldsPartTimeEnlistedTradesAndFullTimeOfficers() {
+        assertEquals(7, CareerGrade.values().length);
+        assertEquals(6, Rank.values().length);
+        assertFalse(CareerGrade.MILITARY_STAGIAR.fullTimeRequired());
+        assertFalse(CareerGrade.MILITARY_STRAJER.fullTimeRequired());
+        assertFalse(CareerGrade.PROFESSIONAL_ZILIER.fullTimeRequired());
+        assertFalse(CareerGrade.PROFESSIONAL_MESTER.fullTimeRequired());
+        assertTrue(CareerGrade.PROFESSIONAL_ZILIER.isProfessional());
+        assertTrue(CareerGrade.PROFESSIONAL_MESTER.isProfessional());
+        for (var officer : new CareerGrade[]{CareerGrade.OFFICER_LOCOTENENT,
+                CareerGrade.OFFICER_CAPITAN, CareerGrade.OFFICER_COLONEL}) {
+            assertTrue(officer.fullTimeRequired());
+            assertTrue(officer.isOfficer());
+            assertFalse(officer.isProfessional());
+        }
+    }
+
+    @Test
+    void transitionMatrixFollowsTheTwoTrackLadder() {
+        authorize("stagiar", CareerGrade.MILITARY_STAGIAR, EmploymentMode.PART_TIME);
+        authorize("strajer", CareerGrade.MILITARY_STRAJER, EmploymentMode.PART_TIME);
+        authorize("zilier", CareerGrade.PROFESSIONAL_ZILIER, EmploymentMode.PART_TIME);
+        authorize("mester", CareerGrade.PROFESSIONAL_MESTER, EmploymentMode.PART_TIME);
+        authorize("lt", CareerGrade.OFFICER_LOCOTENENT, EmploymentMode.FULL_TIME);
+        authorize("cpt", CareerGrade.OFFICER_CAPITAN, EmploymentMode.FULL_TIME);
+
+        assertDoesNotThrow(() -> promotions.submit("stagiar", CareerGrade.MILITARY_STRAJER));
+        assertDoesNotThrow(() -> promotions.submit("strajer", CareerGrade.OFFICER_LOCOTENENT));
+        assertDoesNotThrow(() -> promotions.submit("zilier", CareerGrade.PROFESSIONAL_MESTER));
+        assertDoesNotThrow(() -> promotions.submit("mester", CareerGrade.OFFICER_LOCOTENENT));
+        assertDoesNotThrow(() -> promotions.submit("lt", CareerGrade.OFFICER_CAPITAN));
+        assertDoesNotThrow(() -> promotions.submit("cpt", CareerGrade.OFFICER_COLONEL));
+
+        // No skipping rungs, no cross-track enlisted hops, officers are terminal.
+        assertThrows(IllegalArgumentException.class,
+                () -> promotions.submit("stagiar", CareerGrade.OFFICER_LOCOTENENT));
+        assertThrows(IllegalArgumentException.class,
+                () -> promotions.submit("zilier", CareerGrade.MILITARY_STRAJER));
+        assertThrows(IllegalArgumentException.class,
+                () -> promotions.submit("mester", CareerGrade.PROFESSIONAL_ZILIER));
+        authorize("col", CareerGrade.OFFICER_COLONEL, EmploymentMode.FULL_TIME);
+        assertThrows(IllegalArgumentException.class,
+                () -> promotions.submit("col", CareerGrade.OFFICER_CAPITAN));
+    }
+
+    // ------------------------------------------------------------ approval
+
+    @Test
+    void officerApprovalUpgradesToFullTimeFromEitherOrigin() {
+        authorize("mil", CareerGrade.MILITARY_STRAJER, EmploymentMode.PART_TIME);
+        authorize("pro", CareerGrade.PROFESSIONAL_MESTER, EmploymentMode.PART_TIME);
+
+        petitionToReady("mil", CareerGrade.OFFICER_LOCOTENENT);
+        petitionToReady("pro", CareerGrade.OFFICER_LOCOTENENT);
+        var appMil = promotions.findOpen("mil", CareerGrade.OFFICER_LOCOTENENT);
+        var appPro = promotions.findOpen("pro", CareerGrade.OFFICER_LOCOTENENT);
+        promotions.approve("commissioner", appMil.applicationId, appMil.version);
+        promotions.approve("commissioner", appPro.applicationId, appPro.version);
+
+        var mil = personnel.find("mil");
+        var pro = personnel.find("pro");
+        assertEquals(CareerGrade.OFFICER_LOCOTENENT, mil.careerGrade);
+        assertEquals(CareerTrack.OFFICER, mil.careerTrack);
+        assertEquals(CareerTrack.MILITARY, mil.careerOrigin);
+        assertEquals(EmploymentMode.FULL_TIME, mil.employmentMode);
+        assertEquals(CareerGrade.OFFICER_LOCOTENENT, pro.careerGrade);
+        assertEquals(CareerTrack.PROFESSIONAL, pro.careerOrigin);
+        assertEquals(EmploymentMode.FULL_TIME, pro.employmentMode);
+        assertEquals(PromotionStatus.APPROVED,
+                promotions.find(appMil.applicationId).status);
+    }
+
+    @Test
+    void petitionerCannotApproveTheirOwnPromotion() {
+        authorize("self", CareerGrade.OFFICER_CAPITAN, EmploymentMode.FULL_TIME);
+        personnel.appoint("bootstrap", "self", AppointmentType.COMMISSIONER, "hq", "", null);
+        petitionToReady("self", CareerGrade.OFFICER_COLONEL);
+        var app = promotions.findOpen("self", CareerGrade.OFFICER_COLONEL);
+        assertThrows(IllegalStateException.class,
+                () -> promotions.approve("self", app.applicationId, app.version));
+    }
+
+    // ------------------------------------------------------------ authority
+
+    @Test
+    void everyOfficerGradeHoldsTheFullNonCommissionerCapabilitySet() {
+        authorize("lt", CareerGrade.OFFICER_LOCOTENENT, EmploymentMode.FULL_TIME);
+        authorize("cpt", CareerGrade.OFFICER_CAPITAN, EmploymentMode.FULL_TIME);
+        authorize("col2", CareerGrade.OFFICER_COLONEL, EmploymentMode.FULL_TIME);
+        var auth = new AuthorizationService(people, clock);
+        for (String officer : new String[]{"lt", "cpt", "col2"}) {
+            for (String cap : new String[]{"USE_CUFFS", "EXECUTE_ARRESTS", "ISSUE_FINES",
+                    "ROUTINE_PATROL", "INVESTIGATE_COMPLAINTS", "MOBILIZE_PLAYERS",
+                    "CREATE_MISSIONS", "APPROVE_REWARDS", "REVIEW_APPEALS", "VERIFY_REPORTS",
+                    "MOBILIZE_SPECIALISTS", "ISSUE_DOCUMENTS", "WAIVE_EQUIPMENT_DEBT",
+                    "MANAGE_CAMPAIGNS", "PROFESSIONAL_JOBS"}) {
+                assertTrue(auth.allowed(AuthorizationContext.of(officer, cap)),
+                        officer + " should hold " + cap);
+            }
+        }
+    }
+
+    @Test
+    void enlistedAndTradesKeepTheirReducedCaps() {
+        authorize("stagiar", CareerGrade.MILITARY_STAGIAR, EmploymentMode.PART_TIME);
+        authorize("strajer", CareerGrade.MILITARY_STRAJER, EmploymentMode.PART_TIME);
+        authorize("zilier", CareerGrade.PROFESSIONAL_ZILIER, EmploymentMode.PART_TIME);
+        authorize("mester", CareerGrade.PROFESSIONAL_MESTER, EmploymentMode.PART_TIME);
+        var auth = new AuthorizationService(people, clock);
+        assertFalse(auth.allowed(AuthorizationContext.of("stagiar", "USE_CUFFS")));
+        assertTrue(auth.allowed(AuthorizationContext.of("strajer", "USE_CUFFS")));
+        assertFalse(auth.allowed(AuthorizationContext.of("strajer", "CREATE_MISSIONS")));
+        assertTrue(auth.allowed(AuthorizationContext.of("zilier", "PROFESSIONAL_JOBS")));
+        assertTrue(auth.allowed(AuthorizationContext.of("mester", "PROFESSIONAL_JOBS")));
+        assertFalse(auth.allowed(AuthorizationContext.of("zilier", "ISSUE_FINES")));
+        // Trades patrol only inside an active mobilization scope — unchanged.
+        assertFalse(auth.allowed(AuthorizationContext.of("mester", "ROUTINE_PATROL")));
+    }
+
+    // ------------------------------------------------------------ surfaces
+
+    @Test
+    void legacyRoleNamesKeepCheckpointBansWorkingAfterMigration() {
+        assertTrue(CareerGrade.OFFICER_CAPITAN.legacyRoleNames().contains("INSPECTOR"));
+        assertTrue(CareerGrade.OFFICER_LOCOTENENT.legacyRoleNames().contains("MILITARY_SERGENT"));
+        assertTrue(CareerGrade.PROFESSIONAL_MESTER.legacyRoleNames().containsAll(
+                java.util.Set.of("PROFESSIONAL_SPECIALIST", "PROFESSIONAL_MAISTRU")));
+        assertTrue(CareerGrade.PROFESSIONAL_ZILIER.legacyRoleNames().contains("PROFESSIONAL_STAGIAR_SPECIALIST"));
+        assertTrue(CareerGrade.MILITARY_STRAJER.legacyRoleNames().isEmpty());
+        assertTrue(CareerGrade.OFFICER_COLONEL.legacyRoleNames().isEmpty());
+    }
+
+    @Test
+    void commissionerBootstrapsAsColonel() {
+        var record = personnel.ensureCommissioner("the-comisar");
+        assertEquals(CareerGrade.OFFICER_COLONEL, record.careerGrade);
+        assertEquals(CareerTrack.OFFICER, record.careerTrack);
+        assertEquals(EmploymentMode.FULL_TIME, record.employmentMode);
+    }
+
+    @Test
+    void tradesEnrollmentLandsOnZilier() {
+        var record = personnel.enrollProfessional("worker", "miner");
+        assertEquals(CareerGrade.PROFESSIONAL_ZILIER, record.careerGrade);
+        assertEquals(EmploymentMode.PART_TIME, record.employmentMode);
+    }
+}

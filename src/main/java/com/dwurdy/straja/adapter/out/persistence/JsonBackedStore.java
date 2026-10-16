@@ -2,7 +2,14 @@ package com.dwurdy.straja.adapter.out.persistence;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
+import com.google.gson.JsonPrimitive;
+import com.google.gson.JsonSerializationContext;
+import com.google.gson.JsonSerializer;
+import com.google.gson.JsonDeserializer;
+import com.google.gson.JsonDeserializationContext;
+import com.google.gson.JsonElement;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,7 +22,30 @@ import org.slf4j.LoggerFactory;
  */
 public abstract class JsonBackedStore {
     private static final Logger LOGGER = LoggerFactory.getLogger("Straja");
-    protected static final Gson GSON = new GsonBuilder().serializeNulls().create();
+    protected static final Gson GSON = new GsonBuilder().serializeNulls()
+            .registerTypeAdapter(com.dwurdy.straja.domain.model.CareerGrade.class, new CareerGradeJson())
+            .create();
+
+    /** CareerGrade renames must never reset a save: unknown-but-mappable
+     *  legacy names read forward; truly unknown names fail the parse so the
+     *  store fails closed into corrupt_backup instead of guessing. */
+    private static final class CareerGradeJson implements JsonSerializer<com.dwurdy.straja.domain.model.CareerGrade>,
+            JsonDeserializer<com.dwurdy.straja.domain.model.CareerGrade> {
+        @Override
+        public JsonElement serialize(com.dwurdy.straja.domain.model.CareerGrade value,
+                                     java.lang.reflect.Type type, JsonSerializationContext ctx) {
+            return new JsonPrimitive(value.name());
+        }
+        @Override
+        public com.dwurdy.straja.domain.model.CareerGrade deserialize(JsonElement element,
+                java.lang.reflect.Type type, JsonDeserializationContext ctx) throws JsonParseException {
+            com.dwurdy.straja.domain.model.CareerGrade grade =
+                    com.dwurdy.straja.domain.model.CareerGrade.of(element.getAsString());
+            if (grade == null)
+                throw new JsonParseException("unknown career grade: " + element.getAsString());
+            return grade;
+        }
+    }
 
     // NBT StringTags persist through DataOutput.writeUTF — hard-capped at
     // 65535 modified-UTF-8 bytes. Aggregate stores can legitimately exceed

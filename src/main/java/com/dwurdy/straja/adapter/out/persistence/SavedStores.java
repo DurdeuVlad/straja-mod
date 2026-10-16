@@ -226,7 +226,11 @@ public final class SavedStores {
 
     public static class Personnel extends JsonBackedStore implements PersonnelRepository {
         public Personnel(StoreAccess access) { super(access, "personnel"); }
-        @Override public PersonnelStore read() { return readJsonVersioned(PersonnelStore.class, PersonnelStore::new, PersonnelStore.CURRENT_SCHEMA_VERSION); }
+        @Override public PersonnelStore read() {
+            PersonnelStore store = readJsonVersioned(PersonnelStore.class, PersonnelStore::new, PersonnelStore.CURRENT_SCHEMA_VERSION);
+            store.normalize();
+            return store;
+        }
         @Override public void write(PersonnelStore store) { writeJson(store); }
     }
 

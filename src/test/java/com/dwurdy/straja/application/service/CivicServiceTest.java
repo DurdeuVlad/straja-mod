@@ -49,8 +49,8 @@ class CivicServiceTest {
         senior = server.add("senior1");
         guard = server.add("guard1");
         civ = server.add("civ1");
-        setRank(lt, Rank.INSPECTOR);
-        setRank(senior, Rank.SERGENT);
+        setRank(lt, Rank.CAPITAN);
+        setRank(senior, Rank.LOCOTENENT);
         setRank(guard, Rank.GUARD);
         setDuty(guard, true);
         setDuty(lt, true);

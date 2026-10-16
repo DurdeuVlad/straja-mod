@@ -88,20 +88,20 @@ public final class V2EndToEndGameTests {
         String actor = commissioner(runtime);
         String specialist = id("specialist-recruit");
         var record = authorize(runtime, actor, specialist,
-                CareerGrade.PROFESSIONAL_STAGIAR_SPECIALIST, EmploymentMode.PART_TIME,
+                CareerGrade.PROFESSIONAL_ZILIER, EmploymentMode.PART_TIME,
                 operation("specialist-recruit"));
-        if (record.careerGrade == CareerGrade.PROFESSIONAL_STAGIAR_SPECIALIST) {
+        if (record.careerGrade == CareerGrade.PROFESSIONAL_ZILIER) {
             runtime.v2Personnel().assignProfession(actor, specialist, "MINING");
             var application = runtime.v2Promotions().submit(specialist,
-                    CareerGrade.PROFESSIONAL_SPECIALIST);
+                    CareerGrade.PROFESSIONAL_MESTER);
             runtime.v2Promotions().recordCommissionerEvidence(application.applicationId, actor, "EXAM",
                     "PASS", 100d, "e2e:specialist-exam");
             var ready = runtime.v2Promotions().markReady(application.applicationId);
             runtime.v2Promotions().approve(actor, application.applicationId, ready.version);
         }
         helper.assertTrue(runtime.v2Personnel().find(specialist).careerGrade
-                        == CareerGrade.PROFESSIONAL_SPECIALIST,
-                "specialist recruitment must finish at the professional Specialist grade");
+                        == CareerGrade.PROFESSIONAL_MESTER,
+                "specialist recruitment must finish at the professional Mester grade");
         helper.succeed();
     }
 
@@ -111,9 +111,9 @@ public final class V2EndToEndGameTests {
         String actor = commissioner(runtime);
         String sergeant = id("mobilization-sergeant");
         String specialist = id("mobilization-specialist");
-        authorize(runtime, actor, sergeant, CareerGrade.MILITARY_SERGENT,
+        authorize(runtime, actor, sergeant, CareerGrade.OFFICER_LOCOTENENT,
                 EmploymentMode.FULL_TIME, operation("mobilization-sergeant"));
-        authorize(runtime, actor, specialist, CareerGrade.PROFESSIONAL_SPECIALIST,
+        authorize(runtime, actor, specialist, CareerGrade.PROFESSIONAL_MESTER,
                 EmploymentMode.FULL_TIME, operation("mobilization-specialist"));
         var order = runtime.v2Mobilizations().authorize(sergeant, specialist, "hq", "district",
                 60_000, "E2E-MISSION", "", "E2E");

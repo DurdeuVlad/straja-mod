@@ -296,7 +296,7 @@ public final class ProtocolService {
             }
             case GRANT_RANK -> {
                 var state = players.state(tester);
-                state.rank = Rank.INSPECTOR.level();
+                state.rank = Rank.COLONEL.level();
                 state.invited = true;
                 state.duty = true;
                 state.fired = false;

@@ -48,11 +48,11 @@ class V2FoundationTest {
 
     @Test
     void specialistIsAProfessionalCareerAndNotAThirdMilitaryRank() {
-        assertEquals(5, com.dwurdy.straja.domain.model.Rank.values().length);
-        assertTrue(CareerGrade.PROFESSIONAL_SPECIALIST.isProfessional());
-        assertFalse(CareerGrade.PROFESSIONAL_STAGIAR_SPECIALIST.fullTimeRequired());
-        assertTrue(CareerGrade.PROFESSIONAL_SPECIALIST.fullTimeRequired());
-        assertTrue(CareerGrade.PROFESSIONAL_MAISTRU.fullTimeRequired());
+        assertEquals(6, com.dwurdy.straja.domain.model.Rank.values().length);
+        assertTrue(CareerGrade.PROFESSIONAL_MESTER.isProfessional());
+        assertFalse(CareerGrade.PROFESSIONAL_ZILIER.fullTimeRequired());
+        assertFalse(CareerGrade.PROFESSIONAL_MESTER.fullTimeRequired());
+        assertTrue(CareerGrade.OFFICER_LOCOTENENT.fullTimeRequired());
     }
 
     @Test
@@ -87,7 +87,7 @@ class V2FoundationTest {
         var personnel = new PersonnelService(people, clock, ids);
         PersonnelRecord candidate = personnel.authorize("commissioner", "candidate", CareerGrade.MILITARY_STAGIAR,
                 EmploymentMode.PART_TIME, "TEST", "hq", "auth:candidate");
-        personnel.authorize("commissioner", "commissioner", CareerGrade.INSPECTOR,
+        personnel.authorize("commissioner", "commissioner", CareerGrade.OFFICER_CAPITAN,
                 EmploymentMode.FULL_TIME, "TEST", "hq", "auth:commissioner");
         personnel.appoint("system", "commissioner", AppointmentType.COMMISSIONER, "hq", "", null);
         var auth = new AuthorizationService(people, clock);
@@ -105,7 +105,7 @@ class V2FoundationTest {
     void personnelAuthorizationUsesTheCentralAppointmentGateWhenConfigured() {
         var people = new SavedStores.Personnel(access);
         var personnel = new PersonnelService(people, clock, ids);
-        personnel.authorize("bootstrap", "commissioner", CareerGrade.INSPECTOR,
+        personnel.authorize("bootstrap", "commissioner", CareerGrade.OFFICER_CAPITAN,
                 EmploymentMode.FULL_TIME, "TEST", "hq", "auth:commissioner");
         personnel.appoint("bootstrap", "commissioner", AppointmentType.COMMISSIONER, "hq", "", null);
         var policy = new AuthorizationService(people, clock);
@@ -163,7 +163,7 @@ class V2FoundationTest {
 
         var people = new SavedStores.Personnel(access);
         var personnel = new PersonnelService(people, clock, ids);
-        personnel.authorize("bootstrap", "commissioner", CareerGrade.INSPECTOR,
+        personnel.authorize("bootstrap", "commissioner", CareerGrade.OFFICER_CAPITAN,
                 EmploymentMode.FULL_TIME, "COMMISSIONER_BOOTSTRAP", "hq", "bootstrap:commissioner");
         var authorization = new AuthorizationService(people, clock);
         personnel.useAuthorization(authorization);
@@ -216,9 +216,9 @@ class V2FoundationTest {
     void specialistAuthorityExistsOnlyInsideActiveMobilizationScope() {
         var people = new SavedStores.Personnel(access);
         var personnel = new PersonnelService(people, clock, ids);
-        personnel.authorize("system", "sergeant", CareerGrade.MILITARY_SERGENT, EmploymentMode.FULL_TIME,
+        personnel.authorize("system", "sergeant", CareerGrade.OFFICER_LOCOTENENT, EmploymentMode.FULL_TIME,
                 "TEST", "hq", "auth:sergeant");
-        personnel.authorize("system", "specialist", CareerGrade.PROFESSIONAL_SPECIALIST, EmploymentMode.FULL_TIME,
+        personnel.authorize("system", "specialist", CareerGrade.PROFESSIONAL_MESTER, EmploymentMode.PART_TIME,
                 "TEST", "hq", "auth:specialist");
         var mobilizationRepository = new SavedStores.Mobilizations(access);
         var authorization = new AuthorizationService(people, null, mobilizationRepository, clock);
@@ -241,7 +241,7 @@ class V2FoundationTest {
     void typedMissionLifecycleCreatesOneSettlementEntitlement() {
         var people = new SavedStores.Personnel(access);
         var personnel = new PersonnelService(people, clock, ids);
-        personnel.authorize("system", "inspector", CareerGrade.INSPECTOR, EmploymentMode.FULL_TIME,
+        personnel.authorize("system", "inspector", CareerGrade.OFFICER_CAPITAN, EmploymentMode.FULL_TIME,
                 "TEST", "hq", "auth:inspector");
         personnel.authorize("system", "worker", CareerGrade.MILITARY_STRAJER, EmploymentMode.PART_TIME,
                 "TEST", "hq", "auth:worker");
@@ -322,7 +322,7 @@ class V2FoundationTest {
                 EmploymentMode.PART_TIME, "LEGACY_PROJECTION", "hq", "legacy:commissioner");
 
         var normalized = personnel.ensureCommissioner("commissioner");
-        assertEquals(CareerGrade.INSPECTOR, normalized.careerGrade);
+        assertEquals(CareerGrade.OFFICER_COLONEL, normalized.careerGrade);
         assertEquals(EmploymentMode.FULL_TIME, normalized.employmentMode);
         assertEquals(com.dwurdy.straja.domain.model.PersonnelStatus.AUTHORIZED_ACTIVE,
                 normalized.membershipStatus);
@@ -334,7 +334,7 @@ class V2FoundationTest {
     void callerSelectedProjectionSourceCannotBypassPersonnelAuthority() {
         var people = new SavedStores.Personnel(access);
         var personnel = new PersonnelService(people, clock, ids);
-        personnel.authorize("bootstrap", "commissioner", CareerGrade.INSPECTOR,
+        personnel.authorize("bootstrap", "commissioner", CareerGrade.OFFICER_CAPITAN,
                 EmploymentMode.FULL_TIME, "BOOTSTRAP", "hq", "bootstrap:commissioner");
         personnel.appointInternal("commissioner", AppointmentType.COMMISSIONER, "hq", "", null);
         personnel.useAuthorization(new AuthorizationService(people, clock));
@@ -350,7 +350,7 @@ class V2FoundationTest {
         var personnel = new PersonnelService(people, clock, ids);
         personnel.authorize("commissioner", "candidate", CareerGrade.MILITARY_STAGIAR,
                 EmploymentMode.PART_TIME, "TEST", "hq", "auth:candidate");
-        personnel.authorize("commissioner", "commissioner", CareerGrade.INSPECTOR,
+        personnel.authorize("commissioner", "commissioner", CareerGrade.OFFICER_CAPITAN,
                 EmploymentMode.FULL_TIME, "TEST", "hq", "auth:commissioner");
         personnel.appointInternal("commissioner", AppointmentType.COMMISSIONER, "hq", "", null);
         var promotions = new PromotionService(new SavedStores.Promotions(access), people,
@@ -428,7 +428,7 @@ class V2FoundationTest {
         var people = new SavedStores.Personnel(access);
         var personnel = new PersonnelService(people, clock, ids);
         var record = personnel.enrollProfessional("recruit", "miner");
-        assertEquals(CareerGrade.PROFESSIONAL_STAGIAR_SPECIALIST, record.careerGrade);
+        assertEquals(CareerGrade.PROFESSIONAL_ZILIER, record.careerGrade);
         assertEquals(com.dwurdy.straja.domain.model.CareerTrack.PROFESSIONAL, record.careerTrack);
         assertEquals(EmploymentMode.PART_TIME, record.employmentMode);
         assertEquals(com.dwurdy.straja.domain.model.PersonnelStatus.AUTHORIZED_ACTIVE,
@@ -449,7 +449,7 @@ class V2FoundationTest {
                 EmploymentMode.PART_TIME, "TEST", "hq", "auth:guard");
         assertThrows(IllegalStateException.class,
                 () -> personnel.enrollProfessional("guard", "MINER"));
-        personnel.authorize("commissioner", "worker", CareerGrade.PROFESSIONAL_STAGIAR_SPECIALIST,
+        personnel.authorize("commissioner", "worker", CareerGrade.PROFESSIONAL_ZILIER,
                 EmploymentMode.PART_TIME, "TEST", "hq", "auth:worker");
         personnel.suspend("commissioner", "worker", "TEST");
         assertThrows(IllegalStateException.class,
@@ -466,12 +466,13 @@ class V2FoundationTest {
     void rankNamesResolvePerTrackForDisplay() {
         var policies = new com.dwurdy.straja.domain.model.StrajaPolicies();
         assertEquals("Străjer", policies.rankName(CareerGrade.MILITARY_STRAJER));
-        assertEquals("Inspector", policies.rankName(CareerGrade.INSPECTOR));
-        assertEquals("Ziler", policies.rankName(CareerGrade.PROFESSIONAL_STAGIAR_SPECIALIST));
-        assertEquals("Meseriaș", policies.rankName(CareerGrade.PROFESSIONAL_SPECIALIST));
-        assertEquals("Maistru", policies.rankName(CareerGrade.PROFESSIONAL_MAISTRU));
+        assertEquals("Locotenent", policies.rankName(CareerGrade.OFFICER_LOCOTENENT));
+        assertEquals("Căpitan", policies.rankName(CareerGrade.OFFICER_CAPITAN));
+        assertEquals("Colonel", policies.rankName(CareerGrade.OFFICER_COLONEL));
+        assertEquals("Zilier", policies.rankName(CareerGrade.PROFESSIONAL_ZILIER));
+        assertEquals("Meșter", policies.rankName(CareerGrade.PROFESSIONAL_MESTER));
         policies.meseriasRankNames.put(1, "Zirist");
-        assertEquals("Zirist", policies.rankName(CareerGrade.PROFESSIONAL_STAGIAR_SPECIALIST));
+        assertEquals("Zirist", policies.rankName(CareerGrade.PROFESSIONAL_ZILIER));
     }
     @Test
     void tradesPromotionChainRequiresCommissionerApprovalAndUpgradesToFullTime() {
@@ -480,7 +481,7 @@ class V2FoundationTest {
         var promotions = new PromotionService(new SavedStores.Promotions(access), people,
                 new AuthorizationService(people, clock), clock, ids);
         // A commissioner record must exist for the APPROVE_PROMOTION gate.
-        personnel.authorize("bootstrap", "commissioner", CareerGrade.INSPECTOR,
+        personnel.authorize("bootstrap", "commissioner", CareerGrade.OFFICER_CAPITAN,
                 EmploymentMode.FULL_TIME, "TEST", "hq", "auth:commissioner");
         personnel.appoint("bootstrap", "commissioner", AppointmentType.COMMISSIONER, "hq", "", null);
         var ziler = personnel.enrollProfessional("worker", "MINER");
@@ -491,26 +492,29 @@ class V2FoundationTest {
                 () -> promotions.approve("commissioner", "missing", 0));
 
         // Player leaves a request; commissioner records review evidence, marks ready, approves.
-        var application = promotions.submit("worker", CareerGrade.PROFESSIONAL_SPECIALIST);
+        var application = promotions.submit("worker", CareerGrade.PROFESSIONAL_MESTER);
         promotions.recordCommissionerEvidence(application.applicationId, "commissioner",
                 "REVIEW", "PASS", null, "review:" + application.applicationId);
         promotions.markReady(application.applicationId);
-        promotions.approveOpen("commissioner", "worker", CareerGrade.PROFESSIONAL_SPECIALIST);
+        promotions.approveOpen("commissioner", "worker", CareerGrade.PROFESSIONAL_MESTER);
 
         var record = personnel.find("worker");
-        assertEquals(CareerGrade.PROFESSIONAL_SPECIALIST, record.careerGrade);
-        assertEquals(EmploymentMode.FULL_TIME, record.employmentMode);
+        assertEquals(CareerGrade.PROFESSIONAL_MESTER, record.careerGrade);
+        // Meșter stays part-time; only officer petitions confer full-time.
+        assertEquals(EmploymentMode.PART_TIME, record.employmentMode);
 
-        // Second step: Meseriaș → Maistru, same request-driven path.
-        var top = promotions.submit("worker", CareerGrade.PROFESSIONAL_MAISTRU);
+        // Second step: Meșter petitions into the officer corps — approval
+        // upgrades the member to full-time employment.
+        var top = promotions.submit("worker", CareerGrade.OFFICER_LOCOTENENT);
         promotions.recordCommissionerEvidence(top.applicationId, "commissioner",
                 "REVIEW", "PASS", null, "review:" + top.applicationId);
         promotions.markReady(top.applicationId);
-        promotions.approveOpen("commissioner", "worker", CareerGrade.PROFESSIONAL_MAISTRU);
-        assertEquals(CareerGrade.PROFESSIONAL_MAISTRU, personnel.find("worker").careerGrade);
+        promotions.approveOpen("commissioner", "worker", CareerGrade.OFFICER_LOCOTENENT);
+        assertEquals(CareerGrade.OFFICER_LOCOTENENT, personnel.find("worker").careerGrade);
+        assertEquals(EmploymentMode.FULL_TIME, personnel.find("worker").employmentMode);
 
-        // Maistru is the professional ceiling — no further trades transition.
+        // Officer ladder can't skip a rung — Locotenent can't jump to Colonel.
         assertThrows(IllegalArgumentException.class,
-                () -> promotions.submit("worker", CareerGrade.INSPECTOR));
+                () -> promotions.submit("worker", CareerGrade.OFFICER_COLONEL));
     }
 }

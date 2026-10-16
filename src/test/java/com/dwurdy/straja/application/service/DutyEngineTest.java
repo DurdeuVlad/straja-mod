@@ -185,7 +185,7 @@ class DutyEngineTest {
     @Test
     void patrolTimeCapIgnoresFreeDuty() {
         GuardState state = new GuardState();
-        state.rank = Rank.SERGENT.level();
+        state.rank = Rank.LOCOTENENT.level();
         assertTrue(DutyEngine.startFreeDuty(state, 0, POLICY, false).ok());
         DutyEngine.tickDuty(state,
                 (POLICY.patrolMaxMinutes + 5L) * DutyEngine.MINUTE_MS, 36, Map.of(), POLICY, null);
@@ -258,7 +258,7 @@ class DutyEngineTest {
     @Test
     void freeDutyAccruesSameHourlyWage() {
         GuardState state = new GuardState();
-        state.rank = Rank.SERGENT.level();
+        state.rank = Rank.LOCOTENENT.level();
         state.invited = true;
         var started = DutyEngine.startFreeDuty(state, 0, POLICY, false);
         assertTrue(started.ok());

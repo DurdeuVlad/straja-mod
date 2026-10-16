@@ -137,7 +137,9 @@ public final class PersonnelService implements com.dwurdy.straja.application.por
         record.membershipStatus = PersonnelStatus.AUTHORIZED_ACTIVE;
         record.careerTrack = grade.track();
         record.careerGrade = grade;
-        record.careerOrigin = grade == CareerGrade.INSPECTOR && record.careerOrigin != null
+        // Officer commissions keep the member's entry-track origin (mil/prof
+        // flavor follows them into the officer corps).
+        record.careerOrigin = grade.isOfficer() && record.careerOrigin != null
                 ? record.careerOrigin : grade.track();
         record.employmentMode = mode;
         record.authorizedAt = record.authorizedAt == 0 ? now : record.authorizedAt;
@@ -180,21 +182,21 @@ public final class PersonnelService implements com.dwurdy.straja.application.por
         if (store.records == null) store.records = new java.util.LinkedHashMap<>();
         PersonnelRecord record = store.records.get(subjectUuid);
         if (record == null) {
-            return authorizeInternal("bootstrap", subjectUuid, CareerGrade.INSPECTOR,
+            return authorizeInternal("bootstrap", subjectUuid, CareerGrade.OFFICER_COLONEL,
                     EmploymentMode.FULL_TIME, "COMMISSIONER_BOOTSTRAP", "hq",
                     "commissioner:" + subjectUuid);
         }
         long now = clock.nowMillis();
         boolean changed = record.membershipStatus != PersonnelStatus.AUTHORIZED_ACTIVE
-                || record.careerGrade != CareerGrade.INSPECTOR
-                || record.careerTrack != CareerTrack.MILITARY
+                || record.careerGrade != CareerGrade.OFFICER_COLONEL
+                || record.careerTrack != CareerTrack.OFFICER
                 || record.careerOrigin != CareerTrack.MILITARY
                 || record.employmentMode != EmploymentMode.FULL_TIME
                 || !"hq".equals(record.homeStationId);
         if (changed) {
             record.membershipStatus = PersonnelStatus.AUTHORIZED_ACTIVE;
-            record.careerTrack = CareerTrack.MILITARY;
-            record.careerGrade = CareerGrade.INSPECTOR;
+            record.careerTrack = CareerTrack.OFFICER;
+            record.careerGrade = CareerGrade.OFFICER_COLONEL;
             record.careerOrigin = CareerTrack.MILITARY;
             record.employmentMode = EmploymentMode.FULL_TIME;
             record.homeStationId = "hq";
@@ -349,7 +351,7 @@ public final class PersonnelService implements com.dwurdy.straja.application.por
             throw new IllegalStateException("TRADES_ENROLL_DENIED_" + existing.membershipStatus);
         }
         authorizeUnchecked(subjectUuid, subjectUuid,
-                CareerGrade.PROFESSIONAL_STAGIAR_SPECIALIST, EmploymentMode.PART_TIME,
+                CareerGrade.PROFESSIONAL_ZILIER, EmploymentMode.PART_TIME,
                 "TRADES_ENROLLMENT", "hq", "trades-enroll:" + subjectUuid);
         // authorizeUnchecked wrote its own store snapshot; repositories may
         // round-trip through serialization, so re-read and mutate the persisted
@@ -381,8 +383,9 @@ public final class PersonnelService implements com.dwurdy.straja.application.por
         CareerGrade grade = switch (Rank.of(legacy.rank)) {
             case STAGIAR -> CareerGrade.MILITARY_STAGIAR;
             case GUARD -> CareerGrade.MILITARY_STRAJER;
-            case SERGENT -> CareerGrade.MILITARY_SERGENT;
-            case INSPECTOR -> CareerGrade.INSPECTOR;
+            case LOCOTENENT -> CareerGrade.OFFICER_LOCOTENENT;
+            case CAPITAN -> CareerGrade.OFFICER_CAPITAN;
+            case COLONEL -> CareerGrade.OFFICER_COLONEL;
             default -> null;
         };
         if (grade == null || !"AUTHORIZED".equals(legacy.applicationState)) return find(playerUuid.toString());

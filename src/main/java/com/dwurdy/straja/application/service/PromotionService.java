@@ -169,14 +169,11 @@ public final class PromotionService implements com.dwurdy.straja.application.por
         context.beneficiaryUuid = application.subjectUuid;
         context.requiresIndependentApproval = true;
         if (!authorization.allowed(context)) throw new IllegalStateException("DENIED_APPROVAL");
-        if (application.targetGrade.fullTimeRequired()) {
-            // Military full-time grades require an existing full-time posting.
-            // Trades (Meseriași) grades carry their own contract: approval itself
-            // upgrades the member to full-time employment at reconcile time.
-            boolean employmentOk = application.targetGrade.isProfessional()
-                    || person.employmentMode == EmploymentMode.FULL_TIME;
-            if (!employmentOk || person.hasIncompatibleAffiliation(clock.nowMillis()))
-                throw new IllegalStateException("DENIED_AFFILIATION_CONFLICT");
+        if (application.targetGrade.fullTimeRequired()
+                && person.hasIncompatibleAffiliation(clock.nowMillis())) {
+            // Approving a full-time petition confers the full-time posting;
+            // an incompatible active affiliation is the only blocker.
+            throw new IllegalStateException("DENIED_AFFILIATION_CONFLICT");
         }
         application.status = PromotionStatus.APPROVED;
         application.reviewedBy = actorUuid;
@@ -246,7 +243,9 @@ public final class PromotionService implements com.dwurdy.straja.application.por
             person.careerGrade = application.targetGrade;
             person.careerTrack = application.targetGrade.track();
             person.careerOrigin = application.careerOrigin;
-            if (application.targetGrade.isProfessional() && application.targetGrade.fullTimeRequired())
+            // Any full-time petition (trades or officer corps) upgrades the
+            // member to full-time employment on approval.
+            if (application.targetGrade.fullTimeRequired())
                 person.employmentMode = EmploymentMode.FULL_TIME;
             person.membershipStatus = PersonnelStatus.AUTHORIZED_ACTIVE;
             person.version++;
@@ -337,15 +336,17 @@ public final class PromotionService implements com.dwurdy.straja.application.por
         return status == PromotionStatus.SUBMITTED || status == PromotionStatus.EVIDENCE_IN_PROGRESS
                 || status == PromotionStatus.READY_FOR_APPROVAL;
     }
+    /** Two part-time ladders feed the shared officer corps; officers climb
+     *  LT → CPT → COL. No skipped rungs, no cross-track enlisted hops. */
     private static boolean validTransition(CareerGrade from, CareerGrade target) {
         return switch (from) {
             case MILITARY_STAGIAR -> target == CareerGrade.MILITARY_STRAJER;
-            case MILITARY_STRAJER -> target == CareerGrade.MILITARY_SERGENT;
-            case MILITARY_SERGENT -> target == CareerGrade.INSPECTOR;
-            case PROFESSIONAL_STAGIAR_SPECIALIST -> target == CareerGrade.PROFESSIONAL_SPECIALIST;
-            case PROFESSIONAL_SPECIALIST -> target == CareerGrade.PROFESSIONAL_MAISTRU;
-            case PROFESSIONAL_MAISTRU -> false;
-            default -> false;
+            case MILITARY_STRAJER -> target == CareerGrade.OFFICER_LOCOTENENT;
+            case PROFESSIONAL_ZILIER -> target == CareerGrade.PROFESSIONAL_MESTER;
+            case PROFESSIONAL_MESTER -> target == CareerGrade.OFFICER_LOCOTENENT;
+            case OFFICER_LOCOTENENT -> target == CareerGrade.OFFICER_CAPITAN;
+            case OFFICER_CAPITAN -> target == CareerGrade.OFFICER_COLONEL;
+            case OFFICER_COLONEL -> false;
         };
     }
 }

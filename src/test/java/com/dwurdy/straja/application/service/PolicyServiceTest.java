@@ -127,7 +127,7 @@ class PolicyServiceTest {
     @Test
     void rankNamesRoundTripAndApply() {
         assertEquals("Stagiar", ctx.policies().rankName(1));
-        assertEquals("Inspector", ctx.policies().rankName(4));
+        assertEquals("Căpitan", ctx.policies().rankName(4));
         assertEquals("Civil", ctx.policies().rankName(0), "unlisted levels fall back to the enum name");
 
         TestPlayer c = commissioner();

@@ -751,7 +751,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
     private boolean promotableState(GuardState state) {
         return state.invited && !state.fired && !state.resigned && !state.suspended
                 && !state.resignationPending
-                && state.rank >= Rank.STAGIAR.level() && state.rank < Rank.INSPECTOR.level();
+                && state.rank >= Rank.STAGIAR.level() && state.rank < Rank.COLONEL.level();
     }
 
     private List<StrajaPolicies.QuizQuestion> pendingModules(GuardState state) {
@@ -833,8 +833,9 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         }
         var target = switch (Rank.of(state.rank + 1)) {
             case GUARD -> com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STRAJER;
-            case SERGENT -> com.dwurdy.straja.domain.model.CareerGrade.MILITARY_SERGENT;
-            case INSPECTOR -> com.dwurdy.straja.domain.model.CareerGrade.INSPECTOR;
+            case LOCOTENENT -> com.dwurdy.straja.domain.model.CareerGrade.OFFICER_LOCOTENENT;
+            case CAPITAN -> com.dwurdy.straja.domain.model.CareerGrade.OFFICER_CAPITAN;
+            case COLONEL -> com.dwurdy.straja.domain.model.CareerGrade.OFFICER_COLONEL;
             default -> null;
         };
         if (target == null) { player.refuse("straja.duty.no_promotion", "straja.remedy.instructor"); return; }
@@ -903,8 +904,9 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             v2PersonnelProjection.accept(target);
             var targetGrade = switch (Rank.of(players.state(target).rank + 1)) {
                 case GUARD -> com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STRAJER;
-                case SERGENT -> com.dwurdy.straja.domain.model.CareerGrade.MILITARY_SERGENT;
-                case INSPECTOR -> com.dwurdy.straja.domain.model.CareerGrade.INSPECTOR;
+                case LOCOTENENT -> com.dwurdy.straja.domain.model.CareerGrade.OFFICER_LOCOTENENT;
+                case CAPITAN -> com.dwurdy.straja.domain.model.CareerGrade.OFFICER_CAPITAN;
+                case COLONEL -> com.dwurdy.straja.domain.model.CareerGrade.OFFICER_COLONEL;
                 default -> null;
             };
             if (targetGrade == null) { actor.refuse("straja.duty.target_no_promotion", "straja.remedy.instructor"); return; }
@@ -922,7 +924,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             return;
         }
         GuardState state = players.state(target);
-        if (state.rank < Rank.STAGIAR.level() || state.rank >= Rank.INSPECTOR.level()
+        if (state.rank < Rank.STAGIAR.level() || state.rank >= Rank.COLONEL.level()
                 || state.suspended || state.resigned || state.fired || state.resignationPending) {
             actor.refuse("straja.duty.target_no_command", "straja.remedy.ask_comisar");
             return;
@@ -1017,7 +1019,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             actor.refuse("straja.common.player_offline", "straja.remedy.retry");
             return false;
         }
-        if (rank < Rank.STAGIAR.level() || rank > Rank.INSPECTOR.level()) {
+        if (rank < Rank.STAGIAR.level() || rank > Rank.COLONEL.level()) {
             actor.refuse("straja.duty.rank_invalid", "straja.remedy.fix_retry");
             return false;
         }
@@ -1429,7 +1431,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         }
         int candidate = state.formerRank != null && state.formerRank >= Rank.STAGIAR.level()
                 ? state.formerRank : Rank.STAGIAR.level();
-        int restored = Math.min(candidate, Rank.SERGENT.level());
+        int restored = Math.min(candidate, Rank.LOCOTENENT.level());
         state.rank = restored;
         state.resigned = false;
         state.resignedAt = null;

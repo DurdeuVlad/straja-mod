@@ -63,7 +63,7 @@ public final class NpcCareerSurfaceService {
         if (training.nextRank() != null && training.requiredBlocks() != null) {
             text.append(" Next rank: ").append(Rank.of(training.nextRank()).displayName())
                     .append(" after ").append(training.requiredBlocks()).append(" service blocks.");
-        } else if (state.rank >= Rank.STAGIAR.level() && state.rank < Rank.INSPECTOR.level()) {
+        } else if (state.rank >= Rank.STAGIAR.level() && state.rank < Rank.COLONEL.level()) {
             text.append(" The next advancement requires commissioner review.");
         } else if (state.rank < Rank.STAGIAR.level()) {
             text.append(" Complete admission before career progression becomes available.");
@@ -119,7 +119,7 @@ public final class NpcCareerSurfaceService {
     }
 
     private static NpcSurfaceSnapshot.QuestState careerQuestState(GuardState state) {
-        if (state.rank >= Rank.INSPECTOR.level()) return NpcSurfaceSnapshot.QuestState.COMPLETED;
+        if (state.rank >= Rank.COLONEL.level()) return NpcSurfaceSnapshot.QuestState.COMPLETED;
         if (careerEligible(state)) return NpcSurfaceSnapshot.QuestState.ACTIVE;
         if (state.invited || "APPLIED".equals(state.applicationState)) {
             return NpcSurfaceSnapshot.QuestState.AVAILABLE;

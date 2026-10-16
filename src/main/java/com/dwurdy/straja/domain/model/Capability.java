@@ -39,16 +39,17 @@ public enum Capability {
         MATRIX.put(Rank.GUARD, Set.of(
                 ISSUE_FINES, USE_CUFFS, USE_BATON, EXECUTE_ARRESTS, ASSIST_COMPLAINTS,
                 SELF_SERVICE_FORMS, ROUTINE_PATROL));
-        MATRIX.put(Rank.SERGENT, Set.of(
-                ISSUE_FINES, USE_CUFFS, USE_BATON, EXECUTE_ARRESTS, ASSIST_COMPLAINTS,
-                INVESTIGATE_COMPLAINTS, MOBILIZE_PLAYERS, SELF_SERVICE_FORMS, ROUTINE_PATROL,
-                VERIFY_REPORTS, MOBILIZE_SPECIALISTS, ISSUE_DOCUMENTS));
-        MATRIX.put(Rank.INSPECTOR, Set.of(
+        // Officer corps (Locotenent/Căpitan/Colonel) share the full
+        // non-comisar capability set — specialties are RP flavor only.
+        Set<Capability> officerCaps = Set.of(
                 ISSUE_FINES, USE_CUFFS, USE_BATON, EXECUTE_ARRESTS, ASSIST_COMPLAINTS,
                 INVESTIGATE_COMPLAINTS, MOBILIZE_PLAYERS, CREATE_MISSIONS,
                 APPROVE_REWARDS, REVIEW_APPEALS, SELF_SERVICE_FORMS, ROUTINE_PATROL,
                 VERIFY_REPORTS, MOBILIZE_SPECIALISTS, ISSUE_DOCUMENTS,
-                WAIVE_EQUIPMENT_DEBT, MANAGE_CAMPAIGNS));
+                WAIVE_EQUIPMENT_DEBT, MANAGE_CAMPAIGNS, PROFESSIONAL_JOBS);
+        MATRIX.put(Rank.LOCOTENENT, officerCaps);
+        MATRIX.put(Rank.CAPITAN, officerCaps);
+        MATRIX.put(Rank.COLONEL, officerCaps);
     }
 
     public static Set<Capability> of(Rank rank) {

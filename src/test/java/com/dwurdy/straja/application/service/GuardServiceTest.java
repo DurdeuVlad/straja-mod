@@ -631,7 +631,7 @@ class GuardServiceTest {
     void rejoinCapsAtSergent() {
         TestPlayer p = recruitToStagiar();
         var state = players.state(p.uuid());
-        state.rank = Rank.INSPECTOR.level();
+        state.rank = Rank.CAPITAN.level();
         players.save(p.uuid(), state);
         guards.resign(p, null);
         clock.advance(ctx.policies().resignationNoticeMinutes * 60_000L + 1);
@@ -639,7 +639,7 @@ class GuardServiceTest {
         clock.advance(ctx.policies().resignationCooldownDays * 24L * 3600_000L + 1);
         guards.rejoin(p);
         state = players.state(p.uuid());
-        assertEquals(Rank.SERGENT.level(), state.rank);
+        assertEquals(Rank.LOCOTENENT.level(), state.rank);
         assertFalse(state.resigned);
     }
 
@@ -674,7 +674,7 @@ class GuardServiceTest {
     void lieutenantHasElevatedPermissionButNotCommissioner() {
         TestPlayer lt = server.add("locotenent");
         var state = players.state(lt.uuid());
-        state.rank = Rank.INSPECTOR.level();
+        state.rank = Rank.CAPITAN.level();
         players.save(lt.uuid(), state);
         assertEquals(PermissionLevel.LIEUTENANT, players.permissionLevel(lt, players.state(lt.uuid())));
         assertFalse(players.isCommissioner(lt));
@@ -871,7 +871,7 @@ class GuardServiceTest {
     @Test
     void seniorStartsFreeDutyWithoutConfiguredCheckpoints() {
         // No checkpoints placed at all — patrol guards are blocked, seniors are not.
-        TestPlayer senior = guardAtRank(Rank.SERGENT.level());
+        TestPlayer senior = guardAtRank(Rank.LOCOTENENT.level());
         guards.startDuty(senior);
         var state = players.state(senior.uuid());
         assertTrue(state.duty, "senior must start a free shift without checkpoints");
@@ -898,7 +898,7 @@ class GuardServiceTest {
 
     @Test
     void freeDutyAccruesHourlyAndIgnoresAfkGate() {
-        TestPlayer senior = guardAtRank(Rank.SERGENT.level());
+        TestPlayer senior = guardAtRank(Rank.LOCOTENENT.level());
         guards.startDuty(senior);
         // One real hour — far beyond the 90s AFK grace, with zero movement.
         clock.advance(3600_000L);
@@ -906,14 +906,14 @@ class GuardServiceTest {
         var state = players.state(senior.uuid());
         assertTrue(state.duty);
         long bonus = ctx.policies().promotionBonusHours * ctx.policies().salaryPerHour(1);
-        assertEquals(ctx.policies().salaryPerHour(Rank.SERGENT.level()) + bonus,
+        assertEquals(ctx.policies().salaryPerHour(Rank.LOCOTENENT.level()) + bonus,
                 state.unpaidSalary, "one real hour of free duty pays the hourly wage");
         assertFalse(state.salaryActivityPaused, "trusted ranks never hit the AFK salary gate");
     }
 
     @Test
     void freeDutyEndsAtWill() {
-        TestPlayer senior = guardAtRank(Rank.SERGENT.level());
+        TestPlayer senior = guardAtRank(Rank.LOCOTENENT.level());
         guards.startDuty(senior);
         clock.advance(5 * 60_000L);
         guards.stopDuty(senior);
@@ -926,7 +926,7 @@ class GuardServiceTest {
 
     @Test
     void freeDutyIsNotCappedByThePatrolTimer() {
-        TestPlayer senior = guardAtRank(Rank.SERGENT.level());
+        TestPlayer senior = guardAtRank(Rank.LOCOTENENT.level());
         guards.startDuty(senior);
         var state = players.state(senior.uuid());
         state.dutyStartedAt =
@@ -1024,11 +1024,11 @@ class GuardServiceTest {
 
     @Test
     void trainerCannotPromoteToUnconfiguredRank() {
-        TestPlayer senior = guardAtRank(Rank.SERGENT.level());
-        passModulesUpTo(senior, Rank.SERGENT.level());
+        TestPlayer senior = guardAtRank(Rank.LOCOTENENT.level());
+        passModulesUpTo(senior, Rank.LOCOTENENT.level());
         setBlocks(senior, 9999);
         guards.requestPromotion(senior);
-        assertEquals(Rank.SERGENT.level(), players.state(senior.uuid()).rank,
+        assertEquals(Rank.LOCOTENENT.level(), players.state(senior.uuid()).rank,
                 "ranks without a configured threshold stay a commissioner decision");
         assertTrue(senior.told("decizia Comisarului"));
     }
@@ -1317,7 +1317,7 @@ class GuardServiceTest {
     @Test
     void freeDutyStopsAtWillAwayFromSecretary() {
         placeSecretary(0, 0, 0);
-        TestPlayer senior = guardAtRank(Rank.SERGENT.level());
+        TestPlayer senior = guardAtRank(Rank.LOCOTENENT.level());
         senior.x = 100; senior.z = 100;
         guards.startDuty(senior);
         assertEquals("FREE", players.state(senior.uuid()).mode);

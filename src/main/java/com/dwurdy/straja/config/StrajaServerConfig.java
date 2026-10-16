@@ -647,7 +647,7 @@ public final class StrajaServerConfig {
 
         B.push("bounty");
         BOUNTY_ENABLED = B.comment(
-                        "State-issued player bounties: Inspector+ posts a price on a",
+                        "State-issued player bounties: officer (Locotenent+) posts a",
                         "wanted player; any player may capture them with the criminal",
                         "restraint tools (rope, head sack) and deliver them to a",
                         "checkpoint for a full arrest and a state-paid reward.")
@@ -776,14 +776,15 @@ public final class StrajaServerConfig {
         B.push("salary");
         SALARY_PER_HOUR = B.comment(
                         "Hourly wage in Bronze coins, per rank (§10):",
-                        "Stagiar 16, Străjer 24, Sergent 36, Inspector 64 by default.",
+                        "Stagiar 16, Străjer 24, Locotenent 36, Căpitan 64,",
+                        "Colonel 96 by default.",
                         "Accrues continuously in granularitySeconds chunks.",
                         "Entries: \"rank=coinsPerHour\".")
                 .defineListAllowEmpty(List.of("perHour"),
                         StrajaPolicies.formatIntMap(defaults.salaryPerHour),
                         () -> "1=16", StrajaServerConfig::isIntMapEntry);
         SALARY_COMMISSIONER_PER_HOUR = B.comment(
-                        "Comisar hourly wage in Bronze (default 128 = 2× Inspector).")
+                        "Comisar hourly wage in Bronze (default 128 = 2× Căpitan).")
                 .defineInRange("commissionerPerHour", 128, 0, 100000);
         SALARY_GRANULARITY_SECONDS = B.comment(
                         "Accrual chunk size in seconds; sub-chunk duty time and",
@@ -804,7 +805,7 @@ public final class StrajaServerConfig {
 
         B.push("ranks");
         RANK_NAMES = B.comment(
-                        "Display names per rank level (1=Stagiar ... 4=Inspector).",
+                        "Display names per rank level (1=Stagiar ... 5=Colonel).",
                         "Entries: \"rank=nume\". The Comisar title is a separate",
                         "personnel flag, not a ladder step.")
                 .defineListAllowEmpty(List.of("names"),
@@ -812,11 +813,11 @@ public final class StrajaServerConfig {
                         () -> "1=Stagiar", StrajaServerConfig::isIntStringMapEntry);
         RANK_MESERIAS_NAMES = B.comment(
                         "Display names per trades (Meseriași) path level",
-                        "(1=Ziler freelance day-hand, 2=Meseriaș contracted",
+                        "(1=Zilier freelance day-hand, 2=Meșter contracted",
                         "tradesman). Entries: \"nivel=nume\".")
                 .defineListAllowEmpty(List.of("meseriasNames"),
                         StrajaPolicies.formatIntStringMap(defaults.meseriasRankNames),
-                        () -> "1=Ziler", StrajaServerConfig::isIntStringMapEntry);
+                        () -> "1=Zilier", StrajaServerConfig::isIntStringMapEntry);
         RANK_PREFIX_CHAT = B.comment(
                         "Show the [Rank] prefix on chat messages.")
                 .define("prefixChat", defaults.rankPrefixChat);
@@ -862,7 +863,8 @@ public final class StrajaServerConfig {
         FREE_DUTY_MIN_RANK = B.comment(
                         "Guards at or above this rank (and the commissioner) start and",
                         "end shifts at will — no patrol route or checkpoints required.")
-                .defineInRange("freeDutyMinRank", defaults.freeDutyMinRank, 1, 4);
+                .defineInRange("freeDutyMinRank", defaults.freeDutyMinRank, 1,
+                        com.dwurdy.straja.domain.model.Rank.COLONEL.level());
         SECRETARY_RADIUS_BLOCKS = B.comment(
                         "Normal (patrol) duty may only be started or stopped within this",
                         "many blocks of the configured secretary location.")

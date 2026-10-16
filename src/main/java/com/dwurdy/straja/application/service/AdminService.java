@@ -60,7 +60,7 @@ public class AdminService implements AdminRoleplayUseCase {
                 actions.add(new AvailableAction(Action.REINSTATE, uuid, name));
                 continue;
             }
-            if (state.rank < Rank.INSPECTOR.level()) {
+            if (state.rank < Rank.COLONEL.level()) {
                 actions.add(new AvailableAction(Action.PROMOTE, uuid, name));
             }
             if (state.rank > Rank.STAGIAR.level()) {
@@ -182,17 +182,16 @@ public class AdminService implements AdminRoleplayUseCase {
                 .replaceAll("\\p{M}", "")
                 .toUpperCase(java.util.Locale.ROOT)
                 .replace(' ', '_').replace('-', '_');
-        try {
-            return CareerGrade.valueOf(normalized);
-        } catch (IllegalArgumentException ignored) {
-        }
+        CareerGrade parsed = CareerGrade.of(normalized);
+        if (parsed != null) return parsed;
         return switch (normalized) {
             case "STAGIAR" -> CareerGrade.MILITARY_STAGIAR;
             case "STRAJER", "GENDARME", "JANDAR" -> CareerGrade.MILITARY_STRAJER;
-            case "SERGENT", "SERGEANT" -> CareerGrade.MILITARY_SERGENT;
-            case "ZILER", "DAYMAN" -> CareerGrade.PROFESSIONAL_STAGIAR_SPECIALIST;
-            case "MESERIAS", "TRADESMAN" -> CareerGrade.PROFESSIONAL_SPECIALIST;
-            case "MAISTRU", "MASTER" -> CareerGrade.PROFESSIONAL_MAISTRU;
+            case "ZILIER", "ZILER", "DAYMAN" -> CareerGrade.PROFESSIONAL_ZILIER;
+            case "MESTER", "MESERIAS", "TRADESMAN", "MAISTRU", "MASTER" -> CareerGrade.PROFESSIONAL_MESTER;
+            case "LOCOTENENT", "LIEUTENANT", "SERGENT", "SERGEANT" -> CareerGrade.OFFICER_LOCOTENENT;
+            case "CAPITAN", "CAPTAIN", "INSPECTOR" -> CareerGrade.OFFICER_CAPITAN;
+            case "COLONEL" -> CareerGrade.OFFICER_COLONEL;
             default -> null;
         };
     }
