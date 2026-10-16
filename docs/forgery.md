@@ -165,7 +165,7 @@ la nivel EXPERT indiferent de starea de serviciu.
 | Cine | Plafon | Ce prinde |
 |------|--------|-----------|
 | NPC junior / Străjer în serviciu | JUNIOR | claim-uri absurde de serie + falsuri cunoscute |
-| NPC veteran / Străjer cu quiz trecut (sau Sergent+) | VETERAN | + serii „aproape emise” (următoarele 9 deasupra alocării, inclusiv chiar următorul număr) |
+| NPC veteran / Străjer cu quiz trecut (sau ofițer) | VETERAN | + serii „aproape emise” (următoarele 9 deasupra alocării, inclusiv chiar următorul număr) |
 | NPC expert / Comisar | EXPERT | + conflicte de registru (serie reală, obiect/deținător greșit) |
 
 ## Ghidul de patrulă

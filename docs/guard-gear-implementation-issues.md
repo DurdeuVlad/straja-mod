@@ -243,7 +243,7 @@ Priority: P0 — the second half of the ask.
   tick at `dutyStartedAt + cap` ends the shift with
   `duty_ended(reason=patrol_time_cap)` — graceful end, salary accrued
   normally. Per-checkpoint `missionMinutes` deadlines still apply *within*
-  the cap; SPECIAL/FREE duty unaffected (Sergent+ at-will shifts keep no
+  the cap; SPECIAL/FREE duty unaffected (officer-grade at-will shifts keep no
   cap unless separately desired).
 - Interplay to spell out in code comments: cap vs. last-checkpoint wait —
   a guard in WAITING at the cap boundary ends cleanly rather than timing

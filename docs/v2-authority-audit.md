@@ -35,7 +35,7 @@ first event for that aggregate.
 Promotion approval persists an APPROVED/PENDING intent before updating the
 personnel projection. Startup reconciliation either completes the projection
 or records a durable CONFLICT without overwriting a newer personnel version.
-Configured commissioners are normalized to an active full-time Inspector
+Configured commissioners are normalized to an active full-time Colonel
 before appointment, including legacy lower-grade or part-time records.
 
 Physical payout is treated as a single atomic provider operation. A partial

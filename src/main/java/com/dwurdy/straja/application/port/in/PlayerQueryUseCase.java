@@ -40,7 +40,7 @@ public interface PlayerQueryUseCase {
     String setupHintFor(PlayerGateway player, SetupChecklist.Probes probes);
 
     /**
-     * §4 display composition: the bracketed rank prefix ("[Sergent]") for
+     * §4 display composition: the bracketed rank prefix ("[Căpitan]") for
      * chat/TAB/nameplate surfaces, or null for civilians and former members.
      * Uses the configured rank display names (#15); faction membership never
      * suppresses it while the member is authorized.

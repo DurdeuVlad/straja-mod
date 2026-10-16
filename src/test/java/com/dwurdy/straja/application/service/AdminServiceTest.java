@@ -33,6 +33,8 @@ class AdminServiceTest {
     private AdminService admin;
     private TestPlayer comisar;
     private TestPlayer member;
+    private com.dwurdy.straja.application.service.PersonnelService v2Personnel;
+    private com.dwurdy.straja.application.service.PromotionService v2Promotions;
 
     @BeforeEach
     void setUp() {
@@ -41,6 +43,27 @@ class AdminServiceTest {
         players = new PlayerService(ctx);
         AuditService audit = new AuditService(ctx);
         guards = new GuardService(ctx, players, audit, new EquipmentService(ctx));
+        // Petition promotions run on the V2 stack, wired like StrajaRuntime.
+        var v2Raw = new java.util.HashMap<String, com.dwurdy.straja.support.MemoryStore>();
+        com.dwurdy.straja.adapter.out.persistence.StoreAccess v2Access =
+                name -> v2Raw.computeIfAbsent(name,
+                        ignored -> new com.dwurdy.straja.support.MemoryStore());
+        var personnelRepo = new com.dwurdy.straja.adapter.out.persistence.SavedStores.Personnel(v2Access);
+        var clock = new FixedClock(1_000_000L);
+        v2Personnel = new com.dwurdy.straja.application.service.PersonnelService(
+                personnelRepo, clock, new Fakes.SeqIds());
+        v2Promotions = new com.dwurdy.straja.application.service.PromotionService(
+                new com.dwurdy.straja.adapter.out.persistence.SavedStores.Promotions(v2Access),
+                personnelRepo, new AuthorizationService(personnelRepo, clock), clock,
+                new Fakes.SeqIds());
+        guards.useV2Promotions(v2Promotions);
+        guards.useV2Personnel(v2Personnel);
+        guards.useV2PersonnelProjection(p -> {
+            try {
+                v2Personnel.projectLegacy(p.uuid(), players.state(p.uuid()), p.uuid().toString());
+            } catch (RuntimeException ignored) {}
+        });
+        players.useV2Authority(v2Personnel, new AuthorizationService(personnelRepo, clock));
         emergency = new EmergencyService(ctx, players, audit);
         policy = new PolicyService(ctx, players, audit, Fakes.policies(), new MemStore());
         admin = new AdminService(ctx, players, guards, policy, emergency);
@@ -48,6 +71,14 @@ class AdminServiceTest {
         member = server.add("guard1");
         setRank(member, 2);
         players.state(member); // stamps lastKnownName so the roster can name them
+        // The Comisar exists on the V2 stack too — approvals require the
+        // appointment, same as production.
+        v2Personnel.authorize("bootstrap", comisar.uuid().toString(),
+                com.dwurdy.straja.domain.model.CareerGrade.OFFICER_COLONEL,
+                com.dwurdy.straja.domain.model.EmploymentMode.FULL_TIME,
+                "TEST", "hq", "auth:comisar");
+        v2Personnel.appoint("bootstrap", comisar.uuid().toString(),
+                com.dwurdy.straja.domain.model.AppointmentType.COMMISSIONER, "hq", "", null);
     }
 
     private void setRank(TestPlayer player, int rank) {
@@ -160,24 +191,29 @@ class AdminServiceTest {
     // ---------------------------------------------------------------- mutations
 
     @Test
-    void promoteBumpsRankWhenServiceBlocksAreMet() {
-        var st = ctx.players().read(member.uuid());
-        st.serviceBlocks = 200;
-        ctx.players().write(member.uuid(), st);
+    void promoteApprovesFiledPetition() {
+        // The member filed a promotion petition; the admin action stamps it.
+        var memberState = players.state(member.uuid());
+        memberState.applicationState = "AUTHORIZED";
+        ctx.players().write(member.uuid(), memberState);
+        v2Personnel.projectLegacy(member.uuid(), memberState, member.uuid().toString());
+        v2Promotions.submitPetition(member.uuid().toString(),
+                com.dwurdy.straja.domain.model.CareerGrade.OFFICER_LOCOTENENT, "merit");
 
         admin.promote(comisar, member.uuid().toString());
 
-        assertEquals(3, ctx.players().read(member.uuid()).rank);
-        assertTrue(member.told("Promovare"));
+        assertEquals(3, players.state(member.uuid()).rank);
+        assertTrue(member.told("Promovarea ta a fost aprobată"));
         assertTrue(audited("promote"));
     }
 
     @Test
-    void promoteRefusesWhenServiceBlocksAreMissing() {
+    void promoteWithoutFiledPetitionIsRefused() {
         admin.promote(comisar, member.uuid().toString());
 
-        assertEquals(2, ctx.players().read(member.uuid()).rank);
-        assertTrue(comisar.told("blocuri de serviciu"));
+        assertEquals(2, players.state(member.uuid()).rank);
+        assertTrue(comisar.told("refuzată"),
+                "with no open petition the admin promote must refuse");
     }
 
     @Test

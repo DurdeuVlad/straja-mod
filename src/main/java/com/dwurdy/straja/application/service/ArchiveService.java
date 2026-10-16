@@ -433,7 +433,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
         sheet.updatedAt = now();
         ctx.archive().write(store);
         audit.record("archive_sheet_submit", player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), "SUCCESS", "pending_signature sheetId=" + sheet.id);
-        player.tell("Foaia " + sheet.id + " așteaptă semnătura Comisarului sau Inspectorului.");
+        player.tell("Foaia " + sheet.id + " așteaptă semnătura Comisarului sau a unui ofițer (Căpitan+).");
         return true;
     }
 

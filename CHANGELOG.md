@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+### Rank remodel + petition flows
+
+- Career ladder remodelled: enlisted **Stagiar → Străjer** (part-time,
+  auto-join), trades **Zilier → Meșter** (part-time, petition-join), officer
+  corps **Locotenent → Căpitan → Colonel** (full-time, petition-promote).
+  Comisar stays an appointment flag, not a ladder step.
+- **Persisted saves migrate on load**: legacy grade names (`SERGENT`,
+  `STAGIAR_SPECIALIST`, `SPECIALIST`, `MAISTRU`, `INSPECTOR`) remap to the
+  new enum; unknown values still fail closed into corrupt-backup. Checkpoint
+  `roleBans` keep matching migrated records via legacy role aliases.
+- All officer grades share the full non-Comisar capability set;
+  professional-origin officers keep the mobilization-gated patrol rule.
+- **Join quiz simplified**: fixed-order 6-question bank, pass at ≥5/6,
+  per-question feedback, cooldown + full retake on failure.
+- **Promotion petitions at the Secretary**: "Cere avansarea" files an
+  optional-reason petition straight to review — no evidence/readiness
+  stages. The Comisar reads each petition as a written book (with advisory
+  service stats) and stamps Aprobă/Respinge in a form bound to the
+  application version, so a stale review fails closed. Outcomes reach the
+  applicant live or on next login.
+- **Trades join petitions at the Receptionist**: choosing a profession
+  opens a work-petition form; the Comisar reviews at the Receptionist and
+  approval enrolls a part-time Zilier. Sworn members, suspended and fired
+  records cannot petition.
+- Admin `promote` now means "approve the member's filed petition"; the
+  legacy direct rank-bump path is removed.
+
 ## 0.4.0 — 2026-10-06
 
 The Papers-Please forgery epic (#245): a server-authoritative artifact

@@ -249,7 +249,7 @@ public final class ProtocolService {
                             "2. Achită: §l/straja debt pay <numele_tău> " + TESTER_FINE + "§r\n\n→ Monedele pleacă din inventar; amenda devine ACHITATĂ și primești chitanță.\n\n☑ Gata? §l/straja protocol next"}),
             new Chapter("Cariera", "Devii ofițer și intri în tură.", Hook.GRANT_RANK,
                     new String[]{
-                            "Protocolul ți-a acordat gradul de Inspector și te-a pus în serviciu (în producție: cerere la Recepționistă + examen).",
+                            "Protocolul ți-a acordat gradul de Colonel și te-a pus în serviciu (în producție: înscriere la Recepție + examen la Instructor).",
                             "1. Rulează §l/straja status§r.\n\n→ Rangul nou și tura activă apar pe card.\n\n2. Rulează §l/straja stop§r.\n\n→ Tura se încheie, cu mesaj de confirmare.",
                             "Capitolul următor te repune automat în tură — ofițerii acționează în serviciu.\n\n☑ Gata? §l/straja protocol next"}),
             new Chapter("Arestul", "Imobilizează și predă suspectul.", Hook.SPAWN_ACTOR,

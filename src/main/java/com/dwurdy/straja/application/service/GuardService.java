@@ -917,6 +917,8 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             if (targetGrade == null) { actor.refuse("straja.duty.target_no_promotion", "straja.remedy.instructor"); return; }
             try {
                 v2PromotionService.approveOpen(actor.uuid().toString(), target.uuid().toString(), targetGrade);
+                audit.record("promote", actor.name(), actor.uuid().toString(),
+                        target.name(), target.uuid().toString(), "SUCCESS", "grade=" + targetGrade);
                 actor.tell(target.name() + " a fost promovat prin fluxul V2.");
                 target.tell("Promovarea ta a fost aprobată de Comisar.");
             } catch (RuntimeException error) {
@@ -924,29 +926,11 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             }
             return;
         }
-        if (!players.isCommissioner(actor)) {
-            actor.refuse("straja.duty.promote_comisar", "straja.remedy.ask_comisar");
-            return;
-        }
-        GuardState state = players.state(target);
-        if (state.rank < Rank.STAGIAR.level() || state.rank >= Rank.COLONEL.level()
-                || state.suspended || state.resigned || state.fired || state.resignationPending) {
-            actor.refuse("straja.duty.target_no_command", "straja.remedy.ask_comisar");
-            return;
-        }
-        int nextRank = state.rank + 1;
-        int required = ctx.policies().promotionServiceBlocks.getOrDefault(nextRank, 0);
-        if (state.serviceBlocks < required) {
-            actor.refuse("straja.duty.blocks_short", "straja.remedy.duty", (required - state.serviceBlocks));
-            return;
-        }
-        state.rank = nextRank;
-        players.save(target.uuid(), state);
-        grantRankUp(target, state, nextRank);
-        audit.record("promote", actor.name(), actor.uuid().toString(),
-                target.name(), target.uuid().toString(), "SUCCESS", "rank=" + nextRank);
-        target.tell("Promovare: " + ctx.policies().rankName(nextRank) + ".");
-        actor.tell(target.name() + " a fost promovat la " + ctx.policies().rankName(nextRank) + ".");
+        // Without the V2 stack there is no legal promotion path left — the
+        // petition pipeline is the only way a rank moves up. (Production
+        // always wires it; this fallback only surfaces in unwired tests.)
+        actor.refuse("straja.duty.v2_promotion_refused", "straja.remedy.ask_comisar",
+                "fluxul V2 de promovare nu este activ");
     }
 
     public void demote(PlayerGateway actor, PlayerGateway target) {
@@ -1456,7 +1440,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
                 player.name(), player.uuid().toString(), "SUCCESS", "rejoined");
         roomAutoAssign.onPromotedToGuard(player);
         player.tell("Reîncadrare aprobată automat: " + ctx.policies().rankName(restored)
-                + ". Inspectorul revine cel mult ca Sergent.");
+                + ". Ofițerii revin cel mult ca Locotenent.");
     }
 
     // ------------------------------------------------------------ economy/equipment
@@ -1994,7 +1978,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         }
         if (state.resigned) {
             player.tell("Demisie semnată. Reîncadrarea este disponibilă " + prettyTime(state.rejoinAvailableAt)
-                    + ". Rang la revenire: maximum Sergent.");
+                    + ". Rang la revenire: maximum Locotenent.");
             return;
         }
         if (state.duty) {
@@ -2012,11 +1996,16 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
                 .sorted(java.util.Map.Entry.comparingByKey())
                 .map(java.util.Map.Entry::getValue)
                 .collect(java.util.stream.Collectors.joining(" → "))
+                + "; meseriași: " + ctx.policies().meseriasRankNames.entrySet().stream()
+                .sorted(java.util.Map.Entry.comparingByKey())
+                .map(java.util.Map.Entry::getValue)
+                .collect(java.util.stream.Collectors.joining(" → "))
                 + "; tu ești " + title + ".");
-        player.tell("Stagiar: amenzi standard, patrulă și rapoarte; fără baston, cătușe, arest sau ordine.");
-        player.tell("Străjer: poate folosi bastonul/cătușele și executa arestări după misiune sau mandat.");
-        player.tell("Sergent: preia plângeri, investighează și mobilizează Stagiari/Străjeri; nu emite misiuni plătite.");
-        player.tell("Inspectorul și Comisaru' declară misiuni plătite la secretară și aprobă recompensele.");
+        player.tell("Te înscrii la Recepție: soldat (examen de 6 întrebări la Instructor, minimum 5 corecte) "
+                + "sau meseriaș (depui cerere de muncă, o aprobă Comisarul).");
+        player.tell("Avansarea se depune la Secretară ca petiție cu motiv scris — Comisarul citește și aprobă sau respinge.");
+        player.tell("Ofițerii (Locotenent, Căpitan, Colonel) sunt cu normă întreagă și împart aceleași drepturi: "
+                + "misiuni, documente, plângeri, recompense. Comisarul numește și aprobă cererile.");
         player.tell("Patrulă: " + ctx.setup().read().checkpoints.size() + " checkpoint-uri; "
                 + ctx.policies().checkpointUnlockMinutes + " minute pauză între puncte; tura durează maximum "
                 + ctx.policies().patrolMaxMinutes + " minute reale.");
@@ -2024,7 +2013,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         player.tell("Echipamentul de rang este al tău definitiv; avansarea aduce kit nou + bonus de "
                 + ctx.policies().promotionBonusHours + "h salariu. Rezervele se iau de la Armurier cu puncte de rechiziție.");
         player.tell("Special Duty suspendă temporar checkpoint-urile și cere autorizare. Rapoartele merg la Comisaru'.");
-        player.tell("Semnarea demisiei se face la Comisaru'. Revenirea este posibilă după cooldown și este limitată la Sergent.");
+        player.tell("Semnarea demisiei se face la Comisaru'. Revenirea este posibilă după cooldown și este limitată la Locotenent.");
         var training = pendingModules(state);
         player.tell(!training.isEmpty()
                 ? "Instruire disponibilă: " + training.size() + " module. Vorbește cu Instructorul pentru următoarea întrebare."

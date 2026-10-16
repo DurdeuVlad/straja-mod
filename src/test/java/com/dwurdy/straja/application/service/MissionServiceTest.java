@@ -98,7 +98,7 @@ class MissionServiceTest {
     @Test
     void createRejectsGuardIssuer() {
         missions.createMission(g1, g2, 30, "x", 10);
-        assertTrue(g1.told("Inspectorul sau Comisaru"));
+        assertTrue(g1.told("ofițer sau Comisaru"));
     }
 
     @Test

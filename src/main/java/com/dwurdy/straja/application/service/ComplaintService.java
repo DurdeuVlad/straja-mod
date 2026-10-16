@@ -365,7 +365,8 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
         participant.invitedAt = now();
         complaint.participants.add(participant);
         ctx.complaints().write(data);
-        target.tell("Sergentul " + player.name() + " te-a mobilizat pentru dosarul " + complaint.id
+        target.tell(ctx.policies().rankName(players.state(player).rank) + " " + player.name()
+                + " te-a mobilizat pentru dosarul " + complaint.id
                 + ". Prezintă-te la secretară pentru confirmarea participării la acest dosar.");
         audit.record("complaint_mobilize", player.name(), player.uuid().toString(), target.name(), target.uuid().toString(), "SUCCESS", "invited complaintId=" + complaint.id);
         player.tell(target.name() + " a fost mobilizat pe dosarul " + complaint.id + ".");

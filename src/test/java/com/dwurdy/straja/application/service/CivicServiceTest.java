@@ -253,7 +253,7 @@ class CivicServiceTest {
     @Test
     void hearingWarrantRequiresAuthorityAndDedupes() {
         assertFalse(fines.issueHearingWarrant(guard, civ, "motiv"));      // guard rank too low
-        assertTrue(guard.told("Inspector"));
+        assertTrue(guard.told("ofițer"));
         assertTrue(fines.issueHearingWarrant(lt, civ, "motiv audiere"));  // active lt ok
         var task = ctx.fines().read().tasks.get(0);
         assertEquals("HEARING_WARRANT", task.kind);

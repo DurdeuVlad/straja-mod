@@ -31,10 +31,26 @@ clickabile în chat), **obiecte fizice** și **formulare native**.
    în chat; acțiunea pe care o cauți e prima din listă.
 2. Apasă **«Depune cererea»** — completezi formularul și-l trimiți.
 3. Cererea ta intră la Comisar. După acceptare (sau dacă ești invitat
-   direct), **prezintă-te la Instructor pentru examen** — un scurt quiz
-   despre regulament.
+   direct), **prezintă-te la Instructor pentru examen** — 6 întrebări despre
+   regulament, în ordine fixă; treci cu minimum 5 corecte. Greșești sub 5 →
+   iei pauză și reiei tot examenul.
 4. Treci examenul → devii **Stagiar** și începi cariera: serviciu la
    Secretară, patrule, avansare.
+
+## Cariera: două intrări, un corp de ofițeri
+
+- **Soldat (normă parțială):** Stagiar → Străjer — intri prin examen.
+- **Meseriaș (normă parțială):** Zilier → Meșter — la Recepție apeși
+  **«Meseriași — înscriere»**, alegi meseria și depui **cerere de muncă** cu
+  motiv; Comisarul o aprobă sau respinge tot la Recepție.
+- **Ofițer (normă întreagă):** Locotenent → Căpitan → Colonel — din Străjer
+  sau Meșter, prin cerere de avansare.
+
+**Orice avansare** se depune la **Secretară** («Cere avansarea», cu motiv
+scris). Comisarul citește cererea și o aprobă sau respinge — blocurile de
+serviciu și modulele de instruire sunt orientative, nu praguri. Ofițerii
+împart aceleași drepturi indiferent de grad; doar Comisarul numește și
+decide cereri.
 
 ## Dacă ești trimis la lagărul de muncă
 
@@ -72,7 +88,7 @@ O amendă neachitată nu dispare la arest — devine **datorie de deținut**:
 
 ## Recompense: vânat sau vânător
 
-Când Inspectorul sau Comisarul pune o recompensă pe un jucător, acel jucător
+Când un ofițer sau Comisarul pune o recompensă pe un jucător, acel jucător
 devine **vânat** — porțile cu arest îl prind din mers și orice jucător îl
 poate captura.
 

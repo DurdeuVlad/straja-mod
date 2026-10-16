@@ -7,8 +7,10 @@ It describes **what the system should do**, not how it must be coded. The implem
 The next validated expansion is specified separately in
 [`roleplay-career-bureaucracy-design.md`](roleplay-career-bureaucracy-design.md).
 That document records the proposed parallel Specialist path, multi-station
-administration, time-bounded campaigns, escalation, and Discord notifications;
-it is not yet part of the shipped runtime contract.
+administration, time-bounded campaigns, escalation, and Discord notifications.
+Note: the career ladder shipped differently — the professional track is
+Zilier → Meșter and the officer corps is Locotenent → Căpitan → Colonel
+(see §3); the design doc's Specialist/Sergent/Inspector names are historical.
 
 ## 1. Core principles
 
@@ -22,22 +24,26 @@ it is not yet part of the shipped runtime contract.
 
 ## 2. Rank hierarchy
 
-Current hierarchy, lowest to highest:
+Current hierarchy, lowest to highest — two part-time tracks feed one
+full-time officer corps:
 
-1. **Stagiar**
-2. **Străjer**
-3. **Sergent**
-4. **Inspector**
-5. **Comisar**
+- **Enlisted (part-time, auto-join by quiz):** Stagiar → Străjer
+- **Trades (part-time, petition-join):** Zilier → Meșter
+- **Officer corps (full-time, petition-promote):** Locotenent → Căpitan → Colonel
+- **Comisar** is an appointment flag on a full-time record, not a ladder step.
 
 Rules:
 
 - Rank represents authority/seniority, not a narrow profession.
-- Ranks 1–3 are field personnel: they patrol, respond to incidents and may use physical force/arrest mechanics as allowed by the rest of the mod.
-- `Investigator` is **not** a rank. It is a specialization/function.
-- Other independent functions may include Instructor, Recrutor, Investigator, patrol lead and administrative roles.
+- Enlisted and trades members are field personnel: they patrol, respond to
+  incidents and may use physical force/arrest mechanics as allowed by the
+  rest of the mod.
+- Every promotion above the join step is a petition the Comisar reads and
+  approves or denies — service blocks and training modules stay advisory.
+- All officer grades share the same broad non-Comisar authority; specialties
+  (Instructor, Investigator, patrol lead, administrative roles) are
+  role-play flavor carried on `professions`, not separate grades.
 - Rank display names should be configurable without invalidating saved data; implementations should use stable internal rank identities rather than the Romanian display string itself.
-- Inspector is directly below the Comisar in the current hierarchy.
 
 ## 3. Personnel authorization
 
@@ -65,8 +71,10 @@ Examples:
 
 - `[Stagiar] Nume`
 - `[Străjer] Nume`
-- `[Sergent] Nume`
-- `[Inspector] Nume`
+- `[Zilier] Nume`
+- `[Locotenent] Nume`
+- `[Căpitan] Nume`
+- `[Colonel] Nume`
 
 Exact surfaces such as chat, TAB and nameplate may be configurable.
 
@@ -174,11 +182,14 @@ Current default hourly rates for one real hour of qualifying, actually-played du
 
 - **Stagiar:** 16 Bronze/hour
 - **Străjer:** 24 Bronze/hour
-- **Sergent:** 36 Bronze/hour
-- **Inspector:** 64 Bronze/hour = 1 Brass/hour
+- **Locotenent:** 36 Bronze/hour
+- **Căpitan:** 64 Bronze/hour = 1 Brass/hour
+- **Colonel:** 96 Bronze/hour
 - **Comisar:** 128 Bronze/hour = 2 Brass/hour
 
-This is an accelerating progression. Comisar remains exactly **2× Inspector**.
+This is an accelerating progression across the enlisted-to-officer ladder.
+Trades members (Zilier/Meșter) are part-time and earn through professional
+work rather than the patrol wage ladder.
 
 Rules:
 
@@ -357,8 +368,8 @@ else is recorded as a civic event and remains reviewable by the Comisar.
 ## 16. Explicit non-goals / postponed decisions
 
 - Jailer/item-dependent custody expansion is postponed for now.
-- Current default hourly salaries are **16 / 24 / 36 / 64 / 128 Bronze** for Stagiar / Străjer / Sergent / Inspector / Comisar, while remaining configurable in-game.
-- Exact promotion thresholds/exams between ranks are not finalized.
+- Current default hourly salaries are **16 / 24 / 36 / 64 / 96 / 128 Bronze** for Stagiar / Străjer / Locotenent / Căpitan / Colonel / Comisar, while remaining configurable in-game.
+- Promotions are petition-based (request → Comisar approves/denies); no thresholds or exams above the join step.
 - Anti-AFK salary behavior is not finalized.
 - Exact default mission risk categories/multipliers are not finalized; the invariant is that risk **multiplies** the hours-based wage calculation.
 - Exact UI layout and technical persistence architecture are implementation choices as long as the gameplay invariants above are preserved.

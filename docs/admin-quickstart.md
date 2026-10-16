@@ -129,7 +129,7 @@ statutul de custodie rămâne adevărul autoritar.
 
 ### Recompense de stat (#231)
 
-Doar **Inspectorul și Comisarul** pot pune recompense pe jucători:
+Doar **ofițerii (Locotenent+) și Comisarul** pot pune recompense pe jucători:
 
 ```
 /straja bounty post <jucător> <sumă> [motiv]
@@ -203,8 +203,10 @@ jucători.**" e criteriul de ieșire.
 
 ## 5. Primul jucător
 
-Un jucător nou ajunge la Recepție → «Depune cererea» → examen la Instructor.
-Tu (Comisarul) vezi cererea în inbox și o aprobi. Detalii complete:
+Un jucător nou ajunge la Recepție → «Depune cererea» → examen la Instructor
+(6 întrebări fixe, trece cu ≥5). Meseriașii depun o **cerere de muncă** tot
+la Recepție — tu o aprobi sau respingi acolo. Avansările se cer la Secretară
+și le decizi citind fiecare cerere. Detalii complete:
 **[manualul de gardă](guard-manual.md)** · **[player quickstart](player-quickstart.md)**.
 
 ## 6. Predarea unui build unui tester
