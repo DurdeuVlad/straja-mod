@@ -12,6 +12,8 @@
   "item.straja.cuff_key": "Cheie cătușe",
   "item.straja.cuffs": "Cătușe",
   "item.straja.evidence_bag": "Geantă de dovezi",
+  "item.straja.lockpick": "Speraclă",
+  "item.straja.guard_uniform": "Uniformă de străjer",
   "item.straja.fine_book": "Carnet de amenzi",
   "item.straja.fine_notice": "Înștiințare de amendă",
   "item.straja.head_sack": "Sac de cap",
@@ -1000,6 +1002,15 @@
   "straja.cell.tamper_tier": "Panga deschide doar broaște slabe — celula asta cere clește de buloane.",
   "straja.cell.tamper_busy": "Cineva lucrează deja la acea broască.",
   "straja.cell.tamper_guard": "Un străjer e prea aproape — broasca nu poate fi forțată pe furiș.",
+  "straja.cell.jammed": "Broasca e blocată — are nevoie de timp sau de un meșter s-o deblocheze.",
+  "straja.escape.dig_guard": "Un străjer patrulează prea aproape — săpatul s-ar auzi.",
+  "straja.escape.bribe_not_jailed": "Doar un deținut în celulă poate oferi mită.",
+  "straja.escape.bribe_funds": "Mita costă %s bronz — n-ai destul.",
+  "straja.escape.bribe_none": "Niciun post coruptibil sau străjer la îndemână.",
+  "straja.escape.bribe_busy": "Străjerul acela cântărește deja o ofertă.",
+  "straja.escape.bribe_expired": "Nu există ofertă de mită în așteptare.",
+  "straja.escape.inspect_far": "Nicio ușă de celulă la distanță de inspecție.",
+  "straja.escape.bribe_no_cell": "Nu există o ușă de celulă de deschis pentru tine.",
   "straja.manhunt.calloff_rank": "Doar un ofițer sau Comisarul poate opri o vânătoare.",
   "straja.manhunt.inactive": "Vânătoarea aceea nu mai este activă.",
   "straja.help.player.cmd.manhunt": "oprește o vânătoare activă (ofițeri)",
@@ -1014,5 +1025,7 @@
   "straja.zone.radius_invalid": "Raza trebuie să fie între 4 și 512 blocuri.",
   "straja.zone.unknown": "Nu există zonă riscantă cu id %s.",
   "straja.remedy.dispatch": "Răspunde întâi apelului prin /straja dispatch accept.",
-  "straja.help.player.cmd.transfer": "transporturi deținuți: stare, înscriere, ridicare (membri)"
+  "straja.help.player.cmd.transfer": "transporturi deținuți: stare, înscriere, ridicare (membri)",
+  "straja.help.player.cmd.bribe": "oferă mită ca să ieși (deținuți)",
+  "straja.help.player.cmd.search": "inspectează celula apropiată: tuneluri, broaște, contrabandă (străjeri)"
 }

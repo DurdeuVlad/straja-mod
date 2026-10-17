@@ -72,6 +72,7 @@ public final class StrajaRuntime {
     private final com.dwurdy.straja.application.service.DispatchService dispatch;
     private final com.dwurdy.straja.application.service.ManhuntService manhunts;
     private final com.dwurdy.straja.application.service.TransferService transfers;
+    private final com.dwurdy.straja.application.service.EscapeService escapes;
     private final com.dwurdy.straja.application.service.BoloService bolos;
     private final com.dwurdy.straja.application.service.BountyService bounties;
     private final com.dwurdy.straja.application.service.ProtocolService protocol;
@@ -190,6 +191,7 @@ public final class StrajaRuntime {
                 new SavedStores.Dispatch(stores),
                 new SavedStores.Manhunts(stores),
                 new SavedStores.Transfers(stores),
+                new SavedStores.Escapes(stores),
                 new SavedStores.Bolos(stores),
                 new SavedStores.Bounties(stores),
                 new SavedStores.Evidence(stores),
@@ -410,6 +412,16 @@ public final class StrajaRuntime {
         this.dispatch.useTransfers(this.transfers);
         this.prison.useTransfers(this.transfers);
         this.custody.useTransferBreakGate(this.transfers::distanceBreakAllowed);
+        // FUN-9: escape paths — dig progress, pick jams, bribe posts and the
+        // blend cover all feed the same bounds→fugitive→manhunt funnel.
+        this.escapes = new com.dwurdy.straja.application.service.EscapeService(
+                ctx, players, audit);
+        this.escapes.usePrison(this.prison);
+        this.escapes.useCustody(this.custody);
+        this.escapes.useDispatch(this.dispatch);
+        this.escapes.useManhunts(this.manhunts);
+        this.escapes.useRolls(RollSource.system());
+        this.prison.useEscapes(this.escapes);
         this.evidence = new com.dwurdy.straja.application.service.EvidenceService(ctx, players, audit);
         this.arrestRecords = new com.dwurdy.straja.application.service.ArrestRecordService(ctx, players, audit);
         this.reputation = new com.dwurdy.straja.application.service.ReputationService(
@@ -652,6 +664,7 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.service.DispatchService dispatch() { return dispatch; }
     public com.dwurdy.straja.application.service.ManhuntService manhunts() { return manhunts; }
     public com.dwurdy.straja.application.service.TransferService transfers() { return transfers; }
+    public com.dwurdy.straja.application.service.EscapeService escapes() { return escapes; }
     public com.dwurdy.straja.application.service.BoloService bolos() { return bolos; }
 
     public com.dwurdy.straja.application.service.BountyService bounties() { return bounties; }

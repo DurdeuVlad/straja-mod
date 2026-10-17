@@ -22,6 +22,12 @@ public interface WorldGateway {
      */
     default void closeDoor(String dimension, int x, int y, int z) {}
 
+    /**
+     * Removes a block without drops (FUN-9: a finished tunnel turns to air —
+     * the dug block is consumed, not looted). No-op when unreadable.
+     */
+    default void removeBlock(String dimension, int x, int y, int z) {}
+
     record BlockInfo(String id, boolean air, boolean door, boolean solid) {
         public boolean traversable() {
             return !door && (air || !solid);

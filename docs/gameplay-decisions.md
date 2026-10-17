@@ -375,6 +375,43 @@ guard lethal force requires an active authoritative task, recent hostile damage
 and a target that is not restrained, downed or already in custody. Everything
 else is recorded as a civic event and remains reviewable by the Comisar.
 
+## 15b. Escape paths: dig, pick, bribe, blend (FUN-9)
+
+Custody has a decision space, not just a timer. Four escape path families
+exist inside cells, each a preparation the patrol can interrupt — nothing
+teleports a prisoner out.
+
+- **Dig** — swings on declared tunnel blocks (`escape.tunnelBlocks`, empty
+  list disables) inside the cell's padded bounds accumulate durable progress
+  in the escape store; a finished block turns to air. A patrolling guard
+  inside the detect radius interrupts the work.
+- **Pick** — `straja:lockpick` on a cell door starts a short channel
+  (`cellPickSeconds`). WEAK locks open; STANDARD/REINFORCED roll a jam
+  (`cellPickJamPercent`) that locks the door to all tools for
+  `cellJammedMinutes` and pings dispatch. A picked door opens for
+  `cellPickOpenMinutes`, shorter than a broken one.
+- **Bribe** — `/straja bribe` near a declared corruptible post
+  (`/straja post add|remove|list`) pays its price and opens the payer's cell
+  for `bribeDoorOpenSeconds`. With no post in reach, the offer goes to the
+  nearest on-duty player guard, who answers `accept`/`decline` inside
+  `bribeOfferMs` — accepting pays the guard and opens the door; declining
+  reports the attempt. A second guard witnessing the exchange raises a call.
+  Coins only move when a real cell door exists to unlock.
+- **Blend** — carrying `straja:guard_uniform` when the bounds check fires
+  buys `blendGraceSeconds` of cover; a real guard inside the detect radius
+  blows it (uniform confiscated, warrant + manhunt). Grace expiry or
+  detection both land on the existing fugitive/manhunt funnel. Slipping back
+  inside the cell before the grace ends dissolves the cover cleanly. Camp
+  custody gets no window — a camp breach is an immediate warrant.
+
+**Detection surface.** `/straja search` lets an on-duty member inspect the
+nearest cell: tunnel progress (finding one adds `tunnelFoundPenaltyMinutes`
+to the digger's sentence), jammed locks, and the occupant's contraband
+(`contrabandItems` — confiscated on the spot). Members placing a block over
+a dig site fill the tunnel for good; a prisoner covering their own hole only
+hides the block — the record stays findable. All detections reach the FUN-6
+board at ROUTINE/ENLISTED.
+
 ## 16. Explicit non-goals / postponed decisions
 
 - Jailer/item-dependent custody expansion is postponed for now.

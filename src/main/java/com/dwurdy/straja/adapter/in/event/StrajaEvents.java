@@ -73,6 +73,7 @@ public final class StrajaEvents {
         // FUN-6: unanswered calls widen through the band ladder or expire.
         runtime.dispatch().tick();
         runtime.transfers().tick();
+        runtime.escapes().tick();
         // FUN-7: hunts decay to warrants; hunters get fading hints.
         runtime.manhunts().tick();
         // FUN-4: unsigned reports past deadline auto-file from the ledger.
@@ -605,6 +606,15 @@ public final class StrajaEvents {
         if (runtime == null || event.getLevel().isClientSide()
                 || !(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) return;
         var gateway = new MinecraftPlayerGateway(player.getServer(), player.getUUID());
+        var pos = event.getPos();
+        String dimension = player.level().dimension().location().toString();
+        // FUN-9: a prisoner's swing on a tunnel block counts as dig work —
+        // jailed players are not "blocked" from interacting, only chained ones.
+        if (runtime.escapes().onDigSwing(gateway, dimension,
+                pos.getX(), pos.getY(), pos.getZ())) {
+            event.setCanceled(true);
+            return;
+        }
         if (runtime.custodyRoleplay().actionBlocked(gateway, "interact")) event.setCanceled(true);
     }
 
@@ -828,6 +838,8 @@ public final class StrajaEvents {
         }
         String placedId = net.minecraft.core.registries.BuiltInRegistries.BLOCK
                 .getKey(event.getPlacedBlock().getBlock()).toString();
+        // FUN-9: placing a block over a dig site fills the tunnel.
+        runtime.escapes().onBlockPlaced(gateway, dimension, pos.getX(), pos.getY(), pos.getZ());
         runtime.storage().onBlockPlaced(gateway, dimension, pos.getX(), pos.getY(), pos.getZ(), placedId);
     }
 

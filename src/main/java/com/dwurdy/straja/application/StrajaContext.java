@@ -40,6 +40,7 @@ public record StrajaContext(
         DispatchRepository dispatch,
         ManhuntRepository manhunts,
         TransferRepository transfers,
+        EscapeRepository escapes,
         BoloRepository bolos,
         BountyRepository bounties,
         EvidenceRepository evidence,

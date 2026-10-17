@@ -3,6 +3,7 @@ package com.dwurdy.straja.config;
 import com.dwurdy.straja.domain.model.StrajaPolicies;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.neoforge.common.ModConfigSpec;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -333,6 +334,22 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.IntValue TRANSFER_MAX_ESCORTS;
     public static final ModConfigSpec.DoubleValue TRANSFER_WALK_BLOCKS_PER_HOUR;
     public static final ModConfigSpec.DoubleValue TRANSFER_RISK_MULTIPLIER;
+    public static final ModConfigSpec.IntValue ESCAPE_DIG_CLICKS;
+    public static final ModConfigSpec.IntValue ESCAPE_DIG_COOLDOWN_MS;
+    public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> ESCAPE_TUNNEL_BLOCKS;
+    public static final ModConfigSpec.IntValue CELL_PICK_SECONDS;
+    public static final ModConfigSpec.IntValue CELL_PICK_JAM_PERCENT;
+    public static final ModConfigSpec.IntValue CELL_JAMMED_MINUTES;
+    public static final ModConfigSpec.IntValue CELL_PICK_OPEN_MINUTES;
+    public static final ModConfigSpec.IntValue BRIBE_POST_PRICE;
+    public static final ModConfigSpec.DoubleValue BRIBE_RADIUS;
+    public static final ModConfigSpec.IntValue BRIBE_DOOR_OPEN_SECONDS;
+    public static final ModConfigSpec.IntValue BRIBE_OFFER_MS;
+    public static final ModConfigSpec.IntValue BLEND_GRACE_SECONDS;
+    public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> CONTRABAND_ITEMS;
+    public static final ModConfigSpec.IntValue TUNNEL_FOUND_PENALTY_MINUTES;
+    public static final ModConfigSpec.DoubleValue INSPECTION_RADIUS;
+    public static final ModConfigSpec.IntValue ESCAPE_RETENTION_LIMIT;
     public static final ModConfigSpec.DoubleValue ESCORT_TETHER_RADIUS;
     public static final ModConfigSpec.DoubleValue ESCORT_GATE_BYPASS_RADIUS;
     public static final ModConfigSpec.DoubleValue ESCORT_TELEPORT_DISTANCE;
@@ -1253,6 +1270,70 @@ public final class StrajaServerConfig {
                 .defineInRange("riskMultiplier", defaults.transferRiskMultiplier, 0.1, 100.0);
         B.pop();
 
+        B.push("escape");
+        ESCAPE_DIG_CLICKS = B.comment(
+                        "Swings needed to dig one tunnel block inside a cell.")
+                .defineInRange("digClicks", defaults.escapeDigClicks, 1, 1000);
+        ESCAPE_DIG_COOLDOWN_MS = B.comment(
+                        "Minimum milliseconds between counted dig swings.")
+                .defineInRange("digCooldownMs", defaults.escapeDigCooldownMs, 0, 600000);
+        ESCAPE_TUNNEL_BLOCKS = B.comment(
+                        "Block ids a prisoner can dig through inside a cell.")
+                .defineListAllowEmpty(List.of("tunnelBlocks"),
+                        new ArrayList<>(defaults.escapeTunnelBlocks),
+                        () -> "minecraft:dirt", StrajaServerConfig::isNonBlankString);
+        CELL_PICK_SECONDS = B.comment(
+                        "Seconds the lockpick channel takes — faster than",
+                        "the heavy tools, but strong locks can jam on it.")
+                .defineInRange("cellPickSeconds", defaults.cellPickSeconds, 1, 600);
+        CELL_PICK_JAM_PERCENT = B.comment(
+                        "Percent chance a STANDARD lock jams on a completed pick.")
+                .defineInRange("cellPickJamPercent", defaults.cellPickJamPercent, 0, 100);
+        CELL_JAMMED_MINUTES = B.comment(
+                        "Minutes a jammed lock refuses all tamper attempts.")
+                .defineInRange("cellJammedMinutes", defaults.cellJammedMinutes, 1, 10080);
+        CELL_PICK_OPEN_MINUTES = B.comment(
+                        "Minutes a picked lock stays open — shorter than a",
+                        "broken lock, the quiet option costs endurance.")
+                .defineInRange("cellPickOpenMinutes", defaults.cellPickOpenMinutes, 1, 720);
+        BRIBE_POST_PRICE = B.comment(
+                        "Default bronze price a corruptible post charges to",
+                        "look away; posts can set their own.")
+                .defineInRange("bribePostPrice", defaults.bribePostPrice, 1, 100000);
+        BRIBE_RADIUS = B.comment(
+                        "Reach of a bribe offer to a player guard or a",
+                        "declared corruptible post.")
+                .defineInRange("bribeRadius", defaults.bribeRadius, 1.0, 64.0);
+        BRIBE_DOOR_OPEN_SECONDS = B.comment(
+                        "Seconds a bribed post or guard leaves the cell open.")
+                .defineInRange("bribeDoorOpenSeconds", defaults.bribeDoorOpenSeconds, 5, 3600);
+        BRIBE_OFFER_MS = B.comment(
+                        "Milliseconds a player-guard bribe offer stays pending.")
+                .defineInRange("bribeOfferMs", defaults.bribeOfferMs, 5000, 600000);
+        BLEND_GRACE_SECONDS = B.comment(
+                        "Seconds a uniformed walk-out stays unflagged before",
+                        "the alarm fires — real guards in radius blow it.")
+                .defineInRange("blendGraceSeconds", defaults.blendGraceSeconds, 5, 3600);
+        CONTRABAND_ITEMS = B.comment(
+                        "Item ids confiscated by cell inspection and on",
+                        "detection — lockpicks, heavy tools, the uniform.")
+                .defineListAllowEmpty(List.of("contrabandItems"),
+                        new ArrayList<>(defaults.contrabandItems),
+                        () -> "straja:lockpick", StrajaServerConfig::isNonBlankString);
+        TUNNEL_FOUND_PENALTY_MINUTES = B.comment(
+                        "Minutes added to the digger's sentence when an",
+                        "inspection or a fill finds their tunnel.")
+                .defineInRange("tunnelFoundPenaltyMinutes", defaults.tunnelFoundPenaltyMinutes, 0, 10080);
+        INSPECTION_RADIUS = B.comment(
+                        "Guard inspection reach — the cell door must be this",
+                        "close for /straja inspect to search it.")
+                .defineInRange("inspectionRadius", defaults.inspectionRadius, 1.0, 32.0);
+        ESCAPE_RETENTION_LIMIT = B.comment(
+                        "Bound on retained tunnel records; oldest discovered",
+                        "are pruned on the escape tick.")
+                .defineInRange("retentionLimit", defaults.escapeRetentionLimit, 10, 100000);
+        B.pop();
+
         B.push("audit");
         AUDIT_ENABLED = B.define("enabled", true);
         AUDIT_RETENTION_LIMIT = B.defineInRange("retentionLimit", 500, 10, 100000);
@@ -1624,6 +1705,22 @@ public final class StrajaServerConfig {
         p.manhuntHintBaseRadius = MANHUNT_HINT_BASE_RADIUS.get();
         p.manhuntHintGrowthPerMinute = MANHUNT_HINT_GROWTH_PER_MINUTE.get();
         p.manhuntRecapturePenaltyDays = MANHUNT_RECAPTURE_PENALTY_DAYS.get();
+        p.escapeDigClicks = ESCAPE_DIG_CLICKS.get();
+        p.escapeDigCooldownMs = ESCAPE_DIG_COOLDOWN_MS.get();
+        p.escapeTunnelBlocks = new ArrayList<>(ESCAPE_TUNNEL_BLOCKS.get());
+        p.cellPickSeconds = CELL_PICK_SECONDS.get();
+        p.cellPickJamPercent = CELL_PICK_JAM_PERCENT.get();
+        p.cellJammedMinutes = CELL_JAMMED_MINUTES.get();
+        p.cellPickOpenMinutes = CELL_PICK_OPEN_MINUTES.get();
+        p.bribePostPrice = BRIBE_POST_PRICE.get();
+        p.bribeRadius = BRIBE_RADIUS.get();
+        p.bribeDoorOpenSeconds = BRIBE_DOOR_OPEN_SECONDS.get();
+        p.bribeOfferMs = BRIBE_OFFER_MS.get();
+        p.blendGraceSeconds = BLEND_GRACE_SECONDS.get();
+        p.contrabandItems = new ArrayList<>(CONTRABAND_ITEMS.get());
+        p.tunnelFoundPenaltyMinutes = TUNNEL_FOUND_PENALTY_MINUTES.get();
+        p.inspectionRadius = INSPECTION_RADIUS.get();
+        p.escapeRetentionLimit = ESCAPE_RETENTION_LIMIT.get();
         p.transferRideEnabled = TRANSFER_RIDE_ENABLED.get();
         p.transferMinRideBlocks = TRANSFER_MIN_RIDE_BLOCKS.get();
         p.transferEscortWaitMinutes = TRANSFER_ESCORT_WAIT_MINUTES.get();
