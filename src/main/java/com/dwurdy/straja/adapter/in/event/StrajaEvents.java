@@ -70,6 +70,8 @@ public final class StrajaEvents {
         // configured cadence (delegation.sweepSeconds); the call itself is cheap.
         runtime.delegation().tick();
         if (runtime.serverGateway().tickCount() % 20 != 0) return;
+        // FUN-4: unsigned reports past deadline auto-file from the ledger.
+        runtime.reportService().autoFileSweep();
         runtime.v2Mobilizations().expireDue();
         runtime.v2Campaigns().expireDue();
         runtime.v2Missions().expireDue();

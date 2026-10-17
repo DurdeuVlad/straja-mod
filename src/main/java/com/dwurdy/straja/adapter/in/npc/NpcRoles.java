@@ -1308,14 +1308,25 @@ public final class NpcRoles {
             return true;
         }
         if (!(player instanceof ServerPlayer serverPlayer)) return true;
+        // FUN-4: the institution drafts the report from its ledgers; the
+        // member reviews the prefilled fields, adds a note, and signs.
+        var draft = runtime.reportRoleplay().draft(gw);
+        String activity = draft == null ? "" : draft.activity();
+        String missions = draft == null ? "" : draft.missions();
+        String incidents = draft == null ? "" : draft.incidents();
         FormSessionBridge.open(serverPlayer, new FormSessionUseCase.Request(
                 FormSessionUseCase.Action.REPORT_SUBMIT, "",
-                "Raport de activitate", "Completează raportul pentru perioada curentă.",
+                "Raport de activitate",
+                "Raportul a fost întocmit din registrul de activitate. Verifică-l și semnează.",
                 java.util.List.of(
-                        new FormSessionUseCase.Field(FormField.ACTIVITY, "Activitate", 2000, true),
-                        new FormSessionUseCase.Field(FormField.MISSIONS, "Misiuni", 2000, true),
-                        new FormSessionUseCase.Field(FormField.INCIDENTS, "Incidente", 2000, true),
-                        new FormSessionUseCase.Field(FormField.NOTES, "Note pentru Comisar", 1000, true))));
+                        new FormSessionUseCase.Field(FormField.ACTIVITY, "Activitate",
+                                2000, true, true, activity),
+                        new FormSessionUseCase.Field(FormField.MISSIONS, "Misiuni",
+                                2000, true, true, missions),
+                        new FormSessionUseCase.Field(FormField.INCIDENTS, "Incidente",
+                                2000, true, true, incidents),
+                        new FormSessionUseCase.Field(FormField.NOTES, "Note pentru Comisar",
+                                1000, true, false))));
         return true;
     }
 

@@ -580,6 +580,8 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.port.in.MissionRoleplayUseCase missionRoleplay() { return missions; }
     public com.dwurdy.straja.application.port.in.ComplaintRoleplayUseCase complaintRoleplay() { return complaints; }
     public com.dwurdy.straja.application.port.in.ReportUseCase reportRoleplay() { return reports; }
+    /** FUN-4 sweep access for the auto-file path (headless; not the player surface). */
+    public com.dwurdy.straja.application.service.ReportService reportService() { return reports; }
     public com.dwurdy.straja.application.port.in.AudienceUseCase audienceRoleplay() { return audiences; }
     public com.dwurdy.straja.application.port.in.EmergencyUseCase emergencyRoleplay() { return emergency; }
     public com.dwurdy.straja.application.port.in.AdminRoleplayUseCase adminRoleplay() { return admin; }

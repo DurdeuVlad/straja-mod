@@ -15,6 +15,8 @@ public class ActivityReportStore {
     public Map<String, ActivityReport> reports = new HashMap<>();
     /** member uuid -> anchor millis; a fresh interval starts at each filing. */
     public Map<String, Long> anchors = new HashMap<>();
+    /** member uuid -> serviceBlocks snapshot at interval start, for window deltas. */
+    public Map<String, Long> blockSnapshots = new HashMap<>();
     public int nextId = 1;
 
     /** Most recently submitted report by this member, or null. */

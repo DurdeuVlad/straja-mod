@@ -14,8 +14,23 @@ public interface ReportUseCase {
 
     record AvailableAction(Action action, String reportId) {}
 
+    /**
+     * The institution-drafted content for the member's current reporting
+     * window — assembled from recorded duty, mission, incident, arrest, and
+     * fine ledgers. Empty windows produce an honest empty draft.
+     */
+    record ReportDraft(String activity, String missions, String incidents,
+                       long windowStart, long windowEnd) {}
+
     /** Read-only projection of the report actions currently available to the player. */
     List<AvailableAction> availableActions(PlayerGateway player);
+
+    /**
+     * Drafts the member's report from the activity ledger. Stamps the
+     * member's reporting anchor and block snapshot on first contact, like
+     * {@link #submit}'s interval bookkeeping.
+     */
+    ReportDraft draft(PlayerGateway player);
 
     /**
      * Files (or re-files a RETURNED report) for the current interval.

@@ -304,6 +304,9 @@ public class StrajaPolicies {
     // reports optionally block duty start at the Secretary.
     public int reportIntervalDays = 7;
     public boolean reportBlockDutyWhenOverdue = false;
+    /** FUN-4: the institution files a ledger-drafted AUTO_FILED report for
+     *  members whose reporting deadline passed unsigned. */
+    public boolean reportsAutoFileOverdue = true;
     // §12: Comisar notifications for new audience requests are coalesced —
     // at most one tell per cooldown window regardless of request count.
     public int audienceNotifyCooldownSeconds = 60;
