@@ -29,8 +29,8 @@ public final class OperationRecoveryService {
         if (idempotencyKey == null || idempotencyKey.isBlank())
             throw new IllegalArgumentException("idempotency key is required");
         OperationStore store = repository.read();
-        if (store.idempotencyIndex == null) store.idempotencyIndex = new java.util.LinkedHashMap<>();
-        if (store.operations == null) store.operations = new java.util.LinkedHashMap<>();
+        store.ensureIdempotencyIndex();
+        store.ensureOperations();
         String existingId = store.idempotencyIndex.get(idempotencyKey);
         if (existingId != null && store.operations.get(existingId) != null) {
             OperationRecord existing = store.operations.get(existingId);
@@ -90,14 +90,13 @@ public final class OperationRecoveryService {
     public synchronized OperationRecord findByIdempotencyKey(String key) {
         OperationStore store = repository.read();
         String id = store.idempotencyIndex == null ? null : store.idempotencyIndex.get(key);
-        return id == null || store.operations == null ? null : store.operations.get(id);
+        return id == null ? null : store.ensureOperations().get(id);
     }
 
     public synchronized List<OperationRecord> pendingFor(String subjectUuid) {
         List<OperationRecord> result = new ArrayList<>();
         OperationStore store = repository.read();
-        if (store.operations == null) return result;
-        for (OperationRecord operation : store.operations.values()) {
+        for (OperationRecord operation : store.ensureOperations().values()) {
             if (operation == null) continue;
             boolean pending = operation.status != OperationRecord.OperationStatus.COMPLETED
                     && operation.status != OperationRecord.OperationStatus.ABORTED;

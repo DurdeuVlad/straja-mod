@@ -7,4 +7,10 @@ import java.util.Map;
 public class IdentityCardStore {
     public int nextCardNumber = 1;
     public Map<String, IdentityCard> cards = new LinkedHashMap<>();
+    /** Lazily re-creates {@code cards} after a corrupt or partial read. */
+    public Map<String, IdentityCard> ensureCards() {
+        if (cards == null) cards = new LinkedHashMap<>();
+        return cards;
+    }
+
 }

@@ -9,4 +9,16 @@ public class OperationStore {
     public long storeRevision;
     public Map<String, OperationRecord> operations = new LinkedHashMap<>();
     public Map<String, String> idempotencyIndex = new LinkedHashMap<>();
+    /** Lazily re-creates {@code operations} after a corrupt or partial read. */
+    public Map<String, OperationRecord> ensureOperations() {
+        if (operations == null) operations = new LinkedHashMap<>();
+        return operations;
+    }
+
+    /** Lazily re-creates {@code idempotencyIndex} after a corrupt or partial read. */
+    public Map<String, String> ensureIdempotencyIndex() {
+        if (idempotencyIndex == null) idempotencyIndex = new LinkedHashMap<>();
+        return idempotencyIndex;
+    }
+
 }

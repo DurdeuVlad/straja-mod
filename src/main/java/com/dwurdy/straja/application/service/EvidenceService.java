@@ -40,8 +40,8 @@ public final class EvidenceService {
 
     private EvidenceStore store() {
         EvidenceStore store = ctx.evidence().read();
-        if (store.records == null) store.records = new LinkedHashMap<>();
-        if (store.pendingDeliveries == null) store.pendingDeliveries = new LinkedHashMap<>();
+        store.ensureRecords();
+        store.ensurePendingDeliveries();
         for (EvidenceRecord record : store.records.values()) {
             if (record == null) continue;
             if (record.itemData == null) record.itemData = new LinkedHashMap<>();
@@ -429,9 +429,8 @@ public final class EvidenceService {
     /** Links a newly seized item into the existing formal case when one exists. */
     private void linkCase(EvidenceRecord evidence) {
         var data = ctx.arrestRecords().read();
-        if (data.records == null) return;
         ArrestRecord candidate = null;
-        for (ArrestRecord record : data.records) {
+        for (ArrestRecord record : data.ensureRecords()) {
             if (record == null || !evidence.sourcePlayerUuid.equals(record.detaineeUuid)) continue;
             if (!evidence.incidentId.isBlank() && evidence.incidentId.equals(record.incidentId)) {
                 candidate = record;

@@ -35,4 +35,16 @@ public class BountyStore {
         }
         return null;
     }
+    /** Lazily re-creates {@code records} after a corrupt or partial read. */
+    public List<BountyRecord> ensureRecords() {
+        if (records == null) records = new ArrayList<>();
+        return records;
+    }
+
+    /** Lazily re-creates {@code surrenders} after a corrupt or partial read. */
+    public Map<String, Long> ensureSurrenders() {
+        if (surrenders == null) surrenders = new LinkedHashMap<>();
+        return surrenders;
+    }
+
 }

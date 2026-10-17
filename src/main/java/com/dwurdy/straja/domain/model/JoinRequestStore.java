@@ -8,4 +8,10 @@ public class JoinRequestStore {
     public int schemaVersion = CURRENT_SCHEMA_VERSION;
     public long storeRevision;
     public Map<String, JoinRequest> requests = new LinkedHashMap<>();
+    /** Lazily re-creates {@code requests} after a corrupt or partial read. */
+    public Map<String, JoinRequest> ensureRequests() {
+        if (requests == null) requests = new LinkedHashMap<>();
+        return requests;
+    }
+
 }

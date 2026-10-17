@@ -57,7 +57,7 @@ public final class JoinRequestService implements com.dwurdy.straja.application.p
         String normalizedReason = Text.bounded(reason, Text.REASON_LIMIT);
 
         JoinRequestStore store = requests.read();
-        if (store.requests == null) store.requests = new java.util.LinkedHashMap<>();
+        store.ensureRequests();
         JoinRequest open = null;
         for (JoinRequest request : store.requests.values()) {
             if (request != null && subjectUuid.equals(request.subjectUuid)
@@ -101,8 +101,7 @@ public final class JoinRequestService implements com.dwurdy.straja.application.p
     @Override
     public synchronized java.util.List<JoinRequest> pending() {
         JoinRequestStore store = requests.read();
-        if (store.requests == null) return java.util.List.of();
-        return store.requests.values().stream()
+        return store.ensureRequests().values().stream()
                 .filter(request -> request != null && request.status == JoinRequestStatus.PENDING)
                 .sorted(java.util.Comparator.comparingLong(request -> request.submittedAt))
                 .toList();
@@ -111,14 +110,13 @@ public final class JoinRequestService implements com.dwurdy.straja.application.p
     @Override
     public synchronized JoinRequest find(String requestId) {
         JoinRequestStore store = requests.read();
-        return store.requests == null ? null : store.requests.get(requestId);
+        return store.ensureRequests().get(requestId);
     }
 
     @Override
     public synchronized JoinRequest findOpen(String subjectUuid) {
         JoinRequestStore store = requests.read();
-        if (store.requests == null) return null;
-        return store.requests.values().stream()
+        return store.ensureRequests().values().stream()
                 .filter(request -> request != null && subjectUuid.equals(request.subjectUuid)
                         && request.status == JoinRequestStatus.PENDING)
                 .findFirst().orElse(null);
@@ -179,9 +177,8 @@ public final class JoinRequestService implements com.dwurdy.straja.application.p
             com.dwurdy.straja.application.port.out.PlayerGateway player) {
         if (player == null) return;
         JoinRequestStore store = requests.read();
-        if (store.requests == null) return;
         JoinRequest decided = null;
-        for (JoinRequest request : store.requests.values()) {
+        for (JoinRequest request : store.ensureRequests().values()) {
             if (request == null || request.outcomeDelivered
                     || !player.uuid().toString().equals(request.subjectUuid)) continue;
             if (request.status == JoinRequestStatus.APPROVED

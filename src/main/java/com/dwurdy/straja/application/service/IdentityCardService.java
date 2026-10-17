@@ -92,7 +92,7 @@ public class IdentityCardService implements IdentityCardRoleplayUseCase {
 
     private static IdentityCardStore normalized(IdentityCardStore store) {
         if (store == null) store = new IdentityCardStore();
-        if (store.cards == null) store.cards = new LinkedHashMap<>();
+        store.ensureCards();
         if (store.nextCardNumber < 1) store.nextCardNumber = 1;
         return store;
     }

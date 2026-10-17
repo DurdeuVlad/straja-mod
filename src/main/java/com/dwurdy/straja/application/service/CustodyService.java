@@ -798,7 +798,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
 
     /** Imports old projections once; new flows write canonical state directly. */
     private boolean importLegacyProjections(CustodyStore store) {
-        if (store.states == null) store.states = new java.util.LinkedHashMap<>();
+        store.ensureStates();
         boolean changed = false;
         for (var entry : new ArrayList<>(store.downed.entrySet())) {
             if (store.states.containsKey(entry.getKey()) || malformedDowned(entry.getValue())) continue;
@@ -1076,12 +1076,10 @@ public class CustodyService implements CustodyRoleplayUseCase {
     public void recoverOnRestart() {
         var store = store();
         boolean changed = importLegacyProjections(store);
-        if (store.states != null) {
-            for (var state : store.states.values()) {
-                var recovery = CustodyDeadlineEngine.recover(
-                        state, RecoveryEvent.RESTART, now(), ctx.policies());
-                changed |= recovery.changed();
-            }
+        for (var state : store.ensureStates().values()) {
+            var recovery = CustodyDeadlineEngine.recover(
+                    state, RecoveryEvent.RESTART, now(), ctx.policies());
+            changed |= recovery.changed();
         }
         changed |= processCanonicalDeadlines(store);
         changed |= interruptAllResuscitations(store, "restart");
@@ -1165,13 +1163,11 @@ public class CustodyService implements CustodyRoleplayUseCase {
         boolean changed = importLegacyProjections(store);
         changed |= interruptResuscitationsInvolving(store, player, "logout");
         changed |= stopCarriesInvolving(store, player, "logout");
-        if (store.states != null) {
-            var state = store.states.get(key(player));
-            if (state != null) {
-                var recovery = CustodyDeadlineEngine.recover(
-                        state, RecoveryEvent.LOGOUT, now(), ctx.policies());
-                changed |= recovery.changed();
-            }
+        var state = store.ensureStates().get(key(player));
+        if (state != null) {
+            var recovery = CustodyDeadlineEngine.recover(
+                    state, RecoveryEvent.LOGOUT, now(), ctx.policies());
+            changed |= recovery.changed();
         }
         var discarded = new ArrayList<String>();
         store.cuffRequests.values().removeIf(request -> {

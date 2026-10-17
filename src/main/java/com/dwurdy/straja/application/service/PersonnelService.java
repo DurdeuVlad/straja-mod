@@ -57,8 +57,7 @@ public final class PersonnelService implements com.dwurdy.straja.application.por
 
     public synchronized boolean findByGrade(CareerGrade grade, String jurisdiction, long now) {
         PersonnelStore store = repository.read();
-        if (store.records == null) return false;
-        for (PersonnelRecord record : store.records.values()) {
+        for (PersonnelRecord record : store.ensureRecords().values()) {
             if (record != null && record.active() && record.careerGrade == grade
                     && servesJurisdiction(record, jurisdiction)) return true;
         }
@@ -67,8 +66,7 @@ public final class PersonnelService implements com.dwurdy.straja.application.por
 
     public synchronized String findFirstByGrade(CareerGrade grade, String jurisdiction, long now) {
         PersonnelStore store = repository.read();
-        if (store.records == null) return null;
-        for (PersonnelRecord record : store.records.values()) {
+        for (PersonnelRecord record : store.ensureRecords().values()) {
             if (record != null && record.active() && record.careerGrade == grade
                     && servesJurisdiction(record, jurisdiction))
                 return record.playerUuid;
@@ -109,7 +107,7 @@ public final class PersonnelService implements com.dwurdy.straja.application.por
                                                EmploymentMode employment, String source, String stationId,
                                                String idempotencyKey) {
         PersonnelStore store = repository.read();
-        if (store.records == null) store.records = new java.util.LinkedHashMap<>();
+        store.ensureRecords();
         PersonnelRecord existing = store.records.get(subjectUuid);
         if (existing != null && existing.active()) {
             EmploymentMode requestedMode = employment == null ? EmploymentMode.PART_TIME : employment;
@@ -179,7 +177,7 @@ public final class PersonnelService implements com.dwurdy.straja.application.por
         if (subjectUuid == null || subjectUuid.isBlank())
             throw new IllegalArgumentException("commissioner subject required");
         PersonnelStore store = repository.read();
-        if (store.records == null) store.records = new java.util.LinkedHashMap<>();
+        store.ensureRecords();
         PersonnelRecord record = store.records.get(subjectUuid);
         if (record == null) {
             return authorizeInternal("bootstrap", subjectUuid, CareerGrade.OFFICER_COLONEL,

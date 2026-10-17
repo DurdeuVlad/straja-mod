@@ -106,4 +106,10 @@ public class CustodyStore {
         public String destination = "";
         public long lastBlockedNoticeAt;
     }
+    /** Lazily re-creates {@code states} after a corrupt or partial read. */
+    public Map<String, CustodyState> ensureStates() {
+        if (states == null) states = new LinkedHashMap<>();
+        return states;
+    }
+
 }

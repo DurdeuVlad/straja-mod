@@ -18,4 +18,10 @@ public class StationStore {
         store.stations.put(hq.stationId, hq);
         return store;
     }
+    /** Lazily re-creates {@code stations} after a corrupt or partial read. */
+    public Map<String, Station> ensureStations() {
+        if (stations == null) stations = new LinkedHashMap<>();
+        return stations;
+    }
+
 }

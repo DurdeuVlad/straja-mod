@@ -89,7 +89,7 @@ public final class ProtocolService {
 
     private ProtocolStore store() {
         ProtocolStore store = repo.read();
-        if (store.testers == null) store.testers = new java.util.LinkedHashMap<>();
+        store.ensureTesters();
         return store;
     }
 

@@ -59,7 +59,7 @@ public final class DocumentService {
                                           String scope, String stationId, String jurisdiction, Long expiresAt,
                                           String payloadRef, String correlationId, String idempotencyKey) {
         DocumentStore store = repository.read();
-        if (store.idempotencyIndex == null) store.idempotencyIndex = new java.util.LinkedHashMap<>();
+        store.ensureIdempotencyIndex();
         String fingerprint = RequestFingerprint.of(issuer, subject, type, scope, stationId, jurisdiction,
                 expiresAt, payloadRef, correlationId);
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
@@ -107,7 +107,7 @@ public final class DocumentService {
         if (quantity <= 0) throw new IllegalArgumentException("quantity must be positive");
         requireDocumentAuthority(issuer, holder, stationId, "");
         DocumentStore store = repository.read();
-        if (store.idempotencyIndex == null) store.idempotencyIndex = new java.util.LinkedHashMap<>();
+        store.ensureIdempotencyIndex();
         String fingerprint = RequestFingerprint.of(issuer, holder, type, quantity, scope, stationId, expiresAt);
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
             String existingId = store.idempotencyIndex.get(idempotencyKey);
@@ -144,18 +144,15 @@ public final class DocumentService {
         if (quantity <= 0) return RedemptionResult.failed("INVALID_QUANTITY");
         if (idempotencyKey == null || idempotencyKey.isBlank()) return RedemptionResult.failed("IDEMPOTENCY_REQUIRED");
         DocumentStore store = repository.read();
-        if (store.redemptions == null) store.redemptions = new java.util.LinkedHashMap<>();
-        if (store.redemptions != null) {
-            String fingerprint = RequestFingerprint.of(actorUuid, instrumentId, quantity, stationId);
-            for (DocumentRedemption existing : store.redemptions.values()) {
-                if (existing != null && idempotencyKey.equals(existing.idempotencyKey)) {
-                    if (!fingerprint.equals(existing.requestFingerprint))
-                        return RedemptionResult.failed("IDEMPOTENCY_PAYLOAD_MISMATCH");
-                    return RedemptionResult.replayed(existing);
-                }
+        String fingerprint = RequestFingerprint.of(actorUuid, instrumentId, quantity, stationId);
+        for (DocumentRedemption existing : store.ensureRedemptions().values()) {
+            if (existing != null && idempotencyKey.equals(existing.idempotencyKey)) {
+                if (!fingerprint.equals(existing.requestFingerprint))
+                    return RedemptionResult.failed("IDEMPOTENCY_PAYLOAD_MISMATCH");
+                return RedemptionResult.replayed(existing);
             }
         }
-        DocumentInstrument instrument = store.instruments == null ? null : store.instruments.get(instrumentId);
+        DocumentInstrument instrument = store.ensureInstruments().get(instrumentId);
         if (instrument == null || !instrument.activeAt(clock.nowMillis())) return RedemptionResult.failed("INVALID_INSTRUMENT");
         if (stationId == null || !instrument.stationId.equals(stationId)) return RedemptionResult.failed("DENIED_STATION");
         if (instrument.holder != null && !instrument.holder.isBlank()
@@ -250,7 +247,7 @@ public final class DocumentService {
         requireDocumentAuthority(actorUuid, prior.subject, prior.stationId, prior.jurisdiction);
         String key = idempotencyKey == null || idempotencyKey.isBlank()
                 ? "reprint:" + documentId : idempotencyKey;
-        if (store.idempotencyIndex == null) store.idempotencyIndex = new java.util.LinkedHashMap<>();
+        store.ensureIdempotencyIndex();
         String fingerprint = RequestFingerprint.of(actorUuid, prior.subject, prior.type, prior.scope,
                 prior.stationId, prior.jurisdiction, prior.expiresAt, prior.payloadRef,
                 "reprint:" + documentId);
@@ -298,8 +295,8 @@ public final class DocumentService {
         if (requesterUuid == null || requesterUuid.isBlank() || formType == null || formType.isBlank())
             throw new IllegalArgumentException("form requester and type required");
         DocumentStore store = repository.read();
-        if (store.formRequests == null) store.formRequests = new java.util.LinkedHashMap<>();
-        if (store.formRequestIndex == null) store.formRequestIndex = new java.util.LinkedHashMap<>();
+        store.ensureFormRequests();
+        store.ensureFormRequestIndex();
         String key = idempotencyKey == null || idempotencyKey.isBlank()
                 ? "FORM:" + requesterUuid + ":" + formType + ":" + clock.nowMillis() : idempotencyKey;
         String existingId = store.formRequestIndex.get(key);
@@ -323,8 +320,7 @@ public final class DocumentService {
     /** Marks the form session's persistent request after the one-use session is consumed. */
     public synchronized FormRequest completeFormRequest(String requestId) {
         DocumentStore store = repository.read();
-        if (store.formRequests == null) return null;
-        FormRequest request = store.formRequests.get(requestId);
+        FormRequest request = store.ensureFormRequests().get(requestId);
         if (request == null) return null;
         if (!"SUBMITTED".equals(request.status)) {
             request.status = "SUBMITTED"; request.updatedAt = clock.nowMillis(); request.version++;

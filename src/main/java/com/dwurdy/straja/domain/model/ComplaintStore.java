@@ -20,4 +20,10 @@ public class ComplaintStore {
     public String nextComplaintId() {
         return "C" + (nextId++);
     }
+
+    /** Lazily re-creates {@code complaints} after a corrupt or partial read. */
+    public List<Complaint> ensureComplaints() {
+        if (complaints == null) complaints = new ArrayList<>();
+        return complaints;
+    }
 }

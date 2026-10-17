@@ -23,4 +23,16 @@ public class IncidentStore {
         }
         return null;
     }
+    /** Lazily re-creates {@code incidents} after a corrupt or partial read. */
+    public List<Incident> ensureIncidents() {
+        if (incidents == null) incidents = new ArrayList<>();
+        return incidents;
+    }
+
+    /** Lazily re-creates {@code lastWhistleAt} after a corrupt or partial read. */
+    public Map<String, Long> ensureLastWhistleAt() {
+        if (lastWhistleAt == null) lastWhistleAt = new LinkedHashMap<>();
+        return lastWhistleAt;
+    }
+
 }

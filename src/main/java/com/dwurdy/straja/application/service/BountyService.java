@@ -55,8 +55,8 @@ public final class BountyService {
 
     private BountyStore store() {
         BountyStore store = ctx.bounties().read();
-        if (store.records == null) store.records = new ArrayList<>();
-        if (store.surrenders == null) store.surrenders = new java.util.LinkedHashMap<>();
+        store.ensureRecords();
+        store.ensureSurrenders();
         return store;
     }
 

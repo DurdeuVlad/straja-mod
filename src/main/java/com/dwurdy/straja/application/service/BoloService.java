@@ -28,7 +28,7 @@ public final class BoloService {
 
     private BoloStore store() {
         BoloStore store = ctx.bolos().read();
-        if (store.records == null) store.records = new ArrayList<>();
+        store.ensureRecords();
         for (BoloRecord record : store.records) {
             if (record == null) continue;
             if (record.status == null) record.status = BoloStatus.ACTIVE;

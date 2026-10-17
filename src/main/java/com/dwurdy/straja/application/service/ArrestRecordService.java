@@ -27,7 +27,7 @@ public final class ArrestRecordService {
     public synchronized ArrestRecord startForSentence(Sentence sentence) {
         if (sentence == null || sentence.id == null || sentence.id.isBlank()) return null;
         var data = ctx.arrestRecords().read();
-        if (data.records == null) data.records = new ArrayList<>();
+        data.ensureRecords();
         ArrestRecord existing = findBySentence(data.records, sentence.id);
         if (existing != null) {
             normalize(existing);
@@ -44,7 +44,7 @@ public final class ArrestRecordService {
     public synchronized ArrestRecord finalizeForSentence(Sentence sentence, String notes) {
         if (sentence == null || sentence.id == null || sentence.id.isBlank()) return null;
         var data = ctx.arrestRecords().read();
-        if (data.records == null) data.records = new ArrayList<>();
+        data.ensureRecords();
         ArrestRecord record = findBySentence(data.records, sentence.id);
         if (record == null) {
             record = populate(data, sentence);
@@ -95,15 +95,14 @@ public final class ArrestRecordService {
         if (viewer == null) return List.of();
         String uuid = viewer.uuid() == null ? "" : viewer.uuid().toString();
         var data = ctx.arrestRecords().read();
-        if (data.records == null) return List.of();
-        return data.records.stream()
+        return data.ensureRecords().stream()
                 .filter(record -> record != null && uuid.equals(record.detaineeUuid))
                 .toList();
     }
 
     public synchronized ArrestRecord find(String id) {
         var data = ctx.arrestRecords().read();
-        if (data.records == null) data.records = new ArrayList<>();
+        data.ensureRecords();
         return data.find(id);
     }
 
@@ -111,7 +110,7 @@ public final class ArrestRecordService {
     public synchronized void refreshLinksForSubject(String detaineeUuid) {
         if (detaineeUuid == null || detaineeUuid.isBlank()) return;
         var data = ctx.arrestRecords().read();
-        if (data.records == null) data.records = new ArrayList<>();
+        data.ensureRecords();
         boolean changed = false;
         for (ArrestRecord record : data.records) {
             if (record == null || !detaineeUuid.equals(record.detaineeUuid)) continue;
@@ -174,8 +173,7 @@ public final class ArrestRecordService {
     private void linkIncident(ArrestRecord record) {
         if (record.warrantTaskId.isBlank() && record.fineId.isBlank()) return;
         var data = ctx.incidents().read();
-        if (data.incidents == null) return;
-        for (var incident : data.incidents) {
+        for (var incident : data.ensureIncidents()) {
             if (incident == null) continue;
             if (record.warrantTaskId.equals(incident.linkedArrestTaskId)
                     || record.fineId.equals(incident.linkedFineId)) {
@@ -189,8 +187,7 @@ public final class ArrestRecordService {
 
     private void linkEvidence(ArrestRecord record) {
         var data = ctx.evidence().read();
-        if (data.records == null) return;
-        for (var evidence : data.records.values()) {
+        for (var evidence : data.ensureRecords().values()) {
             if (evidence == null || !record.detaineeUuid.equals(evidence.sourcePlayerUuid)) continue;
             if (evidence.status == com.dwurdy.straja.domain.model.EvidenceStatus.RETURNED
                     || evidence.status == com.dwurdy.straja.domain.model.EvidenceStatus.DESTROYED) continue;
@@ -202,8 +199,7 @@ public final class ArrestRecordService {
 
     private void linkBolo(ArrestRecord record) {
         var data = ctx.bolos().read();
-        if (data.records == null) return;
-        for (var bolo : data.records) {
+        for (var bolo : data.ensureRecords()) {
             if (bolo == null || !record.detaineeUuid.equals(bolo.subjectUuid)) continue;
             if (record.warrantTaskId.equals(bolo.linkedArrestTaskId)
                     || "ACTIVE".equals(String.valueOf(bolo.status))) {
@@ -215,8 +211,7 @@ public final class ArrestRecordService {
 
     private void linkComplaint(ArrestRecord record) {
         var data = ctx.complaints().read();
-        if (data.complaints == null) return;
-        for (var complaint : data.complaints) {
+        for (var complaint : data.ensureComplaints()) {
             if (complaint != null && record.detaineeUuid.equals(complaint.accusedUuid)) {
                 record.complaintId = complaint.id;
                 return;
@@ -226,8 +221,7 @@ public final class ArrestRecordService {
 
     private void linkReputation(ArrestRecord record) {
         var data = ctx.reputation().read();
-        if (data.events == null) return;
-        for (var event : data.events.values()) {
+        for (var event : data.ensureEvents().values()) {
             if (event != null && record.detaineeUuid.equals(event.playerUuid)) {
                 if (!record.reputationEventIds.contains(event.id)) {
                     record.reputationEventIds.add(event.id);

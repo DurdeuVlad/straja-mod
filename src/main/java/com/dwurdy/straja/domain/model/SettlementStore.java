@@ -9,4 +9,10 @@ public class SettlementStore {
     public long storeRevision;
     public Map<String, Settlement> settlements = new LinkedHashMap<>();
     public Map<String, String> settlementKeyIndex = new LinkedHashMap<>();
+    /** Lazily re-creates {@code settlementKeyIndex} after a corrupt or partial read. */
+    public Map<String, String> ensureSettlementKeyIndex() {
+        if (settlementKeyIndex == null) settlementKeyIndex = new LinkedHashMap<>();
+        return settlementKeyIndex;
+    }
+
 }

@@ -21,19 +21,14 @@ public final class SchemaMigrationService {
         if (value == null) value = new PersonnelStore();
         requireSupported(value.schemaVersion, PersonnelStore.CURRENT_SCHEMA_VERSION, value);
         value.schemaVersion = PersonnelStore.CURRENT_SCHEMA_VERSION;
-        if (value.records == null) value.records = new java.util.LinkedHashMap<>();
+        value.ensureRecords();
         return value;
     }
     public PromotionStore promotions(PromotionStore value) { return normalize(value, PromotionStore.CURRENT_SCHEMA_VERSION, PromotionStore::new); }
     public StationStore stations(StationStore value) { return normalize(value, StationStore.CURRENT_SCHEMA_VERSION, StationStore::defaults); }
     public DocumentStore documents(DocumentStore value) {
         value = normalize(value, DocumentStore.CURRENT_SCHEMA_VERSION, DocumentStore::new);
-        if (value.documents == null) value.documents = new java.util.LinkedHashMap<>();
-        if (value.instruments == null) value.instruments = new java.util.LinkedHashMap<>();
-        if (value.redemptions == null) value.redemptions = new java.util.LinkedHashMap<>();
-        if (value.idempotencyIndex == null) value.idempotencyIndex = new java.util.LinkedHashMap<>();
-        if (value.formRequests == null) value.formRequests = new java.util.LinkedHashMap<>();
-        if (value.formRequestIndex == null) value.formRequestIndex = new java.util.LinkedHashMap<>();
+        value.ensureCollections();
         return value;
     }
     public EquipmentStore equipment(EquipmentStore value) { return normalize(value, EquipmentStore.CURRENT_SCHEMA_VERSION, EquipmentStore::new); }

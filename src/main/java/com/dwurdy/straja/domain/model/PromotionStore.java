@@ -10,4 +10,10 @@ public class PromotionStore {
     public long storeRevision;
     public Map<String, PromotionApplication> applications = new LinkedHashMap<>();
     public Map<String, QualificationEvidence> evidence = new LinkedHashMap<>();
+    /** Lazily re-creates {@code applications} after a corrupt or partial read. */
+    public Map<String, PromotionApplication> ensureApplications() {
+        if (applications == null) applications = new LinkedHashMap<>();
+        return applications;
+    }
+
 }

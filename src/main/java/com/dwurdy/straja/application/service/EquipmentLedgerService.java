@@ -169,8 +169,8 @@ public final class EquipmentLedgerService {
         if (quantity <= 0) return new ReturnResult(false, "INVALID_QUANTITY", 0);
         if (operationId == null || operationId.isBlank()) return new ReturnResult(false, "IDEMPOTENCY_REQUIRED", 0);
         EquipmentStore store = repository.read();
-        if (store.returnOperations == null) store.returnOperations = new java.util.LinkedHashMap<>();
-        if (store.returnOperationFingerprints == null) store.returnOperationFingerprints = new java.util.LinkedHashMap<>();
+        store.ensureReturnOperations();
+        store.ensureReturnOperationFingerprints();
         Long replayQuantity = store.returnOperations.get(operationId);
         if (replayQuantity != null) {
             String fingerprint = store.returnOperationFingerprints.get(operationId);

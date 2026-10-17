@@ -81,9 +81,9 @@ public class ArtifactRegistryService {
 
     private static ArtifactRegistryStore normalized(ArtifactRegistryStore store) {
         if (store == null) store = new ArtifactRegistryStore();
-        if (store.artifacts == null) store.artifacts = new LinkedHashMap<>();
-        if (store.licenses == null) store.licenses = new LinkedHashMap<>();
-        if (store.claimedIndex == null) store.claimedIndex = new LinkedHashMap<>();
+        store.ensureArtifacts();
+        store.ensureLicenses();
+        store.ensureClaimedIndex();
         if (store.nextSerial < 1) store.nextSerial = 1;
         if (store.nextLicense < 1) store.nextLicense = 1;
         if (store.nextForgery < 1) store.nextForgery = 1;

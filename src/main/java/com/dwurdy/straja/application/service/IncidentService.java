@@ -32,8 +32,8 @@ public final class IncidentService {
 
     private IncidentStore store() {
         IncidentStore store = ctx.incidents().read();
-        if (store.incidents == null) store.incidents = new ArrayList<>();
-        if (store.lastWhistleAt == null) store.lastWhistleAt = new java.util.LinkedHashMap<>();
+        store.ensureIncidents();
+        store.ensureLastWhistleAt();
         if (store.lastCitizenReportAt == null) {
             store.lastCitizenReportAt = new java.util.LinkedHashMap<>();
         }

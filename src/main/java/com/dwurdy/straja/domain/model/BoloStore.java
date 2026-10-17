@@ -18,4 +18,10 @@ public class BoloStore {
         }
         return null;
     }
+    /** Lazily re-creates {@code records} after a corrupt or partial read. */
+    public List<BoloRecord> ensureRecords() {
+        if (records == null) records = new ArrayList<>();
+        return records;
+    }
+
 }

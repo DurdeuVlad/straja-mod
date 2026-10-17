@@ -18,4 +18,10 @@ public class ArrestRecordStore {
         }
         return null;
     }
+    /** Lazily re-creates {@code records} after a corrupt or partial read. */
+    public List<ArrestRecord> ensureRecords() {
+        if (records == null) records = new ArrayList<>();
+        return records;
+    }
+
 }

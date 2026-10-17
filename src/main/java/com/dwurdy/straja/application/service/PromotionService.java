@@ -50,7 +50,7 @@ public final class PromotionService implements com.dwurdy.straja.application.por
         if (targetGrade == null || !validTransition(person.careerGrade, targetGrade))
             throw new IllegalArgumentException("invalid career transition");
         PromotionStore store = promotions.read();
-        if (store.applications == null) store.applications = new java.util.LinkedHashMap<>();
+        store.ensureApplications();
         for (PromotionApplication application : store.applications.values()) {
             if (application != null && subjectUuid.equals(application.subjectUuid)
                     && targetGrade == application.targetGrade && isOpen(application.status)) {
@@ -118,9 +118,8 @@ public final class PromotionService implements com.dwurdy.straja.application.por
             com.dwurdy.straja.application.port.out.PlayerGateway player) {
         if (player == null) return;
         PromotionStore store = promotions.read();
-        if (store.applications == null) return;
         PromotionApplication decided = null;
-        for (PromotionApplication application : store.applications.values()) {
+        for (PromotionApplication application : store.ensureApplications().values()) {
             if (application == null || application.outcomeDelivered
                     || !player.uuid().toString().equals(application.subjectUuid)) continue;
             if (application.status == PromotionStatus.APPROVED
@@ -151,8 +150,7 @@ public final class PromotionService implements com.dwurdy.straja.application.por
     /** Open petitions awaiting the Comisar's decision, oldest first. */
     public synchronized java.util.List<PromotionApplication> pendingPetitions() {
         PromotionStore store = promotions.read();
-        if (store.applications == null) return java.util.List.of();
-        return store.applications.values().stream()
+        return store.ensureApplications().values().stream()
                 .filter(application -> application != null
                         && application.status == PromotionStatus.READY_FOR_APPROVAL)
                 .sorted(java.util.Comparator.comparingLong(a -> a.submittedAt))
@@ -306,8 +304,7 @@ public final class PromotionService implements com.dwurdy.straja.application.por
     public synchronized int reconcileApprovals() {
         PromotionStore store = promotions.read();
         int repaired = 0;
-        if (store.applications == null) return 0;
-        for (PromotionApplication application : store.applications.values()) {
+        for (PromotionApplication application : store.ensureApplications().values()) {
             if (application == null || application.status != PromotionStatus.APPROVED
                     || "COMPLETE".equals(application.personnelSyncState)) continue;
             try {
@@ -325,7 +322,7 @@ public final class PromotionService implements com.dwurdy.straja.application.por
 
     private void reconcileApproval(PromotionApplication application, PromotionStore promotionStore) {
         PersonnelStore people = personnel.read();
-        if (people.records == null) people.records = new java.util.LinkedHashMap<>();
+        people.ensureRecords();
         PersonnelRecord person = people.records.get(application.subjectUuid);
         if (person == null) {
             application.personnelSyncState = "CONFLICT";
@@ -364,8 +361,7 @@ public final class PromotionService implements com.dwurdy.straja.application.por
 
     public synchronized PromotionApplication findOpen(String subjectUuid, CareerGrade targetGrade) {
         PromotionStore store = promotions.read();
-        if (store.applications == null) return null;
-        for (PromotionApplication application : store.applications.values()) {
+        for (PromotionApplication application : store.ensureApplications().values()) {
             if (application != null && subjectUuid.equals(application.subjectUuid)
                     && targetGrade == application.targetGrade && isOpen(application.status)) return application;
         }

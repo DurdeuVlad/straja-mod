@@ -256,12 +256,7 @@ public final class SavedStores {
         public Documents(StoreAccess access) { super(access, "documents"); }
         @Override public DocumentStore read() {
             DocumentStore store = readJsonVersioned(DocumentStore.class, DocumentStore::new, DocumentStore.CURRENT_SCHEMA_VERSION);
-            if (store.documents == null) store.documents = new java.util.LinkedHashMap<>();
-            if (store.instruments == null) store.instruments = new java.util.LinkedHashMap<>();
-            if (store.redemptions == null) store.redemptions = new java.util.LinkedHashMap<>();
-            if (store.idempotencyIndex == null) store.idempotencyIndex = new java.util.LinkedHashMap<>();
-            if (store.formRequests == null) store.formRequests = new java.util.LinkedHashMap<>();
-            if (store.formRequestIndex == null) store.formRequestIndex = new java.util.LinkedHashMap<>();
+            store.ensureCollections();
             return store;
         }
         @Override public void write(DocumentStore store) { writeJson(store); }

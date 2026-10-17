@@ -25,4 +25,16 @@ public class EvidenceStore {
     public String nextEvidenceId() {
         return "E-" + String.format(java.util.Locale.ROOT, "%05d", nextId++);
     }
+    /** Lazily re-creates {@code records} after a corrupt or partial read. */
+    public Map<String, EvidenceRecord> ensureRecords() {
+        if (records == null) records = new LinkedHashMap<>();
+        return records;
+    }
+
+    /** Lazily re-creates {@code pendingDeliveries} after a corrupt or partial read. */
+    public Map<String, PendingDelivery> ensurePendingDeliveries() {
+        if (pendingDeliveries == null) pendingDeliveries = new LinkedHashMap<>();
+        return pendingDeliveries;
+    }
+
 }

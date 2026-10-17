@@ -35,10 +35,10 @@ public final class ReputationService {
 
     private ReputationStore store() {
         ReputationStore data = ctx.reputation().read();
-        if (data.states == null) data.states = new java.util.LinkedHashMap<>();
-        if (data.events == null) data.events = new java.util.LinkedHashMap<>();
-        if (data.idempotency == null) data.idempotency = new java.util.LinkedHashMap<>();
-        if (data.recentHostileDamageAt == null) data.recentHostileDamageAt = new java.util.LinkedHashMap<>();
+        data.ensureStates();
+        data.ensureEvents();
+        data.ensureIdempotency();
+        data.ensureRecentHostileDamageAt();
         return data;
     }
 

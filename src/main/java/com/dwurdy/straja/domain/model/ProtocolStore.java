@@ -40,4 +40,10 @@ public class ProtocolStore {
         testers.put(playerUuid, entry);
         return entry;
     }
+    /** Lazily re-creates {@code testers} after a corrupt or partial read. */
+    public Map<String, Entry> ensureTesters() {
+        if (testers == null) testers = new LinkedHashMap<>();
+        return testers;
+    }
+
 }

@@ -15,7 +15,7 @@ public class PersonnelStore {
     /** Restores the careerTrack = careerGrade.track() invariant after a
      *  lenient enum remap or a partial old-schema read. */
     public void normalize() {
-        if (records == null) records = new LinkedHashMap<>();
+        ensureRecords();
         for (PersonnelRecord record : records.values()) {
             if (record != null && record.careerGrade != null
                     && record.careerTrack != record.careerGrade.track()) {
@@ -23,4 +23,10 @@ public class PersonnelStore {
             }
         }
     }
+    /** Lazily re-creates {@code records} after a corrupt or partial read. */
+    public Map<String, PersonnelRecord> ensureRecords() {
+        if (records == null) records = new LinkedHashMap<>();
+        return records;
+    }
+
 }

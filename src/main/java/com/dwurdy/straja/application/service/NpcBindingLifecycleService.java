@@ -1106,16 +1106,7 @@ public final class NpcBindingLifecycleService {
         if (value.schemaVersion < 1 || value.schemaVersion > NpcBindingStore.CURRENT_SCHEMA_VERSION) {
             throw new IllegalStateException("unsupported NPC binding schema: " + value.schemaVersion);
         }
-        if (value.bindings == null) value.bindings = new java.util.LinkedHashMap<>();
-        if (value.pendingOperations == null) {
-            value.pendingOperations = new java.util.LinkedHashMap<>();
-        }
-        if (value.pendingRebinds == null) value.pendingRebinds = new java.util.LinkedHashMap<>();
-        if (value.assignmentRevisions == null) value.assignmentRevisions = new java.util.LinkedHashMap<>();
-        if (value.provisioningAudit == null) value.provisioningAudit = new ArrayList<>();
-        if (value.pendingProvisioningCandidates == null) {
-            value.pendingProvisioningCandidates = new java.util.LinkedHashMap<>();
-        }
+        value.ensureCollections();
         value.bindings.entrySet().removeIf(entry -> entry.getKey() == null || entry.getValue() == null);
         value.pendingOperations.entrySet().removeIf(
                 entry -> entry.getKey() == null || entry.getValue() == null || entry.getValue().binding == null

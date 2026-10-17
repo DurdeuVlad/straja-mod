@@ -642,15 +642,15 @@ public final class StrajaRuntime {
     private void reconcileV2OutboxIntents() {
         var intents = new java.util.ArrayList<com.dwurdy.straja.domain.model.OutboxIntent>();
         var personnelStore = v2PersonnelRepository.read();
-        if (personnelStore.records != null) for (var record : personnelStore.records.values()) {
+        for (var record : personnelStore.ensureRecords().values()) {
             if (record != null && record.outboundIntents != null) intents.addAll(record.outboundIntents);
         }
         var promotionStore = v2PromotionRepository.read();
-        if (promotionStore.applications != null) for (var application : promotionStore.applications.values()) {
+        for (var application : promotionStore.ensureApplications().values()) {
             if (application != null && application.outboundIntents != null) intents.addAll(application.outboundIntents);
         }
         var campaignStore = v2CampaignRepository.read();
-        if (campaignStore.campaigns != null) for (var campaign : campaignStore.campaigns.values()) {
+        for (var campaign : campaignStore.ensureCampaigns().values()) {
             if (campaign != null && campaign.outboundIntents != null) intents.addAll(campaign.outboundIntents);
         }
         var missionStore = v2MissionRepository.read();

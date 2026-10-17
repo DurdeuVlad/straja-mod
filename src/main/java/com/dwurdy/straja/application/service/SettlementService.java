@@ -24,7 +24,7 @@ public final class SettlementService {
         if (amount < 0 || amount > Integer.MAX_VALUE || settlementKey == null || settlementKey.isBlank())
             throw new IllegalArgumentException("invalid settlement");
         SettlementStore store = repository.read();
-        if (store.settlementKeyIndex == null) store.settlementKeyIndex = new java.util.LinkedHashMap<>();
+        store.ensureSettlementKeyIndex();
         String existingId = store.settlementKeyIndex.get(settlementKey);
         String fingerprint = RequestFingerprint.of(playerUuid, category, amount, settlementKey, workUnitId);
         if (existingId != null && store.settlements.get(existingId) != null) {

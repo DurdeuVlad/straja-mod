@@ -64,7 +64,7 @@ public final class StationService {
 
     public synchronized Station ensureDefault(SetupData setup) {
         StationStore store = repository.read();
-        if (store.stations == null) store.stations = new java.util.LinkedHashMap<>();
+        store.ensureStations();
         Station station = store.stations.get("hq");
         boolean changed = false;
         if (station == null) {

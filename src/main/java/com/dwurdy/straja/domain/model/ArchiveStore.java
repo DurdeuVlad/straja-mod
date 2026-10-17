@@ -128,4 +128,10 @@ public class ArchiveStore {
         public long createdAt;
         public int attempts;
     }
+    /** Lazily re-creates {@code archivists} after a corrupt or partial read. */
+    public Map<String, String> ensureArchivists() {
+        if (archivists == null) archivists = new LinkedHashMap<>();
+        return archivists;
+    }
+
 }

@@ -57,4 +57,51 @@ public class NpcBindingStore {
             this.phase = phase;
         }
     }
+    /** Re-creates every collection after a corrupt or partial read — the
+     *  single list of what this store owns, shared by the normalize path. */
+    public void ensureCollections() {
+        ensureBindings();
+        ensurePendingOperations();
+        ensurePendingRebinds();
+        ensureAssignmentRevisions();
+        ensureProvisioningAudit();
+        ensurePendingProvisioningCandidates();
+    }
+
+    /** Lazily re-creates {@code bindings} after a corrupt or partial read. */
+    public Map<String, NpcBinding> ensureBindings() {
+        if (bindings == null) bindings = new LinkedHashMap<>();
+        return bindings;
+    }
+
+    /** Lazily re-creates {@code pendingOperations} after a corrupt or partial read. */
+    public Map<String, PendingOperation> ensurePendingOperations() {
+        if (pendingOperations == null) pendingOperations = new LinkedHashMap<>();
+        return pendingOperations;
+    }
+
+    /** Lazily re-creates {@code pendingRebinds} after a corrupt or partial read. */
+    public Map<String, PendingRebind> ensurePendingRebinds() {
+        if (pendingRebinds == null) pendingRebinds = new LinkedHashMap<>();
+        return pendingRebinds;
+    }
+
+    /** Lazily re-creates {@code assignmentRevisions} after a corrupt or partial read. */
+    public Map<String, Long> ensureAssignmentRevisions() {
+        if (assignmentRevisions == null) assignmentRevisions = new LinkedHashMap<>();
+        return assignmentRevisions;
+    }
+
+    /** Lazily re-creates {@code provisioningAudit} after a corrupt or partial read. */
+    public List<NpcProvisioningAuditEntry> ensureProvisioningAudit() {
+        if (provisioningAudit == null) provisioningAudit = new ArrayList<>();
+        return provisioningAudit;
+    }
+
+    /** Lazily re-creates {@code pendingProvisioningCandidates} after a corrupt or partial read. */
+    public Map<String, NpcBinding> ensurePendingProvisioningCandidates() {
+        if (pendingProvisioningCandidates == null) pendingProvisioningCandidates = new LinkedHashMap<>();
+        return pendingProvisioningCandidates;
+    }
+
 }

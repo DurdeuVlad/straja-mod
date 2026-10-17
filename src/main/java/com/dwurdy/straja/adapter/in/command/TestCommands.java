@@ -1562,7 +1562,7 @@ final class TestCommands {
                 + "/" + storedCase.detaineeUuid + "/" + storedCase.evidenceIds) + ")");
         ok &= linkOk;
         var archive = runtime.context().archive().read();
-        if (archive.archivists == null) archive.archivists = new java.util.LinkedHashMap<>();
+        archive.ensureArchivists();
         archive.archivists.put(archivist.uuid().toString(), archivist.name());
         runtime.context().archive().write(archive);
         boolean depositOk = evidence != null

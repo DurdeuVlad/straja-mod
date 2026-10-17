@@ -16,4 +16,16 @@ public class EquipmentStore {
     public Map<String, String> returnOperationFingerprints = new LinkedHashMap<>();
     /** Return operation key -> generated proof document ID. */
     public Map<String, String> returnProofs = new LinkedHashMap<>();
+    /** Lazily re-creates {@code returnOperations} after a corrupt or partial read. */
+    public Map<String, Long> ensureReturnOperations() {
+        if (returnOperations == null) returnOperations = new LinkedHashMap<>();
+        return returnOperations;
+    }
+
+    /** Lazily re-creates {@code returnOperationFingerprints} after a corrupt or partial read. */
+    public Map<String, String> ensureReturnOperationFingerprints() {
+        if (returnOperationFingerprints == null) returnOperationFingerprints = new LinkedHashMap<>();
+        return returnOperationFingerprints;
+    }
+
 }
