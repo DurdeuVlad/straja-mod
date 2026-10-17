@@ -51,6 +51,10 @@ public final class DecisionWords {
     /** Fine appeal review: void the fine entirely. */
     public static final Set<String> FINE_VOID = Set.of(
             "void", "anuleaza", "anulează", "iertare");
+    /** Payment-boundary review: allow the payer to retry the payment. */
+    public static final Set<String> FINE_PAYMENT_RETRY = Set.of("retry", "reincearca");
+    /** Payment-boundary review: mark the fine paid despite the mismatch. */
+    public static final Set<String> FINE_PAYMENT_PAID = Set.of("paid", "platita");
 
     private DecisionWords() {}
 

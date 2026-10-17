@@ -4,6 +4,7 @@ import com.dwurdy.straja.application.StrajaContext;
 import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.application.port.out.ProtocolRepository;
 import com.dwurdy.straja.domain.model.Cell;
+import com.dwurdy.straja.domain.model.AuditResults;
 import com.dwurdy.straja.domain.model.CheckpointMode;
 import com.dwurdy.straja.domain.model.CrossingDirection;
 import com.dwurdy.straja.domain.model.Fine;
@@ -110,7 +111,7 @@ public final class ProtocolService {
         ensureFixtures(tester);
         entry = store.enroll(uuid(tester), tester.name(), now());
         repo.write(store);
-        audit.record(AuditActions.PROTOCOL_START, tester.name(), uuid(tester), "", "", "OK",
+        audit.record(AuditActions.PROTOCOL_START, tester.name(), uuid(tester), "", "", AuditResults.OK,
                 "dossier issued");
         issueCover(tester);
         tell(tester, "straja.protocol.started");
@@ -180,7 +181,7 @@ public final class ProtocolService {
         teardown(tester, entry);
         store.testers.remove(uuid(tester));
         repo.write(store);
-        audit.record(AuditActions.PROTOCOL_STOP, tester.name(), uuid(tester), "", "", "OK",
+        audit.record(AuditActions.PROTOCOL_STOP, tester.name(), uuid(tester), "", "", AuditResults.OK,
                 "stopped at chapter " + entry.chapter);
         tell(tester, "straja.protocol.stopped");
     }
@@ -483,7 +484,7 @@ public final class ProtocolService {
         if (!built.isEmpty()) {
             tell(tester, "straja.protocol.fixtures", String.join("§7, ", built));
             audit.record(AuditActions.PROTOCOL_FIXTURES, tester.name(), uuid(tester), "", "",
-                    "OK", String.join("; ", built));
+                    AuditResults.OK, String.join("; ", built));
         }
     }
 
@@ -561,7 +562,7 @@ public final class ProtocolService {
         entry.updatedAt = now();
         repo.write(store);
         teardown(tester, entry);
-        audit.record(AuditActions.PROTOCOL_FINISH, tester.name(), uuid(tester), "", "", "OK",
+        audit.record(AuditActions.PROTOCOL_FINISH, tester.name(), uuid(tester), "", "", AuditResults.OK,
                 "completed in " + (now() - entry.startedAt) + "ms");
         List<String> pages = new ArrayList<>();
         pages.add("PROTOCOL STRAJA\n══════════════\n\nDOSAR ÎNCHIS\n\nToate cele 9 capitole au fost parcurse. Sigiliul Comisariatului confirmă parcurgerea completă.");

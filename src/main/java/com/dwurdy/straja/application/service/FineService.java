@@ -334,7 +334,7 @@ public class FineService implements FineRoleplayUseCase {
         if (!target.giveVerified(noticeStack(fine))) {
             fine.status = "DELIVERY_FAILED";
             ctx.fines().write(data);
-            audit.record(AuditActions.FINE_ISSUE, issuer.name(), issuer.uuid().toString(), target.name(), target.uuid().toString(), "FAILED", "inventory_delivery_failed fineId=" + fine.id);
+            audit.record(AuditActions.FINE_ISSUE, issuer.name(), issuer.uuid().toString(), target.name(), target.uuid().toString(), AuditResults.FAILED, "inventory_delivery_failed fineId=" + fine.id);
             issuer.refuse("straja.fine.notice_fail", "straja.remedy.ask_comisar");
             return false;
         }
@@ -471,7 +471,7 @@ public class FineService implements FineRoleplayUseCase {
         attempt.previousStatus = previousStatus;
         fine.paymentAttempt = attempt;
         ctx.fines().write(data);
-        audit.record(AuditActions.FINE_PAYMENT_REVIEW, player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), "STARTED", "payment_boundary fineId=" + fine.id + " amount=" + fine.amount);
+        audit.record(AuditActions.FINE_PAYMENT_REVIEW, player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), AuditResults.STARTED, "payment_boundary fineId=" + fine.id + " amount=" + fine.amount);
         var withdrawal = ctx.currency().withdraw(player, due);
         attempt.removedValue = withdrawal.removed();
         attempt.error = withdrawal.error() == null ? "" : withdrawal.error();
@@ -482,7 +482,7 @@ public class FineService implements FineRoleplayUseCase {
                 fine.paymentAttempt = null;
             }
             ctx.fines().write(data);
-            audit.record(AuditActions.FINE_PAY, player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), "FAILED",
+            audit.record(AuditActions.FINE_PAY, player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), AuditResults.FAILED,
                     (fine.paymentAttempt != null ? "payment_review" : "no_debit") + " fineId=" + fine.id + " removedValue=" + withdrawal.removed());
             if (fine.paymentAttempt != null) {
                 player.refuse("straja.fine.pay_failed_review", "straja.remedy.wait");
@@ -523,8 +523,8 @@ public class FineService implements FineRoleplayUseCase {
             return false;
         }
         Fine.PaymentAttempt attempt = fine.paymentAttempt;
-        String action = decision == null ? "" : decision.toLowerCase();
-        if ("retry".equals(action) || "reincearca".equals(action)) {
+        if (com.dwurdy.straja.domain.model.DecisionWords.is(decision,
+                com.dwurdy.straja.domain.model.DecisionWords.FINE_PAYMENT_RETRY)) {
             if (attempt.removedValue > 0 || attempt.sideEffectUnknown) {
                 player.refuse("straja.fine.retry_blocked", "straja.remedy.fix_retry");
                 return false;
@@ -537,7 +537,8 @@ public class FineService implements FineRoleplayUseCase {
             player.tell("Verificarea a fost închisă fără debitare; plata poate fi încercată din nou.");
             return true;
         }
-        if ("paid".equals(action) || "platita".equals(action)) {
+        if (com.dwurdy.straja.domain.model.DecisionWords.is(decision,
+                com.dwurdy.straja.domain.model.DecisionWords.FINE_PAYMENT_PAID)) {
             fine.status = "PAID";
             fine.paidAt = now();
             fine.paymentReviewResolvedAt = now();
@@ -655,15 +656,16 @@ public class FineService implements FineRoleplayUseCase {
             player.refuse("straja.fine.appeal_decision_reception", "straja.remedy.reception");
             return false;
         }
-        String action = decision == null ? "" : decision.toLowerCase();
         Fine.Appeal appeal = fine.appeal;
         long reviewAt = now();
         boolean voided = false;
-        if (com.dwurdy.straja.domain.model.DecisionWords.FINE_UPHOLD.contains(action)) {
+        if (com.dwurdy.straja.domain.model.DecisionWords.is(decision,
+                com.dwurdy.straja.domain.model.DecisionWords.FINE_UPHOLD)) {
             fine.status = appeal.previousStatus == null || appeal.previousStatus.isEmpty() ? "ISSUED" : appeal.previousStatus;
             fine.onlineLastTickAt = reviewAt;
             appeal.decision = "UPHELD";
-        } else if (com.dwurdy.straja.domain.model.DecisionWords.FINE_REDUCE.contains(action)) {
+        } else if (com.dwurdy.straja.domain.model.DecisionWords.is(decision,
+                com.dwurdy.straja.domain.model.DecisionWords.FINE_REDUCE)) {
             if (reducedAmount == null || !p().fineAllowedAmounts.contains(reducedAmount) || reducedAmount >= appeal.previousAmount) {
                 player.refuse("straja.fine.reduction_invalid", "straja.remedy.fix_retry");
                 return false;
@@ -673,7 +675,8 @@ public class FineService implements FineRoleplayUseCase {
             fine.onlineLastTickAt = reviewAt;
             appeal.decision = "REDUCED";
             appeal.reducedAmount = reducedAmount;
-        } else if (com.dwurdy.straja.domain.model.DecisionWords.FINE_VOID.contains(action)) {
+        } else if (com.dwurdy.straja.domain.model.DecisionWords.is(decision,
+                com.dwurdy.straja.domain.model.DecisionWords.FINE_VOID)) {
             fine.status = "WAIVED";
             fine.waivedAt = reviewAt;
             appeal.decision = "VOID";
@@ -1008,20 +1011,20 @@ public class FineService implements FineRoleplayUseCase {
         int payable = Math.min(reward, Math.max(0, p().arrestMaxDailyPayout - state.arrestRewardDayTotal));
         if (payable <= 0) {
             audit.record(AuditActions.ARREST_REWARD, officer.name(), officer.uuid().toString(),
-                    task.target, task.targetUuid, "FAILED", "daily_cap taskId=" + task.id);
+                    task.target, task.targetUuid, AuditResults.FAILED, "daily_cap taskId=" + task.id);
             officer.refuse("straja.fine.daily_reward_cap", "straja.remedy.wait");
             return false;
         }
         if (!ctx.currency().available()) {
             audit.record(AuditActions.ARREST_REWARD, officer.name(), officer.uuid().toString(),
-                    task.target, task.targetUuid, "FAILED", "currency_unavailable taskId=" + task.id);
+                    task.target, task.targetUuid, AuditResults.FAILED, "currency_unavailable taskId=" + task.id);
             officer.refuse("straja.fine.reward_fail", "straja.remedy.retry");
             return false;
         }
         var payout = ctx.currency().deposit(officer, payable, payoutId);
         if (!payout.ok()) {
             audit.record(AuditActions.ARREST_REWARD, officer.name(), officer.uuid().toString(),
-                    task.target, task.targetUuid, "FAILED",
+                    task.target, task.targetUuid, AuditResults.FAILED,
                     "taskId=" + task.id + " delivered=" + payout.delivered()
                             + " error=" + payout.error());
             officer.refuse("straja.fine.reward_fail", "straja.remedy.retry");

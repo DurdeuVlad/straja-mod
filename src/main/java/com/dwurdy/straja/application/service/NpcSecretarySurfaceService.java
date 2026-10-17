@@ -118,7 +118,7 @@ public final class NpcSecretarySurfaceService {
                     field(FormField.MISSIONS, "Missions", 512, true),
                     field(FormField.INCIDENTS, "Incidents", 512, true),
                     field(FormField.NOTES, "Notes", 512, true));
-            case "audience-request" -> List.of(field(FormField.REASON, "Reason", 512, true));
+            case "audience-request" -> List.of(field(FormField.REASON, "Reason", Text.REASON_LIMIT, true));
             case "bolo-create" -> List.of(
                     field(FormField.SUBJECT, "Subject", 64, true),
                     field(FormField.REASON, "Reason", 240, true),

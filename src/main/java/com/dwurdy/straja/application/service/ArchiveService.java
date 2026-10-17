@@ -703,7 +703,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
             copy.sourceState = "NOT_CONSUMED";
             copy.deliveryError = "source_consume_failed";
             ctx.archive().write(store);
-            audit.record(AuditActions.ARCHIVE_ENVELOPE_PACK, player.name(), player.uuid().toString(), targetName, null, "FAILED", "source_consume_failed sheetId=" + sheet.id);
+            audit.record(AuditActions.ARCHIVE_ENVELOPE_PACK, player.name(), player.uuid().toString(), targetName, null, AuditResults.FAILED, "source_consume_failed sheetId=" + sheet.id);
             player.refuse("straja.archive.env_consume_fail", "straja.remedy.retry");
             return false;
         }
@@ -854,7 +854,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
                 copy.deliveryError = "delivery_failed";
                 changed = true;
                 audit.record(AuditActions.ARCHIVE_DELIVERY, player.name(), player.uuid().toString(),
-                        copy.recipientName, copy.recipientUuid, "FAILED",
+                        copy.recipientName, copy.recipientUuid, AuditResults.FAILED,
                         "delivery_failed copyId=" + copy.id);
             }
         }

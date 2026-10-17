@@ -68,27 +68,27 @@ public class ArmoryService implements com.dwurdy.straja.application.port.in.Armo
         StrajaPolicies.ArmoryItem item = find(ctx.policies().armoryStock, key);
         if (!eligible(state)) {
             player.refuse("straja.armory.active_only", "straja.remedy.duty");
-            return refused("armory_buy", player, key, "not_eligible");
+            return refused(AuditActions.ARMORY_BUY, player, key, "not_eligible");
         }
         if (item == null || state.rank < item.minRank()) {
             player.refuse("straja.armory.item_rank", "straja.remedy.faq");
-            return refused("armory_buy", player, key, "unavailable");
+            return refused(AuditActions.ARMORY_BUY, player, key, "unavailable");
         }
         if (!ctx.currency().available()) {
             player.refuse("straja.armory.no_currency", "straja.remedy.ask_comisar");
-            return refused("armory_buy", player, key, "currency_unavailable");
+            return refused(AuditActions.ARMORY_BUY, player, key, "currency_unavailable");
         }
         CurrencyProvider.Withdrawal withdrawal = ctx.currency().withdraw(player, item.cost());
         if (!withdrawal.ok()) {
             player.refuse("straja.armory.no_funds", "straja.remedy.secretary", item.cost());
-            return refused("armory_buy", player, key, "insufficient_funds");
+            return refused(AuditActions.ARMORY_BUY, player, key, "insufficient_funds");
         }
         if (!player.giveVerified(ItemSpec.of(item.itemId(), item.count()))) {
             String refundId = "armory-refund:" + player.uuid() + ":" + ctx.clock().nowMillis() + ":" + key;
             var refund = ctx.currency().deposit(player, item.cost(), refundId);
             audit.record(AuditActions.ARMORY_BUY, player.name(), player.uuid().toString(),
                     player.name(), player.uuid().toString(),
-                    refund.ok() ? "REFUNDED" : "FAILED",
+                    refund.ok() ? AuditResults.REFUNDED : AuditResults.FAILED,
                     key + ",delivery_failed,refund=" + (refund.ok() ? "ok" : "failed"));
             player.refuse(refund.ok()
                     ? "straja.armory.delivery_failed_refunded"
@@ -110,19 +110,19 @@ public class ArmoryService implements com.dwurdy.straja.application.port.in.Armo
         StrajaPolicies.ArmoryItem item = find(ctx.policies().armoryReserves, key);
         if (!eligible(state)) {
             player.refuse("straja.armory.active_only", "straja.remedy.duty");
-            return refused("armory_reserve", player, key, "not_eligible");
+            return refused(AuditActions.ARMORY_RESERVE, player, key, "not_eligible");
         }
         if (item == null || state.rank < item.minRank()) {
             player.refuse("straja.armory.stock_rank", "straja.remedy.faq");
-            return refused("armory_reserve", player, key, "unavailable");
+            return refused(AuditActions.ARMORY_RESERVE, player, key, "unavailable");
         }
         if (state.requisitionPoints < item.cost()) {
             player.refuse("straja.armory.no_points", "straja.remedy.secretary", state.requisitionPoints, item.cost());
-            return refused("armory_reserve", player, key, "insufficient_points");
+            return refused(AuditActions.ARMORY_RESERVE, player, key, "insufficient_points");
         }
         if (!player.inventory().canReceive(List.of(ItemSpec.of(item.itemId(), item.count())))) {
             player.refuse("straja.armory.inv_full", "straja.remedy.retry");
-            return refused("armory_reserve", player, key, "inventory_full");
+            return refused(AuditActions.ARMORY_RESERVE, player, key, "inventory_full");
         }
         state.requisitionPoints -= item.cost();
         players.save(player.uuid(), state);
@@ -130,7 +130,7 @@ public class ArmoryService implements com.dwurdy.straja.application.port.in.Armo
             state.requisitionPoints += item.cost();
             players.save(player.uuid(), state);
             audit.record(AuditActions.ARMORY_RESERVE, player.name(), player.uuid().toString(),
-                    player.name(), player.uuid().toString(), "FAILED",
+                    player.name(), player.uuid().toString(), AuditResults.FAILED,
                     key + ",delivery_failed,points_restored");
             player.refuse("straja.armory.delivery_fail", "straja.remedy.retry");
             return false;

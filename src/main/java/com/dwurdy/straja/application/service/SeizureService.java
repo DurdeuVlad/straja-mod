@@ -114,7 +114,7 @@ public final class SeizureService {
                             stack.itemId(), stack.count());
                 } catch (RuntimeException ignored) {}
                 audit.record(AuditActions.SEIZURE_ROUTE_FAILURE, "system", "", target.name(),
-                        uuid, "FAIL", stack.itemId() + " x" + stack.count());
+                        uuid, AuditResults.FAIL, stack.itemId() + " x" + stack.count());
             }
         }
 

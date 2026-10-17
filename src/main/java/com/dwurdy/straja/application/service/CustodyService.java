@@ -329,7 +329,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
             issuer.refuse("straja.custody.no_cuffs_request", "straja.remedy.jailer");
             return false;
         }
-        return issueRequest(issuer, target, "CUFF", "cuff_request");
+        return issueRequest(issuer, target, "CUFF", AuditActions.CUFF_REQUEST);
     }
 
     public boolean requestSurrender(PlayerGateway issuer, PlayerGateway target) {
@@ -341,7 +341,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
             issuer.refuse("straja.custody.no_cuffs_surrender", "straja.remedy.jailer");
             return false;
         }
-        return issueRequest(issuer, target, "SURRENDER", "surrender_request");
+        return issueRequest(issuer, target, "SURRENDER", AuditActions.SURRENDER_REQUEST);
     }
 
     private boolean issueRequest(PlayerGateway issuer, PlayerGateway target, String kind, String auditAction) {
@@ -2272,7 +2272,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
         }
         String weapon = whip ? "Biciul" : "Bastonul";
         String weaponLower = whip ? "biciul" : "bastonul";
-        String auditAction = whip ? "whip_knockout" : "baton_knockout";
+        String auditAction = whip ? AuditActions.WHIP_KNOCKOUT : AuditActions.BATON_KNOCKOUT;
         if (!enforcementGuard(issuer)) {
             issuer.refuse("straja.custody.item_active_only", "straja.remedy.duty", weapon);
             return new DamageDecision(DamageAction.CANCEL, "issuer_not_active_guard");

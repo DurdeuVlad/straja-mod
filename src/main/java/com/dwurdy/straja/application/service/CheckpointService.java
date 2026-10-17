@@ -484,7 +484,7 @@ public final class CheckpointService {
         ledger(site, p, CrossingDirection.INCOMING, CrossingOutcome.DENY,
                 snapshot, found, "sens interzis la poartă");
         audit.record(AuditActions.CHECKPOINT_DENY, "checkpoint", "", p.name(), p.uuid().toString(),
-                "DENY", "wrong-way " + site.id);
+                AuditResults.DENY, "wrong-way " + site.id);
     }
 
     /** Right-way arrival at a linked gate: boarding stamp consumed, else full assessment. */
@@ -819,7 +819,7 @@ public final class CheckpointService {
                 "arrested");
 
         ledger(site, p, dir, CrossingOutcome.ARREST, snapshot, found, reason);
-        audit.record(AuditActions.CHECKPOINT_ARREST, "checkpoint", "", p.name(), uuid, "ARREST", reason);
+        audit.record(AuditActions.CHECKPOINT_ARREST, "checkpoint", "", p.name(), uuid, AuditResults.ARREST, reason);
         p.title("straja.checkpoint.arrest_title", "straja.checkpoint.arrest_sub");
         playSound(p, DENY_SOUND);
         return true;
@@ -1211,7 +1211,7 @@ public final class CheckpointService {
 
     private void policy(PlayerGateway admin, String scope, String what) {
         audit.record(AuditActions.CHECKPOINT_POLICY, "checkpoint", "", admin.name(),
-                admin.uuid().toString(), "POLICY", scope + " " + what);
+                admin.uuid().toString(), AuditResults.POLICY, scope + " " + what);
         admin.tellKey("straja.checkpoint.policy_set", scope, what);
     }
 

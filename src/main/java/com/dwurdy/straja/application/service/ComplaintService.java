@@ -480,8 +480,8 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
             player.refuse("straja.complaint.no_report", "straja.remedy.instructor");
             return false;
         }
-        String action = decision == null ? "" : decision.toLowerCase();
-        if (com.dwurdy.straja.domain.model.DecisionWords.COMPLAINT_WITHDRAW.contains(action)) {
+        if (com.dwurdy.straja.domain.model.DecisionWords.is(decision,
+                com.dwurdy.straja.domain.model.DecisionWords.COMPLAINT_WITHDRAW)) {
             String trimmed = reason == null ? "" : reason.trim();
             if (trimmed.isEmpty() || trimmed.length() > WITHDRAW_REASON_LIMIT) {
                 player.refuse("straja.complaint.withdraw_reason", "straja.remedy.fix_retry", WITHDRAW_REASON_LIMIT);
@@ -496,7 +496,8 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
             player.tell("Plângerea " + complaint.id + " a fost retrasă și trimisă în istoricul secției.");
             return true;
         }
-        if (!com.dwurdy.straja.domain.model.DecisionWords.COMPLAINT_SATISFY.contains(action)) {
+        if (!com.dwurdy.straja.domain.model.DecisionWords.is(decision,
+                com.dwurdy.straja.domain.model.DecisionWords.COMPLAINT_SATISFY)) {
             player.refuse("straja.complaint.decision_reception", "straja.remedy.reception");
             return false;
         }
@@ -604,8 +605,8 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
             player.refuse("straja.complaint.verify_secretary", "straja.remedy.secretary");
             return false;
         }
-        String action = com.dwurdy.straja.domain.model.DecisionWords.key(decision);
-        if (com.dwurdy.straja.domain.model.DecisionWords.COMPLAINT_RETURN.contains(action)) {
+        if (com.dwurdy.straja.domain.model.DecisionWords.is(decision,
+                com.dwurdy.straja.domain.model.DecisionWords.COMPLAINT_RETURN)) {
             complaint.status = "INVESTIGATING";
             complaint.reviewedBy = player.name();
             complaint.reviewNote = "Raport returnat pentru completări.";
@@ -613,7 +614,8 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
             player.tell("Dosarul a fost returnat pentru completări.");
             return true;
         }
-        if (com.dwurdy.straja.domain.model.DecisionWords.COMPLAINT_DISMISS.contains(action)) {
+        if (com.dwurdy.straja.domain.model.DecisionWords.is(decision,
+                com.dwurdy.straja.domain.model.DecisionWords.COMPLAINT_DISMISS)) {
             complaint.status = "CLOSED";
             complaint.resolution = "UNFOUNDED";
             complaint.rewardTotal = 0;
@@ -625,7 +627,8 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
             player.tell("Dosarul " + complaint.id + " a fost închis ca nefondat.");
             return true;
         }
-        if (!com.dwurdy.straja.domain.model.DecisionWords.COMPLAINT_RESOLVE.contains(action)) {
+        if (!com.dwurdy.straja.domain.model.DecisionWords.is(decision,
+                com.dwurdy.straja.domain.model.DecisionWords.COMPLAINT_RESOLVE)) {
             player.refuse("straja.complaint.pick_action", "straja.remedy.fix_retry");
             return false;
         }

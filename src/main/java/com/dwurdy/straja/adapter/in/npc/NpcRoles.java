@@ -490,7 +490,7 @@ public final class NpcRoles {
                         "Cerere de muncă — " + com.dwurdy.straja.domain.model.Text.displayLower(normalized),
                         "Scrie motivul pentru care vrei să te înscrii la meseriași (opțional).",
                         java.util.List.of(new com.dwurdy.straja.application.port.in.FormSessionUseCase.Field(
-                                "reason", "Motiv",
+                                FormField.REASON, "Motiv",
                                 com.dwurdy.straja.domain.model.Text.REASON_LIMIT, true, false))));
     }
 
@@ -768,7 +768,7 @@ public final class NpcRoles {
                 name ? "Redenumește NPC" : "Skin nou",
                 name ? "Noul nume afișat al NPC-ului." : "ID-ul skin-ului pentru acest NPC.",
                 java.util.List.of(new FormSessionUseCase.Field(
-                        name ? "name" : "skin", name ? "Nume" : "Skin", 80, false))));
+                        name ? FormField.NAME : FormField.SKIN, name ? "Nume" : "Skin", 80, false))));
         return true;
     }
 
@@ -891,7 +891,7 @@ public final class NpcRoles {
                 FormSessionUseCase.Action.REPUTATION_VIEW, "",
                 "Istoric reputație", "Disponibil doar Comisarului; indică un jucător online.",
                 java.util.List.of(new FormSessionUseCase.Field(
-                        "subject", "Jucător", 64, false))));
+                        FormField.SUBJECT, "Jucător", 64, false))));
         return true;
     }
 
@@ -1080,7 +1080,7 @@ public final class NpcRoles {
                 prompt.get().title(),
                 prompt.get().question(),
                 java.util.List.of(new FormSessionUseCase.Field(
-                        "answer", "Răspuns", prompt.get().maxLength(), false))));
+                        FormField.ANSWER, "Răspuns", prompt.get().maxLength(), false))));
         return true;
     }
 
@@ -1094,7 +1094,7 @@ public final class NpcRoles {
                 "Facțiune nativă", "Declară facțiunea din care provii. "
                         + "În timpul turei acționezi ca Străjer al Castelului. Scrie \"niciuna\" pentru a șterge.",
                 java.util.List.of(new FormSessionUseCase.Field(
-                        "faction", "Facțiune", maxLength, false))));
+                        FormField.FACTION, "Facțiune", maxLength, false))));
         return true;
     }
 
@@ -1285,7 +1285,7 @@ public final class NpcRoles {
                 FormSessionUseCase.Action.AUDIENCE_REQUEST, "",
                 "Cerere de audiență", "Scrie motivul pentru care ceri audiență la Comisar.",
                 java.util.List.of(new FormSessionUseCase.Field(
-                        "reason", "Motiv",
+                        FormField.REASON, "Motiv",
                         com.dwurdy.straja.domain.model.Text.REASON_LIMIT, true))));
         return true;
     }
@@ -1318,7 +1318,7 @@ public final class NpcRoles {
                 "Cerere de avansare", "Scrie motivul pentru care ceri avansarea la "
                         + runtime.policies().rankName(target) + " (opțional).",
                 java.util.List.of(new FormSessionUseCase.Field(
-                        "reason", "Motiv",
+                        FormField.REASON, "Motiv",
                         com.dwurdy.straja.domain.model.Text.REASON_LIMIT, true, false))));
         return true;
     }

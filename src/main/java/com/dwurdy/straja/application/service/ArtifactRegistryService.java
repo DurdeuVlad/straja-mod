@@ -347,7 +347,7 @@ public class ArtifactRegistryService {
             repository.write(store);
         }
         audit.record(AuditActions.ARTIFACT_MARK_FAILED, actor.name(), uuid(actor),
-                holder.name(), uuid(holder), "FAIL", "serial=" + serial);
+                holder.name(), uuid(holder), AuditResults.FAIL, "serial=" + serial);
         actor.refuse("straja.artifact.mark_failed", "straja.remedy.retry", "#" + serial);
         return null;
     }

@@ -261,5 +261,9 @@ and a tracked path, or an explicit acceptance that they stay.
 
 ## Status
 
-`draft` — issues 1–9 are ready-for-handoff pending owner review; issues 10–11
-are `needs-input` decisions. No GitHub issues created; local doc only.
+`executed` — issues 1–9 landed as one commit each on `feat/rank-overhaul`
+(79b138c Text cap · 1e9b526 ReviewRef · e1dc390 DecisionWords · 71e909b
+career bridge · 423e060 brand prefix · 0194955 ensureX() · 2f46a70 audit
+vocabulary+sink · 579cd8a resolver+ReviewForm · e6c778c FormField), each
+with the full JUnit suite green (final: 82 classes, 1269 tests, 0
+failures). Issues 10–11 remain `needs-input` owner decisions.

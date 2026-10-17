@@ -32,9 +32,11 @@ public final class AuditActions {
     public static final String ARTIFACT_REVOKE = "artifact_revoke";
     public static final String AUDIENCE_REQUEST = "audience_request";
     public static final String AUDIENCE_REVIEW = "audience_review";
+    public static final String BATON_KNOCKOUT = "baton_knockout";
     public static final String BOLO_CANCEL = "bolo_cancel";
     public static final String BOLO_CREATE = "bolo_create";
     public static final String BOLO_EXPIRE = "bolo_expire";
+    public static final String BOLO_RESOLVE = "bolo_resolve";
     public static final String BOUNTY_BAIL = "bounty_bail";
     public static final String BOUNTY_CANCEL = "bounty_cancel";
     public static final String BOUNTY_CAPTURE = "bounty_capture";
@@ -75,6 +77,7 @@ public final class AuditActions {
     public static final String CUFF_EMERGENCY_RELEASE = "cuff_emergency_release";
     public static final String CUFF_EXPIRE = "cuff_expire";
     public static final String CUFF_RECOVERY = "cuff_recovery";
+    public static final String CUFF_REQUEST = "cuff_request";
     public static final String CUFF_TETHER = "cuff_tether";
     public static final String CUSTODY_DEATH_RECOVERY = "custody_death_recovery";
     public static final String CUSTODY_RECOVERY = "custody_recovery";
@@ -82,6 +85,10 @@ public final class AuditActions {
     public static final String DEBT_APPLY = "debt_apply";
     public static final String DEMOTE = "demote";
     public static final String DESK_CREATE = "desk_create";
+    public static final String DESK_LABOR = "desk_labor";
+    public static final String DESK_LEDGER = "desk_ledger";
+    public static final String DESK_LIST = "desk_list";
+    public static final String DESK_PICK = "desk_pick";
     public static final String DESK_PRICE = "desk_price";
     public static final String DESK_QUARTERMASTER = "desk_quartermaster";
     public static final String DESK_REMOVE = "desk_remove";
@@ -219,10 +226,12 @@ public final class AuditActions {
     public static final String STORAGE_THIEF_MARKED = "storage_thief_marked";
     public static final String SURRENDER_ACCEPT = "surrender_accept";
     public static final String SURRENDER_REFUSE = "surrender_refuse";
+    public static final String SURRENDER_REQUEST = "surrender_request";
     public static final String SUSPECT_KILLED = "suspect_killed";
     public static final String SUSPEND = "suspend";
     public static final String TRAINING_MANUAL = "training_manual";
     public static final String TRAINING_QUIZ = "training_quiz";
     public static final String WANTED_ESCORT = "wanted_escort";
+    public static final String WHIP_KNOCKOUT = "whip_knockout";
     public static final String WHISTLE = "whistle";
 }

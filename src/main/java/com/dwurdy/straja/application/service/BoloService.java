@@ -143,7 +143,7 @@ public final class BoloService {
         if (key.isEmpty()) return 0;
         BoloStore data = store();
         int cleared = 0;
-        var action = status == BoloStatus.RESOLVED ? "bolo_resolve" : "bolo_cancel";
+        var action = status == BoloStatus.RESOLVED ? AuditActions.BOLO_RESOLVE : AuditActions.BOLO_CANCEL;
         for (BoloRecord record : data.records) {
             if (record != null && record.status == BoloStatus.ACTIVE
                     && key.equals(record.subjectUuid)) {
@@ -166,7 +166,7 @@ public final class BoloService {
         if (uuidOrName == null || uuidOrName.isBlank()) return 0;
         BoloStore data = store();
         int cleared = 0;
-        var action = status == BoloStatus.RESOLVED ? "bolo_resolve" : "bolo_cancel";
+        var action = status == BoloStatus.RESOLVED ? AuditActions.BOLO_RESOLVE : AuditActions.BOLO_CANCEL;
         for (BoloRecord record : data.records) {
             if (record != null && record.status == BoloStatus.ACTIVE
                     && (uuidOrName.equals(record.subjectUuid)

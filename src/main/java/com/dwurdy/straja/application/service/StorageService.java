@@ -3,6 +3,7 @@ package com.dwurdy.straja.application.service;
 import com.dwurdy.straja.application.StrajaContext;
 import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.domain.model.Rank;
+import com.dwurdy.straja.domain.model.AuditResults;
 import com.dwurdy.straja.domain.model.StoragePoint;
 import com.dwurdy.straja.domain.model.StorageSetup;
 import com.dwurdy.straja.domain.model.StorageWatchStore;
@@ -133,7 +134,7 @@ public final class StorageService {
             store.clearThief(key);
             ctx.npcGuards().finishQuestForTeam(
                     ctx.policies().storageHuntTeam, ctx.policies().storageHuntQuestId);
-            audit.record(AuditActions.STORAGE_THIEF_CLEARED, "storage", "", key, key, "ARRESTED", "offline");
+            audit.record(AuditActions.STORAGE_THIEF_CLEARED, "storage", "", key, key, AuditResults.ARRESTED, "offline");
         }
         save(store);
     }
@@ -198,7 +199,7 @@ public final class StorageService {
             announceTheft(player.name());
             ctx.npcGuards().startQuestForTeam(ctx.policies().storageHuntTeam, ctx.policies().storageHuntQuestId);
             audit.record(AuditActions.STORAGE_THIEF_MARKED, "storage", "", player.name(), key,
-                    "FLAGGED", "units=" + units);
+                    AuditResults.FLAGGED, "units=" + units);
         }
         store.markThief(key, rec.addOwed(units));
     }
@@ -459,7 +460,7 @@ public final class StorageService {
         if (leftover > 0) {
             ctx.containers().dropItem(dest.dimension(), dest.x(), dest.y(), dest.z(), itemId, leftover);
         }
-        audit.record(AuditActions.STORAGE_DEPOSIT, "storage", "", playerName, "", "OK",
+        audit.record(AuditActions.STORAGE_DEPOSIT, "storage", "", playerName, "", AuditResults.OK,
                 count + "x " + itemId + " (leftover " + leftover + ")");
         return new DepositResult(true, inserted, leftover);
     }
@@ -556,7 +557,7 @@ public final class StorageService {
         zoneCorners.clear();
         save(store);
         admin.tellKey("straja.storage.cfg_reset");
-        audit.record(AuditActions.STORAGE_CFG_RESET, admin.name(), admin.uuid().toString(), "", "", "RESET", "");
+        audit.record(AuditActions.STORAGE_CFG_RESET, admin.name(), admin.uuid().toString(), "", "", AuditResults.RESET, "");
     }
 
     // ------------------------------------------------------------ reporting

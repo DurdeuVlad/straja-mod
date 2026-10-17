@@ -63,7 +63,7 @@ public final class MerchantDeskService {
     // ------------------------------------------------------------ admin
 
     public boolean createDesk(PlayerGateway actor, String deskId, String npcRef) {
-        if (!authorized(actor)) return refuseAuthority(actor, "desk_create");
+        if (!authorized(actor)) return refuseAuthority(actor, AuditActions.DESK_CREATE);
         if (deskId == null || deskId.isBlank() || !deskId.matches("[a-zA-Z0-9_\\-]{1,32}")
                 || "off".equalsIgnoreCase(deskId)) {
             // "off" is the pick-disarm sentinel — never a valid desk id.
@@ -100,7 +100,7 @@ public final class MerchantDeskService {
     }
 
     public boolean removeDesk(PlayerGateway actor, String deskId) {
-        if (!authorized(actor)) return refuseAuthority(actor, "desk_remove");
+        if (!authorized(actor)) return refuseAuthority(actor, AuditActions.DESK_REMOVE);
         var store = store();
         if (store.desk(deskId) == null) {
             actor.refuse("straja.desk.no_desk", "straja.remedy.fix_retry", deskId);
@@ -114,7 +114,7 @@ public final class MerchantDeskService {
     }
 
     public boolean setPrice(PlayerGateway actor, String deskId, String itemId, int price) {
-        if (!authorized(actor)) return refuseAuthority(actor, "desk_price");
+        if (!authorized(actor)) return refuseAuthority(actor, AuditActions.DESK_PRICE);
         var store = store();
         var desk = store.desk(deskId);
         if (desk == null) {
@@ -140,7 +140,7 @@ public final class MerchantDeskService {
     }
 
     public boolean setCreditsLabor(PlayerGateway actor, String deskId, boolean on) {
-        if (!authorized(actor)) return refuseAuthority(actor, "desk_labor");
+        if (!authorized(actor)) return refuseAuthority(actor, AuditActions.DESK_LABOR);
         var store = store();
         var desk = store.desk(deskId);
         if (desk == null) {
@@ -156,7 +156,7 @@ public final class MerchantDeskService {
 
     /** Arms the admin's next chest click as a desk-chest pick. */
     public boolean setPickMode(PlayerGateway admin, String deskId) {
-        if (!authorized(admin)) return refuseAuthority(admin, "desk_pick");
+        if (!authorized(admin)) return refuseAuthority(admin, AuditActions.DESK_PICK);
         if ("off".equals(deskId) || deskId == null || deskId.isBlank()) {
             picks.remove(admin.uuid());
             admin.tellKey("straja.desk.pick_off");
@@ -213,7 +213,7 @@ public final class MerchantDeskService {
      */
     public boolean setupQuartermaster(PlayerGateway actor, String campId, String deskId,
                                       int unitPrice) {
-        if (!authorized(actor)) return refuseAuthority(actor, "desk_quartermaster");
+        if (!authorized(actor)) return refuseAuthority(actor, AuditActions.DESK_QUARTERMASTER);
         var campStore = ctx.laborCamps().read();
         var camp = campStore.camp(campId);
         if (camp == null) {
@@ -267,7 +267,7 @@ public final class MerchantDeskService {
 
     public void listDesks(PlayerGateway viewer) {
         if (!authorized(viewer)) {
-            refuseAuthority(viewer, "desk_list");
+            refuseAuthority(viewer, AuditActions.DESK_LIST);
             return;
         }
         var store = store();
@@ -285,7 +285,7 @@ public final class MerchantDeskService {
     public void showLedger(PlayerGateway viewer, String deskId, String sellerRef) {
         // The ledger names sellers and marks labor sales — staff-only data.
         if (!authorized(viewer)) {
-            refuseAuthority(viewer, "desk_ledger");
+            refuseAuthority(viewer, AuditActions.DESK_LEDGER);
             return;
         }
         var store = store();

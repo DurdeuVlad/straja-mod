@@ -201,7 +201,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         ctx.factions().leaveTeam(player);
         player.tell("Facțiunea ta anterioară \"" + captured + "\" nu mai există; ai rămas fără echipă.");
         audit.record(AuditActions.FACTION_RESTORE_FAILED, "system", player.uuid().toString(),
-                player.name(), player.uuid().toString(), "FAIL", captured);
+                player.name(), player.uuid().toString(), AuditResults.FAIL, captured);
     }
 
     /** Normal (patrol) shifts start and end at the Secretary (§7). */
@@ -1507,7 +1507,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
                 state.salaryPaymentError = "unconfirmed_previous_attempt";
                 players.save(player.uuid(), state);
                 audit.record(AuditActions.SALARY_PAYOUT, player.name(), player.uuid().toString(),
-                        player.name(), player.uuid().toString(), "FAILED", "unconfirmed_previous_attempt");
+                        player.name(), player.uuid().toString(), AuditResults.FAILED, "unconfirmed_previous_attempt");
                 player.refuse("straja.duty.payment_unconfirmed", "straja.remedy.ask_comisar");
             }
             return;
