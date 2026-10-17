@@ -72,6 +72,7 @@ public final class StrajaEvents {
         if (runtime.serverGateway().tickCount() % 20 != 0) return;
         // FUN-6: unanswered calls widen through the band ladder or expire.
         runtime.dispatch().tick();
+        runtime.transfers().tick();
         // FUN-7: hunts decay to warrants; hunters get fading hints.
         runtime.manhunts().tick();
         // FUN-4: unsigned reports past deadline auto-file from the ledger.
@@ -974,6 +975,11 @@ public final class StrajaEvents {
                         new MinecraftPlayerGateway(attacker.getServer(), attacker.getUUID()), victimGateway);
             }
             runtime.custodyRoleplay().recoverAfterDeath(victimGateway);
+            // FUN-8: an escort's death breaks the chain anywhere; a prisoner's
+            // death voids the ride — custody recovery owns the body.
+            String victimUuid = victimGateway.uuid() == null ? "" : victimGateway.uuid().toString();
+            runtime.transfers().escortDied(victimUuid);
+            runtime.transfers().prisonerDied(victimUuid);
             // A flagged thief dying (hunt resolution) clears the debt flag.
             runtime.storage().onPlayerDeath(victimGateway);
         }

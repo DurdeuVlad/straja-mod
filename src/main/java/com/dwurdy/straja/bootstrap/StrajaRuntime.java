@@ -71,6 +71,7 @@ public final class StrajaRuntime {
     private final com.dwurdy.straja.application.service.IncidentService incidents;
     private final com.dwurdy.straja.application.service.DispatchService dispatch;
     private final com.dwurdy.straja.application.service.ManhuntService manhunts;
+    private final com.dwurdy.straja.application.service.TransferService transfers;
     private final com.dwurdy.straja.application.service.BoloService bolos;
     private final com.dwurdy.straja.application.service.BountyService bounties;
     private final com.dwurdy.straja.application.service.ProtocolService protocol;
@@ -188,6 +189,7 @@ public final class StrajaRuntime {
                 new SavedStores.Incidents(stores),
                 new SavedStores.Dispatch(stores),
                 new SavedStores.Manhunts(stores),
+                new SavedStores.Transfers(stores),
                 new SavedStores.Bolos(stores),
                 new SavedStores.Bounties(stores),
                 new SavedStores.Evidence(stores),
@@ -397,6 +399,17 @@ public final class StrajaRuntime {
         this.manhunts.useDispatch(this.dispatch);
         this.manhunts.useBolos(this.bolos);
         this.prison.useManhunts(this.manhunts);
+        // FUN-8: ordered camp transfers become escorted rides — dispatch
+        // routes the call, custody holds the chain, manhunts take a break.
+        this.transfers = new com.dwurdy.straja.application.service.TransferService(
+                ctx, players, audit);
+        this.transfers.useDispatch(this.dispatch);
+        this.transfers.useCustody(this.custody);
+        this.transfers.usePrison(this.prison);
+        this.transfers.useManhunts(this.manhunts);
+        this.dispatch.useTransfers(this.transfers);
+        this.prison.useTransfers(this.transfers);
+        this.custody.useTransferBreakGate(this.transfers::distanceBreakAllowed);
         this.evidence = new com.dwurdy.straja.application.service.EvidenceService(ctx, players, audit);
         this.arrestRecords = new com.dwurdy.straja.application.service.ArrestRecordService(ctx, players, audit);
         this.reputation = new com.dwurdy.straja.application.service.ReputationService(
@@ -411,6 +424,8 @@ public final class StrajaRuntime {
             // LAW-007: cuffs landing calls the hunt off immediately — no
             // waiting for the next periodic aggro scan.
             wanted.onCuffed(officer, target);
+            // FUN-8: an escort cuffing their prisoner takes the ride's chain.
+            transfers.onCuffed(officer, target);
         });
         this.storage = new com.dwurdy.straja.application.service.StorageService(
                 ctx, players, audit, bolos, prison);
@@ -636,6 +651,7 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.service.IncidentService incidents() { return incidents; }
     public com.dwurdy.straja.application.service.DispatchService dispatch() { return dispatch; }
     public com.dwurdy.straja.application.service.ManhuntService manhunts() { return manhunts; }
+    public com.dwurdy.straja.application.service.TransferService transfers() { return transfers; }
     public com.dwurdy.straja.application.service.BoloService bolos() { return bolos; }
 
     public com.dwurdy.straja.application.service.BountyService bounties() { return bounties; }

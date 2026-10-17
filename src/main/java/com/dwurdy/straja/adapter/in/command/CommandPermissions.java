@@ -80,6 +80,8 @@ final class CommandPermissions {
             Map.entry("ajutor", 0),
             Map.entry("dispatch", 0),
             Map.entry("manhunt", 0),
+            Map.entry("transfer", 0),
+            Map.entry("zone", ADMIN),
             Map.entry("status", 0),
             Map.entry("rules", 0),
             Map.entry("regulament", 0),

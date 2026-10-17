@@ -1003,5 +1003,16 @@
   "straja.manhunt.calloff_rank": "Only an officer or the Commissioner can call off a hunt.",
   "straja.manhunt.inactive": "That manhunt is not active anymore.",
   "straja.help.player.cmd.manhunt": "call off an active manhunt (officers)",
-  "straja.cell.unknown": "No cell with that id."
+  "straja.cell.unknown": "No cell with that id.",
+  "straja.transfer.inactive": "That transfer ride is no longer active.",
+  "straja.transfer.escorts_full": "This ride already has its full escort.",
+  "straja.transfer.not_escort": "You are not an assigned escort on this ride.",
+  "straja.transfer.pickup_far": "You must be next to the prisoner to take the chain.",
+  "straja.transfer.retether_fail": "The chain could not be handed to you.",
+  "straja.transfer.cuff_fail": "You cannot cuff the prisoner right now.",
+  "straja.zone.exists": "A risk zone with id %s already exists.",
+  "straja.zone.radius_invalid": "Radius must be between 4 and 512 blocks.",
+  "straja.zone.unknown": "No risk zone with id %s.",
+  "straja.remedy.dispatch": "Answer the call via /straja dispatch accept first.",
+  "straja.help.player.cmd.transfer": "transfer rides: status, join, pickup (members)"
 }

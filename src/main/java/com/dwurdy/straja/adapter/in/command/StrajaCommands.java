@@ -114,6 +114,39 @@ public final class StrajaCommands {
                 .executes(c -> player(c, p -> StrajaRuntime.get().manhunts()
                         .callOff(p, StringArgumentType.getString(c, "id"), "command")))));
         root.then(manhunt);
+        // FUN-8: transfer rides — member join/status surfaces.
+        var transfer = Commands.literal("transfer");
+        transfer.executes(c -> player(c, p -> StrajaRuntime.get().transfers().status(p)));
+        transfer.then(Commands.literal("list")
+                .executes(c -> player(c, StrajaRuntime.get().transfers()::listFor)));
+        transfer.then(Commands.literal("join").then(Commands.argument("id", StringArgumentType.string())
+                .executes(c -> player(c, p -> StrajaRuntime.get().transfers()
+                        .join(p, StringArgumentType.getString(c, "id"))))));
+        transfer.then(Commands.literal("pickup").then(Commands.argument("id", StringArgumentType.string())
+                .executes(c -> player(c, p -> StrajaRuntime.get().transfers()
+                        .pickup(p, StringArgumentType.getString(c, "id"))))));
+        transfer.then(Commands.literal("cancel").then(Commands.argument("id", StringArgumentType.string())
+                .executes(c -> player(c, p -> StrajaRuntime.get().transfers()
+                        .cancel(p, StringArgumentType.getString(c, "id"))))));
+        root.then(transfer);
+        // FUN-8 admin: declared risk zones where a chain can part.
+        var zone = adminOnly(Commands.literal("zone"));
+        zone.then(Commands.literal("list")
+                .executes(c -> player(c, StrajaRuntime.get().transfers()::zoneList)));
+        zone.then(Commands.literal("add").then(Commands.argument("id", StringArgumentType.word())
+                .then(Commands.argument("radius", IntegerArgumentType.integer(4, 512))
+                        .executes(c -> player(c, p -> StrajaRuntime.get().transfers()
+                                .zoneAdd(p, StringArgumentType.getString(c, "id"),
+                                        IntegerArgumentType.getInteger(c, "radius"), "")))
+                        .then(Commands.argument("name", StringArgumentType.greedyString())
+                                .executes(c -> player(c, p -> StrajaRuntime.get().transfers()
+                                        .zoneAdd(p, StringArgumentType.getString(c, "id"),
+                                                IntegerArgumentType.getInteger(c, "radius"),
+                                                StringArgumentType.getString(c, "name"))))))));
+        zone.then(Commands.literal("remove").then(Commands.argument("id", StringArgumentType.word())
+                .executes(c -> player(c, p -> StrajaRuntime.get().transfers()
+                        .zoneRemove(p, StringArgumentType.getString(c, "id"))))));
+        root.then(zone);
 
         var special = adminOnly(Commands.literal("special"));
         special.then(Commands.literal("start").then(Commands.argument("player", EntityArgument.player())
@@ -2558,6 +2591,7 @@ public final class StrajaCommands {
                 new PlayerHelpEntry("/straja inspect", "straja.help.player.cmd.inspect"),
                 new PlayerHelpEntry("/straja dispatch", "straja.help.player.cmd.dispatch"),
                 new PlayerHelpEntry("/straja manhunt", "straja.help.player.cmd.manhunt"),
+                new PlayerHelpEntry("/straja transfer", "straja.help.player.cmd.transfer"),
                 new PlayerHelpEntry("/straja stop", "straja.help.player.cmd.stop"));
 
         /** Commands advertised by the player orientation — all must stay permission-0. */

@@ -1003,5 +1003,16 @@
   "straja.manhunt.calloff_rank": "Doar un ofițer sau Comisarul poate opri o vânătoare.",
   "straja.manhunt.inactive": "Vânătoarea aceea nu mai este activă.",
   "straja.help.player.cmd.manhunt": "oprește o vânătoare activă (ofițeri)",
-  "straja.cell.unknown": "Nu există celulă cu acel id."
+  "straja.cell.unknown": "Nu există celulă cu acel id.",
+  "straja.transfer.inactive": "Acel transfer nu mai este activ.",
+  "straja.transfer.escorts_full": "Acest transport are deja escorta completă.",
+  "straja.transfer.not_escort": "Nu ești escort desemnat pe acest transport.",
+  "straja.transfer.pickup_far": "Trebuie să fii lângă deținut ca să preiei lanțul.",
+  "straja.transfer.retether_fail": "Lanțul nu a putut fi predat ție.",
+  "straja.transfer.cuff_fail": "Nu îl poți încătușa acum.",
+  "straja.zone.exists": "Există deja o zonă riscantă cu id %s.",
+  "straja.zone.radius_invalid": "Raza trebuie să fie între 4 și 512 blocuri.",
+  "straja.zone.unknown": "Nu există zonă riscantă cu id %s.",
+  "straja.remedy.dispatch": "Răspunde întâi apelului prin /straja dispatch accept.",
+  "straja.help.player.cmd.transfer": "transporturi deținuți: stare, înscriere, ridicare (membri)"
 }

@@ -92,6 +92,16 @@ public class CustodyService implements CustodyRoleplayUseCase {
         this.restraintAppliedHook = hook == null ? (actor, target) -> {} : hook;
     }
 
+    /**
+     * FUN-8: consulted before a cuff's distance-timeout break — chained
+     * transfer prisoners break only inside declared risk zones. Default
+     * allows every break (pre-FUN-8 semantics).
+     */
+    private java.util.function.Function<String, Boolean> transferBreakGate = uuid -> true;
+    public void useTransferBreakGate(java.util.function.Function<String, Boolean> gate) {
+        this.transferBreakGate = gate == null ? uuid -> true : gate;
+    }
+
     private long now() { return ctx.clock().nowMillis(); }
     private CustodyStore store() { return ctx.custody().read(); }
 
@@ -1465,6 +1475,74 @@ public class CustodyService implements CustodyRoleplayUseCase {
         return true;
     }
 
+    /**
+     * FUN-8: hands an existing chain to a new escort — same restraint, new
+     * tether anchor. Used when a ride's lead leaves and a co-escort or a
+     * newly-accepted escort picks the prisoner up on contact.
+     */
+    public boolean retether(PlayerGateway newIssuer, PlayerGateway target) {
+        if (newIssuer == null || target == null || !canIssueCuffs(newIssuer)) return false;
+        var store = store();
+        var record = store.cuffed.get(key(target));
+        if (record == null) return false;
+        record.issuer = newIssuer.name();
+        record.issuerUuid = uuidOf(newIssuer);
+        record.escortLostAt = null;
+        record.outOfRangeAt = null;
+        ctx.custody().write(store);
+        grantCuffKey(newIssuer, null);
+        audit.record(AuditActions.CUFF_TETHER, newIssuer.name(), uuidOf(newIssuer),
+                target.name(), uuidOf(target), AuditResults.SUCCESS, "retether");
+        return true;
+    }
+
+    /**
+     * FUN-8: system chain drop for settled/returned rides — removes the
+     * restraint without firing the escape hook (custody state changes are
+     * owned by the caller, not read as an escape).
+     */
+    public boolean releaseChainSilently(PlayerGateway target) {
+        if (target == null) return false;
+        var store = store();
+        String targetKey = key(target);
+        var record = store.cuffed.get(targetKey);
+        if (record == null) return false;
+        recoverCanonicalRestraint(store, targetKey, "transfer_end");
+        restoreCuffedHand(store, target, record);
+        store.cuffed.remove(targetKey);
+        store.bound.remove(targetKey);
+        ctx.custody().write(store);
+        audit.record(AuditActions.RESTRAINT_RELEASE, "system", "", target.name(), uuidOf(target),
+                AuditResults.SUCCESS, "transfer_chain_drop");
+        return true;
+    }
+
+    /**
+     * Offline variant of {@link #releaseChainSilently(PlayerGateway)} — the
+     * ride ends while the body is absent; the record drops and the freed
+     * hand restores on next login via canonical recovery.
+     */
+    public boolean releaseChainSilently(String targetUuid) {
+        if (targetUuid == null || targetUuid.isBlank()) return false;
+        var store = store();
+        var record = store.cuffed.get(targetUuid);
+        if (record == null) return false;
+        recoverCanonicalRestraint(store, targetUuid, "transfer_end");
+        store.cuffed.remove(targetUuid);
+        store.bound.remove(targetUuid);
+        ctx.custody().write(store);
+        audit.record(AuditActions.RESTRAINT_RELEASE, "system", "", record.target, targetUuid,
+                AuditResults.SUCCESS, "transfer_chain_drop");
+        return true;
+    }
+
+    /** Issuer uuid of the active cuff record on a target, or null. */
+    public String cuffedIssuerUuid(PlayerGateway target) {
+        if (target == null) return null;
+        var record = store().cuffed.get(key(target));
+        return record == null ? null : record.issuerUuid;
+    }
+
     public boolean giveCuffs(PlayerGateway player) {
         if (!canIssueCuffs(player)) {
             player.refuse("straja.custody.cuffs_rank", "straja.remedy.instructor");
@@ -2603,17 +2681,24 @@ public class CustodyService implements CustodyRoleplayUseCase {
                         changed = true;
                     } else if (now() - record.outOfRangeAt
                             >= Math.max(1, ctx.policies().cuffBreakGraceSeconds) * 1000L) {
-                        recoverCanonicalRestraint(store, entry.getKey(), "distance_timeout");
-                        restoreCuffedHand(store, target, record);
-                        store.cuffed.remove(entry.getKey());
-                        restraintReleasedHook.accept(issuer, target);
-                        target.tell("Cătușele s-au rupt după ce ai ieșit din raza gardianului.");
-                        issuer.tell(target.name() + " a ieșit din raza cătușelor; acestea s-au rupt.");
-                        audit.record(AuditActions.CUFF_EXPIRE, issuer.name(), record.issuerUuid,
-                                target.name(), record.targetUuid, AuditResults.SUCCESS,
-                                "distance_timeout distance=" + (int) maxDistance);
-                        changed = true;
-                        continue;
+                        if (!transferBreakGate.apply(record.targetUuid)) {
+                            // FUN-8: a chained transfer outside a risk zone
+                            // cannot part by distance — the window re-arms.
+                            record.outOfRangeAt = now();
+                            changed = true;
+                        } else {
+                            recoverCanonicalRestraint(store, entry.getKey(), "distance_timeout");
+                            restoreCuffedHand(store, target, record);
+                            store.cuffed.remove(entry.getKey());
+                            restraintReleasedHook.accept(issuer, target);
+                            target.tell("Cătușele s-au rupt după ce ai ieșit din raza gardianului.");
+                            issuer.tell(target.name() + " a ieșit din raza cătușelor; acestea s-au rupt.");
+                            audit.record(AuditActions.CUFF_EXPIRE, issuer.name(), record.issuerUuid,
+                                    target.name(), record.targetUuid, AuditResults.SUCCESS,
+                                    "distance_timeout distance=" + (int) maxDistance);
+                            changed = true;
+                            continue;
+                        }
                     }
                 } else if (record.outOfRangeAt != null) {
                     record.outOfRangeAt = null;

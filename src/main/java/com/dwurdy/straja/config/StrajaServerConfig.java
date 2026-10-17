@@ -327,6 +327,12 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.IntValue MANHUNT_HINT_BASE_RADIUS;
     public static final ModConfigSpec.DoubleValue MANHUNT_HINT_GROWTH_PER_MINUTE;
     public static final ModConfigSpec.IntValue MANHUNT_RECAPTURE_PENALTY_DAYS;
+    public static final ModConfigSpec.BooleanValue TRANSFER_RIDE_ENABLED;
+    public static final ModConfigSpec.DoubleValue TRANSFER_MIN_RIDE_BLOCKS;
+    public static final ModConfigSpec.IntValue TRANSFER_ESCORT_WAIT_MINUTES;
+    public static final ModConfigSpec.IntValue TRANSFER_MAX_ESCORTS;
+    public static final ModConfigSpec.DoubleValue TRANSFER_WALK_BLOCKS_PER_HOUR;
+    public static final ModConfigSpec.DoubleValue TRANSFER_RISK_MULTIPLIER;
     public static final ModConfigSpec.DoubleValue ESCORT_TETHER_RADIUS;
     public static final ModConfigSpec.DoubleValue ESCORT_GATE_BYPASS_RADIUS;
     public static final ModConfigSpec.DoubleValue ESCORT_TELEPORT_DISTANCE;
@@ -1219,6 +1225,34 @@ public final class StrajaServerConfig {
                 .defineInRange("recapturePenaltyDays", defaults.manhuntRecapturePenaltyDays, 0, 365);
         B.pop();
 
+        B.push("transfer");
+        TRANSFER_RIDE_ENABLED = B.comment(
+                        "Ordered camp transfers become escorted rides: a real",
+                        "escort walks the chained prisoner through declared",
+                        "risk zones. False restores instant teleport transfer.")
+                .define("rideEnabled", defaults.transferRideEnabled);
+        TRANSFER_MIN_RIDE_BLOCKS = B.comment(
+                        "Origin-to-destination hops shorter than this stay",
+                        "instant — same-station moves are not rides.")
+                .defineInRange("minRideBlocks", defaults.transferMinRideBlocks, 0.0, 100000.0);
+        TRANSFER_ESCORT_WAIT_MINUTES = B.comment(
+                        "Minutes an unclaimed ride waits for an escort before",
+                        "the prisoner returns to custody.")
+                .defineInRange("escortWaitMinutes", defaults.transferEscortWaitMinutes, 1, 240);
+        TRANSFER_MAX_ESCORTS = B.comment(
+                        "Escorts paid per ride — the lead plus co-escorts",
+                        "who join before delivery.")
+                .defineInRange("maxEscorts", defaults.transferMaxEscorts, 1, 16);
+        TRANSFER_WALK_BLOCKS_PER_HOUR = B.comment(
+                        "Assumed escort speed feeding the transport reward's",
+                        "estimated-hours term of the mission budget formula.")
+                .defineInRange("walkBlocksPerHour", defaults.transferWalkBlocksPerHour, 100.0, 1000000.0);
+        TRANSFER_RISK_MULTIPLIER = B.comment(
+                        "Risk multiplier on the escort transport reward —",
+                        "rides through risk zones can go wrong.")
+                .defineInRange("riskMultiplier", defaults.transferRiskMultiplier, 0.1, 100.0);
+        B.pop();
+
         B.push("audit");
         AUDIT_ENABLED = B.define("enabled", true);
         AUDIT_RETENTION_LIMIT = B.defineInRange("retentionLimit", 500, 10, 100000);
@@ -1590,6 +1624,12 @@ public final class StrajaServerConfig {
         p.manhuntHintBaseRadius = MANHUNT_HINT_BASE_RADIUS.get();
         p.manhuntHintGrowthPerMinute = MANHUNT_HINT_GROWTH_PER_MINUTE.get();
         p.manhuntRecapturePenaltyDays = MANHUNT_RECAPTURE_PENALTY_DAYS.get();
+        p.transferRideEnabled = TRANSFER_RIDE_ENABLED.get();
+        p.transferMinRideBlocks = TRANSFER_MIN_RIDE_BLOCKS.get();
+        p.transferEscortWaitMinutes = TRANSFER_ESCORT_WAIT_MINUTES.get();
+        p.transferMaxEscorts = TRANSFER_MAX_ESCORTS.get();
+        p.transferWalkBlocksPerHour = TRANSFER_WALK_BLOCKS_PER_HOUR.get();
+        p.transferRiskMultiplier = TRANSFER_RISK_MULTIPLIER.get();
         p.escortTetherRadius = ESCORT_TETHER_RADIUS.get();
         p.escortGateBypassRadius = ESCORT_GATE_BYPASS_RADIUS.get();
         p.escortTeleportDistance = ESCORT_TELEPORT_DISTANCE.get();
