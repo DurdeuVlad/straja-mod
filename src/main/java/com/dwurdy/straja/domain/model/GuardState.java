@@ -51,6 +51,8 @@ public class GuardState {
     public Double lastDutyActivityY = null;
     public Double lastDutyActivityZ = null;
     public boolean salaryActivityPaused = false;
+    /** FUN-5: wages accrue at the response multiplier until this timestamp. */
+    public Long responseCreditUntil = null;
     public long dutyRemainderMs = 0;         // sub-granularity duty time carried forward
     public long dutyServiceMs = 0;           // consumed duty time this shift (service-point ticks)
     public int dutyBlocksCurrent = 0;

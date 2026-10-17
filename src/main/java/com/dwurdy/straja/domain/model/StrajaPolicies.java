@@ -298,6 +298,14 @@ public class StrajaPolicies {
     // patrol route; they earn the same hourly wage and the anti-AFK movement
     // gate is intentionally not applied to them (trusted ranks, §10).
     public int freeDutyMinRank = 3;
+    /** FUN-5: ROUTE keeps the legacy checkpoint-deadline shift; FREE_BEAT
+     *  keeps the route as guidance but a missed deadline never ends duty. */
+    public String dutyRouteMode = "FREE_BEAT";
+    /** FUN-5: wage multiplier while a response credit is active (accepting or
+     *  joining someone else's incident grants the credit). */
+    public double dutyResponseMultiplier = 2.0;
+    /** FUN-5: minutes of multiplied pay granted per response participation. */
+    public int dutyResponseCreditMinutes = 10;
     public int nativeFactionMaxLength = 40;
 
     // §11: activity reports — a reporting interval runs per member; overdue

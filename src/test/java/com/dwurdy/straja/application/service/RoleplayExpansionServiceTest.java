@@ -72,6 +72,41 @@ class RoleplayExpansionServiceTest {
     }
 
     @Test
+    void incidentAcceptGrantsResponseCreditToOnDutyResponder() {
+        TestPlayer citizen = server.add("citizen");
+        TestPlayer guard = addDuty("lead", Rank.GUARD);
+        var incident = incidents.createCitizenReport(citizen, "furt", "A fost furat ceva.");
+        assertNotNull(incident);
+        assertTrue(incidents.accept(guard, incident.id));
+        assertEquals(clock.nowMillis() + ctx.policies().dutyResponseCreditMinutes * 60_000L,
+                players.state(guard.uuid()).responseCreditUntil);
+    }
+
+    @Test
+    void selfCreatedIncidentAcceptEarnsNoCredit() {
+        TestPlayer guard = addDuty("lead", Rank.GUARD);
+        var incident = incidents.createCitizenReport(guard, "furt", "Raport propriu.");
+        assertNotNull(incident);
+        assertTrue(incidents.accept(guard, incident.id), "self-accept stays legal cleanup");
+        assertNull(players.state(guard.uuid()).responseCreditUntil,
+                "accepting your own report is not response work");
+    }
+
+    @Test
+    void joinGrantsCreditAndExtendsToTheLaterWindow() {
+        TestPlayer citizen = server.add("citizen");
+        TestPlayer lead = addDuty("lead", Rank.GUARD);
+        TestPlayer support = addDuty("support", Rank.GUARD);
+        var incident = incidents.createCitizenReport(citizen, "furt", "Martori în zonă.");
+        assertNotNull(incident);
+        incidents.accept(lead, incident.id);
+        clock.advance(4 * 60_000L);
+        assertTrue(incidents.join(support, incident.id));
+        assertEquals(clock.nowMillis() + ctx.policies().dutyResponseCreditMinutes * 60_000L,
+                players.state(support.uuid()).responseCreditUntil);
+    }
+
+    @Test
     void incidentLifecycleEnforcesOneLeadAndSupportLimit() {
         ctx.policies().incidentMaxSupportingGuards = 1;
         TestPlayer citizen = server.add("citizen");

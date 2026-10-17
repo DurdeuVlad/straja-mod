@@ -46,6 +46,12 @@ public final class DutyEngine {
     }
 
     /** Laps required to finish a patrol; 0 keeps the legacy endless loop. */
+    /** FUN-5: FREE_BEAT keeps checkpoints as presence/context beats; ROUTE
+     *  restores the legacy deadline-terminated shift. */
+    public static boolean freeBeat(StrajaPolicies policies) {
+        return policies == null || !"ROUTE".equalsIgnoreCase(String.valueOf(policies.dutyRouteMode));
+    }
+
     private static int patrolRounds(StrajaPolicies policies) {
         return policies != null ? Math.max(0, policies.patrolRounds) : 1;
     }
@@ -86,7 +92,8 @@ public final class DutyEngine {
         }
 
         long granMs = granularityMs(policies);
-        long elapsed = now - state.lastAccrualAt;
+        long accrualStart = state.lastAccrualAt;
+        long elapsed = now - accrualStart;
         long total = state.dutyRemainderMs + elapsed;
         long chunks = total / granMs;
         state.dutyRemainderMs = total % granMs;
@@ -118,7 +125,21 @@ public final class DutyEngine {
             state.salaryPaidSecondsWindow += payableSeconds;
         }
 
-        long work = state.salaryCarryWork + payableSeconds * Math.max(0, (long) salaryPerHour);
+        // FUN-5: seconds accruing under an active response credit pay at the
+        // configured multiplier; the rest pay the base rate. The split point
+        // is the earlier of the tick end and the credit expiry.
+        double multiplier = policies != null && policies.dutyResponseMultiplier > 0
+                ? policies.dutyResponseMultiplier : 1.0;
+        long responseSeconds = 0;
+        if (multiplier > 1.0 && state.responseCreditUntil != null) {
+            long coveredMs = Math.max(0,
+                    Math.min(accrualStart + consumedMs, state.responseCreditUntil) - accrualStart);
+            responseSeconds = coveredMs / 1000;
+        }
+        long payableResponse = Math.min(responseSeconds, payableSeconds);
+        long work = state.salaryCarryWork
+                + (payableSeconds - payableResponse) * Math.max(0, (long) salaryPerHour)
+                + Math.round(payableResponse * (long) Math.max(0, salaryPerHour) * multiplier);
         int coins = (int) (work / 3600L);
         state.salaryCarryWork = work % 3600L;
         if (coins > 0) {
@@ -128,6 +149,8 @@ public final class DutyEngine {
                     .put("paidMinutes", payableSeconds / 60)
                     .put("suppressedSeconds", consumedSeconds - payableSeconds)
                     .put("hourlyWage", salaryPerHour)
+                    .put("responseActive", responseSeconds > 0)
+                    .put("responseMultiplier", multiplier)
                     .build());
         }
         return events;
@@ -150,7 +173,10 @@ public final class DutyEngine {
         state.route = new ArrayList<>(route);
         state.patrolIndex = 0;
         state.patrolRounds = 0;
-        state.requiredRounds = patrolRounds(policies);
+        // FUN-5: a finite round target is a route-mode discipline knob and an
+        // emergency override (snapshotted in GuardService.startDuty). A
+        // FREE_BEAT shift is an open-ended presence period.
+        state.requiredRounds = freeBeat(policies) ? 0 : patrolRounds(policies);
         state.waitingUntil = null;
         state.missionMinutes = new java.util.LinkedHashMap<>();
         for (String checkpointId : route) {
@@ -169,6 +195,7 @@ public final class DutyEngine {
         state.dutyBlocksCurrent = 0;
         state.specialAuthorizedBy = null;
         state.lastEndReason = null;
+        state.responseCreditUntil = null;
         return Result.pass(List.of(DomainEvent.builder("duty_started")
                 .put("checkpoint", route.get(0))
                 .put("deadlineAt", state.deadlineAt)
@@ -213,6 +240,7 @@ public final class DutyEngine {
         state.dutyBlocksCurrent = 0;
         state.specialAuthorizedBy = null;
         state.lastEndReason = null;
+        state.responseCreditUntil = null;
         return Result.pass(List.of(DomainEvent.of("duty_started_free")));
     }
 
@@ -278,11 +306,13 @@ public final class DutyEngine {
         // shifts accrue salary without a route.
         if (!"NORMAL".equals(state.mode)) return new TickResult(events);
 
-        // Hard real-time ceiling: a patrol cannot run past patrolMaxMinutes
-        // regardless of checkpoint pacing — ends gracefully, salary kept.
+        // Hard real-time ceiling on ROUTE shifts only: a patrol cannot run
+        // past patrolMaxMinutes regardless of checkpoint pacing. In FREE_BEAT
+        // a shift is a presence period — it ends on an explicit stop, an
+        // emergency patrol completion, or a loss of authority, never a clock.
         // The final accrual honors the anti-AFK clamp, same as a normal tick.
         long capMs = patrolCapMs(policies);
-        if (capMs > 0 && state.dutyStartedAt != null && now - state.dutyStartedAt >= capMs) {
+        if (!freeBeat(policies) && capMs > 0 && state.dutyStartedAt != null && now - state.dutyStartedAt >= capMs) {
             events.addAll(endDuty(state, "patrol_time_cap", salaryTimestamp, salaryPerHour, policies).events());
             return new TickResult(events);
         }
@@ -299,18 +329,19 @@ public final class DutyEngine {
                     .put("missionMinutes", minutes)
                     .build());
         } else if ("ACTIVE".equals(state.patrolState) && state.deadlineAt != null && now >= state.deadlineAt) {
-            state.duty = false;
-            state.mode = "OFF_DUTY";
-            state.patrolState = "OFF";
-            state.deadlineAt = null;
-            state.lastAccrualAt = null;
-            state.lastDutyActivityAt = null;
-            state.lastDutyActivityX = null;
-            state.lastDutyActivityY = null;
-            state.lastDutyActivityZ = null;
-            state.salaryActivityPaused = false;
-            state.lastEndReason = "checkpoint_timeout";
-            events.add(DomainEvent.builder("duty_ended").put("reason", "checkpoint_timeout").build());
+            if (freeBeat(policies)) {
+                // FUN-5: a missed beat is information, not a termination —
+                // the checkpoint stays active until the member reaches it.
+                events.add(DomainEvent.builder("checkpoint_missed")
+                        .put("checkpoint", state.route.get(state.patrolIndex))
+                        .build());
+                state.deadlineAt = null;
+            } else {
+                // ROUTE discipline: the missed window ends the shift through
+                // the single cleanup path (accrue already ran this tick).
+                events.addAll(endDuty(state, "checkpoint_timeout", salaryTimestamp,
+                        salaryPerHour, policies).events());
+            }
         }
         return new TickResult(events);
     }
@@ -330,6 +361,7 @@ public final class DutyEngine {
         state.lastDutyActivityY = null;
         state.lastDutyActivityZ = null;
         state.salaryActivityPaused = false;
+        state.responseCreditUntil = null;
         state.requiredRounds = 0;
         state.lastEndReason = reason;
         events.add(DomainEvent.builder("duty_ended").put("reason", reason).build());
