@@ -317,6 +317,16 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.IntValue PRISON_MAX_SENTENCE_DAYS;
     public static final ModConfigSpec.IntValue PRISON_ARREST_RADIUS;
     public static final ModConfigSpec.IntValue PRISON_RETENTION_LIMIT;
+    public static final ModConfigSpec.IntValue CELL_TAMPER_SECONDS;
+    public static final ModConfigSpec.IntValue CELL_TAMPER_QUICK_SECONDS;
+    public static final ModConfigSpec.DoubleValue CELL_TAMPER_RANGE;
+    public static final ModConfigSpec.IntValue CELL_BROKEN_MINUTES;
+    public static final ModConfigSpec.DoubleValue MANHUNT_GUARD_DETECT_RADIUS;
+    public static final ModConfigSpec.IntValue MANHUNT_MINUTES;
+    public static final ModConfigSpec.IntValue MANHUNT_HINT_SECONDS;
+    public static final ModConfigSpec.IntValue MANHUNT_HINT_BASE_RADIUS;
+    public static final ModConfigSpec.DoubleValue MANHUNT_HINT_GROWTH_PER_MINUTE;
+    public static final ModConfigSpec.IntValue MANHUNT_RECAPTURE_PENALTY_DAYS;
     public static final ModConfigSpec.DoubleValue ESCORT_TETHER_RADIUS;
     public static final ModConfigSpec.DoubleValue ESCORT_GATE_BYPASS_RADIUS;
     public static final ModConfigSpec.DoubleValue ESCORT_TELEPORT_DISTANCE;
@@ -1167,6 +1177,46 @@ public final class StrajaServerConfig {
         ESCORT_GATE_BYPASS_RADIUS = B.defineInRange("escortGateBypassRadius", 3.0, 1.0, 32.0);
         ESCORT_TELEPORT_DISTANCE = B.defineInRange("escortTeleportDistance", 14.0, 4.0, 128.0);
         LOCKER_CHESTS_PER_PRISONER = B.defineInRange("lockerChestsPerPrisoner", 2, 1, 8);
+        CELL_TAMPER_SECONDS = B.comment(
+                        "Seconds of uninterrupted channel before bolt cutters",
+                        "open a cell lock.")
+                .defineInRange("cellTamperSeconds", defaults.cellTamperSeconds, 1, 600);
+        CELL_TAMPER_QUICK_SECONDS = B.comment(
+                        "Seconds for the crowbar on a WEAK-tier cell lock.")
+                .defineInRange("cellTamperQuickSeconds", defaults.cellTamperQuickSeconds, 1, 600);
+        CELL_TAMPER_RANGE = B.comment(
+                        "Max distance the breaker may drift from the door",
+                        "mid-channel before the attempt fails.")
+                .defineInRange("cellTamperRange", defaults.cellTamperRange, 1.0, 64.0);
+        CELL_BROKEN_MINUTES = B.comment(
+                        "Minutes a sprung lock stays broken — until then the",
+                        "door does not hold anyone.")
+                .defineInRange("cellBrokenMinutes", defaults.cellBrokenMinutes, 1, 1440);
+        B.pop();
+
+        B.push("manhunt");
+        MANHUNT_GUARD_DETECT_RADIUS = B.comment(
+                        "Tamper fails when an on-duty guard stands within this",
+                        "radius of the cell door — presence is the counterplay.")
+                .defineInRange("guardDetectRadius", defaults.manhuntGuardDetectRadius, 1.0, 128.0);
+        MANHUNT_MINUTES = B.comment(
+                        "Minutes an active hunt runs before cooling into",
+                        "standing arrest warrants.")
+                .defineInRange("minutes", defaults.manhuntMinutes, 1, 1440);
+        MANHUNT_HINT_SECONDS = B.comment(
+                        "Seconds between hunter position hints.")
+                .defineInRange("hintSeconds", defaults.manhuntHintSeconds, 5, 3600);
+        MANHUNT_HINT_BASE_RADIUS = B.comment(
+                        "Base fuzz radius for hints in blocks — hints never",
+                        "pinpoint closer than this.")
+                .defineInRange("hintBaseRadius", defaults.manhuntHintBaseRadius, 0, 4096);
+        MANHUNT_HINT_GROWTH_PER_MINUTE = B.comment(
+                        "Extra hint fuzz per elapsed minute — hints degrade",
+                        "with age.")
+                .defineInRange("hintGrowthPerMinute", defaults.manhuntHintGrowthPerMinute, 0.0, 512.0);
+        MANHUNT_RECAPTURE_PENALTY_DAYS = B.comment(
+                        "Extra sentence days a recaptured manhunt runner serves.")
+                .defineInRange("recapturePenaltyDays", defaults.manhuntRecapturePenaltyDays, 0, 365);
         B.pop();
 
         B.push("audit");
@@ -1530,6 +1580,16 @@ public final class StrajaServerConfig {
         p.prisonMaxSentenceDays = PRISON_MAX_SENTENCE_DAYS.get();
         p.prisonArrestRadius = PRISON_ARREST_RADIUS.get();
         p.prisonRetentionLimit = PRISON_RETENTION_LIMIT.get();
+        p.cellTamperSeconds = CELL_TAMPER_SECONDS.get();
+        p.cellTamperQuickSeconds = CELL_TAMPER_QUICK_SECONDS.get();
+        p.cellTamperRange = CELL_TAMPER_RANGE.get();
+        p.cellBrokenMinutes = CELL_BROKEN_MINUTES.get();
+        p.manhuntGuardDetectRadius = MANHUNT_GUARD_DETECT_RADIUS.get();
+        p.manhuntMinutes = MANHUNT_MINUTES.get();
+        p.manhuntHintSeconds = MANHUNT_HINT_SECONDS.get();
+        p.manhuntHintBaseRadius = MANHUNT_HINT_BASE_RADIUS.get();
+        p.manhuntHintGrowthPerMinute = MANHUNT_HINT_GROWTH_PER_MINUTE.get();
+        p.manhuntRecapturePenaltyDays = MANHUNT_RECAPTURE_PENALTY_DAYS.get();
         p.escortTetherRadius = ESCORT_TETHER_RADIUS.get();
         p.escortGateBypassRadius = ESCORT_GATE_BYPASS_RADIUS.get();
         p.escortTeleportDistance = ESCORT_TELEPORT_DISTANCE.get();

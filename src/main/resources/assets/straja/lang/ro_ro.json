@@ -995,5 +995,13 @@
   "straja.petition.gone": "Cererea respectivă nu mai așteaptă o decizie.",
   "straja.petition.bad_decision": "Decizie necunoscută — scrie aproba sau respinge.",
   "straja.petition.denied": "Nu poți decide această cerere.",
-  "straja.remedy.travel": "Deplasează-te mai întâi în dimensiunea apelului."
+  "straja.remedy.travel": "Deplasează-te mai întâi în dimensiunea apelului.",
+  "straja.cell.tamper_duty": "Nu poți forța broaște în timpul serviciului.",
+  "straja.cell.tamper_tier": "Panga deschide doar broaște slabe — celula asta cere clește de buloane.",
+  "straja.cell.tamper_busy": "Cineva lucrează deja la acea broască.",
+  "straja.cell.tamper_guard": "Un străjer e prea aproape — broasca nu poate fi forțată pe furiș.",
+  "straja.manhunt.calloff_rank": "Doar un ofițer sau Comisarul poate opri o vânătoare.",
+  "straja.manhunt.inactive": "Vânătoarea aceea nu mai este activă.",
+  "straja.help.player.cmd.manhunt": "oprește o vânătoare activă (ofițeri)",
+  "straja.cell.unknown": "Nu există celulă cu acel id."
 }

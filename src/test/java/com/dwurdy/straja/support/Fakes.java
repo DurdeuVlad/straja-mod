@@ -638,6 +638,7 @@ public final class Fakes {
                 new SavedStores.IdentityCards(access),
                 new SavedStores.Incidents(access),
                 new SavedStores.Dispatch(access),
+                new SavedStores.Manhunts(access),
                 new SavedStores.Bolos(access),
                 new SavedStores.Bounties(access),
                 new SavedStores.Evidence(access),

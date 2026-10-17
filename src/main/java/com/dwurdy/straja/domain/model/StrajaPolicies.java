@@ -317,6 +317,31 @@ public class StrajaPolicies {
     public int dispatchEnlistedMaxRank = 2;
     /** FUN-6: bound on retained terminal calls; oldest are pruned on tick. */
     public int dispatchRetentionLimit = 100;
+
+    // FUN-7: breaks & manhunts — tamper channel, guard detection radius,
+    // hint cadence/decay, hunt length, recapture penalty.
+    /** Seconds of uninterrupted channel before bolt cutters open a cell. */
+    public int cellTamperSeconds = 20;
+    /** Seconds for the crowbar on a WEAK-tier lock (the fast cheap option). */
+    public int cellTamperQuickSeconds = 8;
+    /** Max distance the breaker may drift from the door mid-channel. */
+    public double cellTamperRange = 4.0;
+    /** Tamper fails when an on-duty guard stands within this radius. */
+    public double manhuntGuardDetectRadius = 16.0;
+    /** How long a broken lock stays broken before the door is usable again. */
+    public int cellBrokenMinutes = 30;
+    /** Minutes an active manhunt runs before cooling to standing warrants. */
+    public int manhuntMinutes = 15;
+    /** Seconds between hunter position hints. */
+    public int manhuntHintSeconds = 30;
+    /** Base hint fuzz radius in blocks — hints never pinpoint closer. */
+    public int manhuntHintBaseRadius = 24;
+    /** Blocks of extra fuzz per elapsed minute — hints degrade with age. */
+    public double manhuntHintGrowthPerMinute = 8.0;
+    /** Extra sentence days a recaptured manhunt runner serves. */
+    public int manhuntRecapturePenaltyDays = 1;
+    /** Bound on retained terminal hunts; oldest are pruned on tick. */
+    public int manhuntRetentionLimit = 50;
     public int nativeFactionMaxLength = 40;
 
     // §11: activity reports — a reporting interval runs per member; overdue

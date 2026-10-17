@@ -70,6 +70,7 @@ public final class StrajaRuntime {
     private final com.dwurdy.straja.application.service.PolicyService policyService;
     private final com.dwurdy.straja.application.service.IncidentService incidents;
     private final com.dwurdy.straja.application.service.DispatchService dispatch;
+    private final com.dwurdy.straja.application.service.ManhuntService manhunts;
     private final com.dwurdy.straja.application.service.BoloService bolos;
     private final com.dwurdy.straja.application.service.BountyService bounties;
     private final com.dwurdy.straja.application.service.ProtocolService protocol;
@@ -186,6 +187,7 @@ public final class StrajaRuntime {
                 new SavedStores.IdentityCards(stores),
                 new SavedStores.Incidents(stores),
                 new SavedStores.Dispatch(stores),
+                new SavedStores.Manhunts(stores),
                 new SavedStores.Bolos(stores),
                 new SavedStores.Bounties(stores),
                 new SavedStores.Evidence(stores),
@@ -389,6 +391,12 @@ public final class StrajaRuntime {
         this.dispatch.useIncidents(this.incidents);
         this.incidents.useDispatch(this.dispatch);
         this.bolos.useDispatch(this.dispatch);
+        // FUN-7: manhunts ride the same pipeline — hints + decay + warrants.
+        this.manhunts = new com.dwurdy.straja.application.service.ManhuntService(
+                ctx, players, audit);
+        this.manhunts.useDispatch(this.dispatch);
+        this.manhunts.useBolos(this.bolos);
+        this.prison.useManhunts(this.manhunts);
         this.evidence = new com.dwurdy.straja.application.service.EvidenceService(ctx, players, audit);
         this.arrestRecords = new com.dwurdy.straja.application.service.ArrestRecordService(ctx, players, audit);
         this.reputation = new com.dwurdy.straja.application.service.ReputationService(
@@ -627,6 +635,7 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.service.RpExpansionService expansion() { return expansion; }
     public com.dwurdy.straja.application.service.IncidentService incidents() { return incidents; }
     public com.dwurdy.straja.application.service.DispatchService dispatch() { return dispatch; }
+    public com.dwurdy.straja.application.service.ManhuntService manhunts() { return manhunts; }
     public com.dwurdy.straja.application.service.BoloService bolos() { return bolos; }
 
     public com.dwurdy.straja.application.service.BountyService bounties() { return bounties; }

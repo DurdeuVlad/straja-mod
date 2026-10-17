@@ -35,9 +35,39 @@ public class PrisonService implements PrisonRoleplayUseCase {
     private LaborCampService camps;
     /** DEBT-1 pending book notices (late-bound like useSeizure). */
     private DebtService debt;
+    /** FUN-7: a completed break opens manhunts for every participant. */
+    private ManhuntService manhunts;
     private long lastTickMs;
     /** Armed admin picks for the locker pool (admin uuid → mode). */
     private final java.util.Map<java.util.UUID, String> pickModes = new java.util.HashMap<>();
+    /** FUN-7: in-flight tamper channels keyed by cell id — memory-only,
+     *  a restart mid-channel simply cancels the attempt. */
+    private final java.util.Map<String, Tamper> tamperAttempts = new java.util.HashMap<>();
+
+    private record Tamper(String cellId, String breakerUuid, String breakerName,
+                          long completesAt, double x, double y, double z) {}
+
+    /** FUN-7: admin lock-tier — WEAK falls to the crowbar, STANDARD needs cutters. */
+    public boolean setCellLockTier(PlayerGateway admin, String cellId, String tier) {
+        var data = store();
+        var cell = data.cell(cellId);
+        if (cell == null) {
+            if (admin != null) admin.refuse("straja.cell.unknown", "straja.remedy.fix_retry");
+            return false;
+        }
+        String t = tier == null ? "" : tier.toUpperCase(java.util.Locale.ROOT);
+        if (!t.equals("STANDARD") && !t.equals("WEAK")) {
+            if (admin != null) admin.refuse("straja.cell.tamper_tier", "straja.remedy.fix_retry");
+            return false;
+        }
+        cell.lockTier = t;
+        ctx.prison().write(data);
+        audit.record(AuditActions.PRISON_CELL_CREATE, admin == null ? "" : admin.name(),
+                admin == null ? "" : uuidOf(admin), cell.id, "", AuditResults.SUCCESS,
+                "locktier=" + t);
+        if (admin != null) admin.tell("Celula " + cell.id + " are broască " + t + ".");
+        return true;
+    }
 
     public PrisonService(StrajaContext ctx, PlayerService players, AuditService audit,
                          CustodyRoleplayUseCase custody) {
@@ -65,6 +95,11 @@ public class PrisonService implements PrisonRoleplayUseCase {
     /** DEBT-1: queued written-book notices drain at login (late-bound like useSeizure). */
     public void useDebt(DebtService service) {
         this.debt = service;
+    }
+
+    /** FUN-7: completed breaks open manhunts (late-bound like useSeizure). */
+    public void useManhunts(ManhuntService service) {
+        this.manhunts = service;
     }
 
     public void onArrest(Consumer<Sentence> hook) {
@@ -321,6 +356,11 @@ public class PrisonService implements PrisonRoleplayUseCase {
             recapture(target, existing);
             return existing;
         }
+        // FUN-7: a non-prisoner runner (the springer) is captured by any
+        // new sentence — pull them out of the hunt either way.
+        if (manhunts != null && manhunts.huntFor(uuidOf(target)) != null) {
+            manhunts.runnerCaptured(uuidOf(target));
+        }
         // LAW-006: the arrest site's destination decides where the prisoner
         // lands — "CAMP:<id>" delivers to a labor camp, anything else is the
         // normal cell/waitlist path.
@@ -458,11 +498,199 @@ public class PrisonService implements PrisonRoleplayUseCase {
             teleportToCell(target, cell);
             target.setGameMode("adventure");
         }
+        // FUN-7: a recaptured manhunt runner serves extra time. The store
+        // object `sentence` came from a different read — persist through the
+        // authoritative graph or the penalty evaporates.
+        var hunt = manhunts == null ? null : manhunts.huntFor(uuid);
+        if (hunt != null) {
+            int penalty = Math.max(0, ctx.policies().manhuntRecapturePenaltyDays);
+            var fresh = store();
+            Sentence stored = null;
+            for (Sentence s : fresh.sentences) {
+                if (s != null && sentence.id.equals(s.id)) stored = s;
+            }
+            if (stored != null && penalty > 0) {
+                stored.remainingActiveMs += (long) penalty
+                        * Math.max(1, ctx.policies().prisonActiveMinutesPerMinecraftDay) * 60_000L;
+                ctx.prison().write(fresh);
+                sentence.remainingActiveMs = stored.remainingActiveMs;
+            }
+            manhunts.runnerCaptured(uuid);
+            target.tell("Vânătoarea s-a încheiat pentru tine — sentința a fost prelungită.");
+        }
         if (wasHunted) {
             target.tell("Ai fost readus în custodie.");
             audit.record(AuditActions.PRISON_RECAPTURE, "", "", sentence.target, uuid,
                     AuditResults.SUCCESS, "sentenceId=" + sentence.id);
         }
+    }
+
+    // ------------------------------------------------------------ FUN-7 tamper
+
+    /**
+     * Right-click on a cell door with a break tool. Bolt cutters open any
+     * tier after a long channel; the crowbar opens WEAK locks quickly.
+     * The attempt refuses while a uniformed guard stands inside the
+     * detection radius — presence is the counterplay. Returns true when
+     * the click was consumed (attempt running, refused, or completed).
+     */
+    @Override
+    public boolean onCellTamper(PlayerGateway breaker, String dimension, int x, int y, int z) {
+        if (breaker == null || breaker.uuid() == null || !ctx.policies().prisonEnabled)
+            return false;
+        var held = breaker.mainHand();
+        String tool = held == null || held.isEmpty() ? "" : held.id();
+        boolean cutters = "straja:bolt_cutters".equals(tool);
+        boolean crowbar = "straja:crowbar".equals(tool);
+        if (!cutters && !crowbar) return false;
+        Cell cell = cellAtDoor(dimension, x, y, z);
+        if (cell == null) return false; // not a cell door — leave the click alone
+        if (players.isOnDutyGuard(breaker)) {
+            breaker.refuse("straja.cell.tamper_duty", "straja.remedy.wait");
+            return true;
+        }
+        if (custody.actionBlocked(breaker, "tamper")) return true;
+        if (cell.brokenUntil > now()) {
+            breaker.tell("Broasca celulei " + cell.id + " a fost spartă — intră liber.");
+            return true;
+        }
+        if (crowbar && !"WEAK".equalsIgnoreCase(cell.lockTier)) {
+            breaker.refuse("straja.cell.tamper_tier", "straja.remedy.fix_retry");
+            return true;
+        }
+        String cellKey = cell.id;
+        Tamper active = tamperAttempts.get(cellKey);
+        String key = breaker.uuid().toString();
+        if (active != null) {
+            if (active.breakerUuid.equals(key)) {
+                long left = Math.max(0, active.completesAt - now()) / 1_000L;
+                breaker.tell("Lucrezi la broască… încă " + left + "s. Nu te mișca.");
+            } else {
+                breaker.refuse("straja.cell.tamper_busy", "straja.remedy.wait");
+            }
+            return true;
+        }
+        // One channel per breaker — a player cannot spring every cell at once.
+        for (Tamper t : tamperAttempts.values()) {
+            if (t.breakerUuid.equals(key)) {
+                breaker.refuse("straja.cell.tamper_busy", "straja.remedy.wait");
+                return true;
+            }
+        }
+        if (guardNear(cell)) {
+            breaker.refuse("straja.cell.tamper_guard", "straja.remedy.wait");
+            return true;
+        }
+        long seconds = crowbar ? ctx.policies().cellTamperQuickSeconds
+                : ctx.policies().cellTamperSeconds;
+        tamperAttempts.put(cellKey, new Tamper(cellKey, key, breaker.name(),
+                now() + Math.max(1, seconds) * 1_000L,
+                cell.doorX + 0.5, cell.doorY + 0.5, cell.doorZ + 0.5));
+        audit.record(AuditActions.PRISON_BREAK, key, key, cell.id, "",
+                AuditResults.SUCCESS, "tamper_start:" + tool);
+        breaker.tell("§6Începi să forțezi celula " + cell.id + " — "
+                + Math.max(1, seconds) + "s. Stai aproape și stai jos de strajă.");
+        return true;
+    }
+
+    /** The cell whose door centre is within tamper reach of the click. */
+    private Cell cellAtDoor(String dimension, int x, int y, int z) {
+        for (Cell cell : store().cells) {
+            if (cell == null || !cell.dimension.equals(dimension)) continue;
+            int dx = x - cell.doorX, dy = y - cell.doorY, dz = z - cell.doorZ;
+            if (dx * dx + dy * dy + dz * dz <= 9) return cell; // 3-block reach
+        }
+        return null;
+    }
+
+    private boolean guardNear(Cell cell) {
+        double radius = Math.max(1.0, ctx.policies().manhuntGuardDetectRadius);
+        for (PlayerGateway p : ctx.server().onlinePlayers()) {
+            if (p == null || !cell.dimension.equals(p.dimension())) continue;
+            if (!players.isOnDutyGuard(p)) continue;
+            double dx = p.x() - cell.doorX, dy = p.y() - cell.doorY, dz = p.z() - cell.doorZ;
+            if (dx * dx + dy * dy + dz * dz <= radius * radius) return true;
+        }
+        return false;
+    }
+
+    /** Advances tamper channels each tick; completion is atomic + audited. */
+    private void tickTampers() {
+        if (tamperAttempts.isEmpty()) return;
+        var it = tamperAttempts.values().iterator();
+        while (it.hasNext()) {
+            Tamper t = it.next();
+            if (now() < t.completesAt) continue;
+            it.remove();
+            PlayerGateway breaker = null;
+            for (PlayerGateway p : ctx.server().onlinePlayers()) {
+                if (p != null && t.breakerUuid.equals(p.uuid() == null ? "" : p.uuid().toString()))
+                    breaker = p;
+            }
+            if (breaker == null || custody.actionBlocked(breaker, "tamper")) continue;
+            Cell cell = null;
+            var data = store();
+            for (Cell c : data.cells) {
+                if (c != null && t.cellId.equals(c.id)) cell = c;
+            }
+            if (cell == null || cell.brokenUntil > now()) continue;
+            if (!cell.dimension.equals(breaker.dimension())) continue; // portaled out
+            // The tool that opened the channel must still be in hand.
+            var heldNow = breaker.mainHand();
+            String toolNow = heldNow == null || heldNow.isEmpty() ? "" : heldNow.id();
+            boolean toolOk = "straja:bolt_cutters".equals(toolNow)
+                    || ("straja:crowbar".equals(toolNow) && "WEAK".equalsIgnoreCase(cell.lockTier));
+            if (!toolOk) {
+                breaker.tell("Ai scăpat unealta din mână — forțarea a eșuat.");
+                continue;
+            }
+            double dx = breaker.x() - t.x, dy = breaker.y() - t.y, dz = breaker.z() - t.z;
+            double range = Math.max(1.0, ctx.policies().cellTamperRange);
+            if (dx * dx + dy * dy + dz * dz > range * range) {
+                breaker.tell("Te-ai depărtat de ușă — forțarea a eșuat.");
+                continue;
+            }
+            if (guardNear(cell)) {
+                breaker.tell("Un străjer s-a apropiat — forțarea a eșuat.");
+                continue;
+            }
+            cell.brokenUntil = now() + Math.max(1, ctx.policies().cellBrokenMinutes) * 60_000L;
+            cell.brokenByUuid = t.breakerUuid;
+            cell.brokenByName = t.breakerName;
+            ctx.prison().write(data);
+            audit.record(AuditActions.PRISON_BREAK, t.breakerName, t.breakerUuid,
+                    cell.id, "", AuditResults.SUCCESS, "tamper_complete");
+            breaker.tell("§cBroasca a cedat — celula " + cell.id + " e deschisă. Fugi!");
+            openManhunt(breaker, cell, data);
+        }
+    }
+
+    /** A finished break implicates the breaker plus that cell's occupants. */
+    private void openManhunt(PlayerGateway breaker, Cell cell, PrisonStore data) {
+        if (manhunts == null) return;
+        var runners = new ArrayList<com.dwurdy.straja.domain.model.ManhuntRecord.Runner>();
+        var br = new com.dwurdy.straja.domain.model.ManhuntRecord.Runner();
+        br.uuid = breaker.uuid().toString();
+        br.name = breaker.name();
+        runners.add(br);
+        var assignment = data.assignments.get(cell.id);
+        if (assignment != null && assignment.targetUuid != null
+                && !assignment.targetUuid.isBlank()
+                && !assignment.targetUuid.equals(br.uuid)) {
+            // Only an occupant the register still holds IN_CELL rides the
+            // hunt — an escorted or already-loose prisoner is not sprung.
+            var rr = ctx.prisonerRegister().read().prisoner(assignment.targetUuid);
+            if (rr != null && rr.status == PrisonerStatus.IN_CELL) {
+                var r = new com.dwurdy.straja.domain.model.ManhuntRecord.Runner();
+                r.uuid = assignment.targetUuid;
+                r.name = assignment.target;
+                r.wasPrisoner = true;
+                runners.add(r);
+            }
+        }
+        manhunts.begin(runners, cell.dimension,
+                cell.doorX + 0.5, cell.doorY + 0.5, cell.doorZ + 0.5,
+                "celula " + cell.id, "cell:" + cell.id);
     }
 
     /** Resolves the arrest site from an explicit site id or a {@code checkpoint:<id>} mission tag. */
@@ -568,6 +796,11 @@ public class PrisonService implements PrisonRoleplayUseCase {
                     com.dwurdy.straja.domain.model.BoloStatus.RESOLVED, "released");
             bolos.resolveForSubject(sentence.target,
                     com.dwurdy.straja.domain.model.BoloStatus.RESOLVED, "released");
+        }
+        // FUN-7: a lawful release lifts the runner out of any live manhunt —
+        // otherwise the hunt would cool into a warrant on a free citizen.
+        if (manhunts != null && manhunts.huntFor(sentence.targetUuid) != null) {
+            manhunts.runnerCaptured(sentence.targetUuid);
         }
         if (target != null) {
             target.setGameMode(rec == null || blank(rec.priorGameMode)
@@ -1242,6 +1475,7 @@ public class PrisonService implements PrisonRoleplayUseCase {
 
     /** Consumes sentence time; online+active only, elapsed capped at 5s/tick. */
     public void tick() {
+        tickTampers(); // FUN-7: sub-second interruptibility — runs every tick
         if (now() - lastTickMs < 1000) return; // ~1s cadence, like the reference
         lastTickMs = now();
         var data = store();

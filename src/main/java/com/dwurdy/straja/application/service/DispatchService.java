@@ -23,6 +23,7 @@ public final class DispatchService {
     public static final String SOURCE_BOLO = "BOLO";
     public static final String SOURCE_BOUNTY = "BOUNTY";
     public static final String SOURCE_OFFENSE = "OFFENSE";
+    public static final String SOURCE_MANHUNT = "MANHUNT";
 
     private final StrajaContext ctx;
     private final PlayerService players;
