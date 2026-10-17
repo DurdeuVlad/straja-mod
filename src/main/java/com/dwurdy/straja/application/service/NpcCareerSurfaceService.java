@@ -7,6 +7,7 @@ import com.dwurdy.straja.domain.model.NpcSurfaceSnapshot;
 import com.dwurdy.straja.domain.model.Rank;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.IntFunction;
 
 /**
  * Projects the authoritative instructor/recruiter progression view onto the
@@ -17,10 +18,12 @@ public final class NpcCareerSurfaceService {
     public NpcSurfaceSnapshot resolve(
             NpcSurfaceSnapshot published,
             GuardState state,
-            GuardRecruitmentUseCase.TrainingView training) {
+            GuardRecruitmentUseCase.TrainingView training,
+            IntFunction<String> rankName) {
         Objects.requireNonNull(published, "published");
         Objects.requireNonNull(state, "state");
         Objects.requireNonNull(training, "training");
+        Objects.requireNonNull(rankName, "rankName");
         List<NpcSurfaceAction> actions = published.actions().stream()
                 .map(action -> switch (action.actionId().value()) {
                     case "training-progress" -> stateful(action, careerEligible(state),
@@ -32,7 +35,7 @@ public final class NpcCareerSurfaceService {
                     default -> action;
                 })
                 .toList();
-        String body = bounded(published.body() + "\n\n" + progressionText(state, training), 8_192);
+        String body = bounded(published.body() + "\n\n" + progressionText(state, training, rankName), 8_192);
         return new NpcSurfaceSnapshot(
                 published.binding(), published.profileId(), published.title(), body,
                 actions, choices(published.dialogue(), actions),
@@ -53,15 +56,16 @@ public final class NpcCareerSurfaceService {
     }
 
     private static String progressionText(
-            GuardState state, GuardRecruitmentUseCase.TrainingView training) {
+            GuardState state, GuardRecruitmentUseCase.TrainingView training,
+            IntFunction<String> rankName) {
         StringBuilder text = new StringBuilder("Career status: ")
-                .append(Rank.of(training.rank()).displayName())
+                .append(rankName.apply(training.rank()))
                 .append("; service blocks: ").append(training.serviceBlocks()).append('.');
         if (training.pendingModules() > 0) {
             text.append(" Pending training modules: ").append(training.pendingModules()).append('.');
         }
         if (training.nextRank() != null && training.requiredBlocks() != null) {
-            text.append(" Next rank: ").append(Rank.of(training.nextRank()).displayName())
+            text.append(" Next rank: ").append(rankName.apply(training.nextRank()))
                     .append(" after ").append(training.requiredBlocks()).append(" service blocks.");
         } else if (state.rank >= Rank.STAGIAR.level() && state.rank < Rank.COLONEL.level()) {
             text.append(" The next advancement requires commissioner review.");

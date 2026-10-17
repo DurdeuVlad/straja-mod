@@ -376,7 +376,8 @@ public final class NpcPresentationRuntime {
         }
         if ("trainer".equals(binding.roleId()) || "recruiter".equals(binding.roleId())) {
             return CAREER_SURFACE.resolve(
-                    admission, state, runtime.guardRecruitment().trainingView(player));
+                    admission, state, runtime.guardRecruitment().trainingView(player),
+                    runtime.policies()::rankName);
         }
         return admission;
     }

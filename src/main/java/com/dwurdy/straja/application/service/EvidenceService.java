@@ -181,7 +181,7 @@ public final class EvidenceService {
         }
         audit.record(AuditActions.ITEM_CONFISCATED, guard.name(), uuid(guard),
                 target.name(), uuid(target),
-                bagDelivered && receiptDelivered ? AuditResults.SUCCESS : "SUCCESS_PENDING_DELIVERY", evidence.id);
+                bagDelivered && receiptDelivered ? AuditResults.SUCCESS : AuditResults.SUCCESS_PENDING_DELIVERY, evidence.id);
         return true;
     }
 

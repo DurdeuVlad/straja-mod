@@ -13,6 +13,7 @@ import com.dwurdy.straja.domain.model.NpcContentId;
 import com.dwurdy.straja.domain.model.NpcProviderId;
 import com.dwurdy.straja.domain.model.NpcSurfaceAction;
 import com.dwurdy.straja.domain.model.NpcSurfaceSnapshot;
+import com.dwurdy.straja.domain.model.StrajaPolicies;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -20,12 +21,13 @@ import org.junit.jupiter.api.Test;
 
 class NpcCareerSurfaceTest {
     private static final NpcContentId PROFILE = NpcContentId.of("straja.instructor.admission");
+    private static final StrajaPolicies POLICIES = new StrajaPolicies();
 
     @Test
     void civilianSurfaceFailsClosedAndKeepsCareerQuestLocked() {
         GuardState state = new GuardState();
         NpcSurfaceSnapshot surface = new NpcCareerSurfaceService().resolve(
-                published(), state, training(0, 0, 2, 0, true, false, 0));
+                published(), state, training(0, 0, 2, 0, true, false, 0), POLICIES::rankName);
 
         assertFalse(action(surface, "training-progress").enabled());
         assertFalse(action(surface, "training-promote").enabled());
@@ -38,7 +40,7 @@ class NpcCareerSurfaceTest {
         state.rank = 1;
         state.invited = true;
         NpcSurfaceSnapshot surface = new NpcCareerSurfaceService().resolve(
-                published(), state, training(1, 20, 2, 20, true, false, 0));
+                published(), state, training(1, 20, 2, 20, true, false, 0), POLICIES::rankName);
 
         assertTrue(action(surface, "training-progress").enabled());
         assertTrue(action(surface, "training-promote").enabled());
@@ -49,11 +51,24 @@ class NpcCareerSurfaceTest {
     }
 
     @Test
+    void progressionTextUsesInjectedRankNames() {
+        GuardState state = new GuardState();
+        state.rank = 1;
+        state.invited = true;
+        NpcSurfaceSnapshot surface = new NpcCareerSurfaceService().resolve(
+                published(), state, training(1, 20, 2, 20, true, false, 0),
+                level -> "Grad " + level);
+
+        assertTrue(surface.body().contains("Career status: Grad 1"));
+        assertTrue(surface.body().contains("Next rank: Grad 2"));
+    }
+
+    @Test
     void pendingModulesDisablePromotionWithAPlayerFacingReason() {
         GuardState state = new GuardState();
         state.rank = 1;
         NpcSurfaceSnapshot surface = new NpcCareerSurfaceService().resolve(
-                published(), state, training(1, 20, 2, 20, false, false, 2));
+                published(), state, training(1, 20, 2, 20, false, false, 2), POLICIES::rankName);
 
         assertFalse(action(surface, "training-promote").enabled());
         assertEquals("Complete the remaining training modules first.",
@@ -67,7 +82,7 @@ class NpcCareerSurfaceTest {
         state.rank = 2;
         state.resignationPending = true;
         NpcSurfaceSnapshot surface = new NpcCareerSurfaceService().resolve(
-                published(), state, training(2, 20, 3, 20, true, false, 0));
+                published(), state, training(2, 20, 3, 20, true, false, 0), POLICIES::rankName);
 
         assertFalse(action(surface, "training-progress").enabled());
         assertFalse(action(surface, "training-promote").enabled());
