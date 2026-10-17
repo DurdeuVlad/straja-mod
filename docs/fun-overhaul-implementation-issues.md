@@ -352,6 +352,15 @@ through it). Consumed by every other flow issue — do it early in M1.
 for officer grades across member mechanics; refusal-message sweep test;
 live UAT: zero-to-Stagiar and zero-to-Zilier with no reading.
 
+**Discovered defect (filed, unfixed here).** `GuardService.suspend/demote/
+fire/reinstate` write only `GuardState`, but `PlayerService.applyV2Projection`
+re-derives `suspended`/`fired`/`rank` from the personnel record on every read
+AND inside `save()` — so legacy discipline ops revert instantly for any
+member holding a V2 record. A "suspended" officer keeps `record.active()`
+and all V2 capability checks pass (including petition review). Fix: route
+the legacy ops through `v2Personnel` status changes when wired. Affects all
+V2 surfaces; needs its own issue.
+
 **Open decisions.** Third-rank names and duties on both part-time tracks
 (proposal: soldier E3 = a lead/field-capable step feeding officer
 petitions; specialist E3 = senior tradesperson). Whether specialist entry
