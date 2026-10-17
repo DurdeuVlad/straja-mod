@@ -23,6 +23,7 @@ import com.dwurdy.straja.domain.model.StrajaPolicies;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 import net.minecraft.server.MinecraftServer;
+import com.dwurdy.straja.domain.model.Text;
 
 /**
  * Composition root: assembles policies + outbound adapters into the
@@ -367,7 +368,7 @@ public final class StrajaRuntime {
                         net.neoforged.fml.loading.FMLPaths.CONFIGDIR.get().resolve("straja-policies.yaml")));
         for (String failed : policyService.applyPersistedOverrides()) {
             com.dwurdy.straja.StrajaMod.LOGGER.warn(
-                    "[Straja] Ignored malformed policy override '{}' in straja-policies.yaml", failed);
+                    Text.STRAJA_PREFIX + "Ignored malformed policy override '{}' in straja-policies.yaml", failed);
         }
         // Persisted policy overrides cannot re-enable Straja's generic downed
         // owner while an optional provider is present.
@@ -447,7 +448,7 @@ public final class StrajaRuntime {
                             sentence.target, sentence.id);
                 } catch (IllegalArgumentException ignored) {
                     com.dwurdy.straja.StrajaMod.LOGGER.warn(
-                            "[Straja] Could not apply offline sentence rehabilitation for {}", sentence.id);
+                            Text.STRAJA_PREFIX + "Could not apply offline sentence rehabilitation for {}", sentence.id);
                 }
             }
             arrestRecords.refreshLinksForSubject(sentence.targetUuid);
@@ -463,7 +464,7 @@ public final class StrajaRuntime {
                             fine.target, fine.id);
                 } catch (IllegalArgumentException ignored) {
                     com.dwurdy.straja.StrajaMod.LOGGER.warn(
-                            "[Straja] Could not apply offline fine rehabilitation for {}", fine.id);
+                            Text.STRAJA_PREFIX + "Could not apply offline fine rehabilitation for {}", fine.id);
                 }
             }
             arrestRecords.refreshLinksForSubject(fine.targetUuid);
@@ -528,17 +529,17 @@ public final class StrajaRuntime {
         if (policies.isLocalEnvironment()) return;
         if (policies.requireCommissionerUuidOutsideLocal && policies.commissionerUuid.isEmpty()) {
             com.dwurdy.straja.StrajaMod.LOGGER.error(
-                    "[Straja] DEPLOYMENT GATE FAILED: commissionerUuid is not pinned outside a local "
+                    Text.STRAJA_PREFIX + "DEPLOYMENT GATE FAILED: commissionerUuid is not pinned outside a local "
                             + "environment — no commissioner identity will be granted");
         }
         if (policies.requireDebugDisabledOutsideLocal && policies.debugEnabled) {
             com.dwurdy.straja.StrajaMod.LOGGER.error(
-                    "[Straja] DEPLOYMENT GATE FAILED: debug.enabled=true outside a local environment "
+                    Text.STRAJA_PREFIX + "DEPLOYMENT GATE FAILED: debug.enabled=true outside a local environment "
                             + "— debug commands are disabled until this is corrected");
         }
         if (policies.requireRealCoinProviderOutsideLocal && !ctx.currency().available()) {
             com.dwurdy.straja.StrajaMod.LOGGER.error(
-                    "[Straja] DEPLOYMENT GATE FAILED: coin provider '{}' is unavailable outside a "
+                    Text.STRAJA_PREFIX + "DEPLOYMENT GATE FAILED: coin provider '{}' is unavailable outside a "
                             + "local environment — deposits/withdrawals will fail closed",
                     ctx.currency().name());
         }
@@ -702,11 +703,11 @@ public final class StrajaRuntime {
             int pendingOperations = v2Operations.pendingFor(player.uuid().toString()).size();
             if (pendingOperations > 0) {
                 com.dwurdy.straja.StrajaMod.LOGGER.info(
-                        "[Straja] V2 recovery found {} pending operation(s) for {}", pendingOperations, player.uuid());
+                        Text.STRAJA_PREFIX + "V2 recovery found {} pending operation(s) for {}", pendingOperations, player.uuid());
             }
         } catch (RuntimeException error) {
             com.dwurdy.straja.StrajaMod.LOGGER.warn(
-                    "[Straja] V2 login projection failed closed for {}: {}", player.uuid(), error.getMessage());
+                    Text.STRAJA_PREFIX + "V2 login projection failed closed for {}: {}", player.uuid(), error.getMessage());
         }
     }
     public com.dwurdy.straja.application.port.in.PlayerQueryUseCase playerQueries() { return players; }

@@ -195,11 +195,11 @@ public final class JoinRequestService implements com.dwurdy.straja.application.p
         }
         if (decided == null) return;
         if (decided.status == JoinRequestStatus.APPROVED) {
-            player.tell("[Straja] Cererea ta de muncă " + decided.requestId
+            player.tell(Text.STRAJA_PREFIX + "Cererea ta de muncă " + decided.requestId
                     + " a fost aprobată — ești acum Zilier ("
                     + Text.displayLower(decided.profession) + ").");
         } else {
-            player.tell("[Straja] Cererea ta de muncă " + decided.requestId + " a fost respinsă"
+            player.tell(Text.STRAJA_PREFIX + "Cererea ta de muncă " + decided.requestId + " a fost respinsă"
                     + (decided.decisionReason.isBlank() ? "." : ": " + decided.decisionReason));
         }
         decided.outcomeDelivered = true;

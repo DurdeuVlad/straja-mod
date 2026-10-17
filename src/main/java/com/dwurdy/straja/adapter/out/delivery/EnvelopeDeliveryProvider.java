@@ -18,6 +18,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.dwurdy.straja.domain.model.Text;
 
 /**
  * Envelope mail adapter. All Envelope API calls are confined here; failures
@@ -65,11 +66,11 @@ public class EnvelopeDeliveryProvider implements DeliveryProvider {
             MailService.of(server.overworld()).getDeliveryManager().startService(draft);
             return new Outcome(Mode.DELIVERED, subject == null ? "" : subject);
         } catch (Throwable error) {
-            LOGGER.error("[Straja] envelope letter delivery failed: {}", error.toString());
+            LOGGER.error(Text.STRAJA_PREFIX + "envelope letter delivery failed: {}", error.toString());
             if (policies.envelopeFallbackToChat) {
                 PlayerGateway target = findOnline(recipientName);
                 if (target != null) {
-                    target.tell("[Straja][Mail offline] " + (body == null ? "" : body));
+                    target.tell(Text.STRAJA_PREFIX + "[Mail offline] " + (body == null ? "" : body));
                     return new Outcome(Mode.CHAT_FALLBACK, "delivered_via_chat");
                 }
             }
@@ -96,7 +97,7 @@ public class EnvelopeDeliveryProvider implements DeliveryProvider {
             MailService.of(server.overworld()).getDeliveryManager().startService(draft);
             return new Outcome(Mode.DELIVERED, label == null ? "" : label);
         } catch (Throwable error) {
-            LOGGER.error("[Straja] envelope package delivery failed: {}", error.toString());
+            LOGGER.error(Text.STRAJA_PREFIX + "envelope package delivery failed: {}", error.toString());
             return Outcome.failed(String.valueOf(error));
         }
     }

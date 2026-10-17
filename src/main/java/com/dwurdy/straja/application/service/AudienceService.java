@@ -200,7 +200,7 @@ public class AudienceService implements AudienceUseCase {
                                 PlayerGateway requester) {
         String verdict = AudienceRequest.RESOLVED.equals(request.status)
                 ? "rezolvată" : "respinsă";
-        requester.tell("[Straja] Cererea ta de audiență " + request.id + " a fost " + verdict
+        requester.tell(Text.STRAJA_PREFIX + "Cererea ta de audiență " + request.id + " a fost " + verdict
                 + " de Comisar."
                 + (request.resolutionNote.isBlank() ? "" : " Notă: " + request.resolutionNote));
         request.outcomeDelivered = true;
@@ -209,7 +209,7 @@ public class AudienceService implements AudienceUseCase {
     private void notifyComisar(int newCount) {
         for (PlayerGateway online : ctx.server().onlinePlayers()) {
             if (players.isCommissioner(online)) {
-                online.tell("[Straja] " + newCount + " cereri de audiență noi așteaptă la Secretariat.");
+                online.tell(Text.STRAJA_PREFIX + newCount + " cereri de audiență noi așteaptă la Secretariat.");
             }
         }
     }

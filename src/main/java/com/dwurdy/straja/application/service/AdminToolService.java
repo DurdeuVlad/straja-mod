@@ -10,6 +10,7 @@ import com.dwurdy.straja.domain.model.SetupChecklist;
 import com.dwurdy.straja.domain.model.SetupData;
 import java.util.ArrayList;
 import java.util.List;
+import com.dwurdy.straja.domain.model.Text;
 
 /**
  * Physical admin tools (AT-001..006): one item per verb for an authorized
@@ -99,7 +100,7 @@ public class AdminToolService implements AdminToolsUseCase {
                 bind.add(new MenuAction("Rol: " + role,
                         "tool-npc-assign:" + entityUuid + "-" + role));
             }
-            return new Menu("[Straja] Entitate neînregistrată — atașează un rol "
+            return new Menu(Text.STRAJA_PREFIX + "Entitate neînregistrată — atașează un rol "
                     + "(aspectul rămâne neschimbat):", List.copyOf(bind));
         }
         var actions = new ArrayList<MenuAction>();
@@ -118,7 +119,7 @@ public class AdminToolService implements AdminToolsUseCase {
         actions.add(new MenuAction("Fișa registrului", "tool-npc-record:" + entityUuid));
         String name = record.displayName == null || record.displayName.isEmpty()
                 ? entityUuid : record.displayName;
-        return new Menu("[Straja] NPC " + name + " (rol: "
+        return new Menu(Text.STRAJA_PREFIX + "NPC " + name + " (rol: "
                 + (record.role == null ? "—" : record.role) + "):", List.copyOf(actions));
     }
 
@@ -170,7 +171,7 @@ public class AdminToolService implements AdminToolsUseCase {
     public void npcShowRecord(PlayerGateway player, String entityUuid) {
         if (!gate(player) || !requireRecord(player, entityUuid)) return;
         NpcRegistry.Record record = recordOf(entityUuid);
-        player.tell("[Straja] Fișa NPC " + entityUuid + ": rol "
+        player.tell(Text.STRAJA_PREFIX + "Fișa NPC " + entityUuid + ": rol "
                 + (record.role == null ? "—" : record.role)
                 + " · nume " + (record.displayName == null ? "—" : record.displayName)
                 + " · skin " + (record.skin == null ? "—" : record.skin));
@@ -279,7 +280,7 @@ public class AdminToolService implements AdminToolsUseCase {
         if (!missing.isEmpty()) {
             actions.add(new MenuAction("Marchează toate cele lipsă aici", "tool-survey-all"));
         }
-        return new Menu("[Straja] Jalon la " + x + ", " + y + ", " + z
+        return new Menu(Text.STRAJA_PREFIX + "Jalon la " + x + ", " + y + ", " + z
                 + " — alege locația de marcat:", List.copyOf(actions));
     }
 

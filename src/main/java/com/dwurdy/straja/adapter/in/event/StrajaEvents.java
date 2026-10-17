@@ -27,6 +27,7 @@ import net.neoforged.bus.api.EventPriority;
 import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
+import com.dwurdy.straja.domain.model.Text;
 
 
 /**
@@ -247,7 +248,7 @@ public final class StrajaEvents {
         runtime.checkpoints().clearPlayer(gateway.uuid());
         String setupHint = runtime.playerQueries().setupHintFor(gateway, runtime.setupProbes());
         if (setupHint != null) {
-            gateway.tell("[Straja] Configurarea este incompletă. " + setupHint
+            gateway.tell(Text.STRAJA_PREFIX + "Configurarea este incompletă. " + setupHint
                     + " Rulează /straja setup pentru checklist-ul complet.");
         }
     }
@@ -637,7 +638,7 @@ public final class StrajaEvents {
                 if (runtime.adminTools().cellClick(gateway, dimension,
                         pos.getX(), pos.getY(), pos.getZ())) {
                     NpcRoles.sendToolPrompt(player,
-                            "[Straja] Celula este delimitată.",
+                            Text.STRAJA_PREFIX + "Celula este delimitată.",
                             "Confirmă înregistrarea celulei", "tool-cell-confirm");
                 }
             }

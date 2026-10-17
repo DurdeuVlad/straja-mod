@@ -13,6 +13,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import com.dwurdy.straja.domain.model.Text;
 
 /**
  * Projects custody timers into sparse action-bar updates and threshold-only
@@ -32,7 +33,7 @@ public final class CustodyMessageProjector {
 
     private record Status(String lifecycleId, String label, List<Timer> timers) {
         String actionbar(long now) {
-            StringBuilder text = new StringBuilder("[Straja] ").append(label);
+            StringBuilder text = new StringBuilder(Text.STRAJA_PREFIX).append(label);
             for (Timer timer : timers) {
                 long seconds = Math.max(0, (timer.deadlineAt - now + 999) / 1000);
                 text.append(" | ").append(timer.label).append(": ").append(seconds).append("s");
@@ -153,7 +154,7 @@ public final class CustodyMessageProjector {
             boolean crossed = previous == null ? seconds == threshold
                     : previous > threshold && seconds <= threshold;
             if (crossed && warnings.add(timerKey + "|" + threshold)) {
-                player.tell("[Straja] Atenție: " + timer.label + " în " + threshold + " secunde.");
+                player.tell(Text.STRAJA_PREFIX + "Atenție: " + timer.label + " în " + threshold + " secunde.");
             }
         }
         previousSeconds.put(timerKey, seconds);

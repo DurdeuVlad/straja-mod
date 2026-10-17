@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import com.dwurdy.straja.domain.model.Text;
 
 /**
  * Enforcement mechanics: cuff consent flow, surrender, direct cuffs, cuff keys,
@@ -382,11 +383,11 @@ public class CustodyService implements CustodyRoleplayUseCase {
         store.cuffRequests.put(request.id, request);
         ctx.custody().write(store);
         if ("SURRENDER".equals(kind)) {
-            target.tell("[Straja] " + issuer.name() + " îți cere predarea. Alege Acceptă sau Refuză "
+            target.tell(Text.STRAJA_PREFIX + issuer.name() + " îți cere predarea. Alege Acceptă sau Refuză "
                     + "în cererea din chat (" + request.id + ").");
             issuer.tell("Cererea de predare a fost trimisă lui " + target.name() + ".");
         } else {
-            target.tell("[Straja] " + issuer.name() + " vrea să te încătușeze. Alege Acceptă sau Refuză "
+            target.tell(Text.STRAJA_PREFIX + issuer.name() + " vrea să te încătușeze. Alege Acceptă sau Refuză "
                     + "în cererea din chat (" + request.id + ").");
             issuer.tell("Cererea de încătușare a fost trimisă lui " + target.name()
                     + ". Așteaptă acceptarea sau refuzul.");
@@ -519,7 +520,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
         store.cuffRequests.remove(request.id);
         if (!"SURRENDER".equals(request.kind)) {
             ctx.custody().write(store);
-            notify(request.issuerUuid, request.issuer, "[Straja] " + player.name()
+            notify(request.issuerUuid, request.issuer, Text.STRAJA_PREFIX + player.name()
                     + " a rezistat și a refuzat încătușarea.");
             player.tell("Ai refuzat încătușarea.");
             return true;

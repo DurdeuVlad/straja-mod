@@ -21,6 +21,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import com.dwurdy.straja.domain.model.Text;
 
 /**
  * Mission lifecycle — a structural port of the reference mission subsystem:
@@ -1307,7 +1308,7 @@ public class MissionService implements MissionRoleplayUseCase {
                 mission.issuer, mission.issuerUuid, "SUCCESS", "joined" + " missionId=" + mission.id);
         player.tell("Ai intrat în misiunea #" + mission.id
                 + ". Așteaptă acceptarea și lucrează împreună cu ceilalți participanți.");
-        notify(mission.issuer, "[Straja] " + player.name() + " a intrat în misiunea #" + mission.id + ".");
+        notify(mission.issuer, Text.STRAJA_PREFIX + player.name() + " a intrat în misiunea #" + mission.id + ".");
         return true;
     }
 
@@ -1337,7 +1338,7 @@ public class MissionService implements MissionRoleplayUseCase {
         ctx.missions().write(store);
         audit.record("mission_accept", player.name(), player.uuid().toString(),
                 player.name(), player.uuid().toString(), "SUCCESS", "accepted" + " missionId=" + mission.id);
-        notify(mission.issuer, "[Straja] Misiunea #" + mission.id + " a fost acceptată de " + player.name() + ".");
+        notify(mission.issuer, Text.STRAJA_PREFIX + "Misiunea #" + mission.id + " a fost acceptată de " + player.name() + ".");
         player.tell("Misiune acceptată: #" + mission.id + ".");
     }
 
@@ -1368,7 +1369,7 @@ public class MissionService implements MissionRoleplayUseCase {
             ctx.missions().write(store);
             audit.record("mission_decline", player.name(), player.uuid().toString(),
                     player.name(), player.uuid().toString(), "SUCCESS", "left_team_mission" + " missionId=" + mission.id);
-            notify(mission.issuer, "[Straja] " + player.name() + " a refuzat participarea la misiunea #"
+            notify(mission.issuer, Text.STRAJA_PREFIX + player.name() + " a refuzat participarea la misiunea #"
                     + mission.id + ". Misiunea rămâne deschisă pentru ceilalți participanți.");
             player.tell("Ai refuzat participarea la misiunea #" + mission.id + ".");
             return true;
@@ -1377,7 +1378,7 @@ public class MissionService implements MissionRoleplayUseCase {
         ctx.missions().write(store);
         audit.record("mission_decline", player.name(), player.uuid().toString(),
                 player.name(), player.uuid().toString(), "SUCCESS", "declined" + " missionId=" + mission.id);
-        notify(mission.issuer, "[Straja] Misiunea #" + mission.id + " a fost refuzată de " + player.name() + ".");
+        notify(mission.issuer, Text.STRAJA_PREFIX + "Misiunea #" + mission.id + " a fost refuzată de " + player.name() + ".");
         player.tell("Misiunea #" + mission.id + " a fost refuzată.");
         return true;
     }
@@ -1409,7 +1410,7 @@ public class MissionService implements MissionRoleplayUseCase {
         ctx.missions().write(store);
         audit.record("mission_report", player.name(), player.uuid().toString(),
                 player.name(), player.uuid().toString(), "SUCCESS", "reported" + " missionId=" + mission.id);
-        notify(mission.issuer, "[Straja] Raport primit pentru misiunea #" + mission.id + ": " + mission.report);
+        notify(mission.issuer, Text.STRAJA_PREFIX + "Raport primit pentru misiunea #" + mission.id + ": " + mission.report);
         player.tell("Raportul pentru misiunea #" + mission.id + " a fost trimis.");
         return true;
     }
@@ -1435,7 +1436,7 @@ public class MissionService implements MissionRoleplayUseCase {
         ctx.missions().write(store);
         audit.record("mission_fail", player.name(), player.uuid().toString(),
                 player.name(), player.uuid().toString(), "SUCCESS", mission.failureReason + " missionId=" + mission.id);
-        notify(mission.issuer, "[Straja] Misiunea #" + mission.id + " a eșuat pentru "
+        notify(mission.issuer, Text.STRAJA_PREFIX + "Misiunea #" + mission.id + " a eșuat pentru "
                 + player.name() + ": " + mission.failureReason + ".");
         player.tell("Misiunea #" + mission.id + " a fost marcată ca eșuată. Recompensa nu se plătește.");
         return true;
@@ -1459,7 +1460,7 @@ public class MissionService implements MissionRoleplayUseCase {
             mission.failureReason = "deadline_before_completion";
             releaseIssuerBudget(store, mission);
             ctx.missions().write(store);
-            notify(mission.target, "[Straja] Misiunea #" + mission.id
+            notify(mission.target, Text.STRAJA_PREFIX + "Misiunea #" + mission.id
                     + " a eșuat: termen depășit înainte de închidere.");
             player.tell("Misiunea a eșuat: termenul a fost depășit înainte de închidere.");
             return false;
@@ -1476,7 +1477,7 @@ public class MissionService implements MissionRoleplayUseCase {
             if (participant != null && claimReward(participant, mission.id)) claimed++;
         }
         participantNames(mission).forEach(name ->
-                notify(name, "[Straja] Misiunea #" + mission.id + " a fost închisă de " + player.name() + "."));
+                notify(name, Text.STRAJA_PREFIX + "Misiunea #" + mission.id + " a fost închisă de " + player.name() + "."));
         player.tell("Misiunea #" + mission.id + " a fost închisă.");
         if (mission.reward > 0 && claimed < mission.assignees.size()) {
             player.tell("Recompensa participanților offline rămâne în așteptare până la reconectare.");
@@ -1729,8 +1730,8 @@ public class MissionService implements MissionRoleplayUseCase {
         releaseIssuerBudget(store, mission);
         audit.record("mission_expire", "", "", "", "", "SUCCESS",
                 "deadline missionId=" + mission.id);
-        notify(mission.target, "[Straja] Misiunea #" + mission.id + " a expirat.");
-        notify(mission.issuer, "[Straja] Misiunea #" + mission.id + " a expirat pentru " + mission.target + ".");
+        notify(mission.target, Text.STRAJA_PREFIX + "Misiunea #" + mission.id + " a expirat.");
+        notify(mission.issuer, Text.STRAJA_PREFIX + "Misiunea #" + mission.id + " a expirat pentru " + mission.target + ".");
     }
 
     /** Tick: open missions past their deadline fail (accepted) or expire (issued). */
@@ -1751,8 +1752,8 @@ public class MissionService implements MissionRoleplayUseCase {
             releaseIssuerBudget(store, mission);
             changed = true;
             String resultText = wasAccepted ? "a eșuat: termen depășit" : "a expirat";
-            notify(mission.target, "[Straja] Misiunea #" + mission.id + " " + resultText + ".");
-            notify(mission.issuer, "[Straja] Misiunea #" + mission.id + " " + resultText
+            notify(mission.target, Text.STRAJA_PREFIX + "Misiunea #" + mission.id + " " + resultText + ".");
+            notify(mission.issuer, Text.STRAJA_PREFIX + "Misiunea #" + mission.id + " " + resultText
                     + " pentru " + mission.target + ".");
         }
         changed |= pruneClosedMissions(store);
@@ -1819,7 +1820,7 @@ public class MissionService implements MissionRoleplayUseCase {
             releaseIssuerBudget(store, mission);
             changed++;
             String other = targetMatches(player, mission) ? mission.issuer : mission.target;
-            notify(other, "[Straja] Misiunea #" + mission.id + " a fost anulată: "
+            notify(other, Text.STRAJA_PREFIX + "Misiunea #" + mission.id + " a fost anulată: "
                     + mission.cancellationReason + ".");
         }
         if (changed > 0) {

@@ -133,10 +133,10 @@ public final class PromotionService implements com.dwurdy.straja.application.por
         }
         if (decided == null) return;
         if (decided.status == PromotionStatus.APPROVED) {
-            player.tell("[Straja] Cererea " + decided.applicationId + " a fost aprobată — noul tău grad: "
+            player.tell(Text.STRAJA_PREFIX + "Cererea " + decided.applicationId + " a fost aprobată — noul tău grad: "
                     + display(decided.targetGrade) + ".");
         } else {
-            player.tell("[Straja] Cererea " + decided.applicationId + " a fost respinsă"
+            player.tell(Text.STRAJA_PREFIX + "Cererea " + decided.applicationId + " a fost respinsă"
                     + (decided.decisionReason.isBlank() ? "." : ": " + decided.decisionReason));
         }
         decided.outcomeDelivered = true;

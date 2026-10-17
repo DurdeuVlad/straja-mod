@@ -8,6 +8,7 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.stream.Collectors;
 import net.neoforged.fml.ModList;
+import com.dwurdy.straja.domain.model.Text;
 
 /** Detects optional mods by ID only; no optional classes or internals are linked. */
 public final class OptionalModCompatibility {
@@ -94,26 +95,26 @@ public final class OptionalModCompatibility {
 
     public static void log(Profile profile) {
         if (profile == null || !profile.hasOptionalMods()) {
-            StrajaMod.LOGGER.info("[Straja] Optional custody mods: none detected; native ownership is active");
+            StrajaMod.LOGGER.info(Text.STRAJA_PREFIX + "Optional custody mods: none detected; native ownership is active");
             return;
         }
-        StrajaMod.LOGGER.info("[Straja] Optional custody mods detected: {}", profile.loadedIds());
+        StrajaMod.LOGGER.info(Text.STRAJA_PREFIX + "Optional custody mods detected: {}", profile.loadedIds());
         if (profile.incapacitated()) {
-            StrajaMod.LOGGER.warn("[Straja] Incapacitated detected: Straja downed/death ownership is disabled "
+            StrajaMod.LOGGER.warn(Text.STRAJA_PREFIX + "Incapacitated detected: Straja downed/death ownership is disabled "
                     + "until an exact integration is verified; use one downed provider only");
         }
         if (profile.vampirism()) {
             if (loadProvider(profile).isPresent()) {
-                StrajaMod.LOGGER.info("[Straja] Vampirism provider loaded: vampire DBNO/resurrection and "
+                StrajaMod.LOGGER.info(Text.STRAJA_PREFIX + "Vampirism provider loaded: vampire DBNO/resurrection and "
                         + "stake finishing remain Vampirism-owned; Straja downed remains available for "
                         + "non-vampires");
             } else {
-                StrajaMod.LOGGER.error("[Straja] Vampirism detected but its optional provider could not be "
+                StrajaMod.LOGGER.error(Text.STRAJA_PREFIX + "Vampirism detected but its optional provider could not be "
                         + "loaded; generic Straja downed ownership remains disabled");
             }
         }
         if (profile.piggyback()) {
-            StrajaMod.LOGGER.warn("[Straja] Piggyback detected: Straja's crouch carry trigger is disabled "
+            StrajaMod.LOGGER.warn(Text.STRAJA_PREFIX + "Piggyback detected: Straja's crouch carry trigger is disabled "
                     + "to prevent competing passenger interactions; use one carry trigger only");
         }
     }

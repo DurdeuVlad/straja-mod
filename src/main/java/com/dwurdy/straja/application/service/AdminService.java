@@ -12,6 +12,7 @@ import com.dwurdy.straja.domain.model.Rank;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import com.dwurdy.straja.domain.model.Text;
 
 /**
  * §14 Comisar admin surface behind the Secretary. Composes the personnel,
@@ -94,7 +95,7 @@ public class AdminService implements AdminRoleplayUseCase {
             actor.refuse("straja.admin.no_sheets", "straja.remedy.reception");
             return;
         }
-        actor.tell("[Straja] Personal înregistrat (" + rows.size() + "):");
+        actor.tell(Text.STRAJA_PREFIX + "Personal înregistrat (" + rows.size() + "):");
         for (UUID id : rows) {
             actor.tell("  " + dossierLine(id));
         }
@@ -108,8 +109,8 @@ public class AdminService implements AdminRoleplayUseCase {
             GuardState state = players.state(id);
             if (state.duty) lines.add(dossierLine(id));
         }
-        actor.tell(lines.isEmpty() ? "[Straja] Nimeni în serviciu acum."
-                : "[Straja] În serviciu (" + lines.size() + "):");
+        actor.tell(lines.isEmpty() ? Text.STRAJA_PREFIX + "Nimeni în serviciu acum."
+                : Text.STRAJA_PREFIX + "În serviciu (" + lines.size() + "):");
         lines.forEach(l -> actor.tell("  " + l));
     }
 
@@ -120,7 +121,7 @@ public class AdminService implements AdminRoleplayUseCase {
         if (id == null) return;
         GuardState state = players.state(id);
         state.refreshLifecycle();
-        actor.tell("[Straja] Dosar " + displayName(state, id) + ":");
+        actor.tell(Text.STRAJA_PREFIX + "Dosar " + displayName(state, id) + ":");
         actor.tell("  Rang: " + (state.rank > 0 ? ctx.policies().rankName(state.rank) : "civil")
                 + " · Stare: " + state.lifecycle
                 + " · Fracțiune: " + (state.nativeFaction != null ? state.nativeFaction : "—")

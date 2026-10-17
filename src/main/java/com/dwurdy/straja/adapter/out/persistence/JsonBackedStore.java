@@ -13,6 +13,7 @@ import com.google.gson.JsonElement;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.dwurdy.straja.domain.model.Text;
 
 /**
  * Shared serialization for aggregate stores. The payload is a JSON string
@@ -73,7 +74,7 @@ public abstract class JsonBackedStore {
             T value = GSON.fromJson(JsonParser.parseString(raw), type);
             return value != null ? value : fallback.get();
         } catch (RuntimeException error) {
-            LOGGER.error("[Straja] corrupt store '{}' — backing up raw payload and starting fresh", storeName);
+            LOGGER.error(Text.STRAJA_PREFIX + "corrupt store '{}' — backing up raw payload and starting fresh", storeName);
             putChunked("corrupt_backup", raw);
             removeChunked("json");
             return fallback.get();
@@ -87,7 +88,7 @@ public abstract class JsonBackedStore {
             java.lang.reflect.Field field = type.getField("schemaVersion");
             int version = field.getInt(value);
             if (version > currentSchemaVersion) {
-                LOGGER.error("[Straja] unsupported future schema {} for '{}' — backing up and resetting", version, storeName);
+                LOGGER.error(Text.STRAJA_PREFIX + "unsupported future schema {} for '{}' — backing up and resetting", version, storeName);
                 putChunked("future_schema_backup", GSON.toJson(value));
                 removeChunked("json");
                 return fallback.get();
@@ -96,7 +97,7 @@ public abstract class JsonBackedStore {
         } catch (NoSuchFieldException ignored) {
             // V1/list stores do not carry schema metadata.
         } catch (ReflectiveOperationException error) {
-            LOGGER.error("[Straja] unreadable schema metadata for '{}' — failing closed", storeName);
+            LOGGER.error(Text.STRAJA_PREFIX + "unreadable schema metadata for '{}' — failing closed", storeName);
             return fallback.get();
         }
         return value;

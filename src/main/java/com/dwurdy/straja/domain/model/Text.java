@@ -8,6 +8,9 @@ public final class Text {
     /** Server + form cap on free-text reasons and reviewer decision notes. */
     public static final int REASON_LIMIT = 500;
 
+    /** The one "[Straja] " brand prefix for chat, menu titles, and log tags. */
+    public static final String STRAJA_PREFIX = "[Straja] ";
+
     private Text() {}
 
     /**

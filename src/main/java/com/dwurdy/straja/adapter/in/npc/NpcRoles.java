@@ -16,6 +16,7 @@ import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.player.Player;
 
 import static com.dwurdy.straja.adapter.in.StrajaText.refusal;
+import com.dwurdy.straja.domain.model.Text;
 
 /**
  * Registry of Straja NPC roles. Role assignment is explicit and persistent on
@@ -107,7 +108,7 @@ public final class NpcRoles {
         if (!surface.guidance().isBlank()) {
             head = head.isBlank() ? surface.guidance() : head + ": " + surface.guidance();
         }
-        MutableComponent message = head.isBlank() ? Component.empty() : Component.literal("[Straja] " + head);
+        MutableComponent message = head.isBlank() ? Component.empty() : Component.literal(Text.STRAJA_PREFIX + head);
         for (NpcPlayerSurface.ChatAction action : surface.actions()) {
             MutableComponent label = (action.labelKey() == null
                     ? Component.literal("[" + action.label() + "]")
@@ -802,8 +803,8 @@ public final class NpcRoles {
                 .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND,
                         "/straja npc-action " + token)));
         player.sendSystemMessage(Component.literal(nativeEntity
-                ? "[Straja] Eliminarea este permanentă. "
-                : "[Straja] Detașarea retrage doar rolul Straja. ").append(confirm));
+                ? Text.STRAJA_PREFIX + "Eliminarea este permanentă. "
+                : Text.STRAJA_PREFIX + "Detașarea retrage doar rolul Straja. ").append(confirm));
         return true;
     }
 

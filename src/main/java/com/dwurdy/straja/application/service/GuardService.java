@@ -19,6 +19,7 @@ import com.dwurdy.straja.domain.model.StrajaPolicies;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import com.dwurdy.straja.domain.model.Text;
 
 /**
  * Player-facing use cases: recruitment, quiz, duty lifecycle, salary, food,
@@ -1817,7 +1818,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         var missingPoints = SetupChecklist.unplacedCheckpoints(setup);
         var missingNpcs = SetupChecklist.missingNpcRoles(registry, NpcAdminService.ROLE_ORDER);
         boolean commissioner = SetupChecklist.commissionerAppointed(probes);
-        player.tell("[Straja] Checklist de configurare:");
+        player.tell(Text.STRAJA_PREFIX + "Checklist de configurare:");
         player.tell(check(commissioner)
                 + " Comisar: " + (commissioner
                         ? commissionerLabel(probes) + (players.isCommissioner(player) ? " (tu)" : "")
@@ -1864,7 +1865,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         var registry = ctx.npcs().read();
         boolean complete = SetupChecklist.isComplete(setup, registry, NpcAdminService.ROLE_ORDER, probes);
         var issues = consistencyIssues == null ? java.util.List.<String>of() : consistencyIssues;
-        player.tell("[Straja] Verificare post-instalare (read-only):");
+        player.tell(Text.STRAJA_PREFIX + "Verificare post-instalare (read-only):");
         player.tell(check(complete) + " Checklist configurare: " + (complete
                 ? "complet"
                 : "incomplet — " + SetupChecklist.nextStep(setup, registry, NpcAdminService.ROLE_ORDER, probes)));

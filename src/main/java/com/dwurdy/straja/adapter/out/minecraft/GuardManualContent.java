@@ -9,6 +9,7 @@ import java.util.List;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.component.WrittenBookContent;
 import net.minecraft.server.network.Filterable;
+import com.dwurdy.straja.domain.model.Text;
 
 /** Loads the Romanian guard manual from data so the handbook is maintainable content. */
 public final class GuardManualContent {
@@ -46,7 +47,7 @@ public final class GuardManualContent {
             }
         } catch (Exception error) {
             com.dwurdy.straja.StrajaMod.LOGGER.error(
-                    "[Straja] Could not load the Romanian guard manual; using emergency fallback", error);
+                    Text.STRAJA_PREFIX + "Could not load the Romanian guard manual; using emergency fallback", error);
             return fallback();
         }
     }
