@@ -19,11 +19,46 @@ public final class BoloService {
     private final StrajaContext ctx;
     private final PlayerService players;
     private final AuditService audit;
+    private DispatchService dispatch; // FUN-6: BOLOs and fugitive marks raise calls
 
     public BoloService(StrajaContext ctx, PlayerService players, AuditService audit) {
         this.ctx = ctx;
         this.players = players;
         this.audit = audit;
+    }
+
+    /** FUN-6 wiring — set post-construction by the runtime. */
+    public void useDispatch(DispatchService dispatch) { this.dispatch = dispatch; }
+
+    /** Subject's live position when online; blank coords otherwise. */
+    private double[] subjectPosition(String subjectUuid) {
+        for (var p : ctx.server().onlinePlayers()) {
+            if (p != null && p.uuid() != null && p.uuid().toString().equals(subjectUuid)) {
+                return new double[]{p.x(), p.y(), p.z()};
+            }
+        }
+        return null;
+    }
+
+    private String subjectDimension(String subjectUuid) {
+        for (var p : ctx.server().onlinePlayers()) {
+            if (p != null && p.uuid() != null && p.uuid().toString().equals(subjectUuid)) {
+                return p.dimension();
+            }
+        }
+        return "";
+    }
+
+    private void raiseBoloCall(BoloRecord record, String severity) {
+        if (dispatch == null || record == null) return;
+        double[] pos = subjectPosition(record.subjectUuid);
+        dispatch.raise(DispatchService.SOURCE_BOLO, record.id,
+                "BOLO: " + record.subjectName, record.reason,
+                subjectDimension(record.subjectUuid),
+                pos != null ? pos[0] : 0, pos != null ? pos[1] : 0, pos != null ? pos[2] : 0,
+                pos != null ? "ultima poziție cunoscută" : "",
+                record.subjectUuid, record.subjectName,
+                record.issuerUuid, severity, "ENLISTED");
     }
 
     private long now() { return ctx.clock().nowMillis(); }
@@ -98,6 +133,7 @@ public final class BoloService {
                 + ". INFORMARE — NU ESTE MANDAT DE AREST.");
         audit.record(AuditActions.BOLO_CREATE, issuer.name(), uuid(issuer), record.id,
                 record.subjectUuid, AuditResults.SUCCESS, record.authority.name());
+        raiseBoloCall(record, "ROUTINE");
         return record;
     }
 
@@ -121,6 +157,8 @@ public final class BoloService {
         ctx.bolos().write(data);
         audit.record(AuditActions.BOLO_CANCEL, actor.name(), uuid(actor), record.id,
                 record.subjectUuid, AuditResults.SUCCESS, "");
+        if (dispatch != null)
+            dispatch.closeForSource(DispatchService.SOURCE_BOLO, record.id, "cancelled");
         actor.tell("BOLO " + record.id + " a fost anulat.");
         return true;
     }
@@ -151,6 +189,8 @@ public final class BoloService {
                 cleared++;
                 audit.record(action, "system", "", record.id,
                         record.subjectUuid, AuditResults.SUCCESS, note);
+                if (dispatch != null)
+                    dispatch.closeForSource(DispatchService.SOURCE_BOLO, record.id, note);
             }
         }
         if (cleared > 0) ctx.bolos().write(data);
@@ -175,6 +215,8 @@ public final class BoloService {
                 cleared++;
                 audit.record(action, "system", "", record.id,
                         record.subjectUuid, AuditResults.SUCCESS, note);
+                if (dispatch != null)
+                    dispatch.closeForSource(DispatchService.SOURCE_BOLO, record.id, note);
             }
         }
         if (cleared > 0) ctx.bolos().write(data);
@@ -198,6 +240,7 @@ public final class BoloService {
         for (BoloRecord record : data.records) {
             if (record != null && record.status == BoloStatus.ACTIVE
                     && subjectUuid.equals(record.subjectUuid)) {
+                raiseBoloCall(record, "URGENT"); // re-alert if the call expired
                 return record; // already hunted — do not stack markers
             }
         }
@@ -217,6 +260,8 @@ public final class BoloService {
         ctx.bolos().write(data);
         audit.record(AuditActions.BOLO_CREATE, "system", "", record.id,
                 record.subjectUuid, AuditResults.SUCCESS, "fugitive_escape sentenceId=" + sentenceId);
+        // FUN-6: a custody breach is a pursuit call — pushed urgently.
+        raiseBoloCall(record, "URGENT");
         return record;
     }
 
@@ -246,6 +291,7 @@ public final class BoloService {
                             ctx.policies().boloMaxReasonLength);
                     ctx.bolos().write(data);
                 }
+                raiseBoloCall(record, "URGENT"); // a live warrant keeps its call fresh
                 return record;
             }
         }
@@ -265,6 +311,7 @@ public final class BoloService {
         ctx.bolos().write(data);
         audit.record(AuditActions.BOLO_CREATE, "system", "", record.id,
                 record.subjectUuid, AuditResults.SUCCESS, "forgery_detected");
+        raiseBoloCall(record, "URGENT");
         return record;
     }
 
@@ -284,6 +331,7 @@ public final class BoloService {
         for (BoloRecord record : data.records) {
             if (record != null && record.status == BoloStatus.ACTIVE
                     && subjectUuid.equals(record.subjectUuid)) {
+                raiseBoloCall(record, "URGENT"); // re-alert if the call expired
                 return record; // already hunted — do not stack markers
             }
         }
@@ -303,6 +351,7 @@ public final class BoloService {
         ctx.bolos().write(data);
         audit.record(AuditActions.BOLO_CREATE, "system", "", record.id,
                 record.subjectUuid, AuditResults.SUCCESS, "legacy_bridge");
+        raiseBoloCall(record, "URGENT");
         return record;
     }
 
@@ -323,6 +372,8 @@ public final class BoloService {
                 changed = true;
                 audit.record(AuditActions.BOLO_EXPIRE, "system", "", record.id,
                         record.subjectUuid, AuditResults.SUCCESS, "");
+                if (dispatch != null)
+                    dispatch.closeForSource(DispatchService.SOURCE_BOLO, record.id, "expired");
             }
         }
         if (changed) ctx.bolos().write(data);

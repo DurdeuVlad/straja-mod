@@ -37,6 +37,8 @@ public final class BountyService {
     private PrisonService prison;
     /** DEBT-2: bail fines land on the debt ledger (late-bound like usePrison). */
     private DebtService debt;
+    /** FUN-6: a posted bounty is an officer-band hunt call. */
+    private DispatchService dispatch;
 
     public BountyService(StrajaContext ctx, PlayerService players, AuditService audit) {
         this.ctx = ctx;
@@ -48,6 +50,8 @@ public final class BountyService {
 
     /** DEBT-3: bail is a pooled contribution served bounty-fine first. */
     public void useDebt(DebtService debt) { this.debt = debt; }
+
+    public void useDispatch(DispatchService dispatch) { this.dispatch = dispatch; }
 
     private long now() { return ctx.clock().nowMillis(); }
 
@@ -143,6 +147,14 @@ public final class BountyService {
                         + (wanted ? "" : " auto_bolo"));
         issuer.tell("Recompensa " + record.id + " pe numele lui " + target.name()
                 + ": " + amount + " unități. Orice jucător îl poate captura.");
+        if (dispatch != null) {
+            dispatch.raise(DispatchService.SOURCE_BOUNTY, record.id,
+                    "Recompensă: " + target.name(),
+                    record.reason.isBlank() ? "recompensă activă" : record.reason,
+                    target.dimension(), target.x(), target.y(), target.z(), "",
+                    record.targetUuid, record.targetName,
+                    record.postedByUuid, "URGENT", "OFFICER");
+        }
         return record;
     }
 
@@ -168,6 +180,8 @@ public final class BountyService {
         record.status = BountyStatus.CANCELLED;
         ctx.bounties().write(store);
         resolveLinkedBolo(record, "bounty_cancelled");
+        if (dispatch != null)
+            dispatch.closeForSource(DispatchService.SOURCE_BOUNTY, record.id, "cancelled");
         audit.record(AuditActions.BOUNTY_CANCEL, actor.name(), uuid(actor), record.targetName,
                 record.targetUuid, AuditResults.SUCCESS, record.id);
         actor.tell("Recompensa " + record.id + " a fost retrasă.");
@@ -351,6 +365,8 @@ public final class BountyService {
                 sentence.target, sentence.targetUuid, AuditResults.SUCCESS,
                 record.id + " payout=" + record.amount + " fine=" + fine.id
                         + "@" + fine.amount);
+        if (dispatch != null)
+            dispatch.closeForSource(DispatchService.SOURCE_BOUNTY, record.id, "captured");
     }
 
     private void payout(BountyRecord record) {
@@ -462,6 +478,8 @@ public final class BountyService {
                 record.status = BountyStatus.EXPIRED;
                 changed = true;
                 resolveLinkedBolo(record, "bounty_expired");
+                if (dispatch != null)
+                    dispatch.closeForSource(DispatchService.SOURCE_BOUNTY, record.id, "bounty_expired");
                 audit.record(AuditActions.BOUNTY_EXPIRE, "system", "", record.targetName,
                         record.targetUuid, AuditResults.SUCCESS, record.id);
             }

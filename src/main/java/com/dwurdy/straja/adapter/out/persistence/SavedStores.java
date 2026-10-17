@@ -152,6 +152,12 @@ public final class SavedStores {
         @Override public void write(IncidentStore store) { writeJson(store); }
     }
 
+    public static class Dispatch extends JsonBackedStore implements DispatchRepository {
+        public Dispatch(StoreAccess access) { super(access, "dispatch"); }
+        @Override public DispatchStore read() { return readJson(DispatchStore.class, DispatchStore::new); }
+        @Override public void write(DispatchStore store) { writeJson(store); }
+    }
+
     public static class Bolos extends JsonBackedStore implements BoloRepository {
         public Bolos(StoreAccess access) { super(access, "bolos"); }
         @Override public BoloStore read() { return readJson(BoloStore.class, BoloStore::new); }

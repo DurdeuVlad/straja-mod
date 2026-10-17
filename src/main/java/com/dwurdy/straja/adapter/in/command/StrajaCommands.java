@@ -96,6 +96,16 @@ public final class StrajaCommands {
         // §7: player-facing — free-duty ranks stop at will; patrol guards are
         // directed back to the Secretary inside the use case.
         root.then(Commands.literal("stop").executes(c -> player(c, StrajaRuntime.get().guards()::stopDuty)));
+        // FUN-6: the dispatch board — member-facing, no rank gate beyond on-duty.
+        var dispatch = Commands.literal("dispatch");
+        dispatch.executes(c -> player(c, StrajaCommands::dispatchBoard));
+        dispatch.then(Commands.literal("accept").then(Commands.argument("call", StringArgumentType.string())
+                .executes(c -> player(c, p -> StrajaRuntime.get().dispatch()
+                        .accept(p, StringArgumentType.getString(c, "call"))))));
+        dispatch.then(Commands.literal("decline").then(Commands.argument("call", StringArgumentType.string())
+                .executes(c -> player(c, p -> StrajaRuntime.get().dispatch()
+                        .decline(p, StringArgumentType.getString(c, "call"))))));
+        root.then(dispatch);
 
         var special = adminOnly(Commands.literal("special"));
         special.then(Commands.literal("start").then(Commands.argument("player", EntityArgument.player())
@@ -1425,6 +1435,26 @@ public final class StrajaCommands {
         }
     }
 
+    private static void dispatchBoard(PlayerGateway player) {
+        if (StrajaRuntime.get().playerQueries().rankPrefixFor(player) == null) {
+            player.refuse("straja.incident.work_rank", "straja.remedy.recruiter");
+            return;
+        }
+        var calls = StrajaRuntime.get().dispatch().board();
+        if (calls.isEmpty()) {
+            player.tell("Tabloul de dispecerat este gol — liniște pe teren.");
+            return;
+        }
+        player.tell("Dispecerat — " + calls.size() + " apeluri:");
+        for (var call : calls) {
+            String state = "ACCEPTED".equals(call.status)
+                    ? "preluat de " + call.acceptedByName : "deschis (" + call.band + ")";
+            player.tell("  " + call.id + " [" + call.severity + "] " + call.title + " — " + state
+                    + (call.subjectName.isBlank() ? "" : " — " + call.subjectName));
+        }
+        player.tell("Răspunde: /straja dispatch accept <id>");
+    }
+
     private static int player(CommandContext<CommandSourceStack> ctx, java.util.function.Consumer<PlayerGateway> op) {
         ServerPlayer player = ctx.getSource().getPlayer();
         if (player == null) {
@@ -2511,6 +2541,7 @@ public final class StrajaCommands {
                 new PlayerHelpEntry("/straja regulament", "straja.help.player.cmd.regulament"),
                 new PlayerHelpEntry("/straja license", "straja.help.player.cmd.license"),
                 new PlayerHelpEntry("/straja inspect", "straja.help.player.cmd.inspect"),
+                new PlayerHelpEntry("/straja dispatch", "straja.help.player.cmd.dispatch"),
                 new PlayerHelpEntry("/straja stop", "straja.help.player.cmd.stop"));
 
         /** Commands advertised by the player orientation — all must stay permission-0. */

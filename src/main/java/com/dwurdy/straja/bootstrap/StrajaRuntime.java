@@ -69,6 +69,7 @@ public final class StrajaRuntime {
     private volatile com.dwurdy.straja.adapter.in.form.FormSubmissionRouter npcFormRouter;
     private final com.dwurdy.straja.application.service.PolicyService policyService;
     private final com.dwurdy.straja.application.service.IncidentService incidents;
+    private final com.dwurdy.straja.application.service.DispatchService dispatch;
     private final com.dwurdy.straja.application.service.BoloService bolos;
     private final com.dwurdy.straja.application.service.BountyService bounties;
     private final com.dwurdy.straja.application.service.ProtocolService protocol;
@@ -184,6 +185,7 @@ public final class StrajaRuntime {
                 new SavedStores.AdminTools(stores),
                 new SavedStores.IdentityCards(stores),
                 new SavedStores.Incidents(stores),
+                new SavedStores.Dispatch(stores),
                 new SavedStores.Bolos(stores),
                 new SavedStores.Bounties(stores),
                 new SavedStores.Evidence(stores),
@@ -382,10 +384,16 @@ public final class StrajaRuntime {
         OptionalModCompatibility.applyFailSafe(compatibility, policies);
         this.incidents = new com.dwurdy.straja.application.service.IncidentService(ctx, players, audit);
         this.bolos = new com.dwurdy.straja.application.service.BoloService(ctx, players, audit);
+        // FUN-6: offense events become dispatch calls routed to on-duty members.
+        this.dispatch = new com.dwurdy.straja.application.service.DispatchService(ctx, players, audit);
+        this.dispatch.useIncidents(this.incidents);
+        this.incidents.useDispatch(this.dispatch);
+        this.bolos.useDispatch(this.dispatch);
         this.evidence = new com.dwurdy.straja.application.service.EvidenceService(ctx, players, audit);
         this.arrestRecords = new com.dwurdy.straja.application.service.ArrestRecordService(ctx, players, audit);
         this.reputation = new com.dwurdy.straja.application.service.ReputationService(
                 ctx, players, audit, incidents, bolos);
+        this.reputation.useDispatch(this.dispatch);
         // LAW-007: the authoritative wanted surface — guards, checkpoints and
         // the storage watch all read wanted/escort state through one service.
         this.wanted = new com.dwurdy.straja.application.service.WantedService(
@@ -411,6 +419,7 @@ public final class StrajaRuntime {
         this.bounties = new com.dwurdy.straja.application.service.BountyService(
                 ctx, players, audit);
         this.bounties.usePrison(this.prison);
+        this.bounties.useDispatch(this.dispatch);
         // DEBT-2: bail lands on the debt ledger; in-custody issue levies.
         this.bounties.useDebt(this.debt);
         // #242: guided tester protocol — scripted state beats + fake suspect.
@@ -439,6 +448,22 @@ public final class StrajaRuntime {
             if (target != null) {
                 reputation.recordCustodyEscape(actor, target,
                         target.uuid() + ":cut:" + ctx.clock().nowMillis());
+                // FUN-6: a custody breach is an urgent call. Sentenced escapes
+                // also carry a fugitive BOLO; an unsentenced escape still
+                // pages the board through this route.
+                try {
+                    this.dispatch.raise(com.dwurdy.straja.application.service.DispatchService.SOURCE_OFFENSE,
+                            target.uuid() + ":escape:" + ctx.clock().nowMillis(),
+                            "Evadare din custodie: " + target.name(),
+                            "Subiectul a ieșit din custodie fără autorizare.",
+                            target.dimension(), target.x(), target.y(), target.z(), "",
+                            String.valueOf(target.uuid()), target.name(),
+                            actor != null && actor.uuid() != null
+                                    ? actor.uuid().toString() : String.valueOf(target.uuid()),
+                            "URGENT", "ENLISTED");
+                } catch (RuntimeException e) {
+                    // Dispatch failure must not swallow the escape record.
+                }
             }
         });
         this.expansion = new com.dwurdy.straja.application.service.RpExpansionService(
@@ -601,6 +626,7 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.port.in.RoleplayExpansionUseCase expansionRoleplay() { return expansion; }
     public com.dwurdy.straja.application.service.RpExpansionService expansion() { return expansion; }
     public com.dwurdy.straja.application.service.IncidentService incidents() { return incidents; }
+    public com.dwurdy.straja.application.service.DispatchService dispatch() { return dispatch; }
     public com.dwurdy.straja.application.service.BoloService bolos() { return bolos; }
 
     public com.dwurdy.straja.application.service.BountyService bounties() { return bounties; }

@@ -306,6 +306,17 @@ public class StrajaPolicies {
     public double dutyResponseMultiplier = 2.0;
     /** FUN-5: minutes of multiplied pay granted per response participation. */
     public int dutyResponseCreditMinutes = 10;
+    /** FUN-6: calls at or above this severity push to members; below it they
+     *  queue on the dispatch board (ROUTINE | URGENT). */
+    public String dispatchPushMinSeverity = "URGENT";
+    /** FUN-6: minutes a call stays answerable at each band before widening. */
+    public int dispatchCallTtlMinutes = 5;
+    /** FUN-6: bound on how many on-duty members a call pushes to at once. */
+    public int dispatchMaxPushTargets = 3;
+    /** FUN-6: ENLISTED-band calls go to members at or below this rank level. */
+    public int dispatchEnlistedMaxRank = 2;
+    /** FUN-6: bound on retained terminal calls; oldest are pruned on tick. */
+    public int dispatchRetentionLimit = 100;
     public int nativeFactionMaxLength = 40;
 
     // §11: activity reports — a reporting interval runs per member; overdue

@@ -655,6 +655,7 @@
   "straja.help.player.cmd.rules": "the server rules",
   "straja.help.player.cmd.status": "your status and rank",
   "straja.help.player.cmd.stop": "end your duty",
+  "straja.help.player.cmd.dispatch": "the dispatch board — answer a call",
   "straja.help.player.faq": "Questions? Every Straja NPC has an «Am o întrebare» menu.",
   "straja.help.player.first_step": "First step: go to the Receptionist and press «Depune cererea».",
   "straja.help.player.intro": "Straja is the server's police force — it recruits members, patrols and resolves incidents.",
@@ -687,6 +688,10 @@
   "straja.incident.fields_required": "The incident needs a title and a description.",
   "straja.incident.inactive": "The incident is no longer active.",
   "straja.incident.max_supporters": "The incident already has the maximum number of supporters.",
+  "straja.dispatch.inactive": "The call is no longer open.",
+  "straja.dispatch.band": "The call is addressed to a different rank band right now.",
+  "straja.dispatch.dimension": "The call is in another dimension.",
+  "straja.dispatch.self_subject": "You are the subject of that call.",
   "straja.incident.rate_limited": "You already reported an incident recently. Wait before sending another.",
   "straja.incident.whistle_cooldown": "The whistle is recharging. Wait %s more seconds.",
   "straja.incident.whistle_duty": "The whistle can only be used while on duty.",
@@ -989,5 +994,6 @@
   "straja.join.refused": "The work petition could not be filed.",
   "straja.petition.gone": "That petition is no longer awaiting a decision.",
   "straja.petition.bad_decision": "Unknown decision — write aproba or respinge.",
-  "straja.petition.denied": "You cannot decide this petition."
+  "straja.petition.denied": "You cannot decide this petition.",
+  "straja.remedy.travel": "Travel to the call's dimension first."
 }

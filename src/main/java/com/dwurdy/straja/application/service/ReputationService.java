@@ -23,6 +23,7 @@ public final class ReputationService {
     private final AuditService audit;
     private final IncidentService incidents;
     private final BoloService bolos;
+    private DispatchService dispatch; // FUN-6: unlawful kills raise a call
 
     public ReputationService(StrajaContext ctx, PlayerService players, AuditService audit,
                              IncidentService incidents, BoloService bolos) {
@@ -32,6 +33,8 @@ public final class ReputationService {
         this.incidents = incidents;
         this.bolos = bolos;
     }
+
+    public void useDispatch(DispatchService dispatch) { this.dispatch = dispatch; }
 
     private long now() { return ctx.clock().nowMillis(); }
 
@@ -200,6 +203,20 @@ public final class ReputationService {
                         : "Moartea finală a unui jucător", false);
         audit.record(AuditActions.LETHAL_FORCE, killer.name(), uuid(killer),
                 victim.name(), uuid(victim), AuditResults.SUCCESS, lawful ? "lawful_context" : source);
+        // FUN-6: an unlawful kill raises an urgent call — the killer is the
+        // subject, and the caller (killer) can never collect response credit.
+        if (!lawful && dispatch != null) {
+            try {
+                dispatch.raise(DispatchService.SOURCE_OFFENSE, deathId,
+                        "Ucidere: " + victim.name(),
+                        "Moarte finală raportată — " + source,
+                        victim.dimension(), victim.x(), victim.y(), victim.z(), "",
+                        uuid(killer), killer.name(), uuid(killer),
+                        "URGENT", "ENLISTED");
+            } catch (RuntimeException e) {
+                // Dispatch is a notification layer — never drop the death event.
+            }
+        }
     }
 
     public synchronized ReputationEvent recordJailerAssault(PlayerGateway attacker,

@@ -164,6 +164,7 @@ public final class NpcRoles {
             case "incident-report" -> openIncidentForm(player, runtime);
             case "bolo-create" -> openBoloForm(player, runtime);
             case "incident-list" -> tellIncidents(runtime, gw);
+            case "dispatch-board" -> tellDispatchBoard(runtime, gw, player);
             case "duty-roster" -> tellRoster(runtime, gw);
             case "bolo-list" -> tellBolos(runtime, gw);
             case "reputation-self" -> tellReputation(runtime, gw);
@@ -679,6 +680,8 @@ public final class NpcRoles {
             case "tool-npc-record" -> runtime.adminTools().npcShowRecord(gw, id);
             case "tool-survey-stamp" -> runtime.adminTools().surveyStamp(gw, id);
             case "incident-accept" -> runtime.expansionRoleplay().acceptIncident(gw, id);
+            case "dispatch-accept" -> runtime.dispatch().accept(gw, id);
+            case "dispatch-decline" -> runtime.dispatch().decline(gw, id);
             case "incident-join" -> runtime.expansionRoleplay().joinIncident(gw, id);
             case "incident-leave" -> runtime.expansionRoleplay().leaveIncident(gw, id);
             case "incident-resolve" -> openIncidentResolveForm(player, runtime, id);
@@ -1034,6 +1037,35 @@ public final class NpcRoles {
             player.tell(bolo.id() + " — " + bolo.subject() + " — " + bolo.reason()
                     + " — " + bolo.authority()
                     + (bolo.arrestAuthority() ? " [task autoritativ]" : " [INFORMARE]"));
+        }
+    }
+
+    /** FUN-6: the dispatch board — open calls with click-to-answer buttons. */
+    private static void tellDispatchBoard(com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                          com.dwurdy.straja.application.port.out.PlayerGateway gw,
+                                          Player player) {
+        // Members only — the board names live subjects and locations.
+        if (runtime.playerQueries().rankPrefixFor(gw) == null) {
+            gw.refuse("straja.incident.work_rank", "straja.remedy.recruiter");
+            return;
+        }
+        var calls = runtime.dispatch().board();
+        if (calls.isEmpty()) {
+            gw.tell("Tabloul de dispecerat este gol — liniște pe teren.");
+            return;
+        }
+        gw.tell("Dispecerat — " + calls.size() + " apeluri:");
+        for (var call : calls) {
+            boolean open = "OPEN".equals(call.status);
+            gw.tell("  " + call.id + " [" + call.severity + "] " + call.title
+                    + " — " + (open ? "deschis (" + call.band + ")" : "preluat de " + call.acceptedByName)
+                    + (call.subjectName.isBlank() ? "" : " — " + call.subjectName));
+            if (open && player instanceof ServerPlayer serverPlayer) {
+                sendToolPrompt(serverPlayer, "", "Preia " + call.id,
+                        "dispatch-accept:" + call.id);
+                sendToolPrompt(serverPlayer, "", "Refuză " + call.id,
+                        "dispatch-decline:" + call.id);
+            }
         }
     }
 
@@ -1679,6 +1711,12 @@ public final class NpcRoles {
                             .anyMatch(incident -> id.equals(incident.id()));
             case "bolo-cancel" -> runtime.expansionRoleplay().activeBolos(player).stream()
                     .anyMatch(bolo -> id.equals(bolo.id()));
+            case "dispatch-accept" -> runtime.dispatch().board().stream()
+                    .anyMatch(call -> id.equals(call.id) && "OPEN".equals(call.status));
+            case "dispatch-decline" -> runtime.dispatch().board().stream()
+                    .anyMatch(call -> id.equals(call.id) && "OPEN".equals(call.status)
+                            && (player.uuid() == null
+                                || !call.declined.contains(player.uuid().toString())));
             // FUN-1: delegation ops re-gate authority inside the service on
             // every click — a stale console click resolves safely anyway.
             case "delegation-mode", "delegation-window", "delegation-revoke" -> true;
