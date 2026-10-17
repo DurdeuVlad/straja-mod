@@ -90,9 +90,16 @@ public interface FormSessionUseCase {
         }
     }
 
-    record Field(String id, String label, int maxLength, boolean multiline, boolean required) {
+    record Field(String id, String label, int maxLength, boolean multiline, boolean required,
+                 String prefill) {
+        public Field(String id, String label, int maxLength, boolean multiline, boolean required) {
+            this(id, label, maxLength, multiline, required, "");
+        }
         public Field(String id, String label, int maxLength, boolean multiline) {
-            this(id, label, maxLength, multiline, true);
+            this(id, label, maxLength, multiline, true, "");
+        }
+        public Field {
+            prefill = prefill == null ? "" : prefill;
         }
     }
 

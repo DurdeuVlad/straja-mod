@@ -197,6 +197,7 @@ public final class PolicyRegistry {
         // §11 activity reports
         k("reports.intervalDays", "reportIntervalDays", Kind.INT);
         k("reports.blockDutyWhenOverdue", "reportBlockDutyWhenOverdue", Kind.BOOL);
+        k("reports.autoFileOverdue", "reportsAutoFileOverdue", Kind.BOOL);
         k("audiences.notifyCooldownSeconds", "audienceNotifyCooldownSeconds", Kind.INT);
         // delegation engine
         k("delegation.sweepSeconds", "delegationSweepSeconds", Kind.INT);

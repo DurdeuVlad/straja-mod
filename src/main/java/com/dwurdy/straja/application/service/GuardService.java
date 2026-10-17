@@ -1441,7 +1441,11 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         if (ctx.policies().reportBlockDutyWhenOverdue && !players.isCommissioner(player)) {
             var reports = ctx.reports().read();
             String uuid = player.uuid().toString();
-            if (com.dwurdy.straja.domain.model.ActivityReports.ensureAnchor(reports, uuid, now())) {
+            boolean stamped = com.dwurdy.straja.domain.model.ActivityReports
+                    .ensureAnchor(reports, uuid, now());
+            stamped |= com.dwurdy.straja.domain.model.ActivityReports
+                    .ensureBlockSnapshot(reports, uuid, state.serviceBlocks);
+            if (stamped) {
                 ctx.reports().write(reports);
             }
             if (com.dwurdy.straja.domain.model.ActivityReports.isOverdue(

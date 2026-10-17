@@ -189,6 +189,7 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.ConfigValue<String> COMISAR_TITLE;
     public static final ModConfigSpec.IntValue REPORT_INTERVAL_DAYS;
     public static final ModConfigSpec.BooleanValue REPORT_BLOCK_DUTY_WHEN_OVERDUE;
+    public static final ModConfigSpec.BooleanValue REPORT_AUTO_FILE_OVERDUE;
     public static final ModConfigSpec.IntValue AUDIENCE_NOTIFY_COOLDOWN;
     public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> PROMOTION_SERVICE_BLOCKS;
 
@@ -844,6 +845,10 @@ public final class StrajaServerConfig {
                         "Refuse duty start at the Secretary while the member's",
                         "activity report is overdue.")
                 .define("blockDutyWhenOverdue", defaults.reportBlockDutyWhenOverdue);
+        REPORT_AUTO_FILE_OVERDUE = B.comment(
+                        "File a ledger-drafted AUTO_FILED report when a member's",
+                        "reporting deadline passes unsigned (FUN-4).")
+                .define("autoFileOverdue", defaults.reportsAutoFileOverdue);
         B.pop();
 
         B.push("audiences");
@@ -1350,6 +1355,7 @@ public final class StrajaServerConfig {
         p.comisarTitle = COMISAR_TITLE.get();
         p.reportIntervalDays = REPORT_INTERVAL_DAYS.get();
         p.reportBlockDutyWhenOverdue = REPORT_BLOCK_DUTY_WHEN_OVERDUE.get();
+        p.reportsAutoFileOverdue = REPORT_AUTO_FILE_OVERDUE.get();
         p.audienceNotifyCooldownSeconds = AUDIENCE_NOTIFY_COOLDOWN.get();
         p.promotionServiceBlocks = mapOrDefault(StrajaPolicies.parseIntMap(PROMOTION_SERVICE_BLOCKS.get()),
                 defaults().promotionServiceBlocks);
