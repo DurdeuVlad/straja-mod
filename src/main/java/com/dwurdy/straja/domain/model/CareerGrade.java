@@ -89,6 +89,21 @@ public enum CareerGrade {
     }
 
     /**
+     * Previous grade on the same ladder, or null at an entry rung. Returns
+     * null for OFFICER_LOCOTENENT: its demotion target depends on the
+     * member's entry-track origin and is resolved by PersonnelService.
+     */
+    public CareerGrade previousGrade() {
+        return switch (this) {
+            case MILITARY_STRAJER -> MILITARY_STAGIAR;
+            case PROFESSIONAL_MESTER -> PROFESSIONAL_ZILIER;
+            case OFFICER_CAPITAN -> OFFICER_LOCOTENENT;
+            case OFFICER_COLONEL -> OFFICER_CAPITAN;
+            case MILITARY_STAGIAR, PROFESSIONAL_ZILIER, OFFICER_LOCOTENENT -> null;
+        };
+    }
+
+    /**
      * The grade's rung on its career ladder, shared across tracks: both
      * entry grades are step 1, both second grades are step 2, officers
      * climb from 3. Promotion XP thresholds key off this so the two

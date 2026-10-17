@@ -1170,11 +1170,18 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             return;
         }
         GuardState state = players.state(target);
-        if (state.rank <= Rank.CIVIL.level()) {
+        boolean hasRecord = v2RecordFor(target) != null;
+        if (!hasRecord && state.rank <= Rank.CIVIL.level()) {
             actor.refuse("straja.duty.target_civilian", "straja.remedy.fix_retry");
             return;
         }
-        int nextRank = state.rank - 1;
+        var delegated = delegatePersonnelOp(actor, target, "demote");
+        if (delegated == PersonnelDelegate.REFUSED) return;
+        // A demoted record re-projects immediately — derive the new rank from
+        // the fresh projection so a cross-track drop (e.g. Lt → Meșter, which
+        // projects to civilian) still ends duty and releases the corps.
+        if (delegated == PersonnelDelegate.APPLIED) state = players.state(target);
+        int nextRank = delegated == PersonnelDelegate.APPLIED ? state.rank : state.rank - 1;
         if (nextRank < Rank.STAGIAR.level() && state.duty) {
             DutyEngine.endDuty(state, "demoted_to_civil", now(), salaryFor(target, state), ctx.policies());
             restoreDutyFaction(target, state);
@@ -1196,12 +1203,61 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         actor.tell(target.name() + " a fost retrogradat.");
     }
 
+    private enum PersonnelDelegate { NO_RECORD, APPLIED, REFUSED }
+
+    /**
+     * Mirrors a discipline op into the V2 personnel record when one exists —
+     * the record is the projection source of truth, so a legacy-only write
+     * would be silently reverted on the next state read. APPLIED means the
+     * record was updated (caller should re-read state if it needs the new
+     * projection); REFUSED means the V2 write was denied and the actor was
+     * told — the caller must stop.
+     */
+    private PersonnelDelegate delegatePersonnelOp(PlayerGateway actor, PlayerGateway target, String op) {
+        if (v2PersonnelService == null || target == null) return PersonnelDelegate.NO_RECORD;
+        try {
+            if (v2PersonnelService.find(target.uuid().toString()) == null)
+                return PersonnelDelegate.NO_RECORD;
+            switch (op) {
+                case "suspend" -> v2PersonnelService.suspend(
+                        actor.uuid().toString(), target.uuid().toString(), "comisar discipline");
+                case "fire" -> v2PersonnelService.terminate(
+                        actor.uuid().toString(), target.uuid().toString(), "comisar discipline");
+                case "reinstate" -> v2PersonnelService.reinstate(
+                        actor.uuid().toString(), target.uuid().toString());
+                case "demote" -> v2PersonnelService.demote(
+                        actor.uuid().toString(), target.uuid().toString(), "comisar discipline");
+                default -> { }
+            }
+            return PersonnelDelegate.APPLIED;
+        } catch (RuntimeException error) {
+            String action = switch (op) {
+                case "suspend" -> AuditActions.SUSPEND;
+                case "fire" -> AuditActions.FIRE;
+                case "reinstate" -> AuditActions.REINSTATE;
+                default -> AuditActions.DEMOTE;
+            };
+            audit.record(action, actor.name(), actor.uuid().toString(),
+                    target.name(), target.uuid().toString(),
+                    AuditResults.REFUSED, error.getMessage());
+            actor.refuse("straja.duty.discipline_refused", "straja.remedy.ask_comisar",
+                    error.getMessage());
+            return PersonnelDelegate.REFUSED;
+        }
+    }
+
+    private com.dwurdy.straja.domain.model.PersonnelRecord v2RecordFor(PlayerGateway target) {
+        if (v2PersonnelService == null || target == null) return null;
+        return v2PersonnelService.find(target.uuid().toString());
+    }
+
     public void suspend(PlayerGateway actor, PlayerGateway target) {
         if (!players.isCommissioner(actor)) {
             actor.refuse("straja.duty.suspend_comisar", "straja.remedy.ask_comisar");
             return;
         }
         GuardState state = players.state(target);
+        if (delegatePersonnelOp(actor, target, "suspend") == PersonnelDelegate.REFUSED) return;
         state.suspended = true;
         state.resignationPending = false;
         state.resignationDeadlineAt = null;
@@ -1273,12 +1329,19 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             return false;
         }
         GuardState state = players.state(target);
-        if (!state.suspended || state.fired || state.resigned || state.rank < Rank.STAGIAR.level()) {
+        // A V2 record carries its own suspension truth — a trades member
+        // (projected rank CIVIL) must still be reinstatable.
+        boolean gateFails = v2RecordFor(target) != null
+                ? !state.suspended
+                : (!state.suspended || state.fired || state.resigned
+                        || state.rank < Rank.STAGIAR.level());
+        if (gateFails) {
             actor.refuse("straja.duty.rejoin_state", "straja.remedy.ask_comisar");
             audit.record(AuditActions.REINSTATE, actor.name(), actor.uuid().toString(),
                     target.name(), target.uuid().toString(), AuditResults.REFUSED, "target_not_suspended");
             return false;
         }
+        if (delegatePersonnelOp(actor, target, "reinstate") == PersonnelDelegate.REFUSED) return false;
         state.suspended = false;
         players.save(target.uuid(), state);
         roomAutoAssign.onPromotedToGuard(target);
@@ -1295,6 +1358,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             return;
         }
         GuardState state = players.state(target);
+        if (delegatePersonnelOp(actor, target, "fire") == PersonnelDelegate.REFUSED) return;
         if (state.duty) {
             DutyEngine.endDuty(state, "fired", now(), salaryFor(target, state), ctx.policies());
             restoreDutyFaction(target, state);

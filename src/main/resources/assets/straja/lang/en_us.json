@@ -515,6 +515,7 @@
   "straja.duty.target_no_promotion": "The target has no promotion available.",
   "straja.duty.target_not_guard": "The target is not an operational guard.",
   "straja.duty.v2_auth_refused": "V2 authorization was refused; the V1 state was not changed.",
+  "straja.duty.discipline_refused": "The V2 discipline action was refused: %s",
   "straja.duty.v2_promotion_refused": "The V2 promotion was refused: %s",
   "straja.emergency.alert_usage": "Usage: /straja emergency alert <message>.",
   "straja.emergency.already_active": "A state of emergency is already active (×%s pay, %s mandatory rounds).",

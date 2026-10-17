@@ -22,6 +22,7 @@ class GuardServiceTest {
     private GuardService guards;
     private PlayerService players;
     private PersonnelService v2Personnel;
+    private com.dwurdy.straja.adapter.out.persistence.SavedStores.Personnel personnelRepo;
     private PromotionService v2Promotions;
 
     @BeforeEach
@@ -38,7 +39,7 @@ class GuardServiceTest {
         com.dwurdy.straja.adapter.out.persistence.StoreAccess v2Access =
                 name -> v2Raw.computeIfAbsent(name,
                         ignored -> new com.dwurdy.straja.support.MemoryStore());
-        var personnelRepo = new com.dwurdy.straja.adapter.out.persistence.SavedStores.Personnel(v2Access);
+        personnelRepo = new com.dwurdy.straja.adapter.out.persistence.SavedStores.Personnel(v2Access);
         v2Personnel = new PersonnelService(personnelRepo, clock, new Fakes.SeqIds());
         v2Promotions = new PromotionService(
                 new com.dwurdy.straja.adapter.out.persistence.SavedStores.Promotions(v2Access),
@@ -749,6 +750,143 @@ class GuardServiceTest {
         assertTrue(state.fired);
         assertEquals(0, state.rank);
         assertFalse(state.invited);
+    }
+
+    // -------------------------------------------------- v2 discipline sync
+
+    private TestPlayer v2Member(com.dwurdy.straja.domain.model.CareerGrade grade) {
+        TestPlayer p = server.add("member-" + grade.name().toLowerCase());
+        v2Personnel.authorize("bootstrap", p.uuid().toString(), grade,
+                com.dwurdy.straja.domain.model.EmploymentMode.PART_TIME, "TEST", "hq",
+                "auth:" + p.uuid());
+        return p;
+    }
+
+    @Test
+    void suspendOnV2MemberPersistsThroughProjection() {
+        TestPlayer c = v2Comisar();
+        TestPlayer p = v2Member(com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STRAJER);
+        guards.suspend(c, p);
+        assertEquals(com.dwurdy.straja.domain.model.PersonnelStatus.SUSPENDED,
+                v2Personnel.find(p.uuid().toString()).membershipStatus);
+        // The projection must agree — a re-read can never resurrect authority.
+        assertTrue(players.state(p.uuid()).suspended);
+        assertFalse(guards.dutyView(p).activeGuard());
+    }
+
+    @Test
+    void fireOnV2MemberTerminatesRecord() {
+        TestPlayer c = v2Comisar();
+        TestPlayer p = v2Member(com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STRAJER);
+        guards.fire(c, p);
+        assertEquals(com.dwurdy.straja.domain.model.PersonnelStatus.TERMINATED,
+                v2Personnel.find(p.uuid().toString()).membershipStatus);
+        assertTrue(players.state(p.uuid()).fired);
+    }
+
+    @Test
+    void reinstateOnV2MemberReactivatesRecord() {
+        TestPlayer c = v2Comisar();
+        TestPlayer p = v2Member(com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STRAJER);
+        guards.suspend(c, p);
+        assertTrue(guards.reinstate(c, p));
+        assertEquals(com.dwurdy.straja.domain.model.PersonnelStatus.AUTHORIZED_ACTIVE,
+                v2Personnel.find(p.uuid().toString()).membershipStatus);
+        assertFalse(players.state(p.uuid()).suspended);
+    }
+
+    @Test
+    void demoteOnV2MemberDropsRecordGrade() {
+        TestPlayer c = v2Comisar();
+        TestPlayer p = v2Member(com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STRAJER);
+        guards.demote(c, p);
+        assertEquals(com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STAGIAR,
+                v2Personnel.find(p.uuid().toString()).careerGrade);
+        assertEquals(Rank.STAGIAR.level(), players.state(p.uuid()).rank);
+    }
+
+    @Test
+    void demoteEntryGradeV2MemberTerminatesRecord() {
+        TestPlayer c = v2Comisar();
+        TestPlayer p = v2Member(com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STAGIAR);
+        guards.demote(c, p);
+        assertEquals(com.dwurdy.straja.domain.model.PersonnelStatus.TERMINATED,
+                v2Personnel.find(p.uuid().toString()).membershipStatus);
+        assertTrue(players.state(p.uuid()).fired);
+    }
+
+    @Test
+    void suspendWithoutV2RecordKeepsLegacyPath() {
+        TestPlayer c = commissioner();
+        TestPlayer p = recruitToStagiar();
+        guards.suspend(c, p);
+        assertNull(v2Personnel.find(p.uuid().toString()));
+        assertTrue(players.state(p.uuid()).suspended);
+    }
+
+    @Test
+    void suspendOnTerminatedV2MemberRefuses() {
+        TestPlayer c = v2Comisar();
+        TestPlayer p = v2Member(com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STRAJER);
+        guards.fire(c, p);
+        guards.suspend(c, p);
+        // A terminated record must not be resurrected into a suspension.
+        assertEquals(com.dwurdy.straja.domain.model.PersonnelStatus.TERMINATED,
+                v2Personnel.find(p.uuid().toString()).membershipStatus);
+        assertTrue(players.state(p.uuid()).fired);
+        assertFalse(players.state(p.uuid()).suspended);
+        // And reinstate on a terminated record stays refused.
+        assertFalse(guards.reinstate(c, p));
+        assertEquals(com.dwurdy.straja.domain.model.PersonnelStatus.TERMINATED,
+                v2Personnel.find(p.uuid().toString()).membershipStatus);
+    }
+
+    @Test
+    void demoteLocotenentToProfessionalEndsDuty() {
+        TestPlayer c = v2Comisar();
+        TestPlayer p = v2Member(com.dwurdy.straja.domain.model.CareerGrade.PROFESSIONAL_ZILIER);
+        // Promotion path: grade written on the record, careerOrigin stays PROFESSIONAL.
+        var personnelStore = personnelRepo.read();
+        var record = personnelStore.records.get(p.uuid().toString());
+        record.careerGrade = com.dwurdy.straja.domain.model.CareerGrade.OFFICER_LOCOTENENT;
+        record.employmentMode = com.dwurdy.straja.domain.model.EmploymentMode.FULL_TIME;
+        personnelRepo.write(personnelStore);
+        assertEquals(Rank.LOCOTENENT.level(), players.state(p.uuid()).rank);
+        var state = players.state(p.uuid());
+        state.duty = true;
+        players.save(p.uuid(), state);
+        guards.demote(c, p);
+        assertEquals(com.dwurdy.straja.domain.model.CareerGrade.PROFESSIONAL_MESTER,
+                v2Personnel.find(p.uuid().toString()).careerGrade);
+        // MESTER projects to civilian rank — the member left the sworn corps:
+        // duty must be ended, not left running on a trades member.
+        assertFalse(players.state(p.uuid()).duty);
+    }
+
+    @Test
+    void tradesMemberReinstateWorks() {
+        TestPlayer c = v2Comisar();
+        TestPlayer p = v2Member(com.dwurdy.straja.domain.model.CareerGrade.PROFESSIONAL_ZILIER);
+        guards.suspend(c, p);
+        assertTrue(players.state(p.uuid()).suspended);
+        assertTrue(guards.reinstate(c, p));
+        assertEquals(com.dwurdy.straja.domain.model.PersonnelStatus.AUTHORIZED_ACTIVE,
+                v2Personnel.find(p.uuid().toString()).membershipStatus);
+    }
+
+    @Test
+    void deniedV2DisciplineLeavesStateUntouched() {
+        // Create the member record first, then wire authorization: the
+        // flag-commissioner has no V2 appointment, so the personnel write is
+        // denied and the legacy state must be spared.
+        TestPlayer c = commissioner();
+        TestPlayer p = v2Member(com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STRAJER);
+        v2Personnel.useAuthorization(
+                new AuthorizationService(personnelRepo, clock));
+        guards.suspend(c, p);
+        assertFalse(players.state(p.uuid()).suspended);
+        assertEquals(com.dwurdy.straja.domain.model.PersonnelStatus.AUTHORIZED_ACTIVE,
+                v2Personnel.find(p.uuid().toString()).membershipStatus);
     }
 
     @Test

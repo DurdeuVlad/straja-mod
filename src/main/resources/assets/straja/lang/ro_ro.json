@@ -515,6 +515,7 @@
   "straja.duty.target_no_promotion": "Ținta nu are o avansare disponibilă.",
   "straja.duty.target_not_guard": "Ținta nu este un străjer operațional.",
   "straja.duty.v2_auth_refused": "Autorizarea V2 a fost refuzată; starea V1 nu a fost modificată.",
+  "straja.duty.discipline_refused": "Măsura disciplinară V2 a fost refuzată: %s",
   "straja.duty.v2_promotion_refused": "Promovarea V2 a fost refuzată: %s",
   "straja.emergency.alert_usage": "Folosire: /straja emergency alert <mesaj>.",
   "straja.emergency.already_active": "Starea de urgență este deja activă (×%s plată, %s runde obligatorii).",
