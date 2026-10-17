@@ -151,7 +151,7 @@ public final class NpcRoles {
             case "v2-document-status" -> tellV2Documents(runtime, gw);
             case "v2-equipment-status" -> tellV2Equipment(runtime, gw);
             case "v2-campaign-status" -> tellV2Campaigns(runtime, gw);
-            case "v2-professional-work" -> tellV2ProfessionalWork(runtime, gw);
+            case "v2-professional-work" -> tellV2ProfessionalWork(player, runtime, gw);
             case "trades-list" -> tellTradesEnroll(player, runtime, gw);
             case "trades-promote" -> requestTradesPromotion(player, runtime, gw);
             case "application-submit" -> runtime.guardRecruitment().applyForStraja(gw);
@@ -357,7 +357,8 @@ public final class NpcRoles {
                 + " | cotă " + campaign.quantityAccepted + "/" + campaign.globalQuota));
     }
 
-    private static void tellV2ProfessionalWork(com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+    private static void tellV2ProfessionalWork(Player mcPlayer,
+                                               com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
                                                com.dwurdy.straja.application.port.out.PlayerGateway player) {
         var personnel = runtime.v2Personnel().find(player.uuid().toString());
         if (personnel == null || personnel.professions == null || personnel.professions.isEmpty()) {
@@ -375,10 +376,29 @@ public final class NpcRoles {
                     personnel.homeStationId, "", now,
                     "generator:" + profession + ":" + player.uuid() + ":" + (now / 86_400_000L),
                     runtime.v2Missions());
-            player.tell("Ofertă profesională V2: " + mission.id + " — " + mission.objective
-                    + " (scadentă la " + mission.dueAt + ").");
+            if (mcPlayer instanceof ServerPlayer serverPlayer) {
+                sendToolPrompt(serverPlayer,
+                        Component.literal("Ofertă profesională " + mission.id + " — " + mission.objective),
+                        Component.literal("Acceptă"),
+                        "v2-mission-claim:" + mission.id);
+            } else {
+                player.tell("Ofertă profesională V2: " + mission.id + " — " + mission.objective
+                        + " (scadentă la " + mission.dueAt + ").");
+            }
         } catch (RuntimeException error) {
             player.refuse("straja.npc.no_offer", "straja.remedy.wait", error.getMessage());
+        }
+    }
+
+    private static void claimV2Mission(com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                       com.dwurdy.straja.application.port.out.PlayerGateway gw,
+                                       String missionId) {
+        try {
+            var mission = runtime.v2Missions().claim(gw.uuid().toString(), missionId);
+            gw.tell("Misiune acceptată: " + mission.id + " — " + mission.objective
+                    + " (+" + mission.xpReward + " puncte de serviciu la finalizare).");
+        } catch (IllegalStateException | IllegalArgumentException e) {
+            gw.refuse("straja.npc.action_stale_mission", "straja.remedy.retry");
         }
     }
 
@@ -453,20 +473,10 @@ public final class NpcRoles {
             gw.refuse("straja.trades.promote.max", "straja.remedy.status");
             return;
         }
-        try {
-            // Trades shortcut files a petition (no reason field) — it lands
-            // READY_FOR_APPROVAL for the Comisar, same as the Secretary form.
-            var application = runtime.v2Promotions().submitPetition(gw.uuid().toString(), next, "");
-            String gradeName = runtime.policies().rankName(next);
-            if (player instanceof ServerPlayer serverPlayer) {
-                serverPlayer.sendSystemMessage(Component.translatable(
-                        "straja.trades.promote.requested", gradeName, application.applicationId));
-            } else {
-                gw.tellKey("straja.trades.promote.requested");
-            }
-        } catch (RuntimeException error) {
-            gw.refuse("straja.npc.promotion_refused", "straja.remedy.instructor", error.getMessage());
-        }
+        // The shared petition path re-derives the same target, applies the
+        // service-block gate with its earn-more remedy, and files the ask —
+        // reviewers stamp it through the standard promotion pipeline.
+        runtime.guardRecruitment().requestPetition(gw, "");
     }
 
     /**
@@ -572,6 +582,9 @@ public final class NpcRoles {
             case "mission-join" -> runtime.missionRoleplay().join(gw, id);
             case "mission-accept" -> runtime.missionRoleplay().accept(gw, id);
             case "mission-decline" -> runtime.missionRoleplay().decline(gw, id);
+            case "mission-invite" -> openMissionForm(player, runtime, gw,
+                    com.dwurdy.straja.application.port.in.MissionRoleplayUseCase.Action.INVITE, id);
+            case "v2-mission-claim" -> claimV2Mission(runtime, gw, id);
             case "mission-complete" -> runtime.missionRoleplay().complete(gw, id);
             case "mission-reward" -> runtime.missionRoleplay().claimReward(gw, id);
             case "mission-reward-recover" -> runtime.missionRoleplay().recoverReward(gw, id);
@@ -1156,13 +1169,15 @@ public final class NpcRoles {
                             new FormSessionUseCase.Field(FormField.MINUTES, "Timp (minute)", 5, false),
                             new FormSessionUseCase.Field(FormField.START, "Începere", 16, false),
                             new FormSessionUseCase.Field(FormField.REWARD, "Recompensă", 10, false),
+                            new FormSessionUseCase.Field(FormField.XP, "Puncte serviciu (gol = automat)", 7, false, false),
                             new FormSessionUseCase.Field(FormField.OBJECTIVE, "Obiectiv", 2000, true)));
             case DRAFT_SCOPE -> new FormSessionUseCase.Request(
                     FormSessionUseCase.Action.MISSION_DRAFT_SCOPE, "",
-                    "Participanți ordin", "Configurează rangul minim și numărul maxim de participanți.",
+                    "Participanți ordin", "Configurează rangul minim, numărul maxim și recrutarea.",
                     java.util.List.of(
                             new FormSessionUseCase.Field(FormField.MINIMUM_RANK, "Rang minim", 16, false),
-                            new FormSessionUseCase.Field(FormField.MAX_ASSIGNEES, "Max participanți", 3, false)));
+                            new FormSessionUseCase.Field(FormField.MAX_ASSIGNEES, "Max participanți", 3, false),
+                            new FormSessionUseCase.Field(FormField.OPEN, "Deschis tuturor (da/nu)", 5, false, false)));
             case ADJUST_BUDGET -> new FormSessionUseCase.Request(
                     FormSessionUseCase.Action.MISSION_BUDGET_ADJUST, "",
                     "Ajustare buget", "Ore estimate și risc recalculează recompensa. "
@@ -1173,6 +1188,11 @@ public final class NpcRoles {
                             new FormSessionUseCase.Field(FormField.RISK, "Risc (multiplicator)", 6, false),
                             new FormSessionUseCase.Field(FormField.REWARD, "Recompensă (gol = calculată)", 10, false, false),
                             new FormSessionUseCase.Field(FormField.REASON, "Motiv depășire", 240, false, false)));
+            case INVITE -> new FormSessionUseCase.Request(
+                    FormSessionUseCase.Action.MISSION_INVITE, expected,
+                    "Alocare participant", "Numele jucătorului alocat la acest ordin; poate accepta sau refuza.",
+                    java.util.List.of(
+                            new FormSessionUseCase.Field(FormField.SUBJECT, "Jucător", 64, false)));
             default -> null;
         };
         if (request == null) return true;
@@ -1341,6 +1361,16 @@ public final class NpcRoles {
             player.sendSystemMessage(refusal("straja.duty.promotion_state", "straja.remedy.ask_comisar"));
             return true;
         }
+        // Fail fast on the XP gate instead of letting the member fill the
+        // form and get refused at submit.
+        int requiredBlocks = runtime.v2Promotions().requiredBlocks(target);
+        if (requiredBlocks > 0
+                && !runtime.v2Promotions().petitionXpSatisfied(gw.uuid().toString(), target)) {
+            player.sendSystemMessage(refusal("straja.duty.promotion_xp",
+                    "straja.remedy.earn_blocks",
+                    runtime.guardRecruitment().trainingView(gw).serviceBlocks() + "/" + requiredBlocks));
+            return true;
+        }
         if (!(player instanceof ServerPlayer serverPlayer)) return true;
         FormSessionBridge.open(serverPlayer, new FormSessionUseCase.Request(
                 FormSessionUseCase.Action.PETITION_REQUEST, "",
@@ -1357,14 +1387,14 @@ public final class NpcRoles {
                                         com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
                                         com.dwurdy.straja.application.port.out.PlayerGateway gw,
                                         String recordId) {
-        if (!runtime.playerQueries().isCommissioner(gw)) {
-            player.sendSystemMessage(refusal("straja.audience.decide_comisar", "straja.remedy.ask_comisar"));
-            return true;
-        }
         var application = runtime.v2Promotions().find(recordId);
         if (application == null || application.status
                 != com.dwurdy.straja.domain.model.PromotionStatus.READY_FOR_APPROVAL) {
             player.sendSystemMessage(refusal("straja.petition.gone", "straja.remedy.retry"));
+            return true;
+        }
+        if (!petitionReviewer(gw, runtime, application.targetGrade)) {
+            player.sendSystemMessage(refusal("straja.audience.decide_comisar", "straja.remedy.ask_comisar"));
             return true;
         }
         String advisory = "";
@@ -1396,14 +1426,14 @@ public final class NpcRoles {
                                                   com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
                                                   com.dwurdy.straja.application.port.out.PlayerGateway gw,
                                                   String recordId) {
-        if (!runtime.playerQueries().isCommissioner(gw)) {
-            player.sendSystemMessage(refusal("straja.audience.decide_comisar", "straja.remedy.ask_comisar"));
-            return true;
-        }
         var application = runtime.v2Promotions().find(recordId);
         if (application == null || application.status
                 != com.dwurdy.straja.domain.model.PromotionStatus.READY_FOR_APPROVAL) {
             player.sendSystemMessage(refusal("straja.petition.gone", "straja.remedy.retry"));
+            return true;
+        }
+        if (!petitionReviewer(gw, runtime, application.targetGrade)) {
+            player.sendSystemMessage(refusal("straja.audience.decide_comisar", "straja.remedy.ask_comisar"));
             return true;
         }
         if (!(player instanceof ServerPlayer serverPlayer)) return true;
@@ -1566,10 +1596,21 @@ public final class NpcRoles {
             }
             case "mission-join", "mission-accept", "mission-decline", "mission-complete",
                     "mission-report", "mission-fail", "mission-reward", "mission-reward-recover",
-                    "mission-template-issue" -> {
+                    "mission-template-issue", "mission-invite" -> {
                 var expected = missionActionFor(operation);
                 yield expected != null && runtime.missionRoleplay().availableActions(player)
                         .stream().anyMatch(a -> a.action() == expected && id.equals(a.missionId()));
+            }
+            case "v2-mission-claim" -> {
+                var mission = runtime.v2Missions().find(id);
+                String uuid = player.uuid().toString();
+                yield mission != null && (mission.v2Status
+                        == com.dwurdy.straja.domain.model.MissionStatus.AVAILABLE
+                        && uuid.equals(mission.beneficiaryUuid)
+                        || uuid.equals(mission.actorUuid)
+                        && (mission.v2Status == com.dwurdy.straja.domain.model.MissionStatus.CLAIMED
+                        || mission.v2Status == com.dwurdy.straja.domain.model.MissionStatus.IN_PROGRESS
+                        || mission.v2Status == com.dwurdy.straja.domain.model.MissionStatus.SUBMITTED));
             }
             case "custody-accept", "custody-refuse", "custody-release" -> {
                 var expected = custodyActionFor(operation);
@@ -1614,12 +1655,13 @@ public final class NpcRoles {
                         == com.dwurdy.straja.domain.model.JoinRequestStatus.PENDING;
             }
             case "petition-read", "petition-review" -> {
-                // Reviewer-bound and record-live: only the Comisar may open a
-                // petition, and only while it still awaits a decision.
-                if (!runtime.playerQueries().isCommissioner(player)) yield false;
+                // Reviewer-bound and record-live: the Comisar decides every
+                // petition; any officer may open part-time asks, and only
+                // while it still awaits a decision.
                 var application = runtime.v2Promotions().find(id);
                 yield application != null && application.status
-                        == com.dwurdy.straja.domain.model.PromotionStatus.READY_FOR_APPROVAL;
+                        == com.dwurdy.straja.domain.model.PromotionStatus.READY_FOR_APPROVAL
+                        && petitionReviewer(player, runtime, application.targetGrade);
             }
             case "incident-accept", "incident-join", "incident-leave", "incident-resolve" ->
                     runtime.expansionRoleplay().activeIncidents(player).stream()
@@ -1653,6 +1695,36 @@ public final class NpcRoles {
         };
     }
 
+    /**
+     * The petitions this reviewer may act on: all of them for the Comisar;
+     * part-time asks for an active officer.
+     */
+    private static java.util.List<com.dwurdy.straja.domain.model.PromotionApplication>
+            reviewablePetitions(com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                com.dwurdy.straja.application.port.out.PlayerGateway player) {
+        boolean commissioner = runtime.playerQueries().isCommissioner(player);
+        return runtime.v2Promotions().pendingPetitions().stream()
+                .filter(application -> commissioner
+                        || petitionReviewer(player, runtime, application.targetGrade))
+                .toList();
+    }
+
+    /**
+     * Who may open a promotion petition: the Comisar decides everything; any
+     * active officer may stamp a part-time step (specialist advancement by
+     * design needs no Comisar wait).
+     */
+    private static boolean petitionReviewer(
+            com.dwurdy.straja.application.port.out.PlayerGateway player,
+            com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+            com.dwurdy.straja.domain.model.CareerGrade target) {
+        if (runtime.playerQueries().isCommissioner(player)) return true;
+        if (target == null || target.fullTimeRequired()) return false;
+        var record = runtime.v2Personnel().find(player.uuid().toString());
+        return record != null && record.active()
+                && record.careerGrade != null && record.careerGrade.isOfficer();
+    }
+
     private static com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.Action
             adminActionFor(String operation) {
         return switch (operation) {
@@ -1678,6 +1750,7 @@ public final class NpcRoles {
             case "mission-reward" -> com.dwurdy.straja.application.port.in.MissionRoleplayUseCase.Action.CLAIM_REWARD;
             case "mission-reward-recover" -> com.dwurdy.straja.application.port.in.MissionRoleplayUseCase.Action.RECOVER_REWARD;
             case "mission-template-issue" -> com.dwurdy.straja.application.port.in.MissionRoleplayUseCase.Action.ISSUE_TEMPLATE;
+            case "mission-invite" -> com.dwurdy.straja.application.port.in.MissionRoleplayUseCase.Action.INVITE;
             default -> null;
         };
     }
@@ -1771,9 +1844,7 @@ public final class NpcRoles {
                         runtime.adminRoleplay().availableActions(gateway)));
                 actions.addAll(NpcPlayerSurface.petitionActions(
                         runtime.guardRecruitment().petitionTarget(gateway),
-                        runtime.playerQueries().isCommissioner(gateway)
-                                ? runtime.v2Promotions().pendingPetitions()
-                                : java.util.List.of(),
+                        reviewablePetitions(runtime, gateway),
                         grade -> runtime.policies().rankName(grade),
                         runtime.playerQueries()::displayName));
                 if (runtime.playerQueries().isCommissioner(gateway)) {

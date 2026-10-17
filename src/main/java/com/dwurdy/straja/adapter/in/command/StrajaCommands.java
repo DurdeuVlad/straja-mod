@@ -515,13 +515,20 @@ public final class StrajaCommands {
                                                         .draftWrite(p, IntegerArgumentType.getInteger(c, "minutes"),
                                                                 StringArgumentType.getString(c, "start"),
                                                                 IntegerArgumentType.getInteger(c, "reward"),
+                                                                -1,
                                                                 StringArgumentType.getString(c, "objective")))))))));
         draft.then(Commands.literal("scope")
                 .then(Commands.argument("rank", StringArgumentType.word())
                         .then(Commands.argument("max", IntegerArgumentType.integer(1))
                                 .executes(c -> player(c, p -> StrajaRuntime.get().missions()
                                         .draftScope(p, StringArgumentType.getString(c, "rank"),
-                                                IntegerArgumentType.getInteger(c, "max")))))));
+                                                IntegerArgumentType.getInteger(c, "max"), (Boolean) null)))
+                                .then(Commands.argument("open", StringArgumentType.word())
+                                        .executes(c -> player(c, p -> StrajaRuntime.get().missions()
+                                                .draftScope(p, StringArgumentType.getString(c, "rank"),
+                                                        IntegerArgumentType.getInteger(c, "max"),
+                                                        "da".equalsIgnoreCase(StringArgumentType.getString(c, "open"))
+                                                                || "true".equalsIgnoreCase(StringArgumentType.getString(c, "open")))))))));
         draft.then(Commands.literal("sign").executes(c -> player(c, StrajaRuntime.get().missions()::draftSign)));
         draft.then(Commands.literal("package").executes(c -> player(c, StrajaRuntime.get().missions()::draftPackage)));
         draft.then(Commands.literal("from")

@@ -56,6 +56,8 @@ public final class FormField {
     public static final String ROUNDS = "rounds";
     public static final String SENTENCE_ID = "sentence-id";
     public static final String SKIN = "skin";
+    public static final String XP = "xp";
+    public static final String OPEN = "open";
     public static final String SLOT = "slot";
     public static final String START = "start";
     public static final String SUBJECT = "subject";

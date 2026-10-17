@@ -44,6 +44,7 @@ class GuardServiceTest {
                 new com.dwurdy.straja.adapter.out.persistence.SavedStores.Promotions(v2Access),
                 personnelRepo, new AuthorizationService(personnelRepo, clock), clock,
                 new Fakes.SeqIds());
+        v2Promotions.usePlayerService(players, policies);
         guards.useV2Promotions(v2Promotions);
         guards.useV2Personnel(v2Personnel);
         guards.useV2PersonnelProjection(p -> {
@@ -733,7 +734,8 @@ class GuardServiceTest {
         assertEquals(Rank.STAGIAR.level(), players.state(p.uuid()).rank);
         assertTrue(c.told("refuzată"));
         // The member files the petition; the comisar's promote stamps it.
-        guards.requestPromotion(p);
+        setBlocks(p, 60);
+        guards.requestPetition(p, "motiv");
         guards.promote(c, p);
         assertEquals(Rank.GUARD.level(), players.state(p.uuid()).rank);
     }
@@ -1068,34 +1070,96 @@ class GuardServiceTest {
     }
 
     @Test
-    void trainerPetitionFilesWithoutServiceBlocks() {
-        // Petition model: blocks/modules are advisory for the reviewer, not
-        // gates on the request itself.
+    void militaryAdvancementNeedsServiceBlocksFirst() {
+        // The fun split: military ranks come from XP + a learnable exam —
+        // without the points the ask is refused with a how-to-earn remedy.
         TestPlayer p = recruitToStagiar();
         guards.requestPromotion(p);
         assertEquals(Rank.STAGIAR.level(), players.state(p.uuid()).rank);
-        var application = v2Promotions.findOpen(p.uuid().toString(),
-                com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STRAJER);
-        assertNotNull(application);
-        assertEquals(com.dwurdy.straja.domain.model.PromotionStatus.READY_FOR_APPROVAL,
-                application.status);
-        assertTrue(p.told("Cererea de avansare"));
+        assertNull(players.state(p.uuid()).examGrade);
+        assertNull(v2Promotions.findOpen(p.uuid().toString(),
+                com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STRAJER));
+        assertTrue(p.told("puncte de serviciu"));
     }
 
     @Test
-    void trainerPetitionIgnoresUnfinishedModules() {
+    void militaryAdvancementStartsExamNotPetition() {
         TestPlayer p = recruitToStagiar();
         setBlocks(p, 500);
         guards.requestPromotion(p);
-        assertNotNull(v2Promotions.findOpen(p.uuid().toString(),
+        assertEquals("MILITARY_STRAJER", players.state(p.uuid()).examGrade);
+        assertNull(v2Promotions.findOpen(p.uuid().toString(),
                 com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STRAJER));
+        assertTrue(p.told("Examen de avansare"));
+        assertTrue(p.told("Întrebarea 1/"));
+    }
+
+    @Test
+    void examPassPromotesInstantly() {
+        TestPlayer p = recruitToStagiar();
+        setBlocks(p, 60);
+        guards.requestPromotion(p);
+        var bank = ctx.policies().trainingQuiz.stream()
+                .filter(q -> q.minRank() <= Rank.GUARD.level()).toList();
+        for (var question : bank) {
+            assertEquals("MILITARY_STRAJER", players.state(p.uuid()).examGrade);
+            guards.quiz(p, question.answers().get(0));
+        }
+        assertNull(players.state(p.uuid()).examGrade);
+        var record = v2Personnel.find(p.uuid().toString());
+        assertEquals(com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STRAJER,
+                record.careerGrade);
+        assertEquals(Rank.GUARD.level(), players.state(p.uuid()).rank);
+        assertTrue(p.told("Examen promovat"));
+    }
+
+    @Test
+    void examFailTeachesAnswerAndAppliesRetakeCooldown() {
+        TestPlayer p = recruitToStagiar();
+        setBlocks(p, 60);
+        guards.requestPromotion(p);
+        var bank = ctx.policies().trainingQuiz.stream()
+                .filter(q -> q.minRank() <= Rank.GUARD.level()).toList();
+        guards.quiz(p, "definitiv greșit");
+        assertTrue(p.told(bank.get(0).answers().get(0)),
+                "a wrong exam answer teaches the correct one on the spot");
+        // Fail the rest — the attempt latches and the cooldown applies.
+        for (int i = 1; i < bank.size(); i++) guards.quiz(p, "definitiv greșit");
+        var state = players.state(p.uuid());
+        assertNull(state.examGrade);
+        assertNotNull(state.examCooldownAt);
+        assertTrue(p.told("Examen picat"));
+        // Cooldown elapsed → a fresh exam can start.
+        clock.advance(120L * 60 * 1000);
+        guards.requestPromotion(p);
+        assertEquals("MILITARY_STRAJER", players.state(p.uuid()).examGrade);
+    }
+
+    @Test
+    void specialistAskNeedsServiceBlocksToo() {
+        TestPlayer p = server.add("zilier");
+        v2Personnel.authorize("bootstrap", p.uuid().toString(),
+                com.dwurdy.straja.domain.model.CareerGrade.PROFESSIONAL_ZILIER,
+                com.dwurdy.straja.domain.model.EmploymentMode.PART_TIME,
+                "TEST", "hq", "auth:zilier");
+        setBlocks(p, 0);
+        guards.requestPromotion(p);
+        assertTrue(p.told("puncte de serviciu"));
+        assertNull(v2Promotions.findOpen(p.uuid().toString(),
+                com.dwurdy.straja.domain.model.CareerGrade.PROFESSIONAL_MESTER));
+        // With the XP banked, the ask files into the officer review queue.
+        setBlocks(p, 60);
+        guards.requestPromotion(p);
+        assertNotNull(v2Promotions.findOpen(p.uuid().toString(),
+                com.dwurdy.straja.domain.model.CareerGrade.PROFESSIONAL_MESTER));
     }
 
     @Test
     void petitionApprovalFlipsRankAfterComisarReview() {
         TestPlayer comisar = v2Comisar();
         TestPlayer p = recruitToStagiar();
-        guards.requestPromotion(p);
+        setBlocks(p, 60);
+        guards.requestPetition(p, "motiv");
         var application = v2Promotions.findOpen(p.uuid().toString(),
                 com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STRAJER);
         assertNotNull(application);
@@ -1111,7 +1175,8 @@ class GuardServiceTest {
     void petitionDeniedKeepsRankAndShowsReason() {
         TestPlayer comisar = v2Comisar();
         TestPlayer p = recruitToStagiar();
-        guards.requestPromotion(p);
+        setBlocks(p, 60);
+        guards.requestPetition(p, "motiv");
         var application = v2Promotions.findOpen(p.uuid().toString(),
                 com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STRAJER);
         v2Promotions.reject(comisar.uuid().toString(), application.applicationId, "mai ai nevoie");

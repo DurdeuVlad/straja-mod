@@ -81,6 +81,16 @@ public class MissionService implements MissionRoleplayUseCase {
         return PlayerService.identityMatches(player, mission.issuerUuid, mission.issuer);
     }
 
+    /** Non-refusing eligibility mirror of join()'s member-state gates. */
+    private boolean memberJoinable(PlayerGateway player, Mission mission) {
+        var state = players.state(player.uuid());
+        return players.permissionLevel(player, state).atLeast(
+                        com.dwurdy.straja.domain.model.PermissionLevel.GUARD)
+                && state.rank >= mission.minimumRank
+                && !state.resigned && !state.fired && !state.suspended
+                && !state.resignationPending;
+    }
+
     private boolean invitedMatches(PlayerGateway player, Mission mission) {
         for (var entry : mission.invited) {
             if (identityMatches(player, entry)) return true;
@@ -277,7 +287,8 @@ public class MissionService implements MissionRoleplayUseCase {
         return new StartParse(true, at, value, null, new Object[0]);
     }
 
-    public void draftWrite(PlayerGateway player, int minutes, String startRaw, int reward, String objective) {
+    public void draftWrite(PlayerGateway player, int minutes, String startRaw, int reward,
+                           int xpReward, String objective) {
         if (!draftGate(player)) return;
         if (!timeValid(minutes)) {
             player.refuse("straja.mission.eta_invalid", "straja.remedy.fix_retry", ctx.policies().missionMinMinutes, ctx.policies().missionMaxMinutes);
@@ -292,6 +303,11 @@ public class MissionService implements MissionRoleplayUseCase {
             player.refuse("straja.mission.reward_invalid", "straja.remedy.fix_retry", ctx.policies().missionMaxReward);
             return;
         }
+        int xp = xpReward < 0 ? derivedXp(minutes) : xpReward;
+        if (xp > ctx.policies().missionMaxXpReward) {
+            player.refuse("straja.mission.xp_invalid", "straja.remedy.fix_retry", ctx.policies().missionMaxXpReward);
+            return;
+        }
         if (objective == null || objective.isBlank()) {
             player.refuse("straja.mission.objective_after_start", "straja.remedy.fix_retry");
             return;
@@ -303,6 +319,7 @@ public class MissionService implements MissionRoleplayUseCase {
         draft.objective = objective.substring(0, Math.min(objective.length(), ctx.policies().envelopeMaxBodyLength));
         draft.minutes = minutes;
         draft.reward = reward;
+        draft.xpReward = xp;
         draft.maxCopies = Math.max(1, ctx.policies().missionMaxCopiesPerDraft);
         draft.rewardPool = Math.min(ctx.policies().missionMaxRewardPool, reward * draft.maxCopies);
         draft.minimumRank = ctx.policies().missionDefaultMinimumRank;
@@ -314,10 +331,23 @@ public class MissionService implements MissionRoleplayUseCase {
         draft.issuedCount = 0;
         store.drafts.put(playerKey(player), draft);
         ctx.missions().write(store);
-        player.tell("Ordin scris. Verifică detaliile la secretară, apoi semnează și sigilează-l în Carnetul de Ordine.");
+        player.tell("Ordin scris: " + reward + " B și " + xp + " puncte de serviciu per participant. "
+                + "Verifică detaliile la secretară, apoi semnează și sigilează-l în Carnetul de Ordine.");
     }
 
-    public void draftScope(PlayerGateway player, String rankName, int maxAssignees) {
+    /**
+     * XP follows duty-time pacing: one service block per serviceBlockMinutes of
+     * work, capped by missionMaxXpReward. Officers may set it explicitly on the
+     * order form; an unset field derives the default.
+     */
+    private int derivedXp(int minutes) {
+        int unit = Math.max(1, ctx.policies().serviceBlockMinutes);
+        return Math.min(ctx.policies().missionMaxXpReward,
+                (int) Math.ceil((double) Math.max(0, minutes) / unit));
+    }
+
+    public void draftScope(PlayerGateway player, String rankName, int maxAssignees,
+                           Boolean openRecruitment) {
         if (!draftGate(player)) return;
         var store = store();
         var draft = draft(player, store);
@@ -329,13 +359,16 @@ public class MissionService implements MissionRoleplayUseCase {
         if (!scopeValid(player, minimumRank, maxAssignees)) return;
         draft.minimumRank = minimumRank;
         draft.maxAssignees = maxAssignees;
+        draft.openRecruitment = openRecruitment == null ? draft.openRecruitment : openRecruitment;
         // Scope changes invalidate the signature and seal.
         draft.signedBy = "";
         draft.signedAt = null;
         draft.packagedAt = null;
         ctx.missions().write(store);
         player.tell("Sfera ordinului: minim " + ctx.policies().rankName(minimumRank) + ", maximum "
-                + maxAssignees + " participanți. Semnează și sigilează din nou.");
+                + maxAssignees + " participanți"
+                + (draft.openRecruitment ? ", deschis tuturor celor eligibili" : ", pe invitație")
+                + ". Semnează și sigilează din nou.");
     }
 
     private int rankValue(String name) {
@@ -481,6 +514,7 @@ public class MissionService implements MissionRoleplayUseCase {
         draft.objective = t.objective.substring(0, Math.min(t.objective.length(), ctx.policies().envelopeMaxBodyLength));
         draft.minutes = t.deadlineMinutes;
         draft.reward = reward;
+        draft.xpReward = derivedXp((int) Math.ceil(t.estimatedHours * 60));
         draft.minimumRank = t.minRank;
         draft.maxAssignees = t.maxPaidParticipants;
         draft.maxCopies = Math.max(1, Math.min(t.maxPaidParticipants, ctx.policies().missionMaxCopiesPerDraft));
@@ -552,6 +586,7 @@ public class MissionService implements MissionRoleplayUseCase {
         draft.estimatedHours = hours;
         draft.risk = risk;
         draft.reward = reward;
+        draft.xpReward = derivedXp((int) Math.ceil(hours * 60));
         draft.rewardPool = Math.min(ctx.policies().missionMaxRewardPool, reward * draft.maxCopies);
         draft.remainingRewardPool = Math.max(0, draft.rewardPool - draft.rewardCommitted);
         draft.overrideReason = explicit > calculated ? trimmedReason : "";
@@ -830,6 +865,7 @@ public class MissionService implements MissionRoleplayUseCase {
         mission.objective = objective.substring(0, Math.min(objective.length(), ctx.policies().envelopeMaxBodyLength));
         mission.minutes = minutes;
         mission.reward = reward;
+        mission.xpReward = derivedXp(minutes);
         mission.rewardStatus = reward > 0 ? "PENDING" : "NONE";
         mission.rewardPayoutId = "mission:" + mission.id + ":reward";
         mission.issuerBudgetKey = budget.key();
@@ -936,9 +972,11 @@ public class MissionService implements MissionRoleplayUseCase {
         mission.invited.add(identity);
         mission.minimumRank = draft.minimumRank;
         mission.maxAssignees = draft.maxAssignees;
+        mission.openRecruitment = draft.openRecruitment;
         mission.objective = draft.objective;
         mission.minutes = draft.minutes;
         mission.reward = draft.reward;
+        mission.xpReward = draft.xpReward;
         mission.rewardStatus = draft.reward > 0 ? "PENDING" : "NONE";
         mission.rewardPayoutId = "mission:" + mission.id + ":reward";
         mission.rewardPool = draft.rewardPool;
@@ -1150,13 +1188,21 @@ public class MissionService implements MissionRoleplayUseCase {
             boolean declinedBefore = declined.stream().anyMatch(e -> identityMatches(player, e));
             boolean beforeDue = mission.dueAt > now;
             String id = mission.id == null ? "" : mission.id;
-            if (invitedOnly && !declinedBefore
+            boolean openEligible = !assigned && !invitedOnly && !declinedBefore
+                    && !issuerMatches(player, mission) && mission.openRecruitment
+                    && memberJoinable(player, mission);
+            if ((invitedOnly || openEligible) && !declinedBefore
                     && ("ISSUED".equals(status) || "ACCEPTED".equals(status))
                     && beforeDue && assignees.size() < mission.maxAssignees) {
                 actions.add(new AvailableAction(Action.JOIN, id));
             }
             if ((assigned || invitedOnly) && "ISSUED".equals(status) && beforeDue) {
                 actions.add(new AvailableAction(Action.DECLINE, id));
+            }
+            if (missionAuthority(player) && issuerMatches(player, mission)
+                    && ("ISSUED".equals(status) || "ACCEPTED".equals(status))
+                    && beforeDue && assignees.size() < mission.maxAssignees) {
+                actions.add(new AvailableAction(Action.INVITE, id));
             }
             if (assigned && "ISSUED".equals(status) && mission.startAt <= now && beforeDue) {
                 actions.add(new AvailableAction(Action.ACCEPT, id));
@@ -1216,7 +1262,11 @@ public class MissionService implements MissionRoleplayUseCase {
         List<Mission> visible = new ArrayList<>();
         for (Mission m : all) {
             if (commissioner || targetMatches(player, m) || issuerMatches(player, m)
-                    || invitedMatches(player, m)) visible.add(m);
+                    || invitedMatches(player, m)
+                    || (m.openRecruitment && m.isOpen()
+                            && !issuerMatches(player, m) && memberJoinable(player, m))) {
+                visible.add(m);
+            }
         }
         if (visible.isEmpty()) {
             player.refuse("straja.mission.none_visible", "straja.remedy.wait");
@@ -1227,6 +1277,10 @@ public class MissionService implements MissionRoleplayUseCase {
     }
 
     public boolean invite(PlayerGateway issuer, String id, PlayerGateway target) {
+        if (!missionAuthority(issuer)) {
+            issuer.refuse("straja.mission.declare_rank", "straja.remedy.ask_comisar");
+            return false;
+        }
         var store = store();
         var mission = store.find(id);
         if (mission == null || !issuerMatches(issuer, mission)) {
@@ -1273,12 +1327,40 @@ public class MissionService implements MissionRoleplayUseCase {
         return true;
     }
 
+    @Override
+    public boolean inviteByName(PlayerGateway issuer, String missionId, String targetName) {
+        if (targetName == null || targetName.isBlank()) {
+            issuer.refuse("straja.mission.participant_invalid", "straja.remedy.fix_retry");
+            return false;
+        }
+        var target = ctx.server().findPlayer(targetName.trim());
+        if (target == null) {
+            issuer.refuse("straja.common.target_offline", "straja.remedy.wait");
+            return false;
+        }
+        return invite(issuer, missionId, target);
+    }
+
     public boolean join(PlayerGateway player, String id) {
         if (!guardActive(player, "intra într-o misiune")) return false;
         var store = store();
         var mission = store.find(id);
-        if (mission == null || (!invitedMatches(player, mission) && !targetMatches(player, mission))) {
+        if (mission == null || (!invitedMatches(player, mission) && !targetMatches(player, mission)
+                && !mission.openRecruitment)) {
             player.refuse("straja.mission.not_invited", "straja.remedy.retry");
+            return false;
+        }
+        if (issuerMatches(player, mission)) {
+            player.refuse("straja.mission.participant_invalid", "straja.remedy.fix_retry");
+            return false;
+        }
+        if (mission.dueAt <= now()) {
+            expire(store, mission);
+            player.refuse("straja.mission.expired", "straja.remedy.retry");
+            return false;
+        }
+        if (openCountFor(player, store) >= ctx.policies().missionMaxActivePerPlayer) {
+            player.refuse("straja.mission.participant_busy", "straja.remedy.wait");
             return false;
         }
         if (declinedMatches(player, mission)) {
@@ -1471,7 +1553,9 @@ public class MissionService implements MissionRoleplayUseCase {
         mission.completedAt = now();
         ctx.missions().write(store);
         audit.record(AuditActions.MISSION_COMPLETE, player.name(), player.uuid().toString(),
-                mission.target, mission.targetUuid, AuditResults.SUCCESS, "completed" + " missionId=" + mission.id);
+                mission.target, mission.targetUuid, AuditResults.SUCCESS,
+                "completed missionId=" + mission.id + " xp=" + mission.xpReward);
+        grantXp(mission);
         // Auto-claim for online participants; offline claims stay pending.
         int claimed = 0;
         for (var entry : mission.assignees) {
@@ -1488,6 +1572,38 @@ public class MissionService implements MissionRoleplayUseCase {
     }
 
     // ------------------------------------------------------------ rewards
+
+    /**
+     * XP pays out at completion, not at coin-claim: service blocks are a state
+     * credit with no delivery failure mode. Runs once per mission behind the
+     * COMPLETED latch, so restart or repeated completion cannot double-grant.
+     */
+    private void grantXp(Mission mission) {
+        if (mission.xpReward <= 0) return;
+        for (var entry : mission.assignees) {
+            if (entry.uuid == null || entry.uuid.isEmpty()) continue;
+            java.util.UUID uuid;
+            try {
+                uuid = java.util.UUID.fromString(entry.uuid);
+            } catch (IllegalArgumentException e) {
+                continue;
+            }
+            try {
+                var state = players.state(uuid);
+                if (state == null) continue;
+                state.serviceBlocks += mission.xpReward;
+                players.save(uuid, state);
+                notify(entry.name, Text.STRAJA_PREFIX + "+" + mission.xpReward
+                        + " puncte de serviciu pentru misiunea #" + mission.id + ".");
+            } catch (RuntimeException e) {
+                // One failed credit never blocks the other participants; the
+                // mission stays COMPLETED and the miss is visible in the audit.
+                audit.record(AuditActions.MISSION_COMPLETE, mission.issuer, mission.issuerUuid,
+                        entry.name, entry.uuid, AuditResults.FAILED,
+                        "xp grant failed missionId=" + mission.id);
+            }
+        }
+    }
 
     private Map<String, Mission.RewardClaim> claims(Mission mission) {
         var participants = mission.assignees;
@@ -1862,6 +1978,8 @@ public class MissionService implements MissionRoleplayUseCase {
                 : (mission.target.isEmpty() ? (participants.isEmpty() ? "—" : participants.get(0)) : mission.target);
         String base = "#" + mission.id + " [" + mission.status + "] pentru " + participantLabel
                 + " — " + mission.minutes + " min — reward " + mission.reward
+                + " +" + mission.xpReward + " pct"
+                + (mission.openRecruitment ? " — deschis" : "")
                 + " — minim " + ctx.policies().rankName(mission.minimumRank)
                 + " — " + participants.size() + "/" + mission.maxAssignees + " participanți"
                 + " — începe " + mission.startLabel + " — " + mission.objective;

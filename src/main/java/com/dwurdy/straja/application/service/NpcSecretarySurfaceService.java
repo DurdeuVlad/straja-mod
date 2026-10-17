@@ -98,10 +98,12 @@ public final class NpcSecretarySurfaceService {
                     field(FormField.MINUTES, "Minutes", 5, true),
                     field(FormField.START, "Start time", 32, true),
                     field(FormField.REWARD, "Reward", 12, true),
+                    field(FormField.XP, "XP per participant", 5, false),
                     field(FormField.OBJECTIVE, "Objective", 512, true));
             case "mission-draft-scope" -> List.of(
                     field(FormField.MINIMUM_RANK, "Minimum rank", 32, true),
-                    field(FormField.MAX_ASSIGNEES, "Maximum assignees", 5, true));
+                    field(FormField.MAX_ASSIGNEES, "Maximum assignees", 5, true),
+                    field(FormField.OPEN, "Open to all (da/nu)", 5, false));
             case "mission-budget-adjust" -> List.of(
                     field(FormField.HOURS, "Hours", 12, true),
                     field(FormField.RISK, "Risk", 12, true),
@@ -178,6 +180,8 @@ public final class NpcSecretarySurfaceService {
             case COMPLETE -> add(actions, parameterized("mission-complete", id), "Complete mission " + id);
             case CLAIM_REWARD -> add(actions, parameterized("mission-reward", id), "Claim mission reward");
             case RECOVER_REWARD -> add(actions, parameterized("mission-reward-recover", id), "Recover mission reward");
+            case INVITE -> add(actions, parameterized("mission-invite", id), "Assign player to mission " + id,
+                    List.of(field(FormField.SUBJECT, "Player", 64, true)));
         }
     }
 

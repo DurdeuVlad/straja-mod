@@ -79,15 +79,21 @@ public final class FormSubmissionRouter {
                     player.sendSystemMessage(refusal("straja.form.order_invalid", "straja.remedy.fix_retry"));
                     return;
                 }
-                missions.draftWrite(gateway, minutes, values.get(FormField.START), reward, values.get(FormField.OBJECTIVE));
+                Integer xp = parseInt(values.get(FormField.XP));
+                missions.draftWrite(gateway, minutes, values.get(FormField.START), reward,
+                        xp == null ? -1 : xp, values.get(FormField.OBJECTIVE));
             }
+            case MISSION_INVITE ->
+                    missions.inviteByName(gateway, submission.recordId(), values.get(FormField.SUBJECT));
             case MISSION_DRAFT_SCOPE -> {
                 Integer maxAssignees = parseInt(values.get(FormField.MAX_ASSIGNEES));
                 if (maxAssignees == null) {
                     player.sendSystemMessage(refusal("straja.form.order_invalid", "straja.remedy.fix_retry"));
                     return;
                 }
-                missions.draftScope(gateway, values.get(FormField.MINIMUM_RANK), maxAssignees);
+                String openRaw = values.get(FormField.OPEN);
+                missions.draftScope(gateway, values.get(FormField.MINIMUM_RANK), maxAssignees,
+                        openRaw == null || openRaw.isBlank() ? null : truthy(openRaw));
             }
             case MISSION_BUDGET_ADJUST ->
                     missions.draftAdjust(gateway, values.get(FormField.HOURS), values.get(FormField.RISK),
@@ -399,6 +405,13 @@ public final class FormSubmissionRouter {
                 }
             }
         } catch (IllegalArgumentException ignored) {}
+    }
+
+    private static boolean truthy(String raw) {
+        return switch (raw == null ? "" : raw.trim().toLowerCase()) {
+            case "da", "yes", "true", "1", "y" -> true;
+            default -> false;
+        };
     }
 
     private static Integer parseInt(String raw) {

@@ -40,6 +40,7 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.IntValue MISSION_MAX_MINUTES;
     public static final ModConfigSpec.IntValue MISSION_MAX_SCHEDULE_DAYS;
     public static final ModConfigSpec.IntValue MISSION_MAX_REWARD;
+    public static final ModConfigSpec.IntValue MISSION_MAX_XP_REWARD;
     public static final ModConfigSpec.IntValue MISSION_MAX_COPIES_PER_DRAFT;
     public static final ModConfigSpec.IntValue MISSION_MAX_REWARD_POOL;
     public static final ModConfigSpec.IntValue MISSION_MAX_REWARD_PER_ISSUER_PER_DAY;
@@ -464,6 +465,7 @@ public final class StrajaServerConfig {
         MISSION_MAX_MINUTES = B.defineInRange("maxMinutes", 240, 1, 10080);
         MISSION_MAX_SCHEDULE_DAYS = B.defineInRange("maxScheduleDays", 7, 0, 365);
         MISSION_MAX_REWARD = B.defineInRange("maxReward", 250, 0, 1000000);
+        MISSION_MAX_XP_REWARD = B.defineInRange("maxXpReward", 12, 0, 100000);
         MISSION_MAX_COPIES_PER_DRAFT = B.defineInRange("maxCopiesPerDraft", 4, 1, 64);
         MISSION_MAX_REWARD_POOL = B.defineInRange("maxRewardPool", 1000, 0, 1000000);
         MISSION_MAX_REWARD_PER_ISSUER_PER_DAY = B.defineInRange("maxRewardPerIssuerPerDay", 1000, 0, 1000000);
@@ -1192,6 +1194,7 @@ public final class StrajaServerConfig {
         p.missionMaxMinutes = MISSION_MAX_MINUTES.get();
         p.missionMaxScheduleDays = MISSION_MAX_SCHEDULE_DAYS.get();
         p.missionMaxReward = MISSION_MAX_REWARD.get();
+        p.missionMaxXpReward = MISSION_MAX_XP_REWARD.get();
         p.missionMaxCopiesPerDraft = MISSION_MAX_COPIES_PER_DRAFT.get();
         p.missionMaxRewardPool = MISSION_MAX_REWARD_POOL.get();
         p.missionMaxRewardPerIssuerPerDay = MISSION_MAX_REWARD_PER_ISSUER_PER_DAY.get();

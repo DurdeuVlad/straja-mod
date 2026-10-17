@@ -88,6 +88,8 @@ public class StrajaPolicies {
     // §13: rewards above calculated × (1 + margin) require an explicit,
     // audited reason.
     public double missionRewardOverrideMargin = 0.25;
+    /** Caps the per-participant XP (service blocks) an officer can attach to a mission. */
+    public int missionMaxXpReward = 12;
 
     // operational incidents, whistle and dispatch
     public boolean incidentsEnabled = true;

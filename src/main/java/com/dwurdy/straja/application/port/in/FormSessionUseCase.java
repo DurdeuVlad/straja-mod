@@ -27,6 +27,7 @@ public interface FormSessionUseCase {
         MISSION_DRAFT_WRITE("mission-draft-write"),
         MISSION_DRAFT_SCOPE("mission-draft-scope"),
         MISSION_BUDGET_ADJUST("mission-budget-adjust"),
+        MISSION_INVITE("mission-invite"),
         COMPLAINT_SUBMIT("complaint-submit"),
         COMPLAINT_REPORT("complaint-report"),
         COMPLAINT_WITHDRAW("complaint-withdraw"),

@@ -23,6 +23,10 @@ public class GuardState {
     public List<String> quizOrder = new ArrayList<>();
     public Map<String, Boolean> trainingPassed = new HashMap<>();
     public String trainingQuizId = null;
+    public String examGrade = null;            // CareerGrade name while a promotion exam runs
+    public int examIndex = 0;
+    public int examCorrect = 0;
+    public Long examCooldownAt = null;
     public Long trainingQuizCooldownAt = null;
     public boolean suspended = false;
     public boolean fired = false;
