@@ -60,6 +60,13 @@ public final class PolicyRegistry {
         k("manhunt.recapturePenaltyDays", "manhuntRecapturePenaltyDays", Kind.INT);
         k("manhunt.retentionLimit", "manhuntRetentionLimit", Kind.INT);
         k("dispatch.enlistedMaxRank", "dispatchEnlistedMaxRank", Kind.INT);
+        k("transfer.rideEnabled", "transferRideEnabled", Kind.BOOL);
+        k("transfer.minRideBlocks", "transferMinRideBlocks", Kind.DOUBLE);
+        k("transfer.escortWaitMinutes", "transferEscortWaitMinutes", Kind.INT);
+        k("transfer.maxEscorts", "transferMaxEscorts", Kind.INT);
+        k("transfer.walkBlocksPerHour", "transferWalkBlocksPerHour", Kind.DOUBLE);
+        k("transfer.riskMultiplier", "transferRiskMultiplier", Kind.DOUBLE);
+        k("transfer.retentionLimit", "transferRetentionLimit", Kind.INT);
         k("timers.foodCooldownMinutes", "foodCooldownMinutes", Kind.INT);
         k("timers.quizCooldownMinutes", "quizCooldownMinutes", Kind.INT);
         k("timers.resignationCooldownDays", "resignationCooldownDays", Kind.INT);

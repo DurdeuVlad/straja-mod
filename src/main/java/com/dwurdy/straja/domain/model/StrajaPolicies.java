@@ -342,6 +342,22 @@ public class StrajaPolicies {
     public int manhuntRecapturePenaltyDays = 1;
     /** Bound on retained terminal hunts; oldest are pruned on tick. */
     public int manhuntRetentionLimit = 50;
+
+    // FUN-8: transfer rides — escorted prisoner moves with risk zones.
+    /** When true, ordered transfers become escorted rides instead of teleports. */
+    public boolean transferRideEnabled = true;
+    /** Hop shorter than this stays instant (same-station moves). */
+    public double transferMinRideBlocks = 64.0;
+    /** An unclaimed ride waits this long before the prisoner returns to custody. */
+    public int transferEscortWaitMinutes = 10;
+    /** Escorts paid per ride beyond the lead — team-mission participant cap. */
+    public int transferMaxEscorts = 2;
+    /** Assumed escort walking speed for the pay formula's estimated hours. */
+    public double transferWalkBlocksPerHour = 15000.0;
+    /** Risk multiplier on the transport reward — rides can go wrong. */
+    public double transferRiskMultiplier = 2.0;
+    /** Bound on retained terminal rides; oldest are pruned on tick. */
+    public int transferRetentionLimit = 50;
     public int nativeFactionMaxLength = 40;
 
     // §11: activity reports — a reporting interval runs per member; overdue

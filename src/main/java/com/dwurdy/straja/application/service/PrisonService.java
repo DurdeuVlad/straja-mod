@@ -102,6 +102,12 @@ public class PrisonService implements PrisonRoleplayUseCase {
         this.manhunts = service;
     }
 
+    /** FUN-8: ordered transfers become escorted rides (late-bound). */
+    private TransferService transfers;
+    public void useTransfers(TransferService service) {
+        this.transfers = service;
+    }
+
     public void onArrest(Consumer<Sentence> hook) {
         if (hook != null) arrestHooks.add(hook);
     }
@@ -917,6 +923,13 @@ public class PrisonService implements PrisonRoleplayUseCase {
             actor.tellKey("straja.camp.already_there", target.name(), camp.id);
             return false;
         }
+        // FUN-8: a rideable transfer orders an escorted ride instead of a
+        // teleport — the prisoner waits for a real escort.
+        if (tryRideOrder(actor, target, camp, sentence, "manual_order")) {
+            actor.tell("Transfer ordonat: " + target.name() + " → " + camp.id
+                    + ". Apelul de escortă e pe tabloul de dispatch.");
+            return true;
+        }
         // DEBT-2: the levy sweeps custody coins before the prisoner boards.
         if (debt != null && ctx.policies().debtEnabled) debt.levy(sentence.targetUuid);
         if (custody.enterJail(target, "prison")) {
@@ -987,6 +1000,22 @@ public class PrisonService implements PrisonRoleplayUseCase {
      * <p>DEBT-2: custody coins settle the ledger before the prisoner boards.
      */
     public boolean systemTransferToCamp(String targetUuid, String campId) {
+        // FUN-8: an ordered system transfer becomes a ride when one can run —
+        // online prisoner, members awake, rideable distance. Otherwise the
+        // instant path applies (the FUN-8 policy fallback).
+        if (tryRideOrderByUuid(null, targetUuid, campId, "system")) return true;
+        return applySystemCampTransfer(targetUuid, campId, "bounty_bail");
+    }
+
+    /**
+     * FUN-8 ride settle: the escorted prisoner reached the wire — applies
+     * the camp custody mutation exactly as the instant path would.
+     */
+    public boolean completeRideDelivery(String targetUuid, String campId, String rideId) {
+        return applySystemCampTransfer(targetUuid, campId, "ride:" + rideId);
+    }
+
+    private boolean applySystemCampTransfer(String targetUuid, String campId, String source) {
         if (camps == null || targetUuid == null || targetUuid.isBlank()) return false;
         var camp = camps.camp(campId);
         if (camp == null) return false;
@@ -1005,11 +1034,81 @@ public class PrisonService implements PrisonRoleplayUseCase {
         // gate calls applyCampTransfer directly, so a blocked release can
         // never re-enter the gate through this path.
         if (debt != null && ctx.policies().debtEnabled) debt.levy(targetUuid);
-        if (!applyCampTransfer(data, sentence, findFor(sentence), camp, "bounty_bail")) {
+        if (!applyCampTransfer(data, sentence, findFor(sentence), camp, source)) {
             return false;
         }
         ctx.prison().write(data);
         return true;
+    }
+
+    /**
+     * FUN-8 ride feasibility: enabled, sentenced prisoner online and not
+     * already chained, a member awake to take the call, and a route long
+     * enough to be a ride. Anything missing falls back to instant transfer.
+     */
+    private boolean tryRideOrderByUuid(PlayerGateway actor, String targetUuid,
+                                       String campId, String reason) {
+        var target = findByUuid(targetUuid);
+        if (target == null || camps == null) return false;
+        var camp = camps.camp(campId);
+        if (camp == null) return false;
+        var sentence = ctx.prison().read().activeSentenceFor(targetUuid);
+        return tryRideOrder(actor, target, camp, sentence, reason);
+    }
+
+    private boolean tryRideOrder(PlayerGateway actor, PlayerGateway target,
+                                 com.dwurdy.straja.domain.model.LaborCampRecord camp,
+                                 Sentence sentence, String reason) {
+        if (transfers == null || !ctx.policies().transferRideEnabled
+                || target == null || sentence == null) return false;
+        var rec = ctx.prisonerRegister().read().prisoner(sentence.targetUuid);
+        if (rec == null || (rec.status != PrisonerStatus.IN_CELL
+                && rec.status != PrisonerStatus.IN_CAMP)) return false;
+        if (custody.isCuffed(target)) return false;
+        var spawn = camp.intakeSpawn != null ? camp.intakeSpawn : camp.dormitorySpawn;
+        double dx = (spawn != null ? spawn.x() : 0) - target.x();
+        double dz = (spawn != null ? spawn.z() : 0) - target.z();
+        if (!target.dimension().equals(camp.dimension)
+                || Math.sqrt(dx * dx + dz * dz) < Math.max(0, ctx.policies().transferMinRideBlocks)) {
+            return false; // same-station hops stay instant
+        }
+        if (!anyMemberAwake(target)) return false;
+        String origin = sentence.cellId.isBlank() ? rec.assignedCampId : "celula " + sentence.cellId;
+        return transfers.order(actor, target, camp, sentence.id,
+                origin == null || origin.isBlank() ? "custodie" : origin, reason) != null;
+    }
+
+    /** Zero online members → the instant fallback keeps custody moves atomic. */
+    private boolean anyMemberAwake(PlayerGateway exclude) {
+        for (PlayerGateway p : ctx.server().onlinePlayers()) {
+            if (p == null || p.uuid() == null || p == exclude) continue;
+            if (players.isCommissioner(p) || players.state(p).rank
+                    >= com.dwurdy.straja.domain.model.Rank.GUARD.level()) return true;
+        }
+        return false;
+    }
+
+    private PlayerGateway findByUuid(String uuid) {
+        if (uuid == null || uuid.isBlank()) return null;
+        for (PlayerGateway p : ctx.server().onlinePlayers()) {
+            if (p != null && p.uuid() != null && uuid.equalsIgnoreCase(p.uuid().toString()))
+                return p;
+        }
+        return null;
+    }
+
+    /**
+     * FUN-8: a broken ride marks the chained prisoner fugitive (warrant +
+     * register). Uuid-keyed — an offline prisoner at the break still gets
+     * the warrant; the online gateway only carries the escape tell.
+     */
+    public void rideChainBroke(String prisonerUuid, PlayerGateway onlineTarget, String rideId) {
+        if (prisonerUuid == null || prisonerUuid.isBlank()) return;
+        var sentence = ctx.prison().read().activeSentenceFor(prisonerUuid);
+        if (sentence == null) return;
+        markFugitive(sentence, onlineTarget);
+        audit.record(AuditActions.PRISON_FUGITIVE, "transfer", "", sentence.target,
+                sentence.targetUuid, AuditResults.SUCCESS, "ride_broken ride=" + rideId);
     }
 
     /**
@@ -1088,7 +1187,11 @@ public class PrisonService implements PrisonRoleplayUseCase {
         String actorUuid = releaser == null ? "" : uuidOf(releaser);
         if ("CAMP".equalsIgnoreCase(ctx.policies().debtOnBlocked)) {
             var camp = debtDefaultCamp();
-            if (camp != null && applyCampTransfer(data, sentence, target, camp, "debt_gate")) {
+            // FUN-8: the debt gate orders a ride when one can run — the
+            // prisoner waits in custody for a real escort.
+            boolean debtRide = camp != null && target != null
+                    && tryRideOrder(releaser, target, camp, sentence, "debt_gate");
+            if (debtRide || (camp != null && applyCampTransfer(data, sentence, target, camp, "debt_gate"))) {
                 // The transfer mutates the caller's store — persist it here
                 // so failure-returning callers cannot lose the camp claim.
                 ctx.prison().write(data);

@@ -24,11 +24,13 @@ public final class DispatchService {
     public static final String SOURCE_BOUNTY = "BOUNTY";
     public static final String SOURCE_OFFENSE = "OFFENSE";
     public static final String SOURCE_MANHUNT = "MANHUNT";
+    public static final String SOURCE_TRANSFER = "TRANSFER";
 
     private final StrajaContext ctx;
     private final PlayerService players;
     private final AuditService audit;
     private IncidentService incidents; // post-construction: call-accept claims the source incident
+    private TransferService transfers; // post-construction: call-accept joins the ride
 
     public DispatchService(StrajaContext ctx, PlayerService players, AuditService audit) {
         this.ctx = ctx;
@@ -37,6 +39,7 @@ public final class DispatchService {
     }
 
     public void useIncidents(IncidentService incidents) { this.incidents = incidents; }
+    public void useTransfers(TransferService transfers) { this.transfers = transfers; }
 
     private DispatchStore store() {
         DispatchStore data = ctx.dispatch().read();
@@ -267,6 +270,13 @@ public final class DispatchService {
                 return false;
             }
         }
+        if (SOURCE_TRANSFER.equals(call.sourceType) && transfers != null
+                && transfers.liveTransfer(call.sourceId) == null) {
+            call.status = "CLOSED";
+            ctx.dispatch().write(data);
+            player.refuse("straja.transfer.inactive", "straja.remedy.retry");
+            return false;
+        }
         call.status = "ACCEPTED";
         call.acceptedByUuid = key;
         call.acceptedByName = player.name();
@@ -283,6 +293,9 @@ public final class DispatchService {
                 + (call.subjectName.isBlank() ? "" : " — subiect: " + call.subjectName));
         if (SOURCE_INCIDENT.equals(call.sourceType) && incidents != null) {
             incidents.accept(player, call.sourceId); // claim the source too
+        }
+        if (SOURCE_TRANSFER.equals(call.sourceType) && transfers != null) {
+            transfers.callAccepted(player, call.sourceId); // join the ride
         }
         return true;
     }

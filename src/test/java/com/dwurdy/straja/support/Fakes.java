@@ -639,6 +639,7 @@ public final class Fakes {
                 new SavedStores.Incidents(access),
                 new SavedStores.Dispatch(access),
                 new SavedStores.Manhunts(access),
+                new SavedStores.Transfers(access),
                 new SavedStores.Bolos(access),
                 new SavedStores.Bounties(access),
                 new SavedStores.Evidence(access),
