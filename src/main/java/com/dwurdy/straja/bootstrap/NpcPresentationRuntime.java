@@ -342,7 +342,7 @@ public final class NpcPresentationRuntime {
                             ? runtime.v2Promotions().pendingPetitions().stream()
                                     .map(application -> new NpcSecretarySurfaceService.PetitionEntry(
                                             application.applicationId,
-                                            subjectName(runtime, application.subjectUuid),
+                                            runtime.playerQueries().displayName(application.subjectUuid),
                                             application.targetGrade == null ? "?"
                                                     : runtime.policies().rankName(application.targetGrade)))
                                     .toList()
@@ -368,7 +368,7 @@ public final class NpcPresentationRuntime {
                             ? runtime.v2JoinRequests().pending().stream()
                                     .map(request -> new NpcCivicSurfaceService.JoinEntry(
                                             request.requestId,
-                                            subjectName(runtime, request.subjectUuid),
+                                            runtime.playerQueries().displayName(request.subjectUuid),
                                             request.profession))
                                     .toList()
                             : java.util.List.of());
@@ -396,18 +396,6 @@ public final class NpcPresentationRuntime {
                                 && !record.careerGrade.isProfessional()));
         if (!eligible) return java.util.List.of();
         return new java.util.ArrayList<>(runtime.v2Generators().professions());
-    }
-
-    /** Display name for a petition subject; falls back to the raw uuid. */
-    private static String subjectName(StrajaRuntime runtime, String subjectUuid) {
-        String name = "";
-        try {
-            var state = runtime.playerQueries().readState(java.util.UUID.fromString(subjectUuid));
-            if (state != null && state.lastKnownName != null) name = state.lastKnownName;
-        } catch (IllegalArgumentException ignored) {
-            // Non-uuid subject ids fall back to the raw identifier.
-        }
-        return name.isBlank() ? subjectUuid : name;
     }
 
     private static boolean playerAtBinding(MinecraftServer server, UUID playerId, NpcBinding binding) {

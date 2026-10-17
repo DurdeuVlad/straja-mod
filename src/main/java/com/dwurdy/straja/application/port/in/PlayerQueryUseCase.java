@@ -21,6 +21,21 @@ public interface PlayerQueryUseCase {
      */
     GuardState readState(java.util.UUID uuid);
 
+    /**
+     * Display name for a subject uuid string: the recorded last-known name
+     * when the state has one, else the raw identifier (non-uuid subject ids
+     * pass through unchanged). The single name-resolution rule for surfaces.
+     */
+    default String displayName(String subjectUuid) {
+        try {
+            GuardState state = readState(java.util.UUID.fromString(subjectUuid));
+            if (state != null && state.lastKnownName != null && !state.lastKnownName.isBlank()) {
+                return state.lastKnownName;
+            }
+        } catch (IllegalArgumentException ignored) {}
+        return subjectUuid;
+    }
+
     boolean isCommissioner(PlayerGateway player);
 
     boolean hasCapability(PlayerGateway player, Capability capability);

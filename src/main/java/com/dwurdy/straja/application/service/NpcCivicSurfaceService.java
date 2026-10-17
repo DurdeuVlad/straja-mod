@@ -5,6 +5,7 @@ import com.dwurdy.straja.application.port.in.FineRoleplayUseCase;
 import com.dwurdy.straja.domain.model.NpcContentId;
 import com.dwurdy.straja.domain.model.NpcSurfaceAction;
 import com.dwurdy.straja.domain.model.NpcSurfaceSnapshot;
+import com.dwurdy.straja.domain.model.ReviewForm;
 import com.dwurdy.straja.domain.model.Text;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -132,9 +133,7 @@ public final class NpcCivicSurfaceService {
             case LIST_APPEALS -> add(actions, "fine-appeal-list", "View pending appeals", List.of());
             case REVIEW_APPEAL -> add(actions, parameterized("fine-appeal-review", id),
                     "Review appeal " + id,
-                    List.of(field("decision", "Decision", 16, true),
-                            field("reduced-amount", "Reduced amount", 12, false),
-                            field("reason", "Reason", limits.reviewReason(), true)));
+                    ReviewForm.fineAppealFields(limits.reviewReason()));
             case DRAFT_WRITE, DRAFT_STATUS, LIST_TASKS, ACCEPT_TASK, COMPLETE_TASK,
                     ARREST_TASK, CLAIM_TASK_REWARD, HEARING_WARRANT -> { }
         }
@@ -168,9 +167,7 @@ public final class NpcCivicSurfaceService {
                 add(actions, parameterized("join-review", request.requestId()),
                         "Decide " + request.requestId() + " — "
                                 + Text.displayLower(request.profession()),
-                        List.of(field("decision", "Decizie (aproba / respinge)", 16, true),
-                                field("note", "Motiv pentru solicitant",
-                                        Text.REASON_LIMIT, false)));
+                        ReviewForm.decisionFields());
             }
         }
     }

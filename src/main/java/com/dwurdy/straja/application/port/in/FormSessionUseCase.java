@@ -1,5 +1,8 @@
 package com.dwurdy.straja.application.port.in;
 
+import com.dwurdy.straja.domain.model.NpcSurfaceAction;
+import com.dwurdy.straja.domain.model.ReviewForm;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -102,6 +105,20 @@ public interface FormSessionUseCase {
                 fields = Collections.unmodifiableList(new ArrayList<>(fields));
             }
         }
+    }
+
+    /** Adapts a shared {@link ReviewForm} field spec into a session field. */
+    static Field fieldOf(NpcSurfaceAction.InputField spec, boolean multiline) {
+        return new Field(spec.key(), spec.label(), spec.maxLength(), multiline, spec.required());
+    }
+
+    /** The standard "Decizie + Motiv pentru solicitant" petition-review form. */
+    static Request decisionReview(Action action, String recordRef, String recordId) {
+        return new Request(action, recordRef,
+                "Decide cererea " + recordId,
+                "Decizie: aproba sau respinge (motiv opțional, trimis solicitantului).",
+                List.of(fieldOf(ReviewForm.DECISION, false),
+                        fieldOf(ReviewForm.NOTE, true)));
     }
 
     record View(String sessionId, String title, String prompt, List<Field> fields) {

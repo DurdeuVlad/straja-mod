@@ -11,6 +11,7 @@ import com.dwurdy.straja.application.port.in.RoleplayExpansionUseCase;
 import com.dwurdy.straja.domain.model.NpcContentId;
 import com.dwurdy.straja.domain.model.NpcSurfaceAction;
 import com.dwurdy.straja.domain.model.NpcSurfaceSnapshot;
+import com.dwurdy.straja.domain.model.ReviewForm;
 import com.dwurdy.straja.domain.model.Text;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -192,7 +193,7 @@ public final class NpcSecretarySurfaceService {
             case WITHDRAW -> add(actions, parameterized("complaint-withdraw", id), "Withdraw complaint " + id,
                     List.of(field("reason", "Reason", limits.withdrawalReason(), true)));
             case REVIEW -> add(actions, parameterized("complaint-review", id), "Review complaint " + id,
-                    List.of(field("decision", "Decision", 32, true), field("reward", "Reward", 12, true)));
+                    ReviewForm.complaintFields());
             case SUBMIT, CONFIRM -> { }
         }
     }
@@ -224,7 +225,7 @@ public final class NpcSecretarySurfaceService {
             case STATUS -> add(actions, "report-status", "View activity report");
             case REVIEW_LIST -> add(actions, "report-review-list", "Review pending reports");
             case REVIEW -> add(actions, parameterized("report-review", id), "Review report " + id,
-                    List.of(field("decision", "Decision", 16, true), field("note", "Note", 500, false)));
+                    ReviewForm.reportFields());
         }
     }
 
@@ -237,7 +238,7 @@ public final class NpcSecretarySurfaceService {
             case STATUS -> add(actions, "audience-status", "View audience request");
             case REVIEW_LIST -> add(actions, "audience-review-list", "Review audience requests");
             case REVIEW -> add(actions, parameterized("audience-review", id), "Review audience request " + id,
-                    List.of(field("decision", "Decision", 16, true), field("note", "Note", 500, false)));
+                    ReviewForm.audienceFields());
         }
     }
 
@@ -306,9 +307,7 @@ public final class NpcSecretarySurfaceService {
                             + bounded(petition.subjectName(), 40) + ")");
             add(actions, parameterized("petition-review", petition.applicationId()),
                     "Decide " + petition.applicationId() + " → " + petition.targetName(),
-                    List.of(field("decision", "Decizie (aproba / respinge)", 16, true),
-                            field("note", "Motiv pentru solicitant",
-                                    Text.REASON_LIMIT, false)));
+                    ReviewForm.decisionFields());
         }
     }
 

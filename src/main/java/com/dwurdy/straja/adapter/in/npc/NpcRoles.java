@@ -508,7 +508,7 @@ public final class NpcRoles {
             player.sendSystemMessage(refusal("straja.join.gone", "straja.remedy.retry"));
             return true;
         }
-        String subjectName = subjectName(runtime, request.subjectUuid);
+        String subjectName = runtime.playerQueries().displayName(request.subjectUuid);
         gw.giveWrittenBook("Cerere " + request.requestId, "Recepția Straja",
                 java.util.List.of(
                         "Cerere de muncă\n\n"
@@ -539,18 +539,10 @@ public final class NpcRoles {
         // Same click contract as promotion petitions: book first, then the
         // decision form bound to the version just read.
         readJoinRequest(player, runtime, gw, recordId);
-        com.dwurdy.straja.adapter.in.form.FormSessionBridge.open(serverPlayer,
-                new com.dwurdy.straja.application.port.in.FormSessionUseCase.Request(
-                        com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.JOIN_REVIEW,
-                        com.dwurdy.straja.domain.model.ReviewRef.encode(request.requestId, request.version),
-                        "Decide cererea " + request.requestId,
-                        "Decizie: aproba sau respinge (motiv opțional, trimis solicitantului).",
-                        java.util.List.of(
-                                new com.dwurdy.straja.application.port.in.FormSessionUseCase.Field(
-                                        "decision", "Decizie", 16, false),
-                                new com.dwurdy.straja.application.port.in.FormSessionUseCase.Field(
-                                        "note", "Motiv pentru solicitant",
-                                        com.dwurdy.straja.domain.model.Text.REASON_LIMIT, true, false))));
+        FormSessionBridge.open(serverPlayer, FormSessionUseCase.decisionReview(
+                FormSessionUseCase.Action.JOIN_REVIEW,
+                com.dwurdy.straja.domain.model.ReviewRef.encode(request.requestId, request.version),
+                request.requestId));
         return true;
     }
 
@@ -1195,8 +1187,8 @@ public final class NpcRoles {
                     FormSessionUseCase.Action.COMPLAINT_REVIEW, expected,
                     "Verificare dosar", "Alege approve, return sau dismiss și recompensa.",
                     java.util.List.of(
-                            new FormSessionUseCase.Field("decision", "Decizie", 16, false),
-                            new FormSessionUseCase.Field("reward", "Recompensă", 10, false)));
+                            FormSessionUseCase.fieldOf(com.dwurdy.straja.domain.model.ReviewForm.DECISION_COMPLAINT, false),
+                            FormSessionUseCase.fieldOf(com.dwurdy.straja.domain.model.ReviewForm.REWARD, false)));
             default -> null;
         };
         if (request == null) return true;
@@ -1237,8 +1229,8 @@ public final class NpcRoles {
                     FormSessionUseCase.Action.FINE_APPEAL_REVIEW, expected,
                     "Decizie contestație", "Alege uphold, reduce sau void.",
                     java.util.List.of(
-                            new FormSessionUseCase.Field("decision", "Decizie", 16, false),
-                            new FormSessionUseCase.Field("reducedAmount", "Sumă redusă", 10, false),
+                            FormSessionUseCase.fieldOf(com.dwurdy.straja.domain.model.ReviewForm.DECISION_APPEAL, false),
+                            FormSessionUseCase.fieldOf(com.dwurdy.straja.domain.model.ReviewForm.REDUCED_AMOUNT, false),
                             new FormSessionUseCase.Field("reason", "Motiv",
                                     limits.reviewReason(), true)));
             case HEARING_WARRANT -> new FormSessionUseCase.Request(
@@ -1306,9 +1298,8 @@ public final class NpcRoles {
                 FormSessionUseCase.Action.AUDIENCE_REVIEW, recordId,
                 "Decide cererea " + recordId, "Decizie: resolve sau dismiss (notă opțională).",
                 java.util.List.of(
-                        new FormSessionUseCase.Field("decision", "Decizie", 16, false),
-                        new FormSessionUseCase.Field("note", "Notă pentru solicitant",
-                                com.dwurdy.straja.domain.model.Text.REASON_LIMIT, true, false))));
+                        FormSessionUseCase.fieldOf(com.dwurdy.straja.domain.model.ReviewForm.DECISION_AUDIENCE, false),
+                        FormSessionUseCase.fieldOf(com.dwurdy.straja.domain.model.ReviewForm.NOTE, true))));
         return true;
     }
 
@@ -1353,7 +1344,7 @@ public final class NpcRoles {
             advisory = "Blocuri de serviciu: " + subjectState.serviceBlocks
                     + "\nRang actual: " + runtime.policies().rankName(subjectState.rank);
         } catch (IllegalArgumentException ignored) {}
-        String subjectName = subjectName(runtime, application.subjectUuid);
+        String subjectName = runtime.playerQueries().displayName(application.subjectUuid);
         java.util.List<String> pages = new java.util.ArrayList<>(java.util.List.of(
                 "Cerere de avansare\n\n"
                         + "ID: " + application.applicationId + "\n"
@@ -1390,28 +1381,11 @@ public final class NpcRoles {
         // decision form. The record id carries the opened version so a
         // reason edited meanwhile fails the decision as stale.
         readPetition(player, runtime, gw, recordId);
-        FormSessionBridge.open(serverPlayer, new FormSessionUseCase.Request(
+        FormSessionBridge.open(serverPlayer, FormSessionUseCase.decisionReview(
                 FormSessionUseCase.Action.PETITION_REVIEW,
                 com.dwurdy.straja.domain.model.ReviewRef.encode(application.applicationId, application.version),
-                "Decide cererea " + application.applicationId,
-                "Decizie: aproba sau respinge (motiv opțional, trimis solicitantului).",
-                java.util.List.of(
-                        new FormSessionUseCase.Field("decision", "Decizie", 16, false),
-                        new FormSessionUseCase.Field("note", "Motiv pentru solicitant",
-                                com.dwurdy.straja.domain.model.Text.REASON_LIMIT, true, false))));
+                application.applicationId));
         return true;
-    }
-
-    /** Display name for a subject uuid; falls back to the raw identifier. */
-    private static String subjectName(com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
-                                      String subjectUuid) {
-        try {
-            var state = runtime.playerQueries().readState(java.util.UUID.fromString(subjectUuid));
-            if (state != null && state.lastKnownName != null && !state.lastKnownName.isBlank()) {
-                return state.lastKnownName;
-            }
-        } catch (IllegalArgumentException ignored) {}
-        return subjectUuid;
     }
 
     private static boolean openAdminForm(Player player,
@@ -1467,8 +1441,8 @@ public final class NpcRoles {
                 "Verifică raportul " + recordId,
                 "Decizie: accept, return (cu notă) sau call (audiență).",
                 java.util.List.of(
-                        new FormSessionUseCase.Field("decision", "Decizie", 16, false),
-                        new FormSessionUseCase.Field("note", "Notă pentru autor", 500, true))));
+                        FormSessionUseCase.fieldOf(com.dwurdy.straja.domain.model.ReviewForm.DECISION_REPORT, false),
+                        FormSessionUseCase.fieldOf(com.dwurdy.straja.domain.model.ReviewForm.NOTE, true))));
         return true;
     }
 
@@ -1768,7 +1742,7 @@ public final class NpcRoles {
                                 ? runtime.v2Promotions().pendingPetitions()
                                 : java.util.List.of(),
                         grade -> runtime.policies().rankName(grade),
-                        uuid -> subjectName(runtime, uuid)));
+                        runtime.playerQueries()::displayName));
                 if (runtime.playerQueries().isCommissioner(gateway)) {
                     actions.add(new NpcPlayerSurface.ChatAction("Istoric reputație", "reputation-view"));
                     actions.add(new NpcPlayerSurface.ChatAction("Corectează reputația", "reputation-correction"));
@@ -1814,7 +1788,7 @@ public final class NpcRoles {
                         runtime.playerQueries().isCommissioner(gateway)
                                 ? runtime.v2JoinRequests().pending()
                                 : java.util.List.of(),
-                        uuid -> subjectName(runtime, uuid)));
+                        runtime.playerQueries()::displayName));
             }
             default -> {}
         }
