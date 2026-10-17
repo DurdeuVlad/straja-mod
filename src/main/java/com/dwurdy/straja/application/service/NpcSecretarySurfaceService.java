@@ -9,6 +9,7 @@ import com.dwurdy.straja.application.port.in.MissionRoleplayUseCase;
 import com.dwurdy.straja.application.port.in.ReportUseCase;
 import com.dwurdy.straja.application.port.in.RoleplayExpansionUseCase;
 import com.dwurdy.straja.domain.model.NpcContentId;
+import com.dwurdy.straja.domain.model.FormField;
 import com.dwurdy.straja.domain.model.NpcSurfaceAction;
 import com.dwurdy.straja.domain.model.NpcSurfaceSnapshot;
 import com.dwurdy.straja.domain.model.ReviewForm;
@@ -92,52 +93,52 @@ public final class NpcSecretarySurfaceService {
         String id = action.actionId().value();
         List<NpcSurfaceAction.InputField> fields = switch (id) {
             case "mission-draft-write" -> List.of(
-                    field("minutes", "Minutes", 5, true),
-                    field("start", "Start time", 32, true),
-                    field("reward", "Reward", 12, true),
-                    field("objective", "Objective", 512, true));
+                    field(FormField.MINUTES, "Minutes", 5, true),
+                    field(FormField.START, "Start time", 32, true),
+                    field(FormField.REWARD, "Reward", 12, true),
+                    field(FormField.OBJECTIVE, "Objective", 512, true));
             case "mission-draft-scope" -> List.of(
-                    field("minimum-rank", "Minimum rank", 32, true),
-                    field("max-assignees", "Maximum assignees", 5, true));
+                    field(FormField.MINIMUM_RANK, "Minimum rank", 32, true),
+                    field(FormField.MAX_ASSIGNEES, "Maximum assignees", 5, true));
             case "mission-budget-adjust" -> List.of(
-                    field("hours", "Hours", 12, true),
-                    field("risk", "Risk", 12, true),
-                    field("reward", "Reward", 12, true),
-                    field("reason", "Reason", 240, true));
+                    field(FormField.HOURS, "Hours", 12, true),
+                    field(FormField.RISK, "Risk", 12, true),
+                    field(FormField.REWARD, "Reward", 12, true),
+                    field(FormField.REASON, "Reason", 240, true));
             case "fine-draft-write" -> List.of(
-                    field("target", "Target player", 64, true),
-                    field("amount", "Amount", 12, true),
-                    field("law", "Law", inputs.fineLimits().law(), true),
-                    field("description", "Description", inputs.fineLimits().description(), true));
+                    field(FormField.TARGET, "Target player", 64, true),
+                    field(FormField.AMOUNT, "Amount", 12, true),
+                    field(FormField.LAW, "Law", inputs.fineLimits().law(), true),
+                    field(FormField.DESCRIPTION, "Description", inputs.fineLimits().description(), true));
             case "fine-warrant" -> List.of(
-                    field("target", "Target player", 64, true),
-                    field("details", "Details", inputs.fineLimits().warrantReason(), true));
+                    field(FormField.TARGET, "Target player", 64, true),
+                    field(FormField.DETAILS, "Details", inputs.fineLimits().warrantReason(), true));
             case "report-submit" -> List.of(
-                    field("activity", "Activity", 512, true),
-                    field("missions", "Missions", 512, true),
-                    field("incidents", "Incidents", 512, true),
-                    field("notes", "Notes", 512, true));
-            case "audience-request" -> List.of(field("reason", "Reason", 512, true));
+                    field(FormField.ACTIVITY, "Activity", 512, true),
+                    field(FormField.MISSIONS, "Missions", 512, true),
+                    field(FormField.INCIDENTS, "Incidents", 512, true),
+                    field(FormField.NOTES, "Notes", 512, true));
+            case "audience-request" -> List.of(field(FormField.REASON, "Reason", 512, true));
             case "bolo-create" -> List.of(
-                    field("subject", "Subject", 64, true),
-                    field("reason", "Reason", 240, true),
-                    field("notes", "Notes", 500, false),
-                    field("authority", "Authority", 120, true),
-                    field("incident-id", "Incident ID", 80, false));
+                    field(FormField.SUBJECT, "Subject", 64, true),
+                    field(FormField.REASON, "Reason", 240, true),
+                    field(FormField.NOTES, "Notes", 500, false),
+                    field(FormField.AUTHORITY, "Authority", 120, true),
+                    field(FormField.INCIDENT_ID, "Incident ID", 80, false));
             case "incident-resolve" -> List.of(
-                    field("resolution", "Resolution", 500, true),
-                    field("notes", "Notes", 500, false));
+                    field(FormField.RESOLUTION, "Resolution", 500, true),
+                    field(FormField.NOTES, "Notes", 500, false));
             case "admin-authorize" -> List.of(
-                    field("name", "Player name", 64, true),
-                    field("rank", "Rank or grade", 24, true));
+                    field(FormField.NAME, "Player name", 64, true),
+                    field(FormField.RANK, "Rank or grade", 24, true));
             case "admin-policy-set" -> List.of(
-                    field("key", "Policy key", 128, true),
-                    field("value", "Policy value", 512, true));
-            case "admin-emergency-alert" -> List.of(field("message", "Alert", 512, true));
+                    field(FormField.KEY, "Policy key", 128, true),
+                    field(FormField.VALUE, "Policy value", 512, true));
+            case "admin-emergency-alert" -> List.of(field(FormField.MESSAGE, "Alert", 512, true));
             case "admin-emergency-start" -> List.of(
-                    field("multiplier", "Multiplier", 16, true),
-                    field("rounds", "Rounds", 8, true),
-                    field("reason", "Reason", 240, true));
+                    field(FormField.MULTIPLIER, "Multiplier", 16, true),
+                    field(FormField.ROUNDS, "Rounds", 8, true),
+                    field(FormField.REASON, "Reason", 240, true));
             default -> action.inputs();
         };
         boolean enabled = switch (id) {
@@ -169,9 +170,9 @@ public final class NpcSecretarySurfaceService {
             case ACCEPT -> add(actions, parameterized("mission-accept", id), "Accept mission " + id);
             case DECLINE -> add(actions, parameterized("mission-decline", id), "Decline mission " + id);
             case REPORT -> add(actions, parameterized("mission-report", id), "Submit mission report",
-                    List.of(field("report", "Report", 512, true)));
+                    List.of(field(FormField.REPORT, "Report", 512, true)));
             case FAIL -> add(actions, parameterized("mission-fail", id), "End mission " + id,
-                    List.of(field("reason", "Reason", 240, true)));
+                    List.of(field(FormField.REASON, "Reason", 240, true)));
             case COMPLETE -> add(actions, parameterized("mission-complete", id), "Complete mission " + id);
             case CLAIM_REWARD -> add(actions, parameterized("mission-reward", id), "Claim mission reward");
             case RECOVER_REWARD -> add(actions, parameterized("mission-reward-recover", id), "Recover mission reward");
@@ -189,9 +190,9 @@ public final class NpcSecretarySurfaceService {
             case JOIN -> add(actions, parameterized("complaint-join", id), "Join complaint " + id);
             case LEAVE -> add(actions, parameterized("complaint-leave", id), "Leave complaint " + id);
             case REPORT -> add(actions, parameterized("complaint-report", id), "Report complaint " + id,
-                    List.of(field("report", "Report", limits.evidence(), true)));
+                    List.of(field(FormField.REPORT, "Report", limits.evidence(), true)));
             case WITHDRAW -> add(actions, parameterized("complaint-withdraw", id), "Withdraw complaint " + id,
-                    List.of(field("reason", "Reason", limits.withdrawalReason(), true)));
+                    List.of(field(FormField.REASON, "Reason", limits.withdrawalReason(), true)));
             case REVIEW -> add(actions, parameterized("complaint-review", id), "Review complaint " + id,
                     ReviewForm.complaintFields());
             case SUBMIT, CONFIRM -> { }
@@ -252,8 +253,8 @@ public final class NpcSecretarySurfaceService {
         }
         add(actions, parameterized("incident-join", id), "Join incident " + id);
         add(actions, parameterized("incident-resolve", id), "Resolve incident " + id,
-                List.of(field("resolution", "Resolution", 500, true),
-                        field("notes", "Notes", 500, false)));
+                List.of(field(FormField.RESOLUTION, "Resolution", 500, true),
+                        field(FormField.NOTES, "Notes", 500, false)));
     }
 
     private static void addBolo(
@@ -298,7 +299,7 @@ public final class NpcSecretarySurfaceService {
         if (inputs.petitionTargetName() != null && !inputs.petitionTargetName().isBlank()) {
             add(actions, "petition-request",
                     "Cere avansarea la " + inputs.petitionTargetName(),
-                    List.of(field("reason", "Motiv (opțional)", Text.REASON_LIMIT, false)));
+                    List.of(field(FormField.REASON, "Motiv (opțional)", Text.REASON_LIMIT, false)));
         }
         for (PetitionEntry petition : inputs.petitions()) {
             if (petition == null) continue;

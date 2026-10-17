@@ -2,6 +2,7 @@ package com.dwurdy.straja.application.service;
 
 import com.dwurdy.straja.application.port.in.GuardRecruitmentUseCase;
 import com.dwurdy.straja.domain.model.GuardState;
+import com.dwurdy.straja.domain.model.FormField;
 import com.dwurdy.straja.domain.model.NpcSurfaceAction;
 import com.dwurdy.straja.domain.model.NpcSurfaceSnapshot;
 import com.dwurdy.straja.domain.model.Rank;
@@ -91,7 +92,7 @@ public final class NpcAdmissionSurfaceService {
         }
         String questionId = prompt.get().questionId();
         List<NpcSurfaceAction.InputField> inputs = action.inputs().stream()
-                .map(field -> "question-id".equals(field.key())
+                .map(field -> FormField.QUESTION_ID.equals(field.key())
                         ? new NpcSurfaceAction.InputField(
                                 field.key(), field.label(), field.maxLength(), true, false, questionId)
                         : field)

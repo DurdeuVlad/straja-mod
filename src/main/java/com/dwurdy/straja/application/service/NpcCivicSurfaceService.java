@@ -3,6 +3,7 @@ package com.dwurdy.straja.application.service;
 import com.dwurdy.straja.application.port.in.ComplaintRoleplayUseCase;
 import com.dwurdy.straja.application.port.in.FineRoleplayUseCase;
 import com.dwurdy.straja.domain.model.NpcContentId;
+import com.dwurdy.straja.domain.model.FormField;
 import com.dwurdy.straja.domain.model.NpcSurfaceAction;
 import com.dwurdy.straja.domain.model.NpcSurfaceSnapshot;
 import com.dwurdy.straja.domain.model.ReviewForm;
@@ -96,9 +97,9 @@ public final class NpcCivicSurfaceService {
                 action.actionId(), action.label(), enabled,
                 enabled ? "" : "Complaint submission is not available at this desk.",
                 List.of(
-                        field("accused", "Accused player", 64, true),
-                        field("category", "Category", 64, true),
-                        field("description", "Description", limits.description(), true)));
+                        field(FormField.ACCUSED, "Accused player", 64, true),
+                        field(FormField.CATEGORY, "Category", 64, true),
+                        field(FormField.DESCRIPTION, "Description", limits.description(), true)));
     }
 
     private static void addComplaint(
@@ -108,14 +109,14 @@ public final class NpcCivicSurfaceService {
         String id = entry.complaintId();
         switch (entry.action()) {
             case SUBMIT -> add(actions, "complaint-submit", "Submit complaint", List.of(
-                    field("accused", "Accused player", 64, true),
-                    field("category", "Category", 64, true),
-                    field("description", "Description", limits.description(), true)));
+                    field(FormField.ACCUSED, "Accused player", 64, true),
+                    field(FormField.CATEGORY, "Category", 64, true),
+                    field(FormField.DESCRIPTION, "Description", limits.description(), true)));
             case CONFIRM -> add(actions, parameterized("complaint-confirm", id),
                     "Confirm complaint " + id, List.of());
             case WITHDRAW -> add(actions, parameterized("complaint-withdraw", id),
                     "Withdraw complaint " + id,
-                    List.of(field("reason", "Reason", limits.withdrawalReason(), true)));
+                    List.of(field(FormField.REASON, "Reason", limits.withdrawalReason(), true)));
             case LIST, CLAIM, JOIN, LEAVE, REPORT, REVIEW -> { }
         }
     }
@@ -129,7 +130,7 @@ public final class NpcCivicSurfaceService {
             case PAY -> add(actions, parameterized("fine-pay", id), "Pay fine " + id, List.of());
             case REFUSE -> add(actions, parameterized("fine-refuse", id), "Refuse fine " + id, List.of());
             case APPEAL -> add(actions, parameterized("fine-appeal", id), "Appeal fine " + id,
-                    List.of(field("reason", "Reason", limits.appealReason(), true)));
+                    List.of(field(FormField.REASON, "Reason", limits.appealReason(), true)));
             case LIST_APPEALS -> add(actions, "fine-appeal-list", "View pending appeals", List.of());
             case REVIEW_APPEAL -> add(actions, parameterized("fine-appeal-review", id),
                     "Review appeal " + id,
@@ -155,7 +156,7 @@ public final class NpcCivicSurfaceService {
                 add(actions, parameterized("join-request", normalized),
                         "Depune cerere de muncă — "
                                 + Text.displayLower(normalized),
-                        List.of(field("reason", "Motiv (opțional)", Text.REASON_LIMIT, false)));
+                        List.of(field(FormField.REASON, "Motiv (opțional)", Text.REASON_LIMIT, false)));
             }
         }
         if (joinRequests != null) {

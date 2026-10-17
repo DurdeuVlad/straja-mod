@@ -25,6 +25,7 @@ import com.dwurdy.straja.application.service.NpcSecretarySurfaceService;
 import com.dwurdy.straja.application.service.NpcSurfaceActionService;
 import com.dwurdy.straja.application.service.NpcSurfaceProviderRegistry;
 import com.dwurdy.straja.domain.model.NpcActionRequest;
+import com.dwurdy.straja.domain.model.FormField;
 import com.dwurdy.straja.domain.model.NpcActionResult;
 import com.dwurdy.straja.domain.model.NpcBinding;
 import com.dwurdy.straja.domain.model.NpcContentId;
@@ -623,8 +624,8 @@ public final class NpcPresentationRuntime {
                 yield true;
             }
             case "quiz-answer" -> {
-                String questionId = request.input().get("question-id");
-                String answer = request.input().get("answer");
+                String questionId = request.input().get(FormField.QUESTION_ID);
+                String answer = request.input().get(FormField.ANSWER);
                 if (questionId == null || questionId.isBlank() || answer == null
                         || answer.isBlank() || answer.length() > 120) {
                     yield false;

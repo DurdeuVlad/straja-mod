@@ -17,6 +17,7 @@ import net.minecraft.world.entity.player.Player;
 
 import static com.dwurdy.straja.adapter.in.StrajaText.refusal;
 import com.dwurdy.straja.domain.model.Text;
+import com.dwurdy.straja.domain.model.FormField;
 
 /**
  * Registry of Straja NPC roles. Role assignment is explicit and persistent on
@@ -848,8 +849,8 @@ public final class NpcRoles {
                 FormSessionUseCase.Action.INCIDENT_REPORT, "",
                 "Raport de incident", "Descrie pe scurt ce s-a întâmplat și unde.",
                 java.util.List.of(
-                        new FormSessionUseCase.Field("category", "Categorie", 80, false),
-                        new FormSessionUseCase.Field("description", "Descriere",
+                        new FormSessionUseCase.Field(FormField.CATEGORY, "Categorie", 80, false),
+                        new FormSessionUseCase.Field(FormField.DESCRIPTION, "Descriere",
                                 runtime.policies().incidentMaxDescriptionLength, true))));
         return true;
     }
@@ -862,9 +863,9 @@ public final class NpcRoles {
                 FormSessionUseCase.Action.INCIDENT_RESOLVE, incidentId,
                 "Încheiere incident", "Alege rezultatul și notează ce s-a întâmplat.",
                 java.util.List.of(
-                        new FormSessionUseCase.Field("resolution",
+                        new FormSessionUseCase.Field(FormField.RESOLUTION,
                                 "Cod (RESOLVED/TRANSFERRED/FALSE_REPORT/NO_ACTION)", 32, false),
-                        new FormSessionUseCase.Field("notes", "Note",
+                        new FormSessionUseCase.Field(FormField.NOTES, "Note",
                                 runtime.policies().incidentMaxDescriptionLength, true))));
         return true;
     }
@@ -876,11 +877,11 @@ public final class NpcRoles {
                 FormSessionUseCase.Action.BOLO_CREATE, "",
                 "Emite BOLO", "BOLO-ul este alertă de informare; nu este mandat de arest.",
                 java.util.List.of(
-                        new FormSessionUseCase.Field("subject", "Jucător online", 64, false),
-                        new FormSessionUseCase.Field("reason", "Motiv", runtime.policies().boloMaxReasonLength, true),
-                        new FormSessionUseCase.Field("notes", "Note", runtime.policies().incidentMaxDescriptionLength, true),
-                        new FormSessionUseCase.Field("authority", "INFORMATION_ONLY", 32, false),
-                        new FormSessionUseCase.Field("incidentId", "Incident legat (opțional)", 80, false, false))));
+                        new FormSessionUseCase.Field(FormField.SUBJECT, "Jucător online", 64, false),
+                        new FormSessionUseCase.Field(FormField.REASON, "Motiv", runtime.policies().boloMaxReasonLength, true),
+                        new FormSessionUseCase.Field(FormField.NOTES, "Note", runtime.policies().incidentMaxDescriptionLength, true),
+                        new FormSessionUseCase.Field(FormField.AUTHORITY, "INFORMATION_ONLY", 32, false),
+                        new FormSessionUseCase.Field(FormField.INCIDENT_ID, "Incident legat (opțional)", 80, false, false))));
         return true;
     }
 
@@ -900,9 +901,9 @@ public final class NpcRoles {
                 FormSessionUseCase.Action.REPUTATION_CORRECTION, "",
                 "Corecție reputație", "Doar Comisarul poate modifica reputația; motivul este obligatoriu.",
                 java.util.List.of(
-                        new FormSessionUseCase.Field("subject", "Jucător online", 64, false),
-                        new FormSessionUseCase.Field("delta", "Modificare", 8, false),
-                        new FormSessionUseCase.Field("reason", "Motiv", 240, true))));
+                        new FormSessionUseCase.Field(FormField.SUBJECT, "Jucător online", 64, false),
+                        new FormSessionUseCase.Field(FormField.DELTA, "Modificare", 8, false),
+                        new FormSessionUseCase.Field(FormField.REASON, "Motiv", 240, true))));
         return true;
     }
 
@@ -919,11 +920,11 @@ public final class NpcRoles {
                 "Percheziție: " + search.targetName(),
                 "Sloturi disponibile: " + slots,
                 java.util.List.of(
-                        new FormSessionUseCase.Field("slot", "Slot", 3, false),
-                        new FormSessionUseCase.Field("amount", "Cantitate exactă", 4, false),
-                        new FormSessionUseCase.Field("reason", "Motiv",
+                        new FormSessionUseCase.Field(FormField.SLOT, "Slot", 3, false),
+                        new FormSessionUseCase.Field(FormField.AMOUNT, "Cantitate exactă", 4, false),
+                        new FormSessionUseCase.Field(FormField.REASON, "Motiv",
                                 runtime.policies().evidenceMaxReasonLength, true),
-                        new FormSessionUseCase.Field("incidentId",
+                        new FormSessionUseCase.Field(FormField.INCIDENT_ID,
                                 "Incident legat (opțional)", 80, false, false))));
         return true;
     }
@@ -935,8 +936,8 @@ public final class NpcRoles {
                 "Transferă proba " + evidenceId,
                 "Indică numele custodelui autorizat online și motivul transferului.",
                 java.util.List.of(
-                        new FormSessionUseCase.Field("custodian", "Custode", 64, false),
-                        new FormSessionUseCase.Field("reason", "Motiv", 200, true))));
+                        new FormSessionUseCase.Field(FormField.CUSTODIAN, "Custode", 64, false),
+                        new FormSessionUseCase.Field(FormField.REASON, "Motiv", 200, true))));
         return true;
     }
 
@@ -946,7 +947,7 @@ public final class NpcRoles {
                 FormSessionUseCase.Action.EVIDENCE_DESTROY, evidenceId,
                 "Distruge proba " + evidenceId,
                 "Acțiunea este definitivă și disponibilă doar Comisarului. Motivul este obligatoriu.",
-                java.util.List.of(new FormSessionUseCase.Field("reason", "Motiv", 200, true))));
+                java.util.List.of(new FormSessionUseCase.Field(FormField.REASON, "Motiv", 200, true))));
         return true;
     }
 
@@ -955,7 +956,7 @@ public final class NpcRoles {
         FormSessionBridge.open(serverPlayer, new FormSessionUseCase.Request(
                 FormSessionUseCase.Action.EVIDENCE_CASE_VIEW, "",
                 "Probe pe dosar", "Introdu ID-ul dosarului de arest.",
-                java.util.List.of(new FormSessionUseCase.Field("caseId", "Dosar", 80, false))));
+                java.util.List.of(new FormSessionUseCase.Field(FormField.CASE_ID, "Dosar", 80, false))));
         return true;
     }
 
@@ -965,9 +966,9 @@ public final class NpcRoles {
                 FormSessionUseCase.Action.ARREST_HANDOFF, "",
                 "Predare la Temnicer", "Completează hand-off-ul unei sentințe active.",
                 java.util.List.of(
-                        new FormSessionUseCase.Field("detainee", "Deținut online", 64, false),
-                        new FormSessionUseCase.Field("sentenceId", "ID sentință", 80, false),
-                        new FormSessionUseCase.Field("notes", "Note", 240, true))));
+                        new FormSessionUseCase.Field(FormField.DETAINEE, "Deținut online", 64, false),
+                        new FormSessionUseCase.Field(FormField.SENTENCE_ID, "ID sentință", 80, false),
+                        new FormSessionUseCase.Field(FormField.NOTES, "Note", 240, true))));
         return true;
     }
 
@@ -1114,35 +1115,35 @@ public final class NpcRoles {
             case REPORT -> new FormSessionUseCase.Request(
                     FormSessionUseCase.Action.MISSION_REPORT, expected,
                     "Raport de misiune", "Descrie rezultatul misiunii.",
-                    java.util.List.of(new FormSessionUseCase.Field("report", "Raport", 2000, true)));
+                    java.util.List.of(new FormSessionUseCase.Field(FormField.REPORT, "Raport", 2000, true)));
             case FAIL -> new FormSessionUseCase.Request(
                     FormSessionUseCase.Action.MISSION_FAIL, expected,
                     "Încheiere voluntară", "Explică motivul renunțării.",
-                    java.util.List.of(new FormSessionUseCase.Field("reason", "Motiv", 240, true)));
+                    java.util.List.of(new FormSessionUseCase.Field(FormField.REASON, "Motiv", 240, true)));
             case DRAFT_WRITE -> new FormSessionUseCase.Request(
                     FormSessionUseCase.Action.MISSION_DRAFT_WRITE, "",
                     "Ordin nou", "Completează ordinul de misiune.",
                     java.util.List.of(
-                            new FormSessionUseCase.Field("minutes", "Timp (minute)", 5, false),
-                            new FormSessionUseCase.Field("start", "Începere", 16, false),
-                            new FormSessionUseCase.Field("reward", "Recompensă", 10, false),
-                            new FormSessionUseCase.Field("objective", "Obiectiv", 2000, true)));
+                            new FormSessionUseCase.Field(FormField.MINUTES, "Timp (minute)", 5, false),
+                            new FormSessionUseCase.Field(FormField.START, "Începere", 16, false),
+                            new FormSessionUseCase.Field(FormField.REWARD, "Recompensă", 10, false),
+                            new FormSessionUseCase.Field(FormField.OBJECTIVE, "Obiectiv", 2000, true)));
             case DRAFT_SCOPE -> new FormSessionUseCase.Request(
                     FormSessionUseCase.Action.MISSION_DRAFT_SCOPE, "",
                     "Participanți ordin", "Configurează rangul minim și numărul maxim de participanți.",
                     java.util.List.of(
-                            new FormSessionUseCase.Field("minimumRank", "Rang minim", 16, false),
-                            new FormSessionUseCase.Field("maxAssignees", "Max participanți", 3, false)));
+                            new FormSessionUseCase.Field(FormField.MINIMUM_RANK, "Rang minim", 16, false),
+                            new FormSessionUseCase.Field(FormField.MAX_ASSIGNEES, "Max participanți", 3, false)));
             case ADJUST_BUDGET -> new FormSessionUseCase.Request(
                     FormSessionUseCase.Action.MISSION_BUDGET_ADJUST, "",
                     "Ajustare buget", "Ore estimate și risc recalculează recompensa. "
                             + "Completează „Recompensă” doar pentru o depășire motivată — "
                             + "peste marja permisă motivul este obligatoriu și se înregistrează.",
                     java.util.List.of(
-                            new FormSessionUseCase.Field("hours", "Ore estimate", 6, false),
-                            new FormSessionUseCase.Field("risk", "Risc (multiplicator)", 6, false),
-                            new FormSessionUseCase.Field("reward", "Recompensă (gol = calculată)", 10, false, false),
-                            new FormSessionUseCase.Field("reason", "Motiv depășire", 240, false, false)));
+                            new FormSessionUseCase.Field(FormField.HOURS, "Ore estimate", 6, false),
+                            new FormSessionUseCase.Field(FormField.RISK, "Risc (multiplicator)", 6, false),
+                            new FormSessionUseCase.Field(FormField.REWARD, "Recompensă (gol = calculată)", 10, false, false),
+                            new FormSessionUseCase.Field(FormField.REASON, "Motiv depășire", 240, false, false)));
             default -> null;
         };
         if (request == null) return true;
@@ -1169,19 +1170,19 @@ public final class NpcRoles {
                     FormSessionUseCase.Action.COMPLAINT_SUBMIT, "",
                     "Plângere nouă", "Completează datele plângerii.",
                     java.util.List.of(
-                            new FormSessionUseCase.Field("accused", "Acuzat", 80, false),
-                            new FormSessionUseCase.Field("category", "Categorie", 80, false),
-                            new FormSessionUseCase.Field("description", "Descriere",
+                            new FormSessionUseCase.Field(FormField.ACCUSED, "Acuzat", 80, false),
+                            new FormSessionUseCase.Field(FormField.CATEGORY, "Categorie", 80, false),
+                            new FormSessionUseCase.Field(FormField.DESCRIPTION, "Descriere",
                                     limits.description(), true)));
             case REPORT -> new FormSessionUseCase.Request(
                     FormSessionUseCase.Action.COMPLAINT_REPORT, expected,
                     "Raport de investigație", "Descrie constatările dosarului.",
-                    java.util.List.of(new FormSessionUseCase.Field("report", "Raport",
+                    java.util.List.of(new FormSessionUseCase.Field(FormField.REPORT, "Raport",
                             limits.evidence(), true)));
             case WITHDRAW -> new FormSessionUseCase.Request(
                     FormSessionUseCase.Action.COMPLAINT_WITHDRAW, expected,
                     "Retragere plângere", "Explică motivul retragerii.",
-                    java.util.List.of(new FormSessionUseCase.Field("reason", "Motiv",
+                    java.util.List.of(new FormSessionUseCase.Field(FormField.REASON, "Motiv",
                             limits.withdrawalReason(), true)));
             case REVIEW -> new FormSessionUseCase.Request(
                     FormSessionUseCase.Action.COMPLAINT_REVIEW, expected,
@@ -1215,15 +1216,15 @@ public final class NpcRoles {
                     FormSessionUseCase.Action.FINE_DRAFT, "",
                     "Amendă nouă", "Completează datele amenzii.",
                     java.util.List.of(
-                            new FormSessionUseCase.Field("target", "Cetățean", 80, false),
-                            new FormSessionUseCase.Field("amount", "Sumă", 10, false),
-                            new FormSessionUseCase.Field("law", "Lege", limits.law(), false),
-                            new FormSessionUseCase.Field("description", "Descriere",
+                            new FormSessionUseCase.Field(FormField.TARGET, "Cetățean", 80, false),
+                            new FormSessionUseCase.Field(FormField.AMOUNT, "Sumă", 10, false),
+                            new FormSessionUseCase.Field(FormField.LAW, "Lege", limits.law(), false),
+                            new FormSessionUseCase.Field(FormField.DESCRIPTION, "Descriere",
                                     limits.description(), true)));
             case APPEAL -> new FormSessionUseCase.Request(
                     FormSessionUseCase.Action.FINE_APPEAL, expected,
                     "Contestație", "Explică motivul contestației.",
-                    java.util.List.of(new FormSessionUseCase.Field("reason", "Motiv",
+                    java.util.List.of(new FormSessionUseCase.Field(FormField.REASON, "Motiv",
                             limits.appealReason(), true)));
             case REVIEW_APPEAL -> new FormSessionUseCase.Request(
                     FormSessionUseCase.Action.FINE_APPEAL_REVIEW, expected,
@@ -1231,14 +1232,14 @@ public final class NpcRoles {
                     java.util.List.of(
                             FormSessionUseCase.fieldOf(com.dwurdy.straja.domain.model.ReviewForm.DECISION_APPEAL, false),
                             FormSessionUseCase.fieldOf(com.dwurdy.straja.domain.model.ReviewForm.REDUCED_AMOUNT, false),
-                            new FormSessionUseCase.Field("reason", "Motiv",
+                            new FormSessionUseCase.Field(FormField.REASON, "Motiv",
                                     limits.reviewReason(), true)));
             case HEARING_WARRANT -> new FormSessionUseCase.Request(
                     FormSessionUseCase.Action.FINE_WARRANT, "",
                     "Mandat de audiere", "Completează ținta și detaliile mandatului.",
                     java.util.List.of(
-                            new FormSessionUseCase.Field("target", "Țintă", 80, false),
-                            new FormSessionUseCase.Field("details", "Detalii",
+                            new FormSessionUseCase.Field(FormField.TARGET, "Țintă", 80, false),
+                            new FormSessionUseCase.Field(FormField.DETAILS, "Detalii",
                                     limits.warrantReason(), true)));
             default -> null;
         };
@@ -1262,10 +1263,10 @@ public final class NpcRoles {
                 FormSessionUseCase.Action.REPORT_SUBMIT, "",
                 "Raport de activitate", "Completează raportul pentru perioada curentă.",
                 java.util.List.of(
-                        new FormSessionUseCase.Field("activity", "Activitate", 2000, true),
-                        new FormSessionUseCase.Field("missions", "Misiuni", 2000, true),
-                        new FormSessionUseCase.Field("incidents", "Incidente", 2000, true),
-                        new FormSessionUseCase.Field("notes", "Note pentru Comisar", 1000, true))));
+                        new FormSessionUseCase.Field(FormField.ACTIVITY, "Activitate", 2000, true),
+                        new FormSessionUseCase.Field(FormField.MISSIONS, "Misiuni", 2000, true),
+                        new FormSessionUseCase.Field(FormField.INCIDENTS, "Incidente", 2000, true),
+                        new FormSessionUseCase.Field(FormField.NOTES, "Note pentru Comisar", 1000, true))));
         return true;
     }
 
@@ -1405,25 +1406,25 @@ public final class NpcRoles {
                     FormSessionUseCase.Action.ADMIN_AUTHORIZE, "",
                     "Autorizare directă", "Numele jucătorului și rangul (1=Stagiar … 5=Colonel).",
                     java.util.List.of(
-                            new FormSessionUseCase.Field("name", "Nume jucător", 32, false),
-                            new FormSessionUseCase.Field("rank", "Rang (1-4)", 2, false)));
+                            new FormSessionUseCase.Field(FormField.NAME, "Nume jucător", 32, false),
+                            new FormSessionUseCase.Field(FormField.RANK, "Rang (1-4)", 2, false)));
             case POLICY_SET -> new FormSessionUseCase.Request(
                     FormSessionUseCase.Action.ADMIN_POLICY_SET, "",
                     "Modifică o regulă", "Cheia din lista de reguli și noua valoare.",
                     java.util.List.of(
-                            new FormSessionUseCase.Field("key", "Cheie", 80, false),
-                            new FormSessionUseCase.Field("value", "Valoare", 200, false)));
+                            new FormSessionUseCase.Field(FormField.KEY, "Cheie", 80, false),
+                            new FormSessionUseCase.Field(FormField.VALUE, "Valoare", 200, false)));
             case EMERGENCY_ALERT -> new FormSessionUseCase.Request(
                     FormSessionUseCase.Action.ADMIN_EMERGENCY_ALERT, "",
                     "Alertă de urgență", "Mesajul ajunge la toți membrii online și la cei care se conectează cât e activă.",
-                    java.util.List.of(new FormSessionUseCase.Field("message", "Mesaj", 240, true)));
+                    java.util.List.of(new FormSessionUseCase.Field(FormField.MESSAGE, "Mesaj", 240, true)));
             case EMERGENCY_START -> new FormSessionUseCase.Request(
                     FormSessionUseCase.Action.ADMIN_EMERGENCY_START, "",
                     "Stare de urgență", "Multiplicator de plată și runde obligatorii (gol = valorile configurate).",
                     java.util.List.of(
-                            new FormSessionUseCase.Field("multiplier", "Multiplicator plată", 6, false, false),
-                            new FormSessionUseCase.Field("rounds", "Runde obligatorii", 4, false, false),
-                            new FormSessionUseCase.Field("reason", "Motiv", 240, false)));
+                            new FormSessionUseCase.Field(FormField.MULTIPLIER, "Multiplicator plată", 6, false, false),
+                            new FormSessionUseCase.Field(FormField.ROUNDS, "Runde obligatorii", 4, false, false),
+                            new FormSessionUseCase.Field(FormField.REASON, "Motiv", 240, false)));
             default -> null;
         };
         if (request == null) return true;
@@ -1465,50 +1466,50 @@ public final class NpcRoles {
                     FormSessionUseCase.Action.ARCHIVE_FOLDER_CREATE, "",
                     "Dosar nou", "Completează datele dosarului.",
                     java.util.List.of(
-                            new FormSessionUseCase.Field("title", "Titlu", limits.title(), false),
-                            new FormSessionUseCase.Field("department", "Departament", 80, false)));
+                            new FormSessionUseCase.Field(FormField.TITLE, "Titlu", limits.title(), false),
+                            new FormSessionUseCase.Field(FormField.DEPARTMENT, "Departament", 80, false)));
             case ISSUE_FOLDER -> new FormSessionUseCase.Request(
                     FormSessionUseCase.Action.ARCHIVE_FOLDER_ISSUE, expected,
                     "Emitere dosar", "Indică jucătorul căruia îi este emis dosarul.",
-                    java.util.List.of(new FormSessionUseCase.Field("target", "Țintă",
+                    java.util.List.of(new FormSessionUseCase.Field(FormField.TARGET, "Țintă",
                             limits.target(), false)));
             case NEW_SHEET -> new FormSessionUseCase.Request(
                     FormSessionUseCase.Action.ARCHIVE_SHEET_NEW, expected,
                     "Foaie nouă", "Completează tipul și titlul foii.",
                     java.util.List.of(
-                            new FormSessionUseCase.Field("type", "Tip", 32, false),
-                            new FormSessionUseCase.Field("title", "Titlu", limits.title(), false)));
+                            new FormSessionUseCase.Field(FormField.TYPE, "Tip", 32, false),
+                            new FormSessionUseCase.Field(FormField.TITLE, "Titlu", limits.title(), false)));
             case EDIT_SHEET -> new FormSessionUseCase.Request(
                     FormSessionUseCase.Action.ARCHIVE_SHEET_EDIT, expected,
                     "Editare foaie", "Scrie conținutul actului.",
-                    java.util.List.of(new FormSessionUseCase.Field("content", "Conținut",
+                    java.util.List.of(new FormSessionUseCase.Field(FormField.CONTENT, "Conținut",
                             limits.content(), true)));
             case SET_RECIPIENTS -> new FormSessionUseCase.Request(
                     FormSessionUseCase.Action.ARCHIVE_RECIPIENTS, expected,
                     "Destinatari", "Listează destinatarii separați prin virgulă.",
-                    java.util.List.of(new FormSessionUseCase.Field("recipients", "Destinatari",
+                    java.util.List.of(new FormSessionUseCase.Field(FormField.RECIPIENTS, "Destinatari",
                             limits.recipients(), true)));
             case SIGN_SHEET -> new FormSessionUseCase.Request(
                     FormSessionUseCase.Action.ARCHIVE_SIGN, expected,
                     "Semnare act", "Notează motivul semnăturii.",
-                    java.util.List.of(new FormSessionUseCase.Field("reason", "Motiv",
+                    java.util.List.of(new FormSessionUseCase.Field(FormField.REASON, "Motiv",
                             limits.signatureReason(), false)));
             case COPY_SHEET -> new FormSessionUseCase.Request(
                     FormSessionUseCase.Action.ARCHIVE_COPY, expected,
                     "Copie indigo", "Alege numărul de copii și destinatarii.",
                     java.util.List.of(
-                            new FormSessionUseCase.Field("count", "Număr copii", 10, false),
-                            new FormSessionUseCase.Field("targets", "Destinatari",
+                            new FormSessionUseCase.Field(FormField.COUNT, "Număr copii", 10, false),
+                            new FormSessionUseCase.Field(FormField.TARGETS, "Destinatari",
                                     limits.recipients(), true)));
             case PACK_ENVELOPE -> new FormSessionUseCase.Request(
                     FormSessionUseCase.Action.ARCHIVE_ENVELOPE, expected,
                     "Plic oficial", "Indică destinatarul plicului.",
-                    java.util.List.of(new FormSessionUseCase.Field("target", "Țintă",
+                    java.util.List.of(new FormSessionUseCase.Field(FormField.TARGET, "Țintă",
                             limits.target(), false)));
             case ISSUE_DOCUMENT -> new FormSessionUseCase.Request(
                     FormSessionUseCase.Action.ARCHIVE_DOCUMENT_ISSUE, expected,
                     "Emitere act", "Indică jucătorul căruia îi este emis actul.",
-                    java.util.List.of(new FormSessionUseCase.Field("target", "Țintă",
+                    java.util.List.of(new FormSessionUseCase.Field(FormField.TARGET, "Țintă",
                             limits.target(), false)));
             default -> null;
         };

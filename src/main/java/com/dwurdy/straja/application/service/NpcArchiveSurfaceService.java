@@ -2,6 +2,7 @@ package com.dwurdy.straja.application.service;
 
 import com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase;
 import com.dwurdy.straja.domain.model.NpcContentId;
+import com.dwurdy.straja.domain.model.FormField;
 import com.dwurdy.straja.domain.model.NpcSurfaceAction;
 import com.dwurdy.straja.domain.model.NpcSurfaceSnapshot;
 import java.util.LinkedHashMap;
@@ -134,24 +135,24 @@ public final class NpcArchiveSurfaceService {
         String operation = id.contains(":") ? id.substring(0, id.indexOf(':')) : id;
         return switch (operation) {
             case "archive-folder-create" -> List.of(
-                    field("title", "Folder title", limits.title(), true),
-                    field("department", "Department", limits.target(), false));
+                    field(FormField.TITLE, "Folder title", limits.title(), true),
+                    field(FormField.DEPARTMENT, "Department", limits.target(), false));
             case "archive-folder-issue" -> List.of(
-                    field("target", "Recipient", limits.target(), true));
+                    field(FormField.TARGET, "Recipient", limits.target(), true));
             case "archive-sheet-new" -> List.of(
-                    field("type", "Document type", limits.target(), true),
-                    field("title", "Sheet title", limits.title(), true));
+                    field(FormField.TYPE, "Document type", limits.target(), true),
+                    field(FormField.TITLE, "Sheet title", limits.title(), true));
             case "archive-sheet-edit" -> List.of(
-                    field("content", "Content", limits.content(), true));
+                    field(FormField.CONTENT, "Content", limits.content(), true));
             case "archive-recipients" -> List.of(
-                    field("recipients", "Recipients", limits.recipients(), true));
+                    field(FormField.RECIPIENTS, "Recipients", limits.recipients(), true));
             case "archive-sheet-sign" -> List.of(
-                    field("reason", "Signature reason", limits.signatureReason(), true));
+                    field(FormField.REASON, "Signature reason", limits.signatureReason(), true));
             case "archive-sheet-copy" -> List.of(
-                    field("count", "Copy count", 8, true),
-                    field("targets", "Recipients", limits.recipients(), true));
+                    field(FormField.COUNT, "Copy count", 8, true),
+                    field(FormField.TARGETS, "Recipients", limits.recipients(), true));
             case "archive-sheet-envelope", "archive-sheet-issue" -> List.of(
-                    field("target", "Recipient", limits.target(), true));
+                    field(FormField.TARGET, "Recipient", limits.target(), true));
             default -> List.of();
         };
     }

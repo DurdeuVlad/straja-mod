@@ -1,5 +1,7 @@
 package com.dwurdy.straja.adapter.in.form;
 
+import com.dwurdy.straja.domain.model.FormField;
+
 import com.dwurdy.straja.adapter.out.minecraft.MinecraftPlayerGateway;
 
 import static com.dwurdy.straja.adapter.in.StrajaText.refusal;
@@ -63,62 +65,62 @@ public final class FormSubmissionRouter {
         var values = submission.values();
         switch (submission.action()) {
             case QUIZ_ANSWER ->
-                    guards.answerQuiz(gateway, submission.recordId(), values.get("answer"));
+                    guards.answerQuiz(gateway, submission.recordId(), values.get(FormField.ANSWER));
             case FACTION_DECLARE ->
-                    guards.declareNativeFaction(gateway, values.get("faction"));
+                    guards.declareNativeFaction(gateway, values.get(FormField.FACTION));
             case MISSION_REPORT ->
-                    missions.report(gateway, submission.recordId(), values.get("report"));
+                    missions.report(gateway, submission.recordId(), values.get(FormField.REPORT));
             case MISSION_FAIL ->
-                    missions.fail(gateway, submission.recordId(), values.get("reason"));
+                    missions.fail(gateway, submission.recordId(), values.get(FormField.REASON));
             case MISSION_DRAFT_WRITE -> {
-                Integer minutes = parseInt(values.get("minutes"));
-                Integer reward = parseInt(values.get("reward"));
+                Integer minutes = parseInt(values.get(FormField.MINUTES));
+                Integer reward = parseInt(values.get(FormField.REWARD));
                 if (minutes == null || reward == null) {
                     player.sendSystemMessage(refusal("straja.form.order_invalid", "straja.remedy.fix_retry"));
                     return;
                 }
-                missions.draftWrite(gateway, minutes, values.get("start"), reward, values.get("objective"));
+                missions.draftWrite(gateway, minutes, values.get(FormField.START), reward, values.get(FormField.OBJECTIVE));
             }
             case MISSION_DRAFT_SCOPE -> {
-                Integer maxAssignees = parseInt(firstValue(values, "max-assignees", "maxAssignees"));
+                Integer maxAssignees = parseInt(values.get(FormField.MAX_ASSIGNEES));
                 if (maxAssignees == null) {
                     player.sendSystemMessage(refusal("straja.form.order_invalid", "straja.remedy.fix_retry"));
                     return;
                 }
-                missions.draftScope(gateway, firstValue(values, "minimum-rank", "minimumRank"), maxAssignees);
+                missions.draftScope(gateway, values.get(FormField.MINIMUM_RANK), maxAssignees);
             }
             case MISSION_BUDGET_ADJUST ->
-                    missions.draftAdjust(gateway, values.get("hours"), values.get("risk"),
-                            values.get("reward"), values.get("reason"));
+                    missions.draftAdjust(gateway, values.get(FormField.HOURS), values.get(FormField.RISK),
+                            values.get(FormField.REWARD), values.get(FormField.REASON));
             case COMPLAINT_SUBMIT ->
-                    complaints.submit(gateway, values.get("accused"), values.get("category"),
-                            values.get("description"));
+                    complaints.submit(gateway, values.get(FormField.ACCUSED), values.get(FormField.CATEGORY),
+                            values.get(FormField.DESCRIPTION));
             case COMPLAINT_REPORT ->
-                    complaints.report(gateway, submission.recordId(), values.get("report"));
+                    complaints.report(gateway, submission.recordId(), values.get(FormField.REPORT));
             case COMPLAINT_WITHDRAW ->
-                    complaints.withdraw(gateway, submission.recordId(), values.get("reason"));
+                    complaints.withdraw(gateway, submission.recordId(), values.get(FormField.REASON));
             case COMPLAINT_REVIEW -> {
-                Integer reward = parseInt(values.get("reward"));
+                Integer reward = parseInt(values.get(FormField.REWARD));
                 if (reward == null) {
                     player.sendSystemMessage(refusal("straja.form.verify_invalid", "straja.remedy.fix_retry"));
                     return;
                 }
-                complaints.review(gateway, submission.recordId(), values.get("decision"), reward);
+                complaints.review(gateway, submission.recordId(), values.get(FormField.DECISION), reward);
             }
             case FINE_DRAFT -> {
-                Integer amount = parseInt(values.get("amount"));
+                Integer amount = parseInt(values.get(FormField.AMOUNT));
                 if (amount == null) {
                     player.sendSystemMessage(refusal("straja.form.fine_invalid", "straja.remedy.fix_retry"));
                     return;
                 }
-                fines.writeDraft(gateway, values.get("target"), amount,
-                        values.get("law"), values.get("description"));
+                fines.writeDraft(gateway, values.get(FormField.TARGET), amount,
+                        values.get(FormField.LAW), values.get(FormField.DESCRIPTION));
             }
             case FINE_APPEAL ->
-                    fines.appeal(gateway, submission.recordId(), values.get("reason"));
+                    fines.appeal(gateway, submission.recordId(), values.get(FormField.REASON));
             case FINE_APPEAL_REVIEW -> {
-                String decision = values.get("decision");
-                Integer reduced = parseInt(firstValue(values, "reduced-amount", "reducedAmount"));
+                String decision = values.get(FormField.DECISION);
+                Integer reduced = parseInt(values.get(FormField.REDUCED_AMOUNT));
                 boolean reduce = com.dwurdy.straja.domain.model.DecisionWords.is(
                         decision, com.dwurdy.straja.domain.model.DecisionWords.FINE_REDUCE);
                 if (reduce && reduced == null) {
@@ -126,48 +128,48 @@ public final class FormSubmissionRouter {
                     return;
                 }
                 fines.reviewAppeal(gateway, submission.recordId(), decision,
-                        reduce ? reduced : Integer.valueOf(0), values.get("reason"));
+                        reduce ? reduced : Integer.valueOf(0), values.get(FormField.REASON));
             }
             case FINE_WARRANT ->
-                    fines.issueHearingWarrant(gateway, values.get("target"), values.get("details"));
+                    fines.issueHearingWarrant(gateway, values.get(FormField.TARGET), values.get(FormField.DETAILS));
             case ARCHIVE_FOLDER_CREATE ->
-                    archive.createFolder(gateway, values.get("title"), values.get("department"));
+                    archive.createFolder(gateway, values.get(FormField.TITLE), values.get(FormField.DEPARTMENT));
             case ARCHIVE_FOLDER_ISSUE ->
-                    archive.issueFolder(gateway, submission.recordId(), values.get("target"));
+                    archive.issueFolder(gateway, submission.recordId(), values.get(FormField.TARGET));
             case ARCHIVE_SHEET_NEW ->
-                    archive.newSheet(gateway, submission.recordId(), values.get("type"),
-                            values.get("title"));
+                    archive.newSheet(gateway, submission.recordId(), values.get(FormField.TYPE),
+                            values.get(FormField.TITLE));
             case ARCHIVE_SHEET_EDIT ->
-                    archive.editSheet(gateway, submission.recordId(), values.get("content"));
+                    archive.editSheet(gateway, submission.recordId(), values.get(FormField.CONTENT));
             case ARCHIVE_RECIPIENTS ->
-                    archive.setRecipients(gateway, submission.recordId(), values.get("recipients"));
+                    archive.setRecipients(gateway, submission.recordId(), values.get(FormField.RECIPIENTS));
             case ARCHIVE_SIGN ->
-                    archive.signSheet(gateway, submission.recordId(), values.get("reason"));
+                    archive.signSheet(gateway, submission.recordId(), values.get(FormField.REASON));
             case ARCHIVE_COPY -> {
-                Integer count = parseInt(values.get("count"));
+                Integer count = parseInt(values.get(FormField.COUNT));
                 if (count == null) {
                     player.sendSystemMessage(refusal("straja.form.copy_invalid", "straja.remedy.fix_retry"));
                     return;
                 }
-                archive.copySheet(gateway, submission.recordId(), count, values.get("targets"));
+                archive.copySheet(gateway, submission.recordId(), count, values.get(FormField.TARGETS));
             }
             case ARCHIVE_ENVELOPE ->
-                    archive.packEnvelope(gateway, submission.recordId(), values.get("target"));
+                    archive.packEnvelope(gateway, submission.recordId(), values.get(FormField.TARGET));
             case ARCHIVE_DOCUMENT_ISSUE ->
-                    archive.issueDocument(gateway, submission.recordId(), values.get("target"));
+                    archive.issueDocument(gateway, submission.recordId(), values.get(FormField.TARGET));
             case REPORT_SUBMIT ->
-                    reports.submit(gateway, values.get("activity"), values.get("missions"),
-                            values.get("incidents"), values.get("notes"));
+                    reports.submit(gateway, values.get(FormField.ACTIVITY), values.get(FormField.MISSIONS),
+                            values.get(FormField.INCIDENTS), values.get(FormField.NOTES));
             case REPORT_REVIEW ->
-                    reports.review(gateway, submission.recordId(), values.get("decision"),
-                            values.get("note"));
+                    reports.review(gateway, submission.recordId(), values.get(FormField.DECISION),
+                            values.get(FormField.NOTE));
             case AUDIENCE_REQUEST ->
-                    audiences.request(gateway, values.get("reason"));
+                    audiences.request(gateway, values.get(FormField.REASON));
             case AUDIENCE_REVIEW ->
-                    audiences.resolve(gateway, submission.recordId(), values.get("decision"),
-                            values.get("note"));
+                    audiences.resolve(gateway, submission.recordId(), values.get(FormField.DECISION),
+                            values.get(FormField.NOTE));
             case PETITION_REQUEST ->
-                    guards.requestPetition(gateway, values.get("reason"));
+                    guards.requestPetition(gateway, values.get(FormField.REASON));
             case PETITION_REVIEW -> {
                 // recordId carries "<appId>_<version>" from the review form —
                 // the version the reviewer actually read. Provider surfaces
@@ -186,14 +188,14 @@ public final class FormSubmissionRouter {
                     return;
                 }
                 boolean approve = com.dwurdy.straja.domain.model.DecisionWords.is(
-                        values.get("decision"), com.dwurdy.straja.domain.model.DecisionWords.APPROVE);
+                        values.get(FormField.DECISION), com.dwurdy.straja.domain.model.DecisionWords.APPROVE);
                 boolean deny = com.dwurdy.straja.domain.model.DecisionWords.is(
-                        values.get("decision"), com.dwurdy.straja.domain.model.DecisionWords.DENY);
+                        values.get(FormField.DECISION), com.dwurdy.straja.domain.model.DecisionWords.DENY);
                 if (!approve && !deny) {
                     player.sendSystemMessage(refusal("straja.petition.bad_decision", "straja.remedy.fix_retry"));
                     return;
                 }
-                String note = values.getOrDefault("note", "");
+                String note = values.getOrDefault(FormField.NOTE, "");
                 try {
                     if (approve) {
                         v2Promotions.approve(gateway.uuid().toString(),
@@ -225,7 +227,7 @@ public final class FormSubmissionRouter {
                 // the service revalidates it against the configured set.
                 try {
                     var request = v2JoinRequests.submit(gateway.uuid().toString(),
-                            submission.recordId(), values.get("reason"));
+                            submission.recordId(), values.get(FormField.REASON));
                     player.sendSystemMessage(net.minecraft.network.chat.Component.translatable(
                             "straja.join.submitted", request.requestId));
                 } catch (RuntimeException refused) {
@@ -249,14 +251,14 @@ public final class FormSubmissionRouter {
                     return;
                 }
                 boolean approve = com.dwurdy.straja.domain.model.DecisionWords.is(
-                        values.get("decision"), com.dwurdy.straja.domain.model.DecisionWords.APPROVE);
+                        values.get(FormField.DECISION), com.dwurdy.straja.domain.model.DecisionWords.APPROVE);
                 boolean deny = com.dwurdy.straja.domain.model.DecisionWords.is(
-                        values.get("decision"), com.dwurdy.straja.domain.model.DecisionWords.DENY);
+                        values.get(FormField.DECISION), com.dwurdy.straja.domain.model.DecisionWords.DENY);
                 if (!approve && !deny) {
                     player.sendSystemMessage(refusal("straja.petition.bad_decision", "straja.remedy.fix_retry"));
                     return;
                 }
-                String note = values.getOrDefault("note", "");
+                String note = values.getOrDefault(FormField.NOTE, "");
                 try {
                     if (approve) {
                         v2JoinRequests.approve(gateway.uuid().toString(),
@@ -284,28 +286,28 @@ public final class FormSubmissionRouter {
                 } catch (IllegalArgumentException ignored) {}
             }
             case ADMIN_AUTHORIZE -> {
-                String rankOrGrade = values.get("rank");
+                String rankOrGrade = values.get(FormField.RANK);
                 if (rankOrGrade == null || rankOrGrade.isBlank()) {
                     player.sendSystemMessage(refusal("straja.form.rank_missing", "straja.remedy.fix_retry"));
                     return;
                 }
-                admin.authorize(gateway, values.get("name"), rankOrGrade);
+                admin.authorize(gateway, values.get(FormField.NAME), rankOrGrade);
             }
             case ADMIN_POLICY_SET ->
-                    admin.policySet(gateway, values.get("key"), values.get("value"));
+                    admin.policySet(gateway, values.get(FormField.KEY), values.get(FormField.VALUE));
             case ADMIN_EMERGENCY_ALERT ->
-                    admin.emergencyAlert(gateway, values.get("message"));
+                    admin.emergencyAlert(gateway, values.get(FormField.MESSAGE));
             case ADMIN_EMERGENCY_START -> {
-                Double multiplier = parseDouble(values.get("multiplier"));
-                Integer rounds = parseInt(values.get("rounds"));
-                admin.emergencyStart(gateway, multiplier, rounds, values.get("reason"));
+                Double multiplier = parseDouble(values.get(FormField.MULTIPLIER));
+                Integer rounds = parseInt(values.get(FormField.ROUNDS));
+                admin.emergencyStart(gateway, multiplier, rounds, values.get(FormField.REASON));
             }
             case TOOL_NPC_NAME -> {
-                adminTools.npcRename(gateway, submission.recordId(), values.get("name"));
+                adminTools.npcRename(gateway, submission.recordId(), values.get(FormField.NAME));
                 reflectNpc(player, submission.recordId(), true);
             }
             case TOOL_NPC_SKIN -> {
-                adminTools.npcSetSkin(gateway, submission.recordId(), values.get("skin"));
+                adminTools.npcSetSkin(gateway, submission.recordId(), values.get(FormField.SKIN));
                 reflectNpc(player, submission.recordId(), false);
             }
             case GIVE_UP -> {
@@ -315,32 +317,32 @@ public final class FormSubmissionRouter {
                 }
             }
             case INCIDENT_REPORT ->
-                    expansion.reportIncident(gateway, values.get("category"), values.get("description"));
+                    expansion.reportIncident(gateway, values.get(FormField.CATEGORY), values.get(FormField.DESCRIPTION));
             case BOLO_CREATE ->
-                    expansion.createBolo(gateway, values.get("subject"), values.get("reason"),
-                            values.get("notes"), values.get("authority"),
-                            firstValue(values, "incident-id", "incidentId"));
+                    expansion.createBolo(gateway, values.get(FormField.SUBJECT), values.get(FormField.REASON),
+                            values.get(FormField.NOTES), values.get(FormField.AUTHORITY),
+                            values.get(FormField.INCIDENT_ID));
             case INCIDENT_RESOLVE ->
                     expansion.resolveIncident(gateway, submission.recordId(),
-                            values.get("resolution"), values.get("notes"));
+                            values.get(FormField.RESOLUTION), values.get(FormField.NOTES));
             case EVIDENCE_CONFISCATE -> {
-                Integer slot = parseInt(values.get("slot"));
-                Integer amount = parseInt(values.get("amount"));
+                Integer slot = parseInt(values.get(FormField.SLOT));
+                Integer amount = parseInt(values.get(FormField.AMOUNT));
                 if (slot == null || amount == null) {
                     player.sendSystemMessage(refusal("straja.form.slot_not_numbers", "straja.remedy.fix_retry"));
                     return;
                 }
                 expansion.confiscate(gateway, submission.recordId(), slot, amount,
-                        values.get("reason"), values.get("incidentId"));
+                        values.get(FormField.REASON), values.get(FormField.INCIDENT_ID));
             }
             case EVIDENCE_TRANSFER ->
                     expansion.transferEvidence(gateway, submission.recordId(),
-                            values.get("custodian"), values.get("reason"));
+                            values.get(FormField.CUSTODIAN), values.get(FormField.REASON));
             case EVIDENCE_DESTROY ->
-                    expansion.destroyEvidence(gateway, submission.recordId(), values.get("reason"));
+                    expansion.destroyEvidence(gateway, submission.recordId(), values.get(FormField.REASON));
             case EVIDENCE_CASE_VIEW -> {
                 var records = com.dwurdy.straja.bootstrap.StrajaRuntime.get()
-                        .evidence().recordsForCase(gateway, values.get("caseId"));
+                        .evidence().recordsForCase(gateway, values.get(FormField.CASE_ID));
                 if (records.isEmpty()) gateway.refuse("straja.form.dossier_evidence", "straja.remedy.archivist");
                 else for (var evidence : records) {
                     gateway.tell(evidence.id + " — " + evidence.itemId + " x" + evidence.amount
@@ -348,10 +350,10 @@ public final class FormSubmissionRouter {
                 }
             }
             case ARREST_HANDOFF ->
-                    expansion.finalizeArrest(gateway, values.get("detainee"),
-                            firstValue(values, "sentence-id", "sentenceId"), values.get("notes"));
+                    expansion.finalizeArrest(gateway, values.get(FormField.DETAINEE),
+                            values.get(FormField.SENTENCE_ID), values.get(FormField.NOTES));
             case REPUTATION_VIEW -> {
-                var history = expansion.reputationHistory(gateway, values.get("subject"));
+                var history = expansion.reputationHistory(gateway, values.get(FormField.SUBJECT));
                 if (history.isEmpty()) {
                     gateway.refuse("straja.form.subject_history", "straja.remedy.retry");
                 } else {
@@ -363,12 +365,12 @@ public final class FormSubmissionRouter {
                 }
             }
             case REPUTATION_CORRECTION -> {
-                Integer delta = parseInt(values.get("delta"));
+                Integer delta = parseInt(values.get(FormField.DELTA));
                 if (delta == null) {
                     player.sendSystemMessage(refusal("straja.form.reputation_not_number", "straja.remedy.fix_retry"));
                     return;
                 }
-                expansion.correctReputation(gateway, values.get("subject"), delta, values.get("reason"));
+                expansion.correctReputation(gateway, values.get(FormField.SUBJECT), delta, values.get(FormField.REASON));
             }
             default -> {}
         }
@@ -413,10 +415,5 @@ public final class FormSubmissionRouter {
         } catch (NumberFormatException e) {
             return null;
         }
-    }
-
-    private static String firstValue(java.util.Map<String, String> values, String primary, String legacy) {
-        String value = values.get(primary);
-        return value != null ? value : values.get(legacy);
     }
 }
