@@ -2,6 +2,7 @@ package com.dwurdy.straja;
 
 import com.dwurdy.straja.adapter.out.persistence.SavedStores;
 import com.dwurdy.straja.adapter.out.persistence.StoreAccess;
+import com.dwurdy.straja.application.service.AuditService;
 import com.dwurdy.straja.application.service.AuthorizationService;
 import com.dwurdy.straja.application.service.JoinRequestService;
 import com.dwurdy.straja.application.service.PersonnelService;
@@ -176,6 +177,41 @@ class JoinPetitionTest {
         assertTrue(gateway.messages.get(0).contains("aprobată"));
         joins.deliverOutcome(gateway);
         assertEquals(1, gateway.messages.size()); // delivered once
+    }
+
+    @Test
+    void petitionReasonIsCappedAtServiceLimit() {
+        var request = joins.submit("newbie", "fierar", "x".repeat(700));
+        assertEquals(500, request.reason.length());
+        assertEquals(500, joins.find(request.requestId).reason.length());
+    }
+
+    @Test
+    void decisionReasonIsCappedAtServiceLimit() {
+        var request = joins.submit("newbie", "fierar", "");
+        var decided = joins.reject("commissioner", request.requestId, request.version,
+                "x".repeat(700));
+        assertEquals(500, decided.decisionReason.length());
+    }
+
+    @Test
+    void filingAndReviewDecisionsAreAudited() {
+        var audit = new AuditService(Fakes.context(new Fakes.TestServer(), clock));
+        joins.useAuditService(audit);
+        var request = joins.submit("newbie", "fierar", "vreau să muncesc");
+        joins.submit("newbie", "fierar", "vreau să muncesc"); // identical — no duplicate entry
+        var second = joins.submit("alta", "tamplar", "");
+        joins.approve("commissioner", request.requestId, request.version);
+        joins.reject("commissioner", second.requestId, second.version, "plin");
+
+        var entries = audit.tail(50);
+        assertEquals(2, entries.stream().filter(e -> "join_request".equals(e.action)).count());
+        var reviews = entries.stream().filter(e -> "join_request_review".equals(e.action)).toList();
+        assertEquals(2, reviews.size());
+        assertTrue(reviews.stream().anyMatch(e -> "APPROVED".equals(e.result)
+                && request.requestId.equals(e.target) && "newbie".equals(e.targetUuid)));
+        assertTrue(reviews.stream().anyMatch(e -> "REJECTED".equals(e.result)
+                && second.requestId.equals(e.target) && "plin".equals(e.details)));
     }
 
     @Test

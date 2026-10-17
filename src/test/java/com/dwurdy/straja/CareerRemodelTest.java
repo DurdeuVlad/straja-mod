@@ -2,6 +2,7 @@ package com.dwurdy.straja;
 
 import com.dwurdy.straja.adapter.out.persistence.SavedStores;
 import com.dwurdy.straja.adapter.out.persistence.StoreAccess;
+import com.dwurdy.straja.application.service.AuditService;
 import com.dwurdy.straja.application.service.AuthorizationService;
 import com.dwurdy.straja.application.service.PersonnelService;
 import com.dwurdy.straja.application.service.PromotionService;
@@ -298,6 +299,85 @@ class CareerRemodelTest {
         // The version bump invalidates any review opened against the old text.
         assertTrue(second.version > first.version);
         assertEquals(1, promotions.pendingPetitions().size());
+    }
+
+    @Test
+    void petitionResubmissionAfterRecordChangeRepinsAndStaysApprovable() {
+        authorize("zilier", CareerGrade.PROFESSIONAL_ZILIER, EmploymentMode.PART_TIME);
+        var first = promotions.submitPetition("zilier", CareerGrade.PROFESSIONAL_MESTER, "motiv");
+        // A routine record write — e.g. a second profession approved through a
+        // join petition while this one awaited review — bumps the member's
+        // personnel version and must not wedge the open petition.
+        personnel.assignProfession("commissioner", "zilier", "FIERAR");
+        var refiled = promotions.submitPetition("zilier", CareerGrade.PROFESSIONAL_MESTER, "motiv");
+        assertEquals(first.applicationId, refiled.applicationId);
+        assertTrue(refiled.version > first.version);
+        promotions.approve("commissioner", refiled.applicationId, refiled.version);
+        assertEquals(CareerGrade.PROFESSIONAL_MESTER, personnel.find("zilier").careerGrade);
+    }
+
+    @Test
+    void stalePetitionWithoutResubmissionStillFailsClosed() {
+        authorize("zilier", CareerGrade.PROFESSIONAL_ZILIER, EmploymentMode.PART_TIME);
+        var application = promotions.submitPetition("zilier", CareerGrade.PROFESSIONAL_MESTER, "motiv");
+        personnel.assignProfession("commissioner", "zilier", "FIERAR");
+        assertThrows(IllegalStateException.class,
+                () -> promotions.approve("commissioner", application.applicationId, application.version));
+        assertEquals(PromotionStatus.READY_FOR_APPROVAL,
+                promotions.find(application.applicationId).status);
+    }
+
+    @Test
+    void recordChangeAfterRefilingStillBlocksApproval() {
+        authorize("zilier", CareerGrade.PROFESSIONAL_ZILIER, EmploymentMode.PART_TIME);
+        promotions.submitPetition("zilier", CareerGrade.PROFESSIONAL_MESTER, "motiv");
+        personnel.assignProfession("commissioner", "zilier", "FIERAR");
+        var refiled = promotions.submitPetition("zilier", CareerGrade.PROFESSIONAL_MESTER, "motiv");
+        // Re-pinning does not weaken the pin: a change after the last filing
+        // still fails the optimistic-concurrency check at decision time.
+        personnel.assignProfession("commissioner", "zilier", "TESLAR");
+        assertThrows(IllegalStateException.class,
+                () -> promotions.approve("commissioner", refiled.applicationId, refiled.version));
+        assertEquals(CareerGrade.PROFESSIONAL_ZILIER, personnel.find("zilier").careerGrade);
+    }
+
+    @Test
+    void identicalPetitionResubmissionWithoutRecordChangeStaysIdempotent() {
+        authorize("mil", CareerGrade.MILITARY_STRAJER, EmploymentMode.PART_TIME);
+        var first = promotions.submitPetition("mil", CareerGrade.OFFICER_LOCOTENENT, "motiv");
+        var second = promotions.submitPetition("mil", CareerGrade.OFFICER_LOCOTENENT, "motiv");
+        assertEquals(first.applicationId, second.applicationId);
+        assertEquals(first.version, second.version);
+    }
+
+    @Test
+    void petitionReasonIsCappedAtServiceLimit() {
+        authorize("mil", CareerGrade.MILITARY_STRAJER, EmploymentMode.PART_TIME);
+        var application = promotions.submitPetition("mil", CareerGrade.OFFICER_LOCOTENENT,
+                "x".repeat(700));
+        assertEquals(500, application.petitionReason.length());
+        assertEquals(500, promotions.find(application.applicationId).petitionReason.length());
+    }
+
+    @Test
+    void petitionReviewDecisionsAreAudited() {
+        var audit = new AuditService(Fakes.context(new Fakes.TestServer(), clock));
+        promotions.useAuditService(audit);
+        authorize("mil", CareerGrade.MILITARY_STRAJER, EmploymentMode.PART_TIME);
+        authorize("zilier", CareerGrade.PROFESSIONAL_ZILIER, EmploymentMode.PART_TIME);
+        var approved = promotions.submitPetition("mil", CareerGrade.OFFICER_LOCOTENENT, "motiv");
+        promotions.approve("commissioner", approved.applicationId, approved.version);
+        var denied = promotions.submitPetition("zilier", CareerGrade.PROFESSIONAL_MESTER, "motiv");
+        promotions.reject("commissioner", denied.applicationId, "nu acum");
+
+        var reviews = audit.tail(50).stream()
+                .filter(entry -> "promotion_petition_review".equals(entry.action)).toList();
+        assertEquals(2, reviews.size());
+        assertTrue(reviews.stream().anyMatch(entry -> "APPROVED".equals(entry.result)
+                && approved.applicationId.equals(entry.target) && "mil".equals(entry.targetUuid)
+                && entry.details.contains("to=OFFICER_LOCOTENENT")));
+        assertTrue(reviews.stream().anyMatch(entry -> "REJECTED".equals(entry.result)
+                && denied.applicationId.equals(entry.target) && "nu acum".equals(entry.details)));
     }
 
     @Test

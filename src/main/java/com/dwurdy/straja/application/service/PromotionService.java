@@ -16,6 +16,9 @@ import com.dwurdy.straja.domain.model.PromotionStore;
 import com.dwurdy.straja.domain.model.QualificationEvidence;
 
 public final class PromotionService implements com.dwurdy.straja.application.port.in.PromotionV2UseCase {
+    /** Server-side cap on petition/decision text — matches the form fields. */
+    private static final int REASON_LIMIT = 500;
+
     private final PromotionRepository promotions;
     private final PersonnelRepository personnel;
     private final AuthorizationService authorization;
@@ -32,8 +35,15 @@ public final class PromotionService implements com.dwurdy.straja.application.por
         this.ids = ids;
     }
 
+    private AuditService audit;
+
     public void onApproved(java.util.function.Consumer<PromotionApplication> listener) {
         this.approvalListener = listener == null ? ignored -> {} : listener;
+    }
+
+    /** Installed by the composition root; absent in unit compatibility contexts. */
+    public void useAuditService(AuditService audit) {
+        this.audit = audit;
     }
 
     public synchronized PromotionApplication submit(String subjectUuid, CareerGrade targetGrade) {
@@ -45,7 +55,19 @@ public final class PromotionService implements com.dwurdy.straja.application.por
         if (store.applications == null) store.applications = new java.util.LinkedHashMap<>();
         for (PromotionApplication application : store.applications.values()) {
             if (application != null && subjectUuid.equals(application.subjectUuid)
-                    && targetGrade == application.targetGrade && isOpen(application.status)) return application;
+                    && targetGrade == application.targetGrade && isOpen(application.status)) {
+                // Re-pin on resubmission: the member re-asserts the request
+                // against their current record, so a routine record change
+                // (profession assignment, status cycle) since the first filing
+                // must not wedge the application as permanently stale.
+                if (application.expectedPersonnelVersion != person.version) {
+                    application.expectedPersonnelVersion = person.version;
+                    application.version++;
+                    store.storeRevision++;
+                    promotions.write(store);
+                }
+                return application;
+            }
         }
         PromotionApplication application = new PromotionApplication();
         application.applicationId = ids.newId("PROM");
@@ -71,6 +93,7 @@ public final class PromotionService implements com.dwurdy.straja.application.por
                                                              String reason) {
         PromotionApplication application = submit(subjectUuid, targetGrade);
         String normalized = reason == null ? "" : reason.trim();
+        if (normalized.length() > REASON_LIMIT) normalized = normalized.substring(0, REASON_LIMIT);
         if (!isOpen(application.status)) return application;
         if (application.status == PromotionStatus.READY_FOR_APPROVAL
                 && normalized.equals(application.petitionReason)) {
@@ -270,6 +293,11 @@ public final class PromotionService implements com.dwurdy.straja.application.por
         // after this write, reconcileApprovals() can finish the personnel
         // projection on the next server start.
         promotions.write(store);
+        if (audit != null) {
+            audit.record("promotion_petition_review", actorUuid, actorUuid,
+                    application.applicationId, application.subjectUuid, "APPROVED",
+                    "from=" + application.fromGrade + " to=" + application.targetGrade);
+        }
         reconcileApproval(application, store);
         PromotionApplication persisted = requireApplication(promotions.read(), applicationId);
         approvalListener.accept(persisted);
@@ -381,11 +409,18 @@ public final class PromotionService implements com.dwurdy.straja.application.por
         }
         application.status = PromotionStatus.REJECTED;
         application.reviewedBy = actorUuid == null ? "" : actorUuid;
-        application.decisionReason = reason == null ? "" : reason;
+        String trimmed = reason == null ? "" : reason.trim();
+        application.decisionReason = trimmed.length() > REASON_LIMIT
+                ? trimmed.substring(0, REASON_LIMIT) : trimmed;
         application.decisionAt = clock.nowMillis();
         application.version++;
         store.storeRevision++;
         promotions.write(store);
+        if (audit != null) {
+            audit.record("promotion_petition_review", actorUuid == null ? "" : actorUuid, actorUuid,
+                    application.applicationId, application.subjectUuid, "REJECTED",
+                    application.decisionReason);
+        }
         return application;
     }
 

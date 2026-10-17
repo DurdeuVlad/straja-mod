@@ -290,6 +290,8 @@ public final class StrajaRuntime {
         this.players.useV2Authority(v2Personnel, v2Authorization);
         this.audit = new AuditService(ctx);
         this.v2ComplaintEscalation.useAuditService(this.audit);
+        this.v2Promotions.useAuditService(this.audit);
+        this.v2JoinRequests.useAuditService(this.audit);
         this.equipment = new EquipmentService(ctx);
         this.guards = new GuardService(ctx, players, audit, equipment, this::bootId);
         this.guards.useV2Promotions(v2Promotions);

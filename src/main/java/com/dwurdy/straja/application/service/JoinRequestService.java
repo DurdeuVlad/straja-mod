@@ -19,12 +19,16 @@ import com.dwurdy.straja.domain.model.PersonnelStatus;
  * fails closed.
  */
 public final class JoinRequestService implements com.dwurdy.straja.application.port.in.JoinRequestUseCase {
+    /** Server-side cap on petition/decision text — matches the form fields. */
+    private static final int REASON_LIMIT = 500;
+
     private final JoinRequestRepository requests;
     private final PersonnelService personnel;
     private final AuthorizationService authorization;
     private final java.util.function.Supplier<java.util.Set<String>> professions;
     private final Clock clock;
     private final IdGenerator ids;
+    private AuditService audit;
 
     public JoinRequestService(JoinRequestRepository requests, PersonnelService personnel,
                               AuthorizationService authorization,
@@ -38,6 +42,11 @@ public final class JoinRequestService implements com.dwurdy.straja.application.p
         this.ids = ids;
     }
 
+    /** Installed by the composition root; absent in unit compatibility contexts. */
+    public void useAuditService(AuditService audit) {
+        this.audit = audit;
+    }
+
     @Override
     public synchronized JoinRequest submit(String subjectUuid, String profession, String reason) {
         if (subjectUuid == null || subjectUuid.isBlank())
@@ -49,6 +58,8 @@ public final class JoinRequestService implements com.dwurdy.straja.application.p
             throw new IllegalArgumentException("JOIN_UNKNOWN_PROFESSION");
         requireEligibleSubject(subjectUuid);
         String normalizedReason = reason == null ? "" : reason.trim();
+        if (normalizedReason.length() > REASON_LIMIT)
+            normalizedReason = normalizedReason.substring(0, REASON_LIMIT);
 
         JoinRequestStore store = requests.read();
         if (store.requests == null) store.requests = new java.util.LinkedHashMap<>();
@@ -68,6 +79,11 @@ public final class JoinRequestService implements com.dwurdy.straja.application.p
             open.version++;
             store.storeRevision++;
             requests.write(store);
+            if (audit != null) {
+                audit.record("join_request", subjectUuid, subjectUuid,
+                        open.requestId, subjectUuid, "SUCCESS",
+                        "updated profession=" + normalizedProfession);
+            }
             return open;
         }
         JoinRequest request = new JoinRequest();
@@ -79,6 +95,11 @@ public final class JoinRequestService implements com.dwurdy.straja.application.p
         store.requests.put(request.requestId, request);
         store.storeRevision++;
         requests.write(store);
+        if (audit != null) {
+            audit.record("join_request", subjectUuid, subjectUuid,
+                    request.requestId, subjectUuid, "SUCCESS",
+                    "filed profession=" + normalizedProfession);
+        }
         return request;
     }
 
@@ -124,6 +145,11 @@ public final class JoinRequestService implements com.dwurdy.straja.application.p
         persisted.version++;
         store.storeRevision++;
         requests.write(store);
+        if (audit != null) {
+            audit.record("join_request_review", actorUuid, actorUuid,
+                    persisted.requestId, persisted.subjectUuid, "APPROVED",
+                    "profession=" + persisted.profession);
+        }
         return persisted;
     }
 
@@ -136,10 +162,17 @@ public final class JoinRequestService implements com.dwurdy.straja.application.p
         persisted.status = JoinRequestStatus.REJECTED;
         persisted.reviewedBy = actorUuid;
         persisted.decisionAt = clock.nowMillis();
-        persisted.decisionReason = reason == null ? "" : reason.trim();
+        String trimmed = reason == null ? "" : reason.trim();
+        persisted.decisionReason = trimmed.length() > REASON_LIMIT
+                ? trimmed.substring(0, REASON_LIMIT) : trimmed;
         persisted.version++;
         store.storeRevision++;
         requests.write(store);
+        if (audit != null) {
+            audit.record("join_request_review", actorUuid, actorUuid,
+                    persisted.requestId, persisted.subjectUuid, "REJECTED",
+                    persisted.decisionReason);
+        }
         return persisted;
     }
 
