@@ -147,7 +147,8 @@ public class FormSessionService implements FormSessionUseCase {
             String raw = values.get(field.id());
             if (raw == null) return null;
             String trimmed = raw.trim();
-            if (trimmed.isEmpty() || trimmed.length() > field.maxLength()) return null;
+            if (trimmed.length() > field.maxLength()) return null;
+            if (trimmed.isEmpty() && field.required()) return null;
             cleaned.put(field.id(), trimmed);
         }
         return cleaned;

@@ -86,7 +86,11 @@ public interface FormSessionUseCase {
         }
     }
 
-    record Field(String id, String label, int maxLength, boolean multiline) {}
+    record Field(String id, String label, int maxLength, boolean multiline, boolean required) {
+        public Field(String id, String label, int maxLength, boolean multiline) {
+            this(id, label, maxLength, multiline, true);
+        }
+    }
 
     record Request(Action action, String recordId, String title, String prompt, List<Field> fields) {
         public Request {

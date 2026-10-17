@@ -65,6 +65,7 @@ public class StrajaFormMenu extends AbstractContainerMenu {
             buf.writeUtf(field.label(), MAX_LABEL);
             buf.writeVarInt(field.maxLength());
             buf.writeBoolean(field.multiline());
+            buf.writeBoolean(field.required());
         }
     }
 
@@ -79,7 +80,7 @@ public class StrajaFormMenu extends AbstractContainerMenu {
         List<Field> fields = new ArrayList<>(count);
         for (int i = 0; i < count; i++) {
             Field field = new Field(buf.readUtf(MAX_FIELD_ID), buf.readUtf(MAX_LABEL),
-                    buf.readVarInt(), buf.readBoolean());
+                    buf.readVarInt(), buf.readBoolean(), buf.readBoolean());
             if (field.maxLength() < 1 || field.maxLength() > MAX_FIELD_LENGTH) {
                 throw new IllegalArgumentException("form field length out of bounds");
             }

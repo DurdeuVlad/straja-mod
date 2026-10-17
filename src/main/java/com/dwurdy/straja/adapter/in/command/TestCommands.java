@@ -196,6 +196,32 @@ final class TestCommands {
                 .then(Commands.argument("id", StringArgumentType.word())
                         .executes(ctx -> run(ctx, runtime ->
                                 runtime.guards().applyForStraja(player(ctx, runtime))))));
+        test.then(Commands.literal("join-request")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("profession", StringArgumentType.word())
+                                .then(Commands.argument("reason", StringArgumentType.greedyString())
+                                        .executes(ctx -> run(ctx, runtime -> {
+                                            var req = runtime.v2JoinRequests().submit(
+                                                    player(ctx, runtime).uuid().toString(),
+                                                    StringArgumentType.getString(ctx, "profession"),
+                                                    StringArgumentType.getString(ctx, "reason"));
+                                            send(ctx, req == null ? "join-request refused"
+                                                    : "join-request=" + req.requestId + " " + req.status);
+                                        }))))));
+        test.then(Commands.literal("join-list")
+                .executes(ctx -> run(ctx, runtime -> {
+                    for (var req : runtime.v2JoinRequests().pending())
+                        send(ctx, req.requestId + " " + req.subjectUuid + " " + req.profession
+                                + " " + req.status + " v" + req.version);
+                })));
+        test.then(Commands.literal("token")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("action", StringArgumentType.greedyString())
+                                .executes(ctx -> run(ctx, runtime -> send(ctx, "token="
+                                        + com.dwurdy.straja.adapter.in.npc.NpcInteractionService
+                                                .issueToolActionToken(player(ctx, runtime).uuid(),
+                                                        StringArgumentType.getString(ctx,
+                                                                "action"))))))));
         test.then(Commands.literal("faction")
                 .then(Commands.argument("id", StringArgumentType.word())
                         .then(Commands.argument("name", StringArgumentType.greedyString())

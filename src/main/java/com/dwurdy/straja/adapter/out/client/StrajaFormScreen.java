@@ -41,6 +41,7 @@ public class StrajaFormScreen extends AbstractContainerScreen<StrajaFormMenu> {
     private int fieldGap = FIELD_GAP;
     private boolean submitted;
     private boolean cancelSent;
+    private Button submitButton;
 
     private record Input(Field field, Supplier<String> value, int labelY) {}
 
@@ -119,8 +120,9 @@ public class StrajaFormScreen extends AbstractContainerScreen<StrajaFormMenu> {
             }
         }
         int footerY = topPos + imageHeight - FOOTER_HEIGHT;
-        addRenderableWidget(Button.builder(Component.translatable("straja.form.submit"), b -> submit())
+        this.submitButton = addRenderableWidget(Button.builder(Component.translatable("straja.form.submit"), b -> submit())
                 .bounds(x, footerY, 80, 20).build());
+        refreshSubmitState();
         addRenderableWidget(Button.builder(Component.translatable("straja.form.cancel"), b -> onClose())
                 .bounds(x + 88, footerY, 80, 20).build());
     }
@@ -138,11 +140,29 @@ public class StrajaFormScreen extends AbstractContainerScreen<StrajaFormMenu> {
                 + multiCount * multiLineHeight + singleCount * SINGLE_LINE_HEIGHT;
     }
 
+    @Override
+    protected void containerTick() {
+        super.containerTick();
+        refreshSubmitState();
+    }
+
+    private void refreshSubmitState() {
+        if (submitButton == null) return;
+        submitButton.active = inputs.stream().allMatch(input -> {
+            if (!input.field().required()) return true;
+            String value = input.value().get();
+            return value != null && !value.isBlank();
+        });
+    }
+
     private void submit() {
         Map<String, String> values = new LinkedHashMap<>();
         for (Input input : inputs) {
             String value = input.value().get();
-            if (value == null || value.isBlank()) return;
+            if (value == null || value.isBlank()) {
+                if (input.field().required()) return;
+                value = "";
+            }
             values.put(input.field().id(), value);
         }
         submitted = true;

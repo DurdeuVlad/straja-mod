@@ -489,7 +489,7 @@ public final class NpcRoles {
                         "Cerere de muncă — " + normalized.toLowerCase(java.util.Locale.ROOT),
                         "Scrie motivul pentru care vrei să te înscrii la meseriași (opțional).",
                         java.util.List.of(new com.dwurdy.straja.application.port.in.FormSessionUseCase.Field(
-                                "reason", "Motiv", 500, true))));
+                                "reason", "Motiv", 500, true, false))));
     }
 
     /** Hands the reviewer a written book with the work-petition text. */
@@ -548,7 +548,7 @@ public final class NpcRoles {
                                 new com.dwurdy.straja.application.port.in.FormSessionUseCase.Field(
                                         "decision", "Decizie", 16, false),
                                 new com.dwurdy.straja.application.port.in.FormSessionUseCase.Field(
-                                        "note", "Motiv pentru solicitant", 500, true))));
+                                        "note", "Motiv pentru solicitant", 500, true, false))));
         return true;
     }
 
@@ -886,7 +886,7 @@ public final class NpcRoles {
                         new FormSessionUseCase.Field("reason", "Motiv", runtime.policies().boloMaxReasonLength, true),
                         new FormSessionUseCase.Field("notes", "Note", runtime.policies().incidentMaxDescriptionLength, true),
                         new FormSessionUseCase.Field("authority", "INFORMATION_ONLY", 32, false),
-                        new FormSessionUseCase.Field("incidentId", "Incident legat (opțional)", 80, false))));
+                        new FormSessionUseCase.Field("incidentId", "Incident legat (opțional)", 80, false, false))));
         return true;
     }
 
@@ -930,7 +930,7 @@ public final class NpcRoles {
                         new FormSessionUseCase.Field("reason", "Motiv",
                                 runtime.policies().evidenceMaxReasonLength, true),
                         new FormSessionUseCase.Field("incidentId",
-                                "Incident legat (opțional)", 80, false))));
+                                "Incident legat (opțional)", 80, false, false))));
         return true;
     }
 
@@ -1147,8 +1147,8 @@ public final class NpcRoles {
                     java.util.List.of(
                             new FormSessionUseCase.Field("hours", "Ore estimate", 6, false),
                             new FormSessionUseCase.Field("risk", "Risc (multiplicator)", 6, false),
-                            new FormSessionUseCase.Field("reward", "Recompensă (gol = calculată)", 10, false),
-                            new FormSessionUseCase.Field("reason", "Motiv depășire", 240, false)));
+                            new FormSessionUseCase.Field("reward", "Recompensă (gol = calculată)", 10, false, false),
+                            new FormSessionUseCase.Field("reason", "Motiv depășire", 240, false, false)));
             default -> null;
         };
         if (request == null) return true;
@@ -1304,7 +1304,7 @@ public final class NpcRoles {
                 "Decide cererea " + recordId, "Decizie: resolve sau dismiss (notă opțională).",
                 java.util.List.of(
                         new FormSessionUseCase.Field("decision", "Decizie", 16, false),
-                        new FormSessionUseCase.Field("note", "Notă pentru solicitant", 500, true))));
+                        new FormSessionUseCase.Field("note", "Notă pentru solicitant", 500, true, false))));
         return true;
     }
 
@@ -1322,7 +1322,7 @@ public final class NpcRoles {
                 "Cerere de avansare", "Scrie motivul pentru care ceri avansarea la "
                         + runtime.policies().rankName(target) + " (opțional).",
                 java.util.List.of(new FormSessionUseCase.Field(
-                        "reason", "Motiv", 500, true))));
+                        "reason", "Motiv", 500, true, false))));
         return true;
     }
 
@@ -1392,7 +1392,7 @@ public final class NpcRoles {
                 "Decizie: aproba sau respinge (motiv opțional, trimis solicitantului).",
                 java.util.List.of(
                         new FormSessionUseCase.Field("decision", "Decizie", 16, false),
-                        new FormSessionUseCase.Field("note", "Motiv pentru solicitant", 500, true))));
+                        new FormSessionUseCase.Field("note", "Motiv pentru solicitant", 500, true, false))));
         return true;
     }
 
@@ -1441,8 +1441,8 @@ public final class NpcRoles {
                     FormSessionUseCase.Action.ADMIN_EMERGENCY_START, "",
                     "Stare de urgență", "Multiplicator de plată și runde obligatorii (gol = valorile configurate).",
                     java.util.List.of(
-                            new FormSessionUseCase.Field("multiplier", "Multiplicator plată", 6, false),
-                            new FormSessionUseCase.Field("rounds", "Runde obligatorii", 4, false),
+                            new FormSessionUseCase.Field("multiplier", "Multiplicator plată", 6, false, false),
+                            new FormSessionUseCase.Field("rounds", "Runde obligatorii", 4, false, false),
                             new FormSessionUseCase.Field("reason", "Motiv", 240, false)));
             default -> null;
         };
