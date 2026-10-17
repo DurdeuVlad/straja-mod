@@ -379,6 +379,7 @@ class GuardServiceTest {
 
     @Test
     void patrolTimeCapEndsDutyGracefully() {
+        ctx.policies().dutyRouteMode = "ROUTE"; // the cap is a route-mode bound
         placeCheckpoints();
         TestPlayer p = recruitToStagiar();
         standAt(p, 1);
@@ -399,6 +400,7 @@ class GuardServiceTest {
 
     @Test
     void patrolTimeCapDoesNotEndEarly() {
+        ctx.policies().dutyRouteMode = "ROUTE";
         placeCheckpoints();
         TestPlayer p = recruitToStagiar();
         standAt(p, 1);
@@ -539,9 +541,12 @@ class GuardServiceTest {
         guards.tickPlayerDuty(p);
         var state = players.state(p.uuid());
         assertTrue(state.salaryActivityPaused, "AFK guard must stop accruing");
-        // patrol deadline still evaluated against wall clock (default 30min) -> timed out
-        assertFalse(state.duty);
-        assertEquals("checkpoint_timeout", state.lastEndReason);
+        // FUN-5: the missed beat is a reminder, not a termination — the shift
+        // continues and the checkpoint stays active for a late arrival.
+        assertTrue(state.duty);
+        assertNull(state.lastEndReason);
+        assertNull(state.deadlineAt);
+        assertTrue(p.told("serviciul continuă"), "the missed beat is told, not silent");
     }
 
     @Test
@@ -1594,6 +1599,7 @@ class GuardServiceTest {
 
     @Test
     void normalDutyStartsAndStopsOnlyAtTheSecretary() {
+        ctx.policies().dutyRouteMode = "ROUTE"; // secretary-return is route discipline
         placeCheckpoints();
         placeSecretary(0, 0, 0);
         TestPlayer p = guardAtRank(Rank.STAGIAR.level());
@@ -1616,6 +1622,22 @@ class GuardServiceTest {
         p.x = 2; p.z = 2;
         guards.stopDuty(p);
         assertFalse(players.state(p.uuid()).duty);
+    }
+
+    @Test
+    void freeBeatDutyStopsAtWillAwayFromSecretary() {
+        // FREE_BEAT default: a shift is a presence period — it ends at will,
+        // not by walking back to a desk.
+        placeCheckpoints();
+        placeSecretary(0, 0, 0);
+        TestPlayer p = guardAtRank(Rank.STAGIAR.level());
+        p.x = 1; p.z = 1;
+        guards.startDuty(p);
+        assertTrue(players.state(p.uuid()).duty);
+        assertEquals("NORMAL", players.state(p.uuid()).mode);
+        p.x = 100; p.z = 100;
+        guards.stopDuty(p);
+        assertFalse(players.state(p.uuid()).duty, "free-beat presence ends anywhere");
     }
 
     @Test

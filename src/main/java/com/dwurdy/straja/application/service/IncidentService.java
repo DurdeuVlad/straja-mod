@@ -32,6 +32,20 @@ public final class IncidentService {
 
     private long now() { return ctx.clock().nowMillis(); }
 
+    /** FUN-5: responding to an incident credits multiplied pay for the
+     *  configured window — presence earns the base rate, response earns more. */
+    private void grantResponseCredit(PlayerGateway guard) {
+        int minutes = ctx.policies().dutyResponseCreditMinutes;
+        if (minutes <= 0 || guard == null || guard.uuid() == null) return;
+        var state = players.state(guard);
+        if (state == null || !state.duty) return;
+        long until = now() + minutes * 60_000L;
+        if (state.responseCreditUntil == null || state.responseCreditUntil < until) {
+            state.responseCreditUntil = until;
+            players.save(guard.uuid(), state);
+        }
+    }
+
     private IncidentStore store() {
         IncidentStore store = ctx.incidents().read();
         store.ensureIncidents();
@@ -302,6 +316,9 @@ public final class IncidentService {
         incident.status = IncidentStatus.ASSIGNED;
         ctx.incidents().write(data);
         audit.record(AuditActions.INCIDENT_ACCEPT, guard.name(), uuid(guard), incident.id, "", AuditResults.SUCCESS, "");
+        // Self-created incidents (own whistle, own report) are cleanup, not
+        // response work — accepting stays legal but earns no credit.
+        if (!incident.createdByUuid.equals(uuid(guard))) grantResponseCredit(guard);
         guard.tell("Ai preluat " + incident.id + ".");
         return true;
     }
@@ -326,6 +343,7 @@ public final class IncidentService {
         if (incident.status == IncidentStatus.OPEN) incident.status = IncidentStatus.ASSIGNED;
         ctx.incidents().write(data);
         audit.record(AuditActions.INCIDENT_JOIN, guard.name(), key, incident.id, "", AuditResults.SUCCESS, "");
+        grantResponseCredit(guard);
         guard.tell("Te-ai alăturat incidentului " + incident.id + ".");
         return true;
     }

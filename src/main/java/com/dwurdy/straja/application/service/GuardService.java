@@ -138,11 +138,17 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
                         + " monede în sold (" + event.data().get("paidMinutes")
                         + " min plătite, " + event.data().get("hourlyWage") + "/h"
                         + (ctx.emergency().read().active ? ", primă de urgență inclusă" : "")
+                        + (Boolean.TRUE.equals(event.data().get("responseActive"))
+                                ? ", ×" + event.data().get("responseMultiplier") + " răspuns" : "")
                         + ").");
                 case "checkpoint_activated" -> player.tell("Checkpoint atins. Următorul devine disponibil peste "
                         + ctx.policies().checkpointUnlockMinutes + " minute.");
-                case "checkpoint_available" -> player.tell("Checkpoint disponibil: " + event.data().get("checkpoint")
+                case "checkpoint_available" -> player.tell(DutyEngine.freeBeat(ctx.policies())
+                        ? "Checkpoint disponibil: " + event.data().get("checkpoint") + "."
+                        : "Checkpoint disponibil: " + event.data().get("checkpoint")
                         + ". Ai " + event.data().get("missionMinutes") + " minute.");
+                case "checkpoint_missed" -> player.tell("Ai ratat vizita la "
+                        + event.data().get("checkpoint") + " — serviciul continuă. Checkpoint-ul rămâne activ.");
                 case "patrol_round_complete" -> player.tell("Rundă de patrulare completă (runda "
                         + event.data().get("round") + "). Checkpoint-ul "
                         + event.data().get("checkpoint") + " devine disponibil peste "
@@ -152,7 +158,9 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
                 case "duty_ended" -> player.tell("Serviciul s-a încheiat: " + event.data().get("reason")
                         + ". Soldul acumulat a fost păstrat.");
                 case "special_started" -> player.tell("Special Duty activ. Cronometrele checkpoint-urilor sunt suspendate.");
-                case "patrol_resumed" -> player.tell("Patrula a fost reluată. Ai " + event.data().get("missionMinutes")
+                case "patrol_resumed" -> player.tell(DutyEngine.freeBeat(ctx.policies())
+                        ? "Patrula a fost reluată. Următorul beat: " + event.data().get("checkpoint") + "."
+                        : "Patrula a fost reluată. Ai " + event.data().get("missionMinutes")
                         + " minute pentru " + event.data().get("checkpoint") + ".");
                 default -> {}
             }
@@ -1493,7 +1501,9 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             players.save(player.uuid(), state);
             audit.record(AuditActions.DUTY_START, player.name(), player.uuid().toString(),
                     player.name(), player.uuid().toString(), AuditResults.SUCCESS, "started");
-            player.tell("Serviciu început. Primul checkpoint: " + state.route.get(0) + ". Ai "
+            player.tell(DutyEngine.freeBeat(ctx.policies())
+                    ? "Serviciu început. Primul beat: " + state.route.get(0) + "."
+                    : "Serviciu început. Primul checkpoint: " + state.route.get(0) + ". Ai "
                     + state.missionMinutes.get(state.route.get(0)) + " minute.");
         }
     }
@@ -1519,8 +1529,61 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         if (applyCoreResult(player, state, result)) {
             audit.record(AuditActions.DUTY_CHECKPOINT, player.name(), player.uuid().toString(),
                     player.name(), player.uuid().toString(), AuditResults.SUCCESS, id);
+            tellBeatContext(player, point);
         }
     }
+
+    /**
+     * FUN-5: a checkpoint is a beat — registering presence also surfaces the
+     * local picture: open incidents near the point, active BOLOs, and BOLO
+     * subjects currently online nearby. Read-only; nothing here is a chore.
+     */
+    private void tellBeatContext(PlayerGateway player, SetupData.Checkpoint point) {
+        final double radiusSq = 48.0 * 48.0;
+        long now = now();
+        java.util.List<String> nearby = new java.util.ArrayList<>();
+        int openElsewhere = 0;
+        for (var incident : ctx.incidents().read().incidents) {
+            if (incident == null || (incident.status != com.dwurdy.straja.domain.model.IncidentStatus.OPEN
+                    && incident.status != com.dwurdy.straja.domain.model.IncidentStatus.ASSIGNED)) continue;
+            if (incident.expiresAt > 0 && incident.expiresAt <= now) continue;
+            boolean near = point.dimension.equals(incident.dimension)
+                    && sq(player.x() - incident.x, player.y() - incident.y, player.z() - incident.z) <= radiusSq;
+            if (near) nearby.add(incident.id + " " + incident.title);
+            else openElsewhere++;
+        }
+        var bolos = ctx.bolos().read();
+        java.util.List<String> wantedNearby = new java.util.ArrayList<>();
+        int activeBolos = 0;
+        if (bolos != null) {
+            for (var bolo : bolos.ensureRecords()) {
+                if (bolo == null || bolo.status != com.dwurdy.straja.domain.model.BoloStatus.ACTIVE
+                        || (bolo.expiresAt > 0 && bolo.expiresAt <= now)) continue;
+                activeBolos++;
+                for (PlayerGateway online : ctx.server().onlinePlayers()) {
+                    if (online.uuid() == null || !online.uuid().toString().equalsIgnoreCase(bolo.subjectUuid)) continue;
+                    if (point.dimension.equals(online.dimension())
+                            && sq(player.x() - online.x(), player.y() - online.y(), player.z() - online.z()) <= radiusSq) {
+                        wantedNearby.add(bolo.subjectName + " (" + bolo.id + ")");
+                    }
+                    break;
+                }
+            }
+        }
+        if (nearby.isEmpty() && openElsewhere == 0 && activeBolos == 0) {
+            player.tell("Sectorul este liniștit — nimic activ.");
+            return;
+        }
+        if (!nearby.isEmpty())
+            player.tell("În zonă: " + String.join("; ", nearby.subList(0, Math.min(3, nearby.size()))));
+        if (openElsewhere > 0)
+            player.tell("Alte " + openElsewhere + " incidente active în alte sectoare.");
+        if (activeBolos > 0)
+            player.tell(activeBolos + " BOLO active.");
+        for (String who : wantedNearby) player.tell("[BOLO] " + who + " a fost semnalat în apropiere.");
+    }
+
+    private static double sq(double dx, double dy, double dz) { return dx * dx + dy * dy + dz * dz; }
 
     private boolean atCheckpoint(PlayerGateway player, SetupData.Checkpoint point) {
         if (!point.isPlaced() || !player.dimension().equals(point.dimension)) return false;
@@ -1542,7 +1605,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             player.refuse("straja.duty.not_on_duty", "straja.remedy.duty");
             return;
         }
-        if (!"FREE".equals(state.mode) && !nearSecretary(player)) {
+        if (!"FREE".equals(state.mode) && !DutyEngine.freeBeat(ctx.policies()) && !nearSecretary(player)) {
             player.refuse("straja.duty.end_at_secretary", "straja.remedy.secretary");
             return;
         }
@@ -1582,6 +1645,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         state.lastDutyActivityY = null;
         state.lastDutyActivityZ = null;
         state.salaryActivityPaused = false;
+        state.responseCreditUntil = null;
         state.lastEndReason = "server_restart";
         restoreDutyFaction(player, state);
         players.save(player.uuid(), state);
@@ -2309,7 +2373,11 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         player.tell("Avansarea se depune la Secretară ca petiție cu motiv scris — Comisarul citește și aprobă sau respinge.");
         player.tell("Ofițerii (Locotenent, Căpitan, Colonel) sunt cu normă întreagă și împart aceleași drepturi: "
                 + "misiuni, documente, plângeri, recompense. Comisarul numește și aprobă cererile.");
-        player.tell("Patrulă: " + ctx.setup().read().checkpoints.size() + " checkpoint-uri; "
+        player.tell(DutyEngine.freeBeat(ctx.policies())
+                ? "Patrulă: " + ctx.setup().read().checkpoints.size() + " beat-uri de prezență; "
+                + "tura rămâne deschisă cât ești în serviciu — prezența plătește baza, răspunsurile plătesc "
+                + ctx.policies().dutyResponseMultiplier + "×."
+                : "Patrulă: " + ctx.setup().read().checkpoints.size() + " checkpoint-uri; "
                 + ctx.policies().checkpointUnlockMinutes + " minute pauză între puncte; tura durează maximum "
                 + ctx.policies().patrolMaxMinutes + " minute reale.");
         player.tell("Salariu: plată orară, acumulată continuu. Monede: 1 / 64 / 4096 / 262144 Bronz.");

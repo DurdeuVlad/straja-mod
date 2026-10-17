@@ -41,6 +41,9 @@ public final class PolicyRegistry {
         k("timers.patrolRounds", "patrolRounds", Kind.INT);
         k("timers.patrolMaxMinutes", "patrolMaxMinutes", Kind.INT);
         k("timers.patrolMaxCheckpoints", "patrolMaxCheckpoints", Kind.INT);
+        k("duty.routeMode", "dutyRouteMode", Kind.STRING);
+        k("duty.responseMultiplier", "dutyResponseMultiplier", Kind.DOUBLE);
+        k("duty.responseCreditMinutes", "dutyResponseCreditMinutes", Kind.INT);
         k("timers.foodCooldownMinutes", "foodCooldownMinutes", Kind.INT);
         k("timers.quizCooldownMinutes", "quizCooldownMinutes", Kind.INT);
         k("timers.resignationCooldownDays", "resignationCooldownDays", Kind.INT);

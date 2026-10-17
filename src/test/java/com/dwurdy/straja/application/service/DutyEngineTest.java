@@ -127,18 +127,61 @@ class DutyEngineTest {
 
     @Test
     void finalCheckpointCompletesPatrolByDefault() {
-        GuardState state = juniorOnDuty();
+        StrajaPolicies route = new StrajaPolicies();
+        route.dutyRouteMode = "ROUTE"; // patrolRounds is a route-mode knob
+        GuardState state = new GuardState();
+        state.rank = Rank.STAGIAR.level();
+        state.invited = true;
+        state.quizPassed = true;
+        assertTrue(DutyEngine.startDuty(state, ROUTE, 0, Map.of(), route).ok());
         for (int i = 0; i < 3; i++) {
-            DutyEngine.activateCheckpoint(state, ROUTE.get(i), 60_000, 20, Map.of(), POLICY);
-            DutyEngine.tickDuty(state, 60_000 + DutyEngine.DEFAULT_UNLOCK_MINUTES * DutyEngine.MINUTE_MS + 1, 20, Map.of(), POLICY, null);
+            DutyEngine.activateCheckpoint(state, ROUTE.get(i), 60_000, 20, Map.of(), route);
+            DutyEngine.tickDuty(state, 60_000 + DutyEngine.DEFAULT_UNLOCK_MINUTES * DutyEngine.MINUTE_MS + 1, 20, Map.of(), route, null);
         }
-        Result last = DutyEngine.activateCheckpoint(state, "checkpoint_4", 800_000, 20, Map.of(), POLICY);
+        Result last = DutyEngine.activateCheckpoint(state, "checkpoint_4", 800_000, 20, Map.of(), route);
         assertTrue(last.ok());
         // default patrolRounds=1: one pass through the route ends the shift
         assertFalse(state.duty);
         assertEquals("patrol_complete", state.lastEndReason);
         assertTrue(last.events().stream().anyMatch(e -> e.type().equals("patrol_complete")));
         assertTrue(last.events().stream().anyMatch(e -> e.type().equals("duty_ended")));
+    }
+
+    @Test
+    void freeBeatShiftIsOpenEndedEvenWithConfiguredRounds() {
+        StrajaPolicies free = new StrajaPolicies();
+        free.patrolRounds = 1; // ignored under FREE_BEAT — presence is open-ended
+        GuardState state = new GuardState();
+        state.rank = Rank.STAGIAR.level();
+        state.invited = true;
+        state.quizPassed = true;
+        assertTrue(DutyEngine.startDuty(state, ROUTE, 0, Map.of(), free).ok());
+        assertEquals(0, state.requiredRounds, "no round quota on a presence shift");
+        for (int i = 0; i < 3; i++) {
+            DutyEngine.activateCheckpoint(state, ROUTE.get(i), 60_000, 20, Map.of(), free);
+            DutyEngine.tickDuty(state, 60_000 + DutyEngine.DEFAULT_UNLOCK_MINUTES * DutyEngine.MINUTE_MS + 1, 20, Map.of(), free, null);
+        }
+        Result last = DutyEngine.activateCheckpoint(state, "checkpoint_4", 800_000, 20, Map.of(), free);
+        assertTrue(last.ok());
+        assertTrue(state.duty, "a completed lap is a round event, not an ending");
+        assertEquals(1, state.patrolRounds);
+        assertTrue(last.events().stream().anyMatch(e -> e.type().equals("patrol_round_complete")));
+        assertFalse(last.events().stream().anyMatch(e -> e.type().equals("duty_ended")));
+    }
+
+    @Test
+    void emergencyRequiredRoundsStillEndsFreeBeatShift() {
+        GuardState state = juniorOnDuty(); // FREE_BEAT default
+        // Emergency snapshot arrives after start (GuardService writes it).
+        state.requiredRounds = 1;
+        for (int i = 0; i < 3; i++) {
+            DutyEngine.activateCheckpoint(state, ROUTE.get(i), 60_000, 20, Map.of(), POLICY);
+            DutyEngine.tickDuty(state, 60_000 + DutyEngine.DEFAULT_UNLOCK_MINUTES * DutyEngine.MINUTE_MS + 1, 20, Map.of(), POLICY, null);
+        }
+        Result last = DutyEngine.activateCheckpoint(state, "checkpoint_4", 800_000, 20, Map.of(), POLICY);
+        assertTrue(last.ok());
+        assertFalse(state.duty, "an emergency round quota ends the shift explicitly");
+        assertEquals("patrol_complete", state.lastEndReason);
     }
 
     @Test
@@ -173,13 +216,30 @@ class DutyEngineTest {
 
     @Test
     void patrolTimeCapEndsNormalDuty() {
-        GuardState state = juniorOnDuty();
+        StrajaPolicies route = new StrajaPolicies();
+        route.dutyRouteMode = "ROUTE";
+        GuardState state = new GuardState();
+        state.rank = Rank.STAGIAR.level();
+        state.invited = true;
+        state.quizPassed = true;
+        DutyEngine.startDuty(state, ROUTE, 0, Map.of(), route);
         state.dutyStartedAt = 0L;
         var result = DutyEngine.tickDuty(state,
-                POLICY.patrolMaxMinutes * DutyEngine.MINUTE_MS, 20, Map.of(), POLICY, null);
+                route.patrolMaxMinutes * DutyEngine.MINUTE_MS, 20, Map.of(), route, null);
         assertFalse(state.duty);
         assertEquals("patrol_time_cap", state.lastEndReason);
         assertTrue(result.events().stream().anyMatch(e -> e.type().equals("duty_ended")));
+    }
+
+    @Test
+    void freeBeatShiftIsABoundedPresencePeriod() {
+        GuardState state = juniorOnDuty(); // FREE_BEAT default
+        state.dutyStartedAt = 0L;
+        // Well past the route-mode patrol cap — a presence shift keeps going.
+        var result = DutyEngine.tickDuty(state,
+                (POLICY.patrolMaxMinutes + 5L) * DutyEngine.MINUTE_MS, 20, Map.of(), POLICY, null);
+        assertTrue(state.duty, "presence shifts end only on explicit paths");
+        assertFalse(result.events().stream().anyMatch(e -> e.type().equals("duty_ended")));
     }
 
     @Test
@@ -203,12 +263,63 @@ class DutyEngineTest {
 
     @Test
     void deadlineTimeoutEndsDuty() {
-        GuardState state = juniorOnDuty();
+        StrajaPolicies route = new StrajaPolicies();
+        route.dutyRouteMode = "ROUTE";
+        GuardState state = new GuardState();
+        state.rank = Rank.STAGIAR.level();
+        state.invited = true;
+        state.quizPassed = true;
+        DutyEngine.startDuty(state, ROUTE, 0, Map.of(), route);
         long deadline = state.deadlineAt;
-        var result = DutyEngine.tickDuty(state, deadline, 20, Map.of(), POLICY, null);
+        var result = DutyEngine.tickDuty(state, deadline, 20, Map.of(), route, null);
         assertFalse(state.duty);
         assertEquals("checkpoint_timeout", state.lastEndReason);
         assertTrue(result.events().stream().anyMatch(e -> e.type().equals("duty_ended")));
+    }
+
+    @Test
+    void freeBeatMissedCheckpointNeverEndsDuty() {
+        GuardState state = juniorOnDuty(); // POLICY defaults to FREE_BEAT
+        long deadline = state.deadlineAt;
+        var result = DutyEngine.tickDuty(state, deadline, 20, Map.of(), POLICY, null);
+        assertTrue(state.duty, "a missed beat is a reminder, not a termination");
+        assertNull(state.deadlineAt);
+        assertNull(state.lastEndReason);
+        assertTrue(result.events().stream().anyMatch(e -> e.type().equals("checkpoint_missed")));
+        assertFalse(result.events().stream().anyMatch(e -> e.type().equals("duty_ended")));
+        // The beat stays active — arriving late still registers presence.
+        var activation = DutyEngine.activateCheckpoint(state, ROUTE.get(0), deadline + 60_000,
+                20, Map.of(), POLICY);
+        assertTrue(activation.ok());
+    }
+
+    @Test
+    void responseCreditPaysMultiplierInsideWindowOnly() {
+        StrajaPolicies p = new StrajaPolicies();
+        p.dutyResponseMultiplier = 2.0;
+        GuardState state = juniorOnDuty();
+        state.responseCreditUntil = 5 * DutyEngine.MINUTE_MS;
+        // 10 minutes at Străjer 24/h: 5 base (2 coins) + 5 at 2× (4 coins) = 6
+        DutyEngine.accrue(state, 10 * DutyEngine.MINUTE_MS, 24, p);
+        assertEquals(6, state.unpaidSalary);
+    }
+
+    @Test
+    void expiredResponseCreditPaysBaseRate() {
+        StrajaPolicies p = new StrajaPolicies();
+        p.dutyResponseMultiplier = 2.0;
+        GuardState state = juniorOnDuty();
+        state.responseCreditUntil = 0L; // already expired before the shift
+        DutyEngine.accrue(state, 30 * DutyEngine.MINUTE_MS, 24, p);
+        assertEquals(12, state.unpaidSalary, "expired credit earns the plain base rate");
+    }
+
+    @Test
+    void endDutyClearsResponseCredit() {
+        GuardState state = juniorOnDuty();
+        state.responseCreditUntil = DutyEngine.MINUTE_MS * 60;
+        DutyEngine.endDuty(state, "voluntary_stop", 60_000, 20, POLICY);
+        assertNull(state.responseCreditUntil);
     }
 
     // ---------------------------------------------------------------- salary

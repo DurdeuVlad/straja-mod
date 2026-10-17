@@ -194,6 +194,9 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> PROMOTION_SERVICE_BLOCKS;
 
     public static final ModConfigSpec.IntValue FREE_DUTY_MIN_RANK;
+    public static final ModConfigSpec.ConfigValue<String> DUTY_ROUTE_MODE;
+    public static final ModConfigSpec.DoubleValue DUTY_RESPONSE_MULTIPLIER;
+    public static final ModConfigSpec.IntValue DUTY_RESPONSE_CREDIT_MINUTES;
     public static final ModConfigSpec.IntValue SECRETARY_RADIUS_BLOCKS;
     public static final ModConfigSpec.BooleanValue CAPTURE_DUTY_FACTION;
     public static final ModConfigSpec.ConfigValue<String> STRAJA_TEAM_NAME;
@@ -885,6 +888,19 @@ public final class StrajaServerConfig {
         STRAJA_TEAM_NAME = B.comment(
                         "Scoreboard team applied to on-duty guards.")
                 .define("strajaTeamName", defaults.strajaTeamName);
+        DUTY_ROUTE_MODE = B.comment(
+                        "ROUTE keeps the legacy checkpoint-deadline shift: missing",
+                        "a checkpoint window ends duty. FREE_BEAT (default) keeps the",
+                        "route as guidance only — a missed beat is a reminder, never",
+                        "a termination. Presence plus response work earns the wage.")
+                .define("routeMode", defaults.dutyRouteMode);
+        DUTY_RESPONSE_MULTIPLIER = B.comment(
+                        "Wage multiplier while a response credit is active.",
+                        "Accepting or joining another member's incident grants",
+                        "responseCreditMinutes minutes of multiplied pay.")
+                .defineInRange("responseMultiplier", defaults.dutyResponseMultiplier, 1.0, 10.0);
+        DUTY_RESPONSE_CREDIT_MINUTES = B.defineInRange("responseCreditMinutes",
+                defaults.dutyResponseCreditMinutes, 1, 240);
         B.pop();
 
         B.push("emergency");
@@ -1360,6 +1376,10 @@ public final class StrajaServerConfig {
         p.promotionServiceBlocks = mapOrDefault(StrajaPolicies.parseIntMap(PROMOTION_SERVICE_BLOCKS.get()),
                 defaults().promotionServiceBlocks);
         p.freeDutyMinRank = FREE_DUTY_MIN_RANK.get();
+        p.dutyRouteMode = "ROUTE".equalsIgnoreCase(String.valueOf(DUTY_ROUTE_MODE.get()))
+                ? "ROUTE" : "FREE_BEAT";
+        p.dutyResponseMultiplier = DUTY_RESPONSE_MULTIPLIER.get();
+        p.dutyResponseCreditMinutes = DUTY_RESPONSE_CREDIT_MINUTES.get();
         p.secretaryRadiusBlocks = SECRETARY_RADIUS_BLOCKS.get();
         p.captureDutyFaction = CAPTURE_DUTY_FACTION.get();
         p.strajaTeamName = STRAJA_TEAM_NAME.get();
