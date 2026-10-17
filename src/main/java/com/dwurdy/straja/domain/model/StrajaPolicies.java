@@ -358,6 +358,47 @@ public class StrajaPolicies {
     public double transferRiskMultiplier = 2.0;
     /** Bound on retained terminal rides; oldest are pruned on tick. */
     public int transferRetentionLimit = 50;
+
+    // FUN-9: escape paths — dig, pick, bribe, blend. Every path has a
+    // preparation stage a patrol or inspection can interrupt.
+    /** Swings to dig one tunnel block; each swing re-arms a cooldown. */
+    public int escapeDigClicks = 12;
+    /** Minimum ms between counted swings — autoclicking gains nothing. */
+    public int escapeDigCooldownMs = 1_500;
+    /** Block ids a prisoner can dig through inside a cell. */
+    public List<String> escapeTunnelBlocks = new ArrayList<>(List.of(
+            "minecraft:dirt", "minecraft:coarse_dirt", "minecraft:rooted_dirt",
+            "minecraft:gravel", "minecraft:sand", "minecraft:clay",
+            "minecraft:mud", "minecraft:suspicious_gravel"));
+    /** Seconds the lockpick channel takes — faster than tools, riskier. */
+    public int cellPickSeconds = 6;
+    /** Percent chance a non-WEAK lock jams on a completed pick. */
+    public int cellPickJamPercent = 35;
+    /** Minutes a jammed lock stays jammed before the mechanism frees. */
+    public int cellJammedMinutes = 20;
+    /** Minutes a picked lock stays open — shorter than a broken lock. */
+    public int cellPickOpenMinutes = 8;
+    /** Default price a declared corruptible post charges to look away. */
+    public int bribePostPrice = 64;
+    /** Reach of a bribe offer to a player guard / a declared post. */
+    public double bribeRadius = 6.0;
+    /** Seconds a bribed post unlocks the payer's cell door for. */
+    public int bribeDoorOpenSeconds = 90;
+    /** Offer expires without an answer — the prisoner keeps the coins. */
+    public int bribeOfferMs = 60_000;
+    /** Seconds a blending prisoner walks free before the alarm fires. */
+    public int blendGraceSeconds = 45;
+    /** Contraband item ids confiscated on inspection or detection. */
+    public List<String> contrabandItems = new ArrayList<>(List.of(
+            "straja:lockpick", "straja:bolt_cutters", "straja:crowbar",
+            "straja:guard_uniform"));
+    /** Minutes added to the digger's sentence when a tunnel is found. */
+    public int tunnelFoundPenaltyMinutes = 30;
+    /** Guard inspection reach — the cell door must be this close. */
+    public double inspectionRadius = 6.0;
+    /** Bound on retained tunnel records; oldest discovered are pruned. */
+    public int escapeRetentionLimit = 100;
+
     public int nativeFactionMaxLength = 40;
 
     // §11: activity reports — a reporting interval runs per member; overdue

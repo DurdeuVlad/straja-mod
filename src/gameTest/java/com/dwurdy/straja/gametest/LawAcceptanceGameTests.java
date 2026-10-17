@@ -1452,12 +1452,18 @@ public final class LawAcceptanceGameTests {
                     "the levy must physically drain the locker coins — left "
                             + leftInLocker);
             var diverted = runtime.context().prisonerRegister().read().prisoner(uuid);
+            // FUN-8: with a qualified member online the divert is a ride
+            // order — the debtor stays IN_CELL awaiting escort. The
+            // instant IN_CAMP claim is only the no-member fallback.
+            var ride = runtime.context().transfers().read().activeFor(uuid);
+            helper.assertTrue(ride != null && ride.isLive()
+                            && "at10_camp".equals(ride.destCampId),
+                    "onBlocked=CAMP must order a ride to the default camp — got "
+                            + (ride == null ? "no ride" : ride.status + "/" + ride.destCampId));
             helper.assertTrue(diverted != null
-                            && diverted.status == PrisonerStatus.IN_CAMP
-                            && "at10_camp".equals(diverted.assignedCampId),
-                    "onBlocked=CAMP must divert the debtor to the default camp — got "
-                            + (diverted == null ? "no record"
-                            : diverted.status + "/" + diverted.assignedCampId));
+                            && diverted.status == PrisonerStatus.IN_CELL,
+                    "the debtor waits in custody for the escort — got "
+                            + (diverted == null ? "no record" : diverted.status));
             var stillServing = runtime.context().prison().read().sentences.stream()
                     .filter(s -> uuid.equals(s.targetUuid)).findFirst().orElseThrow();
             helper.assertTrue("ACTIVE".equals(stillServing.status),

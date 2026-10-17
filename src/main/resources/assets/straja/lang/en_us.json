@@ -12,6 +12,8 @@
   "item.straja.cuff_key": "Cuff Key",
   "item.straja.cuffs": "Handcuffs",
   "item.straja.evidence_bag": "Evidence Bag",
+  "item.straja.lockpick": "Lockpick",
+  "item.straja.guard_uniform": "Guard Uniform",
   "item.straja.fine_book": "Fine Book",
   "item.straja.fine_notice": "Fine Notice",
   "item.straja.head_sack": "Head Sack",
@@ -1000,6 +1002,15 @@
   "straja.cell.tamper_tier": "The crowbar only opens weak locks — this cell needs bolt cutters.",
   "straja.cell.tamper_busy": "Someone is already working on that lock.",
   "straja.cell.tamper_guard": "A guard is too close — the lock cannot be forced quietly.",
+  "straja.cell.jammed": "The lock is jammed — it needs time or a tradesman to free it.",
+  "straja.escape.dig_guard": "A guard patrols too close — the digging would be heard.",
+  "straja.escape.bribe_not_jailed": "Only a prisoner in a cell can offer a bribe.",
+  "straja.escape.bribe_funds": "The bribe costs %s bronze — you cannot cover it.",
+  "straja.escape.bribe_none": "No corruptible post or guard within reach.",
+  "straja.escape.bribe_busy": "That guard is already weighing an offer.",
+  "straja.escape.bribe_expired": "No pending bribe offer to answer.",
+  "straja.escape.inspect_far": "No cell door within inspection reach.",
+  "straja.escape.bribe_no_cell": "There is no locked cell door to open for you.",
   "straja.manhunt.calloff_rank": "Only an officer or the Commissioner can call off a hunt.",
   "straja.manhunt.inactive": "That manhunt is not active anymore.",
   "straja.help.player.cmd.manhunt": "call off an active manhunt (officers)",
@@ -1014,5 +1025,7 @@
   "straja.zone.radius_invalid": "Radius must be between 4 and 512 blocks.",
   "straja.zone.unknown": "No risk zone with id %s.",
   "straja.remedy.dispatch": "Answer the call via /straja dispatch accept first.",
-  "straja.help.player.cmd.transfer": "transfer rides: status, join, pickup (members)"
+  "straja.help.player.cmd.transfer": "transfer rides: status, join, pickup (members)",
+  "straja.help.player.cmd.bribe": "offer a bribe to slip out (prisoners)",
+  "straja.help.player.cmd.search": "inspect the nearest cell: tunnels, locks, contraband (guards)"
 }

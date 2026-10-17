@@ -148,6 +148,37 @@ public final class StrajaCommands {
                         .zoneRemove(p, StringArgumentType.getString(c, "id"))))));
         root.then(zone);
 
+        // FUN-9: escape surfaces — the prisoner bribes, the guard searches
+        // the cell, and answers pending bribe offers.
+        var bribe = Commands.literal("bribe");
+        bribe.executes(c -> player(c, p -> StrajaRuntime.get().escapes().bribe(p)));
+        bribe.then(Commands.literal("accept")
+                .executes(c -> player(c, p -> StrajaRuntime.get().escapes().bribeAnswer(p, true))));
+        bribe.then(Commands.literal("decline")
+                .executes(c -> player(c, p -> StrajaRuntime.get().escapes().bribeAnswer(p, false))));
+        root.then(bribe);
+        root.then(Commands.literal("search")
+                .executes(c -> player(c, StrajaRuntime.get().escapes()::inspect)));
+        // FUN-9 admin: declared corruptible posts a prisoner can pay.
+        var post = adminOnly(Commands.literal("post"));
+        post.then(Commands.literal("list")
+                .executes(c -> player(c, StrajaRuntime.get().escapes()::postList)));
+        post.then(Commands.literal("add").then(Commands.argument("id", StringArgumentType.word())
+                .then(Commands.argument("price", IntegerArgumentType.integer(1))
+                        .executes(c -> player(c, p -> StrajaRuntime.get().escapes()
+                                .postAdd(p, StringArgumentType.getString(c, "id"),
+                                        IntegerArgumentType.getInteger(c, "price"),
+                                        6.0, "")))
+                        .then(Commands.argument("radius", IntegerArgumentType.integer(2, 64))
+                                .executes(c -> player(c, p -> StrajaRuntime.get().escapes()
+                                        .postAdd(p, StringArgumentType.getString(c, "id"),
+                                                IntegerArgumentType.getInteger(c, "price"),
+                                                IntegerArgumentType.getInteger(c, "radius"), "")))))));
+        post.then(Commands.literal("remove").then(Commands.argument("id", StringArgumentType.word())
+                .executes(c -> player(c, p -> StrajaRuntime.get().escapes()
+                        .postRemove(p, StringArgumentType.getString(c, "id"))))));
+        root.then(post);
+
         var special = adminOnly(Commands.literal("special"));
         special.then(Commands.literal("start").then(Commands.argument("player", EntityArgument.player())
                 .executes(c -> { StrajaRuntime.get().guards().specialStart(actor(c), target(c, "player")); return 1; })));
@@ -2592,6 +2623,8 @@ public final class StrajaCommands {
                 new PlayerHelpEntry("/straja dispatch", "straja.help.player.cmd.dispatch"),
                 new PlayerHelpEntry("/straja manhunt", "straja.help.player.cmd.manhunt"),
                 new PlayerHelpEntry("/straja transfer", "straja.help.player.cmd.transfer"),
+                new PlayerHelpEntry("/straja bribe", "straja.help.player.cmd.bribe"),
+                new PlayerHelpEntry("/straja search", "straja.help.player.cmd.search"),
                 new PlayerHelpEntry("/straja stop", "straja.help.player.cmd.stop"));
 
         /** Commands advertised by the player orientation — all must stay permission-0. */

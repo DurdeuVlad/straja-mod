@@ -59,6 +59,12 @@ public class MinecraftWorldGateway implements WorldGateway {
         }
     }
 
+    @Override public void removeBlock(String dimension, int x, int y, int z) {
+        ServerLevel level = level(dimension);
+        if (level == null) return;
+        level.removeBlock(new BlockPos(x, y, z), false);
+    }
+
     @Override public boolean setRoomSign(String dimension, int x, int y, int z, String facing,
                                        String line1, String line2, String line3) {
         ServerLevel level = level(dimension);
