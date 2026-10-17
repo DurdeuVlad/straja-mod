@@ -655,6 +655,7 @@
   "straja.help.player.cmd.rules": "regulamentul serverului",
   "straja.help.player.cmd.status": "starea și rangul tău",
   "straja.help.player.cmd.stop": "încheie serviciul",
+  "straja.help.player.cmd.dispatch": "tabloul de dispecerat — răspunde unui apel",
   "straja.help.player.faq": "Ai întrebări? Fiecare NPC Straja are meniul «Am o întrebare».",
   "straja.help.player.first_step": "Primul pas: mergi la Recepție și apasă «Depune cererea».",
   "straja.help.player.intro": "Straja este forța de ordine a serverului — recrutează membri, patrulează și rezolvă incidente.",
@@ -687,6 +688,10 @@
   "straja.incident.fields_required": "Incidentul trebuie să aibă titlu și descriere.",
   "straja.incident.inactive": "Incidentul nu mai este activ.",
   "straja.incident.max_supporters": "Incidentul are deja numărul maxim de sprijinitori.",
+  "straja.dispatch.inactive": "Apelul nu mai este deschis.",
+  "straja.dispatch.band": "Apelul este adresat altei categorii de rang în acest moment.",
+  "straja.dispatch.dimension": "Apelul este în altă dimensiune.",
+  "straja.dispatch.self_subject": "Tu ești subiectul acelui apel.",
   "straja.incident.rate_limited": "Ai raportat deja un incident recent. Așteaptă înainte de a trimite altul.",
   "straja.incident.whistle_cooldown": "Fluierul se reîncarcă. Mai așteaptă %s secunde.",
   "straja.incident.whistle_duty": "Fluierul poate fi folosit doar în timpul serviciului.",
@@ -989,5 +994,6 @@
   "straja.join.refused": "Cererea de muncă nu a putut fi depusă.",
   "straja.petition.gone": "Cererea respectivă nu mai așteaptă o decizie.",
   "straja.petition.bad_decision": "Decizie necunoscută — scrie aproba sau respinge.",
-  "straja.petition.denied": "Nu poți decide această cerere."
+  "straja.petition.denied": "Nu poți decide această cerere.",
+  "straja.remedy.travel": "Deplasează-te mai întâi în dimensiunea apelului."
 }

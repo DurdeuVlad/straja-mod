@@ -44,6 +44,11 @@ public final class PolicyRegistry {
         k("duty.routeMode", "dutyRouteMode", Kind.STRING);
         k("duty.responseMultiplier", "dutyResponseMultiplier", Kind.DOUBLE);
         k("duty.responseCreditMinutes", "dutyResponseCreditMinutes", Kind.INT);
+        k("dispatch.pushMinSeverity", "dispatchPushMinSeverity", Kind.STRING);
+        k("dispatch.callTtlMinutes", "dispatchCallTtlMinutes", Kind.INT);
+        k("dispatch.maxPushTargets", "dispatchMaxPushTargets", Kind.INT);
+        k("dispatch.retentionLimit", "dispatchRetentionLimit", Kind.INT);
+        k("dispatch.enlistedMaxRank", "dispatchEnlistedMaxRank", Kind.INT);
         k("timers.foodCooldownMinutes", "foodCooldownMinutes", Kind.INT);
         k("timers.quizCooldownMinutes", "quizCooldownMinutes", Kind.INT);
         k("timers.resignationCooldownDays", "resignationCooldownDays", Kind.INT);

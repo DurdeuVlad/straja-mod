@@ -197,6 +197,11 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.ConfigValue<String> DUTY_ROUTE_MODE;
     public static final ModConfigSpec.DoubleValue DUTY_RESPONSE_MULTIPLIER;
     public static final ModConfigSpec.IntValue DUTY_RESPONSE_CREDIT_MINUTES;
+    public static final ModConfigSpec.ConfigValue<String> DISPATCH_PUSH_MIN_SEVERITY;
+    public static final ModConfigSpec.IntValue DISPATCH_CALL_TTL_MINUTES;
+    public static final ModConfigSpec.IntValue DISPATCH_MAX_PUSH_TARGETS;
+    public static final ModConfigSpec.IntValue DISPATCH_ENLISTED_MAX_RANK;
+    public static final ModConfigSpec.IntValue DISPATCH_RETENTION_LIMIT;
     public static final ModConfigSpec.IntValue SECRETARY_RADIUS_BLOCKS;
     public static final ModConfigSpec.BooleanValue CAPTURE_DUTY_FACTION;
     public static final ModConfigSpec.ConfigValue<String> STRAJA_TEAM_NAME;
@@ -903,6 +908,31 @@ public final class StrajaServerConfig {
                 defaults.dutyResponseCreditMinutes, 1, 240);
         B.pop();
 
+        B.push("dispatch");
+        DISPATCH_PUSH_MIN_SEVERITY = B.comment(
+                        "Calls at or above this severity push to on-duty members:",
+                        "URGENT (default) or ROUTINE. Below the threshold calls",
+                        "queue on the dispatch board instead of pushing.")
+                .define("pushMinSeverity", defaults.dispatchPushMinSeverity);
+        DISPATCH_CALL_TTL_MINUTES = B.comment(
+                        "Minutes a call stays answerable at each rank band before",
+                        "it widens; an ALL-band expiry retires the call unanswered.")
+                .defineInRange("callTtlMinutes", defaults.dispatchCallTtlMinutes, 1, 1440);
+        DISPATCH_MAX_PUSH_TARGETS = B.comment(
+                        "Bound on how many on-duty members a call pushes to",
+                        "at once — nearest first.")
+                .defineInRange("maxPushTargets", defaults.dispatchMaxPushTargets, 1, 64);
+        DISPATCH_ENLISTED_MAX_RANK = B.comment(
+                        "ENLISTED-band calls push to members at or below this",
+                        "rank level (1=Stagiar, 2=Străjer).")
+                .defineInRange("enlistedMaxRank", defaults.dispatchEnlistedMaxRank, 1,
+                        com.dwurdy.straja.domain.model.Rank.COLONEL.level());
+        DISPATCH_RETENTION_LIMIT = B.comment(
+                        "How many closed/expired calls are retained before the",
+                        "oldest terminal records are pruned on tick.")
+                .defineInRange("retentionLimit", defaults.dispatchRetentionLimit, 10, 10000);
+        B.pop();
+
         B.push("emergency");
         EMERGENCY_URGENCY_TTL = B.comment(
                         "Minutes an urgency call stays live; members logging in while",
@@ -1380,6 +1410,12 @@ public final class StrajaServerConfig {
                 ? "ROUTE" : "FREE_BEAT";
         p.dutyResponseMultiplier = DUTY_RESPONSE_MULTIPLIER.get();
         p.dutyResponseCreditMinutes = DUTY_RESPONSE_CREDIT_MINUTES.get();
+        p.dispatchPushMinSeverity = "ROUTINE".equalsIgnoreCase(String.valueOf(DISPATCH_PUSH_MIN_SEVERITY.get()))
+                ? "ROUTINE" : "URGENT";
+        p.dispatchCallTtlMinutes = DISPATCH_CALL_TTL_MINUTES.get();
+        p.dispatchMaxPushTargets = DISPATCH_MAX_PUSH_TARGETS.get();
+        p.dispatchEnlistedMaxRank = DISPATCH_ENLISTED_MAX_RANK.get();
+        p.dispatchRetentionLimit = DISPATCH_RETENTION_LIMIT.get();
         p.secretaryRadiusBlocks = SECRETARY_RADIUS_BLOCKS.get();
         p.captureDutyFaction = CAPTURE_DUTY_FACTION.get();
         p.strajaTeamName = STRAJA_TEAM_NAME.get();

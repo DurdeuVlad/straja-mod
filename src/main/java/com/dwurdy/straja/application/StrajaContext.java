@@ -37,6 +37,7 @@ public record StrajaContext(
         AdminToolRepository adminTools,
         IdentityCardRepository identityCards,
         IncidentRepository incidents,
+        DispatchRepository dispatch,
         BoloRepository bolos,
         BountyRepository bounties,
         EvidenceRepository evidence,

@@ -23,12 +23,16 @@ public final class IncidentService {
     private final StrajaContext ctx;
     private final PlayerService players;
     private final AuditService audit;
+    private DispatchService dispatch; // FUN-6: every created incident raises a call
 
     public IncidentService(StrajaContext ctx, PlayerService players, AuditService audit) {
         this.ctx = ctx;
         this.players = players;
         this.audit = audit;
     }
+
+    /** FUN-6 wiring — set post-construction by the runtime. */
+    public void useDispatch(DispatchService dispatch) { this.dispatch = dispatch; }
 
     private long now() { return ctx.clock().nowMillis(); }
 
@@ -241,6 +245,21 @@ public final class IncidentService {
         data.incidents.add(incident);
         audit.record(AuditActions.INCIDENT_CREATE, incident.createdByName, incident.createdByUuid,
                 incident.id, "", AuditResults.SUCCESS, incident.source);
+        if (dispatch != null) {
+            // FUN-6: the offense event becomes a routed call. URGENT incidents
+            // push; routine work queues on the board.
+            try {
+                dispatch.raise(DispatchService.SOURCE_INCIDENT, incident.id,
+                        incident.title, incident.description, incident.dimension,
+                        incident.x, incident.y, incident.z, incident.placeLabel,
+                        incident.subjectUuid, incident.subjectName,
+                        incident.createdByUuid,
+                        incident.priority == IncidentPriority.URGENT ? "URGENT" : "ROUTINE",
+                        "ENLISTED");
+            } catch (RuntimeException e) {
+                // Dispatch is a notification layer — it must never drop the incident.
+            }
+        }
         return incident;
     }
 
@@ -404,6 +423,7 @@ public final class IncidentService {
         ctx.incidents().write(data);
         audit.record(AuditActions.INCIDENT_RESOLVE, guard.name(), key, incident.id, "", AuditResults.SUCCESS,
                 code.name());
+        if (dispatch != null) dispatch.closeForSource(DispatchService.SOURCE_INCIDENT, incident.id, code.name());
         guard.tell("Incidentul " + incident.id + " a fost încheiat.");
         return true;
     }
@@ -450,6 +470,8 @@ public final class IncidentService {
                 incident.resolution = IncidentResolution.OTHER;
                 changed = true;
                 audit.record(AuditActions.INCIDENT_EXPIRE, "system", "", incident.id, "", AuditResults.SUCCESS, "");
+                if (dispatch != null)
+                    dispatch.closeForSource(DispatchService.SOURCE_INCIDENT, incident.id, "expired");
             }
         }
         if (changed) ctx.incidents().write(data);
