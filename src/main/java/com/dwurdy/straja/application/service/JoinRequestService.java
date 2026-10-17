@@ -10,6 +10,8 @@ import com.dwurdy.straja.domain.model.JoinRequestStore;
 import com.dwurdy.straja.domain.model.PersonnelRecord;
 import com.dwurdy.straja.domain.model.PersonnelStatus;
 import com.dwurdy.straja.domain.model.Text;
+import com.dwurdy.straja.domain.model.AuditActions;
+import com.dwurdy.straja.domain.model.AuditResults;
 
 /**
  * Petition-gated entry into the trades: a civilian files a work petition at
@@ -26,7 +28,7 @@ public final class JoinRequestService implements com.dwurdy.straja.application.p
     private final java.util.function.Supplier<java.util.Set<String>> professions;
     private final Clock clock;
     private final IdGenerator ids;
-    private AuditService audit;
+    private AuditService audit = AuditService.NONE;
 
     public JoinRequestService(JoinRequestRepository requests, PersonnelService personnel,
                               AuthorizationService authorization,
@@ -40,9 +42,9 @@ public final class JoinRequestService implements com.dwurdy.straja.application.p
         this.ids = ids;
     }
 
-    /** Installed by the composition root; absent in unit compatibility contexts. */
+    /** Installed by the composition root; {@link AuditService#NONE} in unit contexts. */
     public void useAuditService(AuditService audit) {
-        this.audit = audit;
+        this.audit = audit == null ? AuditService.NONE : audit;
     }
 
     @Override
@@ -74,11 +76,9 @@ public final class JoinRequestService implements com.dwurdy.straja.application.p
             open.version++;
             store.storeRevision++;
             requests.write(store);
-            if (audit != null) {
-                audit.record("join_request", subjectUuid, subjectUuid,
-                        open.requestId, subjectUuid, "SUCCESS",
-                        "updated profession=" + normalizedProfession);
-            }
+            audit.record(AuditActions.JOIN_REQUEST, subjectUuid, subjectUuid,
+                    open.requestId, subjectUuid, AuditResults.SUCCESS,
+                    "updated profession=" + normalizedProfession);
             return open;
         }
         JoinRequest request = new JoinRequest();
@@ -90,11 +90,9 @@ public final class JoinRequestService implements com.dwurdy.straja.application.p
         store.requests.put(request.requestId, request);
         store.storeRevision++;
         requests.write(store);
-        if (audit != null) {
-            audit.record("join_request", subjectUuid, subjectUuid,
-                    request.requestId, subjectUuid, "SUCCESS",
-                    "filed profession=" + normalizedProfession);
-        }
+        audit.record(AuditActions.JOIN_REQUEST, subjectUuid, subjectUuid,
+                request.requestId, subjectUuid, AuditResults.SUCCESS,
+                "filed profession=" + normalizedProfession);
         return request;
     }
 
@@ -138,11 +136,9 @@ public final class JoinRequestService implements com.dwurdy.straja.application.p
         persisted.version++;
         store.storeRevision++;
         requests.write(store);
-        if (audit != null) {
-            audit.record("join_request_review", actorUuid, actorUuid,
-                    persisted.requestId, persisted.subjectUuid, "APPROVED",
-                    "profession=" + persisted.profession);
-        }
+        audit.record(AuditActions.JOIN_REQUEST_REVIEW, actorUuid, actorUuid,
+                persisted.requestId, persisted.subjectUuid, AuditResults.APPROVED,
+                "profession=" + persisted.profession);
         return persisted;
     }
 
@@ -159,11 +155,9 @@ public final class JoinRequestService implements com.dwurdy.straja.application.p
         persisted.version++;
         store.storeRevision++;
         requests.write(store);
-        if (audit != null) {
-            audit.record("join_request_review", actorUuid, actorUuid,
-                    persisted.requestId, persisted.subjectUuid, "REJECTED",
-                    persisted.decisionReason);
-        }
+        audit.record(AuditActions.JOIN_REQUEST_REVIEW, actorUuid, actorUuid,
+                persisted.requestId, persisted.subjectUuid, AuditResults.REJECTED,
+                persisted.decisionReason);
         return persisted;
     }
 

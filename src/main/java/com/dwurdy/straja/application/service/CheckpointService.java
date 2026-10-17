@@ -21,6 +21,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import com.dwurdy.straja.domain.model.AuditActions;
+import com.dwurdy.straja.domain.model.AuditResults;
 
 /**
  * LAW-002 checkpoint core: port of the prototype's 5-tick crossing scan
@@ -481,7 +483,7 @@ public final class CheckpointService {
         playSound(p, DENY_SOUND);
         ledger(site, p, CrossingDirection.INCOMING, CrossingOutcome.DENY,
                 snapshot, found, "sens interzis la poartă");
-        audit.record("checkpoint_deny", "checkpoint", "", p.name(), p.uuid().toString(),
+        audit.record(AuditActions.CHECKPOINT_DENY, "checkpoint", "", p.name(), p.uuid().toString(),
                 "DENY", "wrong-way " + site.id);
     }
 
@@ -752,8 +754,8 @@ public final class CheckpointService {
                     : f.item().data(com.dwurdy.straja.application.service.ArtifactRegistryService.SERIAL_KEY).isBlank()
                             ? f.item().data(com.dwurdy.straja.application.service.ArtifactRegistryService.MARK_KEY)
                             : f.item().data(com.dwurdy.straja.application.service.ArtifactRegistryService.SERIAL_KEY);
-            audit.record("forgery_detected", "checkpoint", "", p.name(),
-                    p.uuid().toString(), "SUCCESS",
+            audit.record(AuditActions.FORGERY_DETECTED, "checkpoint", "", p.name(),
+                    p.uuid().toString(), AuditResults.SUCCESS,
                     "site=" + site.id + " offense=" + f.offense()
                             + " item=" + (f.item() == null ? "" : f.item().itemId)
                             + " verdict=" + f.verdict()
@@ -817,7 +819,7 @@ public final class CheckpointService {
                 "arrested");
 
         ledger(site, p, dir, CrossingOutcome.ARREST, snapshot, found, reason);
-        audit.record("checkpoint_arrest", "checkpoint", "", p.name(), uuid, "ARREST", reason);
+        audit.record(AuditActions.CHECKPOINT_ARREST, "checkpoint", "", p.name(), uuid, "ARREST", reason);
         p.title("straja.checkpoint.arrest_title", "straja.checkpoint.arrest_sub");
         playSound(p, DENY_SOUND);
         return true;
@@ -1143,8 +1145,8 @@ public final class CheckpointService {
         if (target == null || target.uuid() == null) return false;
         boolean flagged = bolos.flagSystem(target.uuid().toString(), target.name(),
                 "marcat agresiv la punctul de control") != null;
-        audit.record("checkpoint_aggressive", "checkpoint", "", target.name(),
-                target.uuid().toString(), flagged ? "WANTED" : "REFUSED", "legacy aggressive");
+        audit.record(AuditActions.CHECKPOINT_AGGRESSIVE, "checkpoint", "", target.name(),
+                target.uuid().toString(), flagged ? "WANTED" : AuditResults.REFUSED, "legacy aggressive");
         return flagged;
     }
 
@@ -1208,7 +1210,7 @@ public final class CheckpointService {
     }
 
     private void policy(PlayerGateway admin, String scope, String what) {
-        audit.record("checkpoint_policy", "checkpoint", "", admin.name(),
+        audit.record(AuditActions.CHECKPOINT_POLICY, "checkpoint", "", admin.name(),
                 admin.uuid().toString(), "POLICY", scope + " " + what);
         admin.tellKey("straja.checkpoint.policy_set", scope, what);
     }

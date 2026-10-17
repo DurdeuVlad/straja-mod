@@ -21,6 +21,8 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import com.dwurdy.straja.domain.model.AuditActions;
+import com.dwurdy.straja.domain.model.AuditResults;
 
 /**
  * Migrates persistent state from the legacy KubeJS implementation. Input is a
@@ -95,8 +97,8 @@ public final class MigrationService {
         errors += migrateLawEnforcement(data, lines);
         migrateCommissionerHint(data, lines);
 
-        audit.record("kubejs_migration", "migration", null, null, null,
-                errors == 0 ? "SUCCESS" : "PARTIAL", String.join(" | ", lines));
+        audit.record(AuditActions.KUBEJS_MIGRATION, "migration", null, null, null,
+                errors == 0 ? AuditResults.SUCCESS : "PARTIAL", String.join(" | ", lines));
         return new Report(lines, errors);
     }
 

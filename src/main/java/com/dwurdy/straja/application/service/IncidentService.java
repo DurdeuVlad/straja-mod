@@ -14,6 +14,8 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import com.dwurdy.straja.domain.model.AuditActions;
+import com.dwurdy.straja.domain.model.AuditResults;
 
 /** Operational dispatch lifecycle. Missions intentionally remain separate. */
 public final class IncidentService {
@@ -67,7 +69,7 @@ public final class IncidentService {
         long last = data.lastCitizenReportAt.getOrDefault(key, 0L);
         if (last > 0 && now() - last < ctx.policies().incidentCitizenReportCooldownSeconds * SECOND) {
             citizen.refuse("straja.incident.rate_limited", "straja.remedy.wait");
-            audit.record("incident_create", citizen.name(), key, "", "", "REFUSED", "cooldown");
+            audit.record(AuditActions.INCIDENT_CREATE, citizen.name(), key, "", "", AuditResults.REFUSED, "cooldown");
             return null;
         }
         long active = data.incidents.stream()
@@ -77,7 +79,7 @@ public final class IncidentService {
                 .count();
         if (active >= ctx.policies().incidentMaxActiveCitizenReports) {
             citizen.refuse("straja.incident.active_limit", "straja.remedy.wait");
-            audit.record("incident_create", citizen.name(), key, "", "", "REFUSED", "active_limit");
+            audit.record(AuditActions.INCIDENT_CREATE, citizen.name(), key, "", "", AuditResults.REFUSED, "active_limit");
             return null;
         }
         Incident incident = create(data, citizen, IncidentType.CITIZEN_REPORT,
@@ -93,7 +95,7 @@ public final class IncidentService {
         if (guard == null || !enabled(guard) || !ctx.policies().whistleEnabled) return null;
         if (!players.isOnDutyGuard(guard)) {
             guard.refuse("straja.incident.whistle_duty", "straja.remedy.duty");
-            audit.record("whistle", guard.name(), uuid(guard), "", "", "REFUSED", "not_on_duty");
+            audit.record(AuditActions.WHISTLE, guard.name(), uuid(guard), "", "", AuditResults.REFUSED, "not_on_duty");
             return null;
         }
         IncidentStore data = store();
@@ -102,7 +104,7 @@ public final class IncidentService {
         long cooldown = ctx.policies().whistleCooldownSeconds * SECOND;
         if (last > 0 && now() - last < cooldown) {
             guard.refuse("straja.incident.whistle_cooldown", "straja.remedy.wait", Math.max(1, (cooldown - (now() - last)) / SECOND));
-            audit.record("whistle", guard.name(), key, "", "", "REFUSED", "cooldown");
+            audit.record(AuditActions.WHISTLE, guard.name(), key, "", "", AuditResults.REFUSED, "cooldown");
             return null;
         }
         Incident existing = data.incidents.stream()
@@ -117,7 +119,7 @@ public final class IncidentService {
             data.lastWhistleAt.put(key, now());
             ctx.incidents().write(data);
             notifyUrgent(existing);
-            audit.record("whistle", guard.name(), key, existing.id, "", "SUCCESS", "refreshed");
+            audit.record(AuditActions.WHISTLE, guard.name(), key, existing.id, "", AuditResults.SUCCESS, "refreshed");
             guard.tell("Cererea " + existing.id + " a fost reîmprospătată.");
             return existing;
         }
@@ -130,7 +132,7 @@ public final class IncidentService {
         notifyUrgent(incident);
         ctx.world().playSoundAt(guard.dimension(), guard.x(), guard.y(), guard.z(),
                 ctx.policies().whistleSoundRadius, "minecraft:block.note_block.bell");
-        audit.record("whistle", guard.name(), key, incident.id, "", "SUCCESS", "created");
+        audit.record(AuditActions.WHISTLE, guard.name(), key, incident.id, "", AuditResults.SUCCESS, "created");
         guard.tell("Ai solicitat ajutor: " + incident.id + ".");
         return incident;
     }
@@ -202,8 +204,8 @@ public final class IncidentService {
         String cleanDescription = clean(description, ctx.policies().incidentMaxDescriptionLength);
         if (cleanTitle.isBlank() || cleanDescription.isBlank()) {
             if (creator != null) creator.refuse("straja.incident.fields_required", "straja.remedy.fix_retry");
-            if (creator != null) audit.record("incident_create", creator.name(), uuid(creator),
-                    "", "", "REFUSED", "invalid_text");
+            if (creator != null) audit.record(AuditActions.INCIDENT_CREATE, creator.name(), uuid(creator),
+                    "", "", AuditResults.REFUSED, "invalid_text");
             return null;
         }
         Incident incident = new Incident();
@@ -223,8 +225,8 @@ public final class IncidentService {
             incident.subjectName = subject.name();
         }
         data.incidents.add(incident);
-        audit.record("incident_create", incident.createdByName, incident.createdByUuid,
-                incident.id, "", "SUCCESS", incident.source);
+        audit.record(AuditActions.INCIDENT_CREATE, incident.createdByName, incident.createdByUuid,
+                incident.id, "", AuditResults.SUCCESS, incident.source);
         return incident;
     }
 
@@ -299,7 +301,7 @@ public final class IncidentService {
         incident.acceptedAt = now();
         incident.status = IncidentStatus.ASSIGNED;
         ctx.incidents().write(data);
-        audit.record("incident_accept", guard.name(), uuid(guard), incident.id, "", "SUCCESS", "");
+        audit.record(AuditActions.INCIDENT_ACCEPT, guard.name(), uuid(guard), incident.id, "", AuditResults.SUCCESS, "");
         guard.tell("Ai preluat " + incident.id + ".");
         return true;
     }
@@ -323,7 +325,7 @@ public final class IncidentService {
         incident.supportingGuardNames.add(guard.name());
         if (incident.status == IncidentStatus.OPEN) incident.status = IncidentStatus.ASSIGNED;
         ctx.incidents().write(data);
-        audit.record("incident_join", guard.name(), key, incident.id, "", "SUCCESS", "");
+        audit.record(AuditActions.INCIDENT_JOIN, guard.name(), key, incident.id, "", AuditResults.SUCCESS, "");
         guard.tell("Te-ai alăturat incidentului " + incident.id + ".");
         return true;
     }
@@ -349,7 +351,7 @@ public final class IncidentService {
             if (index < incident.supportingGuardNames.size()) incident.supportingGuardNames.remove(index);
         }
         ctx.incidents().write(data);
-        audit.record("incident_leave", guard.name(), key, incident.id, "", "SUCCESS", "");
+        audit.record(AuditActions.INCIDENT_LEAVE, guard.name(), key, incident.id, "", AuditResults.SUCCESS, "");
         return true;
     }
 
@@ -382,7 +384,7 @@ public final class IncidentService {
         incident.resolutionNotes = clean(notes, ctx.policies().incidentMaxDescriptionLength);
         incident.resolvedAt = now();
         ctx.incidents().write(data);
-        audit.record("incident_resolve", guard.name(), key, incident.id, "", "SUCCESS",
+        audit.record(AuditActions.INCIDENT_RESOLVE, guard.name(), key, incident.id, "", AuditResults.SUCCESS,
                 code.name());
         guard.tell("Incidentul " + incident.id + " a fost încheiat.");
         return true;
@@ -414,7 +416,7 @@ public final class IncidentService {
         }
         if (changed) {
             ctx.incidents().write(data);
-            audit.record("incident_assignment_removed", "system", "", key, "", "SUCCESS",
+            audit.record(AuditActions.INCIDENT_ASSIGNMENT_REMOVED, "system", "", key, "", AuditResults.SUCCESS,
                     reason == null ? "" : reason);
         }
     }
@@ -429,7 +431,7 @@ public final class IncidentService {
                 incident.resolvedAt = now();
                 incident.resolution = IncidentResolution.OTHER;
                 changed = true;
-                audit.record("incident_expire", "system", "", incident.id, "", "SUCCESS", "");
+                audit.record(AuditActions.INCIDENT_EXPIRE, "system", "", incident.id, "", AuditResults.SUCCESS, "");
             }
         }
         if (changed) ctx.incidents().write(data);

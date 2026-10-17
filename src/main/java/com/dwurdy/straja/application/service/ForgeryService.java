@@ -10,6 +10,8 @@ import com.dwurdy.straja.domain.model.ForgeryMarking.MarkClass;
 import com.dwurdy.straja.domain.model.ForgeryTier;
 import com.dwurdy.straja.domain.model.StrajaPolicies;
 import java.util.List;
+import com.dwurdy.straja.domain.model.AuditActions;
+import com.dwurdy.straja.domain.model.AuditResults;
 
 /**
  * #247 / #245 M2 — the black-market forging engine. Unlicensed attempts to
@@ -89,8 +91,8 @@ public class ForgeryService {
         String claimed = ForgeryMarking.claimedSerialFor(marking);
         ArtifactRecord shadow = registry.recordForgery(actor, itemId,
                 marking, claimed, tier);
-        audit.record("artifact_forge", actor.name(), uuid(actor),
-                actor.name(), uuid(actor), "SUCCESS",
+        audit.record(AuditActions.ARTIFACT_FORGE, actor.name(), uuid(actor),
+                actor.name(), uuid(actor), AuditResults.SUCCESS,
                 "tier=" + tier.name() + " marking=" + marking
                         + " claimed=" + claimed + " item=" + itemId
                         + " shadow=" + shadow.serial);

@@ -6,6 +6,8 @@ import com.dwurdy.straja.application.port.out.IdGenerator;
 import com.dwurdy.straja.domain.model.Complaint;
 import com.dwurdy.straja.domain.model.ComplaintStore;
 import java.util.function.Predicate;
+import com.dwurdy.straja.domain.model.AuditActions;
+import com.dwurdy.straja.domain.model.AuditResults;
 
 /** Time-based complaint escalation independent of loaded NPCs or player login. */
 public final class ComplaintEscalationService {
@@ -16,7 +18,7 @@ public final class ComplaintEscalationService {
     private final Predicate<String> inspectorAvailable;
     private final java.util.function.Function<String, String> inspectorResolver;
     private final long defaultSlaMillis;
-    private AuditService audit;
+    private AuditService audit = AuditService.NONE;
 
     public ComplaintEscalationService(ComplaintRepository repository, Clock clock, IdGenerator ids,
                                       Predicate<String> inspectorAvailable) {
@@ -48,7 +50,7 @@ public final class ComplaintEscalationService {
     }
 
     public void useAuditService(AuditService audit) {
-        this.audit = audit;
+        this.audit = audit == null ? AuditService.NONE : audit;
     }
 
     public synchronized Complaint assignDeadline(String complaintId, long slaMillis) {
@@ -70,7 +72,7 @@ public final class ComplaintEscalationService {
 
     public synchronized int escalateDue(String commissionerUuid, String jurisdiction) {
         ComplaintStore store = repository.read(); int changed = 0; long now = clock.nowMillis();
-        for (Complaint complaint : store.complaints) {
+        for (Complaint complaint : store.ensureComplaints()) {
             if (complaint == null || !complaint.isOpen()) continue;
             if (complaint.originalDeadline == null) complaint.originalDeadline = complaint.createdAt + defaultSlaMillis;
             long deadline = complaint.deadlineExtensions == null || complaint.deadlineExtensions.isEmpty()
@@ -86,11 +88,9 @@ public final class ComplaintEscalationService {
             complaint.escalationTargetUuid = inspector == null || inspector.isBlank() ? commissionerUuid : inspector;
             complaint.status = "ESCALATED";
             complaint.version++; changed++;
-            if (audit != null) {
-                audit.record("complaint_escalation", "SYSTEM", "SYSTEM", complaint.id,
-                        complaint.accusedUuid, "SUCCESS",
-                        "target=" + complaint.escalationTargetUuid + ", mission=" + complaint.investigationMissionId);
-            }
+            audit.record(AuditActions.COMPLAINT_ESCALATION, "SYSTEM", "SYSTEM", complaint.id,
+                    complaint.accusedUuid, AuditResults.SUCCESS,
+                    "target=" + complaint.escalationTargetUuid + ", mission=" + complaint.investigationMissionId);
         }
         if (changed > 0) storeWrite(store); return changed;
     }

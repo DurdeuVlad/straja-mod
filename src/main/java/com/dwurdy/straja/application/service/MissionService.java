@@ -22,6 +22,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import com.dwurdy.straja.domain.model.Text;
+import com.dwurdy.straja.domain.model.AuditActions;
+import com.dwurdy.straja.domain.model.AuditResults;
 
 /**
  * Mission lifecycle — a structural port of the reference mission subsystem:
@@ -539,7 +541,7 @@ public class MissionService implements MissionRoleplayUseCase {
                     player.refuse("straja.mission.reward_over_limit", "straja.remedy.fix_retry", limit);
                     return;
                 }
-                audit.record("mission_reward_override", player.name(),
+                audit.record(AuditActions.MISSION_REWARD_OVERRIDE, player.name(),
                         player.uuid() == null ? "" : player.uuid().toString(),
                         draft.templateId, "", "OVERRIDDEN",
                         "calculated=" + calculated + " requested=" + explicit
@@ -620,7 +622,7 @@ public class MissionService implements MissionRoleplayUseCase {
         t.createdAt = t.updatedAt = now();
         store.templates.put(t.id, t);
         ctx.missionTemplates().write(store);
-        audit.record("mission_template_create", player.name(),
+        audit.record(AuditActions.MISSION_TEMPLATE_CREATE, player.name(),
                 player.uuid() == null ? "" : player.uuid().toString(), t.id, "", "CREATED", t.name);
         player.tell("Șablon " + t.id + " „" + t.name + "” creat — " + calculatedReward(t)
                 + " B/participant la salariul curent.");
@@ -690,7 +692,7 @@ public class MissionService implements MissionRoleplayUseCase {
         }
         t.updatedAt = now();
         ctx.missionTemplates().write(store);
-        audit.record("mission_template_set", player.name(),
+        audit.record(AuditActions.MISSION_TEMPLATE_SET, player.name(),
                 player.uuid() == null ? "" : player.uuid().toString(), t.id, "", "UPDATED",
                 f + "=" + v);
         player.tell(t.id + " actualizat (" + f + "). Recompensa curentă: " + calculatedReward(t) + " B/participant.");
@@ -718,7 +720,7 @@ public class MissionService implements MissionRoleplayUseCase {
         t.createdAt = t.updatedAt = now();
         store.templates.put(t.id, t);
         ctx.missionTemplates().write(store);
-        audit.record("mission_template_duplicate", player.name(),
+        audit.record(AuditActions.MISSION_TEMPLATE_DUPLICATE, player.name(),
                 player.uuid() == null ? "" : player.uuid().toString(), t.id, "", "DUPLICATED",
                 "from=" + src.id);
         player.tell("Copiat în " + t.id + " (dezactivat — activează-l după ajustări).");
@@ -735,7 +737,7 @@ public class MissionService implements MissionRoleplayUseCase {
         t.enabled = enabled;
         t.updatedAt = now();
         ctx.missionTemplates().write(store);
-        audit.record("mission_template_enable", player.name(),
+        audit.record(AuditActions.MISSION_TEMPLATE_ENABLE, player.name(),
                 player.uuid() == null ? "" : player.uuid().toString(), t.id, "",
                 enabled ? "ENABLED" : "DISABLED", t.name);
         player.tell(t.id + " „" + t.name + "” " + (enabled ? "activat" : "dezactivat") + ".");
@@ -846,9 +848,9 @@ public class MissionService implements MissionRoleplayUseCase {
         var delivery = deliver(issuer, target, mission);
         mission.delivery = delivery.mode().name();
         ctx.missions().write(store);
-        audit.record("mission_create_quick", issuer.name(), mission.issuerUuid,
+        audit.record(AuditActions.MISSION_CREATE_QUICK, issuer.name(), mission.issuerUuid,
                 target.name(), mission.targetUuid,
-                delivery.succeeded() ? "SUCCESS" : "FAILED", delivery.mode().name() + " missionId=" + mission.id);
+                delivery.succeeded() ? AuditResults.SUCCESS : "FAILED", delivery.mode().name() + " missionId=" + mission.id);
 
         if (!delivery.succeeded()) {
             releaseIssuerBudget(store, mission);
@@ -998,7 +1000,7 @@ public class MissionService implements MissionRoleplayUseCase {
             mission.delivery = "PACKAGE_PENDING";
             mission.deliveryError = "envelope_package_failed";
             ctx.missions().write(store);
-            audit.record("mission_give", issuer.name(), mission.issuerUuid,
+            audit.record(AuditActions.MISSION_GIVE, issuer.name(), mission.issuerUuid,
                     target.name(), mission.targetUuid, "PARTIAL",
                     "order_delivered_package_pending missionId=" + mission.id);
             target.tell("Ai primit un ordin sigilat de la " + mission.issuer
@@ -1009,8 +1011,8 @@ public class MissionService implements MissionRoleplayUseCase {
         mission.delivery = "ENVELOPE_PACKAGE";
         draft.lastMissionId = mission.id;
         ctx.missions().write(store);
-        audit.record("mission_give", issuer.name(), mission.issuerUuid,
-                target.name(), mission.targetUuid, "SUCCESS", "envelope_package_delivered" + " missionId=" + mission.id);
+        audit.record(AuditActions.MISSION_GIVE, issuer.name(), mission.issuerUuid,
+                target.name(), mission.targetUuid, AuditResults.SUCCESS, "envelope_package_delivered" + " missionId=" + mission.id);
         target.tell("Ai primit un ordin sigilat prin Envelope, de la " + mission.issuer
                 + ". Deschide pachetul și alege Acceptă pentru misiunea #" + mission.id + ".");
         issuer.tell("Ordinul #" + mission.id + " a fost semnat, sigilat și predat lui "
@@ -1031,7 +1033,7 @@ public class MissionService implements MissionRoleplayUseCase {
         mission.delivery = "FAILED";
         mission.deliveryError = error;
         ctx.missions().write(store);
-        audit.record("mission_give", issuer.name(), mission.issuerUuid,
+        audit.record(AuditActions.MISSION_GIVE, issuer.name(), mission.issuerUuid,
                 target.name(), mission.targetUuid, "FAILED", error + " missionId=" + mission.id);
         issuer.refuse("straja.mission.packet_fail", "straja.remedy.ask_comisar");
     }
@@ -1056,7 +1058,7 @@ public class MissionService implements MissionRoleplayUseCase {
         var packageResult = ctx.delivery().sendPackage(actor, mission.target,
                 contents, envelopeBody(mission));
         if (!packageResult.succeeded()) {
-            audit.record("mission_resend_package", actor.name(), actor.uuid() == null ? "" : actor.uuid().toString(),
+            audit.record(AuditActions.MISSION_RESEND_PACKAGE, actor.name(), actor.uuid() == null ? "" : actor.uuid().toString(),
                     mission.target, mission.targetUuid, "FAILED",
                     "envelope_package_retry_failed missionId=" + mission.id);
             actor.refuse("straja.mission.packet_blocked", "straja.remedy.wait", mission.id);
@@ -1065,8 +1067,8 @@ public class MissionService implements MissionRoleplayUseCase {
         mission.delivery = "ENVELOPE_PACKAGE";
         mission.deliveryError = "";
         ctx.missions().write(store);
-        audit.record("mission_resend_package", actor.name(), actor.uuid() == null ? "" : actor.uuid().toString(),
-                mission.target, mission.targetUuid, "SUCCESS", "envelope_package_delivered missionId=" + mission.id);
+        audit.record(AuditActions.MISSION_RESEND_PACKAGE, actor.name(), actor.uuid() == null ? "" : actor.uuid().toString(),
+                mission.target, mission.targetUuid, AuditResults.SUCCESS, "envelope_package_delivered missionId=" + mission.id);
         notify(mission.target, "Scrisoarea misiunii #" + mission.id + " a fost trimisă prin Envelope.");
         actor.tell("Pachetul Envelope pentru misiunea #" + mission.id + " a fost trimis.");
         return true;
@@ -1263,8 +1265,8 @@ public class MissionService implements MissionRoleplayUseCase {
         mission.invited.add(new Mission.Identity(
                 target.uuid() == null ? "" : target.uuid().toString(), target.name(), now()));
         ctx.missions().write(store);
-        audit.record("mission_invite", issuer.name(), issuer.uuid().toString(),
-                target.name(), mission.targetUuid, "SUCCESS", "invited" + " missionId=" + mission.id);
+        audit.record(AuditActions.MISSION_INVITE, issuer.name(), issuer.uuid().toString(),
+                target.name(), mission.targetUuid, AuditResults.SUCCESS, "invited" + " missionId=" + mission.id);
         target.tell("Ai fost invitat în misiunea #" + mission.id + " de " + mission.issuer
                 + ". Prezintă-te la secretară și confirmă participarea la ordinul primit.");
         issuer.tell(target.name() + " a fost invitat în misiunea #" + mission.id + ".");
@@ -1304,8 +1306,8 @@ public class MissionService implements MissionRoleplayUseCase {
         mission.assignees.add(new Mission.Identity(
                 player.uuid() == null ? "" : player.uuid().toString(), player.name(), now()));
         ctx.missions().write(store);
-        audit.record("mission_join", player.name(), player.uuid().toString(),
-                mission.issuer, mission.issuerUuid, "SUCCESS", "joined" + " missionId=" + mission.id);
+        audit.record(AuditActions.MISSION_JOIN, player.name(), player.uuid().toString(),
+                mission.issuer, mission.issuerUuid, AuditResults.SUCCESS, "joined" + " missionId=" + mission.id);
         player.tell("Ai intrat în misiunea #" + mission.id
                 + ". Așteaptă acceptarea și lucrează împreună cu ceilalți participanți.");
         notify(mission.issuer, Text.STRAJA_PREFIX + player.name() + " a intrat în misiunea #" + mission.id + ".");
@@ -1336,8 +1338,8 @@ public class MissionService implements MissionRoleplayUseCase {
         mission.status = "ACCEPTED";
         mission.acceptedAt = now();
         ctx.missions().write(store);
-        audit.record("mission_accept", player.name(), player.uuid().toString(),
-                player.name(), player.uuid().toString(), "SUCCESS", "accepted" + " missionId=" + mission.id);
+        audit.record(AuditActions.MISSION_ACCEPT, player.name(), player.uuid().toString(),
+                player.name(), player.uuid().toString(), AuditResults.SUCCESS, "accepted" + " missionId=" + mission.id);
         notify(mission.issuer, Text.STRAJA_PREFIX + "Misiunea #" + mission.id + " a fost acceptată de " + player.name() + ".");
         player.tell("Misiune acceptată: #" + mission.id + ".");
     }
@@ -1367,8 +1369,8 @@ public class MissionService implements MissionRoleplayUseCase {
             mission.assignees.removeIf(e -> identityMatches(player, e));
             mission.invited.removeIf(e -> identityMatches(player, e));
             ctx.missions().write(store);
-            audit.record("mission_decline", player.name(), player.uuid().toString(),
-                    player.name(), player.uuid().toString(), "SUCCESS", "left_team_mission" + " missionId=" + mission.id);
+            audit.record(AuditActions.MISSION_DECLINE, player.name(), player.uuid().toString(),
+                    player.name(), player.uuid().toString(), AuditResults.SUCCESS, "left_team_mission" + " missionId=" + mission.id);
             notify(mission.issuer, Text.STRAJA_PREFIX + player.name() + " a refuzat participarea la misiunea #"
                     + mission.id + ". Misiunea rămâne deschisă pentru ceilalți participanți.");
             player.tell("Ai refuzat participarea la misiunea #" + mission.id + ".");
@@ -1376,8 +1378,8 @@ public class MissionService implements MissionRoleplayUseCase {
         }
         mission.status = "DECLINED";
         ctx.missions().write(store);
-        audit.record("mission_decline", player.name(), player.uuid().toString(),
-                player.name(), player.uuid().toString(), "SUCCESS", "declined" + " missionId=" + mission.id);
+        audit.record(AuditActions.MISSION_DECLINE, player.name(), player.uuid().toString(),
+                player.name(), player.uuid().toString(), AuditResults.SUCCESS, "declined" + " missionId=" + mission.id);
         notify(mission.issuer, Text.STRAJA_PREFIX + "Misiunea #" + mission.id + " a fost refuzată de " + player.name() + ".");
         player.tell("Misiunea #" + mission.id + " a fost refuzată.");
         return true;
@@ -1408,8 +1410,8 @@ public class MissionService implements MissionRoleplayUseCase {
         mission.report = report.substring(0, Math.min(report.length(), ctx.policies().envelopeMaxBodyLength));
         mission.reportedAt = now();
         ctx.missions().write(store);
-        audit.record("mission_report", player.name(), player.uuid().toString(),
-                player.name(), player.uuid().toString(), "SUCCESS", "reported" + " missionId=" + mission.id);
+        audit.record(AuditActions.MISSION_REPORT, player.name(), player.uuid().toString(),
+                player.name(), player.uuid().toString(), AuditResults.SUCCESS, "reported" + " missionId=" + mission.id);
         notify(mission.issuer, Text.STRAJA_PREFIX + "Raport primit pentru misiunea #" + mission.id + ": " + mission.report);
         player.tell("Raportul pentru misiunea #" + mission.id + " a fost trimis.");
         return true;
@@ -1434,8 +1436,8 @@ public class MissionService implements MissionRoleplayUseCase {
                 : (reason == null || reason.isBlank() ? "renunțare" : reason.substring(0, Math.min(reason.length(), 240)));
         releaseIssuerBudget(store, mission);
         ctx.missions().write(store);
-        audit.record("mission_fail", player.name(), player.uuid().toString(),
-                player.name(), player.uuid().toString(), "SUCCESS", mission.failureReason + " missionId=" + mission.id);
+        audit.record(AuditActions.MISSION_FAIL, player.name(), player.uuid().toString(),
+                player.name(), player.uuid().toString(), AuditResults.SUCCESS, mission.failureReason + " missionId=" + mission.id);
         notify(mission.issuer, Text.STRAJA_PREFIX + "Misiunea #" + mission.id + " a eșuat pentru "
                 + player.name() + ": " + mission.failureReason + ".");
         player.tell("Misiunea #" + mission.id + " a fost marcată ca eșuată. Recompensa nu se plătește.");
@@ -1468,8 +1470,8 @@ public class MissionService implements MissionRoleplayUseCase {
         mission.status = "COMPLETED";
         mission.completedAt = now();
         ctx.missions().write(store);
-        audit.record("mission_complete", player.name(), player.uuid().toString(),
-                mission.target, mission.targetUuid, "SUCCESS", "completed" + " missionId=" + mission.id);
+        audit.record(AuditActions.MISSION_COMPLETE, player.name(), player.uuid().toString(),
+                mission.target, mission.targetUuid, AuditResults.SUCCESS, "completed" + " missionId=" + mission.id);
         // Auto-claim for online participants; offline claims stay pending.
         int claimed = 0;
         for (var entry : mission.assignees) {
@@ -1589,7 +1591,7 @@ public class MissionService implements MissionRoleplayUseCase {
             mission.rewardDeliveredDenominations = payout.delivered();
             refreshRewardStatus(mission);
             ctx.missions().write(store);
-            audit.record("mission_reward", player.name(), player.uuid().toString(),
+            audit.record(AuditActions.MISSION_REWARD, player.name(), player.uuid().toString(),
                     recipient.name(), claim.uuid, "FAILED", claim.status + " missionId=" + mission.id);
             player.tell(payout.delivered() > 0
                     ? "Cota ta a fost livrată parțial; plata este blocată pentru verificarea Comisarului."
@@ -1601,8 +1603,8 @@ public class MissionService implements MissionRoleplayUseCase {
         refreshRewardStatus(mission);
         mission.rewardPaidAt = now();
         ctx.missions().write(store);
-        audit.record("mission_reward", player.name(), player.uuid().toString(),
-                recipient.name(), claim.uuid, "SUCCESS", "paid" + " missionId=" + mission.id);
+        audit.record(AuditActions.MISSION_REWARD, player.name(), player.uuid().toString(),
+                recipient.name(), claim.uuid, AuditResults.SUCCESS, "paid" + " missionId=" + mission.id);
         recipient.tell("Ai primit cota ta din recompensa misiunii #" + mission.id + ": "
                 + claim.amount + " monede.");
         if (recipient != player) player.tell("Recompensa a fost livrată lui " + recipient.name() + ".");
@@ -1631,8 +1633,8 @@ public class MissionService implements MissionRoleplayUseCase {
             claim.status = "PAID";
             claim.recoveredAt = now();
             recovered = true;
-            audit.record("mission_reward_recover", actor.name(), actor.uuid().toString(),
-                    entry.name, entry.uuid, "SUCCESS", "receipt_found" + " missionId=" + mission.id);
+            audit.record(AuditActions.MISSION_REWARD_RECOVER, actor.name(), actor.uuid().toString(),
+                    entry.name, entry.uuid, AuditResults.SUCCESS, "receipt_found" + " missionId=" + mission.id);
         }
         refreshRewardStatus(mission);
         mission.rewardRecoveryRequestedAt = now();
@@ -1688,14 +1690,14 @@ public class MissionService implements MissionRoleplayUseCase {
                         claim.recoveredAt = now();
                         refreshRewardStatus(mission);
                         changed = true;
-                        audit.record("mission_reward_recover", player.name(), uuid,
-                                player.name(), uuid, "SUCCESS",
+                        audit.record(AuditActions.MISSION_REWARD_RECOVER, player.name(), uuid,
+                                player.name(), uuid, AuditResults.SUCCESS,
                                 "receipt_found missionId=" + mission.id);
                     } else {
                         claim.status = "PAYMENT_FAILED";
                         refreshRewardStatus(mission);
                         changed = true;
-                        audit.record("mission_reward_recover", player.name(), uuid,
+                        audit.record(AuditActions.MISSION_REWARD_RECOVER, player.name(), uuid,
                                 player.name(), uuid, "FAILED",
                                 "interrupted_payment_retryable missionId=" + mission.id);
                         retry.add(mission.id);
@@ -1707,8 +1709,8 @@ public class MissionService implements MissionRoleplayUseCase {
                         claim.recoveredAt = now();
                         refreshRewardStatus(mission);
                         changed = true;
-                        audit.record("mission_reward_recover", player.name(), uuid,
-                                player.name(), uuid, "SUCCESS",
+                        audit.record(AuditActions.MISSION_REWARD_RECOVER, player.name(), uuid,
+                                player.name(), uuid, AuditResults.SUCCESS,
                                 "receipt_found missionId=" + mission.id);
                     } else {
                         retry.add(mission.id);
@@ -1728,7 +1730,7 @@ public class MissionService implements MissionRoleplayUseCase {
         mission.status = "EXPIRED";
         mission.expiredAt = now();
         releaseIssuerBudget(store, mission);
-        audit.record("mission_expire", "", "", "", "", "SUCCESS",
+        audit.record(AuditActions.MISSION_EXPIRE, "", "", "", "", AuditResults.SUCCESS,
                 "deadline missionId=" + mission.id);
         notify(mission.target, Text.STRAJA_PREFIX + "Misiunea #" + mission.id + " a expirat.");
         notify(mission.issuer, Text.STRAJA_PREFIX + "Misiunea #" + mission.id + " a expirat pentru " + mission.target + ".");
@@ -1783,7 +1785,7 @@ public class MissionService implements MissionRoleplayUseCase {
         List<Mission> doomed = prunable.subList(Math.max(0, prunable.size() - surplus), prunable.size());
         boolean removed = store.missions.removeAll(doomed);
         if (removed) {
-            audit.record("mission_pruned", "system", "", "", "", "SUCCESS",
+            audit.record(AuditActions.MISSION_PRUNED, "system", "", "", "", AuditResults.SUCCESS,
                     "removed=" + doomed.size() + " limit=" + limit);
         }
         return removed;
@@ -1825,8 +1827,8 @@ public class MissionService implements MissionRoleplayUseCase {
         }
         if (changed > 0) {
             ctx.missions().write(store);
-            audit.record("mission_cancel_role_change", player.name(), player.uuid().toString(),
-                    "", "", "SUCCESS", cancellationReason + " count=" + changed);
+            audit.record(AuditActions.MISSION_CANCEL_ROLE_CHANGE, player.name(), player.uuid().toString(),
+                    "", "", AuditResults.SUCCESS, cancellationReason + " count=" + changed);
         }
         return changed;
     }

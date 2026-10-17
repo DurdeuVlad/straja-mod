@@ -13,6 +13,8 @@ import com.dwurdy.straja.domain.model.GuardState;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import com.dwurdy.straja.domain.model.AuditActions;
+import com.dwurdy.straja.domain.model.AuditResults;
 
 /** Citizen complaints: submission, investigation, report, review and rewards. */
 public class ComplaintService implements ComplaintRoleplayUseCase {
@@ -273,7 +275,7 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
             v2Escalation.assignDeadline(complaint.id, p().complaintSlaMillis);
             v2Escalation.linkInvestigationMission(complaint.id);
         }
-        audit.record("complaint_submit", player.name(), key, complaint.accused, complaint.accusedUuid, "SUCCESS", "submitted complaintId=" + complaint.id + " category=" + complaint.category);
+        audit.record(AuditActions.COMPLAINT_SUBMIT, player.name(), key, complaint.accused, complaint.accusedUuid, AuditResults.SUCCESS, "submitted complaintId=" + complaint.id + " category=" + complaint.category);
         player.tell("Plângerea " + complaint.id + " a fost înregistrată. Vei putea confirma rezultatul la recepționistă.");
         return true;
     }
@@ -320,7 +322,7 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
         complaint.status = "CLAIMED";
         complaint.claimedAt = now();
         ctx.complaints().write(data);
-        audit.record("complaint_claim", player.name(), player.uuid().toString(), complaint.complainant, complaint.complainantUuid, "SUCCESS", "case_lead complaintId=" + complaint.id);
+        audit.record(AuditActions.COMPLAINT_CLAIM, player.name(), player.uuid().toString(), complaint.complainant, complaint.complainantUuid, AuditResults.SUCCESS, "case_lead complaintId=" + complaint.id);
         player.tell("Ai preluat dosarul " + complaint.id + ".");
         return true;
     }
@@ -368,7 +370,7 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
         target.tell(ctx.policies().rankName(players.state(player).rank) + " " + player.name()
                 + " te-a mobilizat pentru dosarul " + complaint.id
                 + ". Prezintă-te la secretară pentru confirmarea participării la acest dosar.");
-        audit.record("complaint_mobilize", player.name(), player.uuid().toString(), target.name(), target.uuid().toString(), "SUCCESS", "invited complaintId=" + complaint.id);
+        audit.record(AuditActions.COMPLAINT_MOBILIZE, player.name(), player.uuid().toString(), target.name(), target.uuid().toString(), AuditResults.SUCCESS, "invited complaintId=" + complaint.id);
         player.tell(target.name() + " a fost mobilizat pe dosarul " + complaint.id + ".");
         return true;
     }
@@ -398,7 +400,7 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
         participant.joinedAt = now();
         if ("CLAIMED".equals(complaint.status)) complaint.status = "INVESTIGATING";
         ctx.complaints().write(data);
-        audit.record("complaint_join", player.name(), player.uuid().toString(), complaint.complainant, complaint.complainantUuid, "SUCCESS", "reported_at_secretary complaintId=" + complaint.id);
+        audit.record(AuditActions.COMPLAINT_JOIN, player.name(), player.uuid().toString(), complaint.complainant, complaint.complainantUuid, AuditResults.SUCCESS, "reported_at_secretary complaintId=" + complaint.id);
         player.tell("Te-ai raportat pentru dosarul " + complaint.id + ".");
         return true;
     }
@@ -423,7 +425,7 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
         participant.status = "LEFT";
         participant.leftAt = now();
         ctx.complaints().write(data);
-        audit.record("complaint_leave", player.name(), player.uuid().toString(), complaint.complainant, complaint.complainantUuid, "SUCCESS", "left_case complaintId=" + complaint.id);
+        audit.record(AuditActions.COMPLAINT_LEAVE, player.name(), player.uuid().toString(), complaint.complainant, complaint.complainantUuid, AuditResults.SUCCESS, "left_case complaintId=" + complaint.id);
         player.tell("Ai ieșit din dosarul " + complaint.id + ". Retragerea rămâne în istoricul cazului.");
         return true;
     }
@@ -457,7 +459,7 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
         ctx.complaints().write(data);
         PlayerGateway complainant = ctx.server().findPlayer(complaint.complainant);
         if (complainant != null) complainant.refuse("straja.complaint.confirm_reception", "straja.remedy.reception", complaint.id);
-        audit.record("complaint_report", player.name(), player.uuid().toString(), complaint.complainant, complaint.complainantUuid, "SUCCESS", "report_submitted complaintId=" + complaint.id);
+        audit.record(AuditActions.COMPLAINT_REPORT, player.name(), player.uuid().toString(), complaint.complainant, complaint.complainantUuid, AuditResults.SUCCESS, "report_submitted complaintId=" + complaint.id);
         player.tell("Raportul dosarului " + complaint.id + " a fost trimis spre verificare.");
         return true;
     }
@@ -490,7 +492,7 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
             complaint.withdrawnAt = now();
             complaint.withdrawReason = trimmed;
             ctx.complaints().write(data);
-            audit.record("complaint_withdraw", player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), "SUCCESS", "complainant_withdrew complaintId=" + complaint.id);
+            audit.record(AuditActions.COMPLAINT_WITHDRAW, player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), AuditResults.SUCCESS, "complainant_withdrew complaintId=" + complaint.id);
             player.tell("Plângerea " + complaint.id + " a fost retrasă și trimisă în istoricul secției.");
             return true;
         }
@@ -502,7 +504,7 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
         complaint.complainantDecision = "SATISFIED";
         complaint.satisfiedAt = now();
         ctx.complaints().write(data);
-        audit.record("complaint_satisfied", player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), "SUCCESS", "complainant_confirmed complaintId=" + complaint.id);
+        audit.record(AuditActions.COMPLAINT_SATISFIED, player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), AuditResults.SUCCESS, "complainant_confirmed complaintId=" + complaint.id);
         player.tell("Ai confirmat că dosarul " + complaint.id + " a fost soluționat.");
         return true;
     }
@@ -619,7 +621,7 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
             complaint.reviewedBy = player.name();
             complaint.closedAt = now();
             ctx.complaints().write(data);
-            audit.record("complaint_close", player.name(), player.uuid().toString(), complaint.complainant, complaint.complainantUuid, "SUCCESS", "unfounded complaintId=" + complaint.id);
+            audit.record(AuditActions.COMPLAINT_CLOSE, player.name(), player.uuid().toString(), complaint.complainant, complaint.complainantUuid, AuditResults.SUCCESS, "unfounded complaintId=" + complaint.id);
             player.tell("Dosarul " + complaint.id + " a fost închis ca nefondat.");
             return true;
         }
@@ -652,7 +654,7 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
         complaint.rewardBudgetStatus = configuredReward > 0 ? "RESERVED" : "NONE";
         deliverReward(data, complaint);
         ctx.complaints().write(data);
-        audit.record("complaint_close", player.name(), player.uuid().toString(), complaint.complainant, complaint.complainantUuid, "SUCCESS", "resolved_and_reviewed complaintId=" + complaint.id + " reward=" + configuredReward);
+        audit.record(AuditActions.COMPLAINT_CLOSE, player.name(), player.uuid().toString(), complaint.complainant, complaint.complainantUuid, AuditResults.SUCCESS, "resolved_and_reviewed complaintId=" + complaint.id + " reward=" + configuredReward);
         player.tell("Dosarul " + complaint.id + " a fost închis. Reward calculat: " + configuredReward + " monede; livrare: " + complaint.rewardStatus + ".");
         return true;
     }

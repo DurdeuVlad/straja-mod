@@ -12,6 +12,8 @@ import com.dwurdy.straja.domain.model.Text;
 
 import java.util.ArrayList;
 import java.util.List;
+import com.dwurdy.straja.domain.model.AuditActions;
+import com.dwurdy.straja.domain.model.AuditResults;
 
 /**
  * §12 audience requests: members file through the Secretary; the Comisar is
@@ -94,7 +96,7 @@ public class AudienceService implements AudienceUseCase {
             store.lastComisarNotifiedAt = now;
         }
         ctx.audiences().write(store);
-        audit.record("audience_request", player.name(), uuid, request.id, uuid, "SUCCESS",
+        audit.record(AuditActions.AUDIENCE_REQUEST, player.name(), uuid, request.id, uuid, AuditResults.SUCCESS,
                 updated ? "reason_updated" : "filed");
         player.tell(updated
                 ? "Motivul cererii " + request.id + " a fost actualizat."
@@ -170,8 +172,8 @@ public class AudienceService implements AudienceUseCase {
         request.resolvedAt = now();
         request.outcomeDelivered = false;
         ctx.audiences().write(store);
-        audit.record("audience_review", player.name(), player.uuid().toString(),
-                request.id, request.requesterUuid, "SUCCESS", status);
+        audit.record(AuditActions.AUDIENCE_REVIEW, player.name(), player.uuid().toString(),
+                request.id, request.requesterUuid, AuditResults.SUCCESS, status);
         player.tell(AudienceRequest.RESOLVED.equals(status)
                 ? "Cererea " + request.id + " a fost rezolvată."
                 : "Cererea " + request.id + " a fost respinsă.");

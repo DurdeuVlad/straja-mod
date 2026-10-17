@@ -10,6 +10,8 @@ import com.dwurdy.straja.domain.model.BountyStore;
 import com.dwurdy.straja.domain.model.Fine;
 import com.dwurdy.straja.domain.model.Sentence;
 import java.util.ArrayList;
+import com.dwurdy.straja.domain.model.AuditActions;
+import com.dwurdy.straja.domain.model.AuditResults;
 
 /**
  * #231 state-issued player bounties. Inspector+ posts a price on a wanted
@@ -79,8 +81,8 @@ public final class BountyService {
         if ((issuerState == null || issuerState.rank < MIN_POSTER_RANK)
                 && !players.isCommissioner(issuer)) {
             issuer.refuse("straja.bounty.post_rank", "straja.remedy.inspector");
-            audit.record("bounty_post", issuer.name(), uuid(issuer), target.name(),
-                    uuid(target), "REFUSED", "issuer_below_inspector");
+            audit.record(AuditActions.BOUNTY_POST, issuer.name(), uuid(issuer), target.name(),
+                    uuid(target), AuditResults.REFUSED, "issuer_below_inspector");
             return null;
         }
         if (uuid(issuer).equals(uuid(target))) {
@@ -135,8 +137,8 @@ public final class BountyService {
         record.linkedBoloId = bolo.id;
         store.records.add(record);
         ctx.bounties().write(store);
-        audit.record("bounty_post", issuer.name(), uuid(issuer), target.name(),
-                uuid(target), "SUCCESS",
+        audit.record(AuditActions.BOUNTY_POST, issuer.name(), uuid(issuer), target.name(),
+                uuid(target), AuditResults.SUCCESS,
                 record.id + " amount=" + amount + " bolo=" + bolo.id
                         + (wanted ? "" : " auto_bolo"));
         issuer.tell("Recompensa " + record.id + " pe numele lui " + target.name()
@@ -166,8 +168,8 @@ public final class BountyService {
         record.status = BountyStatus.CANCELLED;
         ctx.bounties().write(store);
         resolveLinkedBolo(record, "bounty_cancelled");
-        audit.record("bounty_cancel", actor.name(), uuid(actor), record.targetName,
-                record.targetUuid, "SUCCESS", record.id);
+        audit.record(AuditActions.BOUNTY_CANCEL, actor.name(), uuid(actor), record.targetName,
+                record.targetUuid, AuditResults.SUCCESS, record.id);
         actor.tell("Recompensa " + record.id + " a fost retrasă.");
         return true;
     }
@@ -252,8 +254,8 @@ public final class BountyService {
         ctx.bounties().write(store);
         target.tell("Te-ai predat. " + captor.name() + " te poate lega și preda.");
         captor.tell(target.name() + " s-a predat. Îl poți lega cu Frânghia.");
-        audit.record("bounty_surrender", captor.name(), uuid(captor),
-                target.name(), uuid(target), "SUCCESS", record.id);
+        audit.record(AuditActions.BOUNTY_SURRENDER, captor.name(), uuid(captor),
+                target.name(), uuid(target), AuditResults.SUCCESS, record.id);
         return true;
     }
 
@@ -345,8 +347,8 @@ public final class BountyService {
         }
         payout(record);
         ctx.bounties().write(store);
-        audit.record("bounty_capture", record.hunterName, record.hunterUuid,
-                sentence.target, sentence.targetUuid, "SUCCESS",
+        audit.record(AuditActions.BOUNTY_CAPTURE, record.hunterName, record.hunterUuid,
+                sentence.target, sentence.targetUuid, AuditResults.SUCCESS,
                 record.id + " payout=" + record.amount + " fine=" + fine.id
                         + "@" + fine.amount);
     }
@@ -426,8 +428,8 @@ public final class BountyService {
             }
         }
         boolean covered = bountyFine && !open;
-        audit.record("bounty_bail", payer.name(), uuid(payer), display,
-                targetUuid, "SUCCESS", "amount=" + paid + " covered=" + covered
+        audit.record(AuditActions.BOUNTY_BAIL, payer.name(), uuid(payer), display,
+                targetUuid, AuditResults.SUCCESS, "amount=" + paid + " covered=" + covered
                         + " thirdParty=" + !uuid(payer).equals(targetUuid));
         // Paid bail releases immediately — the sentence ends BAIL_PAID.
         if (covered) {
@@ -460,8 +462,8 @@ public final class BountyService {
                 record.status = BountyStatus.EXPIRED;
                 changed = true;
                 resolveLinkedBolo(record, "bounty_expired");
-                audit.record("bounty_expire", "system", "", record.targetName,
-                        record.targetUuid, "SUCCESS", record.id);
+                audit.record(AuditActions.BOUNTY_EXPIRE, "system", "", record.targetName,
+                        record.targetUuid, AuditResults.SUCCESS, record.id);
             }
         }
         // Bail window lapsed, fine still unpaid -> send to the mines.

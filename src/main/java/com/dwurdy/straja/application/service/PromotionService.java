@@ -15,6 +15,8 @@ import com.dwurdy.straja.domain.model.PromotionStatus;
 import com.dwurdy.straja.domain.model.PromotionStore;
 import com.dwurdy.straja.domain.model.QualificationEvidence;
 import com.dwurdy.straja.domain.model.Text;
+import com.dwurdy.straja.domain.model.AuditActions;
+import com.dwurdy.straja.domain.model.AuditResults;
 
 public final class PromotionService implements com.dwurdy.straja.application.port.in.PromotionV2UseCase {
     private final PromotionRepository promotions;
@@ -33,15 +35,15 @@ public final class PromotionService implements com.dwurdy.straja.application.por
         this.ids = ids;
     }
 
-    private AuditService audit;
+    private AuditService audit = AuditService.NONE;
 
     public void onApproved(java.util.function.Consumer<PromotionApplication> listener) {
         this.approvalListener = listener == null ? ignored -> {} : listener;
     }
 
-    /** Installed by the composition root; absent in unit compatibility contexts. */
+    /** Installed by the composition root; {@link AuditService#NONE} in unit contexts. */
     public void useAuditService(AuditService audit) {
-        this.audit = audit;
+        this.audit = audit == null ? AuditService.NONE : audit;
     }
 
     public synchronized PromotionApplication submit(String subjectUuid, CareerGrade targetGrade) {
@@ -286,11 +288,9 @@ public final class PromotionService implements com.dwurdy.straja.application.por
         // after this write, reconcileApprovals() can finish the personnel
         // projection on the next server start.
         promotions.write(store);
-        if (audit != null) {
-            audit.record("promotion_petition_review", actorUuid, actorUuid,
-                    application.applicationId, application.subjectUuid, "APPROVED",
-                    "from=" + application.fromGrade + " to=" + application.targetGrade);
-        }
+        audit.record(AuditActions.PROMOTION_PETITION_REVIEW, actorUuid, actorUuid,
+                application.applicationId, application.subjectUuid, AuditResults.APPROVED,
+                "from=" + application.fromGrade + " to=" + application.targetGrade);
         reconcileApproval(application, store);
         PromotionApplication persisted = requireApplication(promotions.read(), applicationId);
         approvalListener.accept(persisted);
@@ -405,11 +405,9 @@ public final class PromotionService implements com.dwurdy.straja.application.por
         application.version++;
         store.storeRevision++;
         promotions.write(store);
-        if (audit != null) {
-            audit.record("promotion_petition_review", actorUuid == null ? "" : actorUuid, actorUuid,
-                    application.applicationId, application.subjectUuid, "REJECTED",
-                    application.decisionReason);
-        }
+        audit.record(AuditActions.PROMOTION_PETITION_REVIEW, actorUuid == null ? "" : actorUuid, actorUuid,
+                application.applicationId, application.subjectUuid, AuditResults.REJECTED,
+                application.decisionReason);
         return application;
     }
 

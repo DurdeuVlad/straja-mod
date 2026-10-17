@@ -6,6 +6,8 @@ import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.domain.model.PrisonerStatus;
 
 import java.util.UUID;
+import com.dwurdy.straja.domain.model.AuditActions;
+import com.dwurdy.straja.domain.model.AuditResults;
 
 /**
  * LAW-007: the authoritative wanted/fugitive query surface. One service owns
@@ -119,9 +121,9 @@ public final class WantedService
         if (target == null) return;
         dropAggroAround(target); // thief-flagged too — escort suspends all aggro
         if (!isWanted(target.uuid())) return;
-        audit.record("wanted_escort", officer == null ? "" : officer.name(),
+        audit.record(AuditActions.WANTED_ESCORT, officer == null ? "" : officer.name(),
                 officer == null ? "" : String.valueOf(officer.uuid()),
                 target.name(), String.valueOf(target.uuid()),
-                "SUCCESS", "aggro_suspended");
+                AuditResults.SUCCESS, "aggro_suspended");
     }
 }

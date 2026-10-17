@@ -9,6 +9,8 @@ import com.dwurdy.straja.domain.model.Rank;
 import com.dwurdy.straja.domain.model.StrajaPolicies;
 import java.util.ArrayList;
 import java.util.List;
+import com.dwurdy.straja.domain.model.AuditActions;
+import com.dwurdy.straja.domain.model.AuditResults;
 
 /**
  * Armorer NPC shop (EQ-004/EQ-005). Two shelves:
@@ -84,7 +86,7 @@ public class ArmoryService implements com.dwurdy.straja.application.port.in.Armo
         if (!player.giveVerified(ItemSpec.of(item.itemId(), item.count()))) {
             String refundId = "armory-refund:" + player.uuid() + ":" + ctx.clock().nowMillis() + ":" + key;
             var refund = ctx.currency().deposit(player, item.cost(), refundId);
-            audit.record("armory_buy", player.name(), player.uuid().toString(),
+            audit.record(AuditActions.ARMORY_BUY, player.name(), player.uuid().toString(),
                     player.name(), player.uuid().toString(),
                     refund.ok() ? "REFUNDED" : "FAILED",
                     key + ",delivery_failed,refund=" + (refund.ok() ? "ok" : "failed"));
@@ -93,8 +95,8 @@ public class ArmoryService implements com.dwurdy.straja.application.port.in.Armo
                     : "straja.armory.delivery_failed", "straja.remedy.ask_comisar");
             return false;
         }
-        audit.record("armory_buy", player.name(), player.uuid().toString(),
-                player.name(), player.uuid().toString(), "SUCCESS",
+        audit.record(AuditActions.ARMORY_BUY, player.name(), player.uuid().toString(),
+                player.name(), player.uuid().toString(), AuditResults.SUCCESS,
                 key + ",price=" + item.cost());
         player.tell("Ai cumpărat " + item.count() + "× " + item.itemId()
                 + " pentru " + item.cost() + " monede.");
@@ -127,14 +129,14 @@ public class ArmoryService implements com.dwurdy.straja.application.port.in.Armo
         if (!player.giveVerified(ItemSpec.of(item.itemId(), item.count()))) {
             state.requisitionPoints += item.cost();
             players.save(player.uuid(), state);
-            audit.record("armory_reserve", player.name(), player.uuid().toString(),
+            audit.record(AuditActions.ARMORY_RESERVE, player.name(), player.uuid().toString(),
                     player.name(), player.uuid().toString(), "FAILED",
                     key + ",delivery_failed,points_restored");
             player.refuse("straja.armory.delivery_fail", "straja.remedy.retry");
             return false;
         }
-        audit.record("armory_reserve", player.name(), player.uuid().toString(),
-                player.name(), player.uuid().toString(), "SUCCESS",
+        audit.record(AuditActions.ARMORY_RESERVE, player.name(), player.uuid().toString(),
+                player.name(), player.uuid().toString(), AuditResults.SUCCESS,
                 key + ",points=" + item.cost());
         player.tell("Ai ridicat " + item.count() + "× " + item.itemId()
                 + " pentru " + item.cost() + " puncte de rechiziție. Sold: "
@@ -144,7 +146,7 @@ public class ArmoryService implements com.dwurdy.straja.application.port.in.Armo
 
     private boolean refused(String action, PlayerGateway player, String key, String reason) {
         audit.record(action, player.name(), player.uuid().toString(),
-                player.name(), player.uuid().toString(), "REFUSED", key + "," + reason);
+                player.name(), player.uuid().toString(), AuditResults.REFUSED, key + "," + reason);
         return false;
     }
 

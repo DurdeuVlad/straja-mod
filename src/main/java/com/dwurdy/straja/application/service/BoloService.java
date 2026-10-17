@@ -11,6 +11,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import com.dwurdy.straja.domain.model.AuditActions;
+import com.dwurdy.straja.domain.model.AuditResults;
 
 /** Informational watch notices; an authoritative warrant remains separate. */
 public final class BoloService {
@@ -48,8 +50,8 @@ public final class BoloService {
         if (!players.isOnDutyGuard(issuer) || issuerState == null
                 || issuerState.rank < ctx.policies().boloMinimumIssuerRank) {
             issuer.refuse("straja.bolo.issue_rank", "straja.remedy.duty");
-            audit.record("bolo_create", issuer.name(), uuid(issuer), subject.name(),
-                    uuid(subject), "REFUSED", "issuer_not_eligible");
+            audit.record(AuditActions.BOLO_CREATE, issuer.name(), uuid(issuer), subject.name(),
+                    uuid(subject), AuditResults.REFUSED, "issuer_not_eligible");
             return null;
         }
         if (reason == null || reason.isBlank()
@@ -61,8 +63,8 @@ public final class BoloService {
         if (requested == BoloAuthority.ARREST_AUTHORIZED
                 && !hasAuthoritativeTask(subject, null)) {
             issuer.tell("Un BOLO nu poate crea singur autoritate de arest.");
-            audit.record("bolo_create", issuer.name(), uuid(issuer), subject.name(),
-                    uuid(subject), "REFUSED", "missing_authoritative_task");
+            audit.record(AuditActions.BOLO_CREATE, issuer.name(), uuid(issuer), subject.name(),
+                    uuid(subject), AuditResults.REFUSED, "missing_authoritative_task");
             return null;
         }
         BoloStore data = store();
@@ -94,8 +96,8 @@ public final class BoloService {
         ctx.bolos().write(data);
         issuer.tell("BOLO " + record.id + " a fost emis pentru " + subject.name()
                 + ". INFORMARE — NU ESTE MANDAT DE AREST.");
-        audit.record("bolo_create", issuer.name(), uuid(issuer), record.id,
-                record.subjectUuid, "SUCCESS", record.authority.name());
+        audit.record(AuditActions.BOLO_CREATE, issuer.name(), uuid(issuer), record.id,
+                record.subjectUuid, AuditResults.SUCCESS, record.authority.name());
         return record;
     }
 
@@ -117,8 +119,8 @@ public final class BoloService {
         }
         record.status = BoloStatus.CANCELLED;
         ctx.bolos().write(data);
-        audit.record("bolo_cancel", actor.name(), uuid(actor), record.id,
-                record.subjectUuid, "SUCCESS", "");
+        audit.record(AuditActions.BOLO_CANCEL, actor.name(), uuid(actor), record.id,
+                record.subjectUuid, AuditResults.SUCCESS, "");
         actor.tell("BOLO " + record.id + " a fost anulat.");
         return true;
     }
@@ -148,7 +150,7 @@ public final class BoloService {
                 record.status = status;
                 cleared++;
                 audit.record(action, "system", "", record.id,
-                        record.subjectUuid, "SUCCESS", note);
+                        record.subjectUuid, AuditResults.SUCCESS, note);
             }
         }
         if (cleared > 0) ctx.bolos().write(data);
@@ -172,7 +174,7 @@ public final class BoloService {
                 record.status = status;
                 cleared++;
                 audit.record(action, "system", "", record.id,
-                        record.subjectUuid, "SUCCESS", note);
+                        record.subjectUuid, AuditResults.SUCCESS, note);
             }
         }
         if (cleared > 0) ctx.bolos().write(data);
@@ -213,8 +215,8 @@ public final class BoloService {
         record.linkedArrestTaskId = sentenceId == null ? "" : sentenceId;
         data.records.add(record);
         ctx.bolos().write(data);
-        audit.record("bolo_create", "system", "", record.id,
-                record.subjectUuid, "SUCCESS", "fugitive_escape sentenceId=" + sentenceId);
+        audit.record(AuditActions.BOLO_CREATE, "system", "", record.id,
+                record.subjectUuid, AuditResults.SUCCESS, "fugitive_escape sentenceId=" + sentenceId);
         return record;
     }
 
@@ -261,8 +263,8 @@ public final class BoloService {
         record.authority = BoloAuthority.ARREST_AUTHORIZED;
         data.records.add(record);
         ctx.bolos().write(data);
-        audit.record("bolo_create", "system", "", record.id,
-                record.subjectUuid, "SUCCESS", "forgery_detected");
+        audit.record(AuditActions.BOLO_CREATE, "system", "", record.id,
+                record.subjectUuid, AuditResults.SUCCESS, "forgery_detected");
         return record;
     }
 
@@ -299,8 +301,8 @@ public final class BoloService {
         record.authority = BoloAuthority.ARREST_AUTHORIZED;
         data.records.add(record);
         ctx.bolos().write(data);
-        audit.record("bolo_create", "system", "", record.id,
-                record.subjectUuid, "SUCCESS", "legacy_bridge");
+        audit.record(AuditActions.BOLO_CREATE, "system", "", record.id,
+                record.subjectUuid, AuditResults.SUCCESS, "legacy_bridge");
         return record;
     }
 
@@ -319,8 +321,8 @@ public final class BoloService {
                     && record.expiresAt > 0 && record.expiresAt <= now()) {
                 record.status = BoloStatus.EXPIRED;
                 changed = true;
-                audit.record("bolo_expire", "system", "", record.id,
-                        record.subjectUuid, "SUCCESS", "");
+                audit.record(AuditActions.BOLO_EXPIRE, "system", "", record.id,
+                        record.subjectUuid, AuditResults.SUCCESS, "");
             }
         }
         if (changed) ctx.bolos().write(data);

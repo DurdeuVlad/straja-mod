@@ -12,6 +12,8 @@ import com.dwurdy.straja.domain.model.StrajaPolicies;
 
 import java.util.ArrayList;
 import java.util.List;
+import com.dwurdy.straja.domain.model.AuditActions;
+import com.dwurdy.straja.domain.model.AuditResults;
 
 /**
  * §11 weekly activity reports: members file through the Secretary; the
@@ -122,7 +124,7 @@ public class ReportService implements ReportUseCase {
         // A fresh interval starts at filing.
         store.anchors.put(uuid, now);
         ctx.reports().write(store);
-        audit.record("report_submit", player.name(), uuid, report.id, uuid, "SUCCESS",
+        audit.record(AuditActions.REPORT_SUBMIT, player.name(), uuid, report.id, uuid, AuditResults.SUCCESS,
                 resubmission ? "revision_" + report.revision : "filed");
         player.tell("Raportul " + report.id + " a fost depus la Secretariat" +
                 (resubmission ? " (revizia " + report.revision + ")" : "")
@@ -208,8 +210,8 @@ public class ReportService implements ReportUseCase {
         report.reviewNote = note == null ? "" : note.trim();
         report.reviewedAt = now();
         ctx.reports().write(store);
-        audit.record("report_review", player.name(), player.uuid().toString(),
-                report.id, report.authorUuid, "SUCCESS", status);
+        audit.record(AuditActions.REPORT_REVIEW, player.name(), player.uuid().toString(),
+                report.id, report.authorUuid, AuditResults.SUCCESS, status);
         player.tell(switch (status) {
             case ActivityReport.ACCEPTED -> "Raportul " + report.id + " a fost acceptat.";
             case ActivityReport.RETURNED -> "Raportul " + report.id + " a fost returnat cu notă.";

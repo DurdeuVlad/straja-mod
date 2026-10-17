@@ -9,6 +9,8 @@ import com.dwurdy.straja.domain.model.PrisonerRegisterStore;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import com.dwurdy.straja.domain.model.AuditActions;
+import com.dwurdy.straja.domain.model.AuditResults;
 
 /**
  * DEBT-1 (#234) debt ledger. Every fine carries a {@code paidAmount} plus a
@@ -134,8 +136,8 @@ public final class DebtService {
             if (fine.contributions == null) fine.contributions = new ArrayList<>();
             fine.contributions.add(contribution);
             fine.paidAmount += applied;
-            audit.record("debt_apply", contribution.payer, contribution.payerUuid,
-                    fine.target, fine.targetUuid, "SUCCESS",
+            audit.record(AuditActions.DEBT_APPLY, contribution.payer, contribution.payerUuid,
+                    fine.target, fine.targetUuid, AuditResults.SUCCESS,
                     "fineId=" + fine.id + " applied=" + applied + " source=" + contribution.source
                             + " remaining=" + fine.remaining());
         }
@@ -333,7 +335,7 @@ public final class DebtService {
         var applied = allocate(targetUuid, extracted, name, targetUuid, "LEVY");
         int appliedTotal = applied.stream().mapToInt(Allocation::applied).sum();
         int debtLeft = outstandingDebt(targetUuid);
-        audit.record("levy", "system", "", name, targetUuid, "SUCCESS",
+        audit.record(AuditActions.LEVY, "system", "", name, targetUuid, AuditResults.SUCCESS,
                 "extracted=" + extracted + " applied=" + appliedTotal
                         + " remaining=" + debtLeft);
         notifyPrisoner(targetUuid, online, "Proces-verbal de sechestru",
@@ -457,8 +459,8 @@ public final class DebtService {
         }
         ctx.prisonerRegister().write(reg);
         if (delivered > 0) {
-            audit.record("notice_delivery", "system", "", target.name(),
-                    target.uuid().toString(), "SUCCESS", "pending delivered=" + delivered);
+            audit.record(AuditActions.NOTICE_DELIVERY, "system", "", target.name(),
+                    target.uuid().toString(), AuditResults.SUCCESS, "pending delivered=" + delivered);
         }
     }
 }

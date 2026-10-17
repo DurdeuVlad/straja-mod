@@ -5,6 +5,13 @@ import com.dwurdy.straja.domain.model.AuditEntry;
 
 /** Bounded append-only audit trail. */
 public class AuditService {
+    /** Silent sink for late-bound consumers before the real service is wired. */
+    public static final AuditService NONE = new AuditService(null) {
+        @Override public void record(String action, String actor, String actorUuid,
+                                     String target, String targetUuid, String result, String details) {}
+        @Override public java.util.List<AuditEntry> tail(int count) { return java.util.List.of(); }
+    };
+
     private final StrajaContext ctx;
 
     public AuditService(StrajaContext ctx) {

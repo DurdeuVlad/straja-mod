@@ -20,6 +20,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import com.dwurdy.straja.domain.model.Text;
+import com.dwurdy.straja.domain.model.AuditActions;
+import com.dwurdy.straja.domain.model.AuditResults;
 
 /**
  * Player-facing use cases: recruitment, quiz, duty lifecycle, salary, food,
@@ -198,7 +200,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         }
         ctx.factions().leaveTeam(player);
         player.tell("Facțiunea ta anterioară \"" + captured + "\" nu mai există; ai rămas fără echipă.");
-        audit.record("faction_restore_failed", "system", player.uuid().toString(),
+        audit.record(AuditActions.FACTION_RESTORE_FAILED, "system", player.uuid().toString(),
                 player.name(), player.uuid().toString(), "FAIL", captured);
     }
 
@@ -276,8 +278,8 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         if (state.rank >= Rank.STAGIAR.level() || state.resigned || state.fired || state.suspended
                 || state.duty || state.resignationPending) {
             actor.refuse("straja.duty.invite_eligible", "straja.remedy.fix_retry");
-            audit.record("invite", actor.name(), actor.uuid().toString(),
-                    target.name(), target.uuid().toString(), "REFUSED", "target_not_eligible");
+            audit.record(AuditActions.INVITE, actor.name(), actor.uuid().toString(),
+                    target.name(), target.uuid().toString(), AuditResults.REFUSED, "target_not_eligible");
             return false;
         }
         state.invited = true;
@@ -291,8 +293,8 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             state.quizOrder = new java.util.ArrayList<>();
         }
         players.save(target.uuid(), state);
-        audit.record("invite", actor.name(), actor.uuid().toString(),
-                target.name(), target.uuid().toString(), "SUCCESS", "invited");
+        audit.record(AuditActions.INVITE, actor.name(), actor.uuid().toString(),
+                target.name(), target.uuid().toString(), AuditResults.SUCCESS, "invited");
         target.tell("Ai fost invitat în Straja Castelului. Prezintă-te la Instructor pentru examen și instruire.");
         actor.tell("Invitația a fost trimisă lui " + target.name() + ".");
         return true;
@@ -346,8 +348,8 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         state.appliedAt = now();
         state.applicationRecordedBy = player.name();
         players.save(player.uuid(), state);
-        audit.record("application", player.name(), player.uuid().toString(),
-                player.name(), player.uuid().toString(), "SUCCESS", "applied");
+        audit.record(AuditActions.APPLICATION, player.name(), player.uuid().toString(),
+                player.name(), player.uuid().toString(), AuditResults.SUCCESS, "applied");
         player.tell("Cerere înregistrată la Recepție. Prezintă-te la Instructor pentru examenul de admitere.");
     }
 
@@ -405,8 +407,8 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         GuardState state = players.state(target);
         state.nativeFaction = normalized;
         players.save(target.uuid(), state);
-        audit.record("native_faction", actor.name(), actor.uuid().toString(),
-                target.name(), target.uuid().toString(), "SUCCESS",
+        audit.record(AuditActions.NATIVE_FACTION, actor.name(), actor.uuid().toString(),
+                target.name(), target.uuid().toString(), AuditResults.SUCCESS,
                 normalized == null ? "cleared" : normalized);
         if (normalized == null) {
             target.tell("Facțiunea nativă a fost ștearsă din registrul Străjii.");
@@ -444,8 +446,8 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             return false;
         }
         players.save(target.uuid(), state);
-        audit.record("specialization", actor.name(), actor.uuid().toString(),
-                target.name(), target.uuid().toString(), "SUCCESS",
+        audit.record(AuditActions.SPECIALIZATION, actor.name(), actor.uuid().toString(),
+                target.name(), target.uuid().toString(), AuditResults.SUCCESS,
                 (grant ? "grant:" : "revoke:") + name);
         target.tell(grant ? "Ai primit funcția: " + name + "." : "Funcția " + name + " ți-a fost retrasă.");
         actor.tell(target.name() + (grant ? " — funcția " : " — funcția ") + name
@@ -606,8 +608,8 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
                     + ctx.policies().promotionBonusHours + "h × "
                     + ctx.policies().salaryPerHour(rank) + "/h).");
         }
-        audit.record("rank_grant", player.name(), player.uuid().toString(),
-                player.name(), player.uuid().toString(), "SUCCESS",
+        audit.record(AuditActions.RANK_GRANT, player.name(), player.uuid().toString(),
+                player.name(), player.uuid().toString(), AuditResults.SUCCESS,
                 "rank=" + rank + (bonus > 0 ? ",bonus=" + bonus : ""));
         if (state.kitClaimedRank < rank) equipment.giveKit(player, state);
     }
@@ -649,8 +651,8 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             players.save(player.uuid(), state);
             player.tell("Examen picat: " + score + "/" + total + " corecte, ai nevoie de " + need
                     + ". Poți reîncepe peste " + ctx.policies().quizCooldownMinutes + " minute.");
-            audit.record("quiz", player.name(), player.uuid().toString(),
-                    player.name(), player.uuid().toString(), "REFUSED",
+            audit.record(AuditActions.QUIZ, player.name(), player.uuid().toString(),
+                    player.name(), player.uuid().toString(), AuditResults.REFUSED,
                     "score=" + score + "/" + total + " need=" + need);
             return;
         }
@@ -736,14 +738,14 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             players.save(player.uuid(), state);
             player.tell("Răspuns corect. " + (next != null ? "Următorul modul: " + next.question()
                     : "Ai terminat instruirea disponibilă pentru rangul tău."));
-            audit.record("training_quiz", player.name(), player.uuid().toString(),
-                    player.name(), player.uuid().toString(), "SUCCESS", "correct_answer");
+            audit.record(AuditActions.TRAINING_QUIZ, player.name(), player.uuid().toString(),
+                    player.name(), player.uuid().toString(), AuditResults.SUCCESS, "correct_answer");
         } else {
             state.trainingQuizCooldownAt = now() + ctx.policies().quizCooldownMinutes * DutyEngine.MINUTE_MS;
             players.save(player.uuid(), state);
             player.refuse("straja.duty.quiz_wrong", "straja.remedy.wait");
-            audit.record("training_quiz", player.name(), player.uuid().toString(),
-                    player.name(), player.uuid().toString(), "REFUSED", "wrong_answer");
+            audit.record(AuditActions.TRAINING_QUIZ, player.name(), player.uuid().toString(),
+                    player.name(), player.uuid().toString(), AuditResults.REFUSED, "wrong_answer");
         }
     }
 
@@ -867,8 +869,8 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         try {
             var application = v2PromotionService.submitPetition(
                     player.uuid().toString(), target, reason);
-            audit.record("promotion_petition", player.name(), player.uuid().toString(),
-                    player.name(), player.uuid().toString(), "SUCCESS",
+            audit.record(AuditActions.PROMOTION_PETITION, player.name(), player.uuid().toString(),
+                    player.name(), player.uuid().toString(), AuditResults.SUCCESS,
                     "target=" + target + " app=" + application.applicationId);
             player.tell("Cererea de avansare " + application.applicationId + " ("
                     + ctx.policies().rankName(target) + ") a ajuns la Comisar pentru decizie.");
@@ -897,8 +899,8 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             player.refuse("straja.duty.manual_full", "straja.remedy.retry");
             return;
         }
-        audit.record("training_manual", player.name(), player.uuid().toString(),
-                player.name(), player.uuid().toString(), "SUCCESS", "manual_issued");
+        audit.record(AuditActions.TRAINING_MANUAL, player.name(), player.uuid().toString(),
+                player.name(), player.uuid().toString(), AuditResults.SUCCESS, "manual_issued");
         player.tell("Ai primit Manualul de instruire. Deschide-l pentru regulament.");
     }
 
@@ -914,8 +916,8 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             if (targetGrade == null) { actor.refuse("straja.duty.target_no_promotion", "straja.remedy.instructor"); return; }
             try {
                 v2PromotionService.approveOpen(actor.uuid().toString(), target.uuid().toString(), targetGrade);
-                audit.record("promote", actor.name(), actor.uuid().toString(),
-                        target.name(), target.uuid().toString(), "SUCCESS", "grade=" + targetGrade);
+                audit.record(AuditActions.PROMOTE, actor.name(), actor.uuid().toString(),
+                        target.name(), target.uuid().toString(), AuditResults.SUCCESS, "grade=" + targetGrade);
                 actor.tell(target.name() + " a fost promovat prin fluxul V2.");
                 target.tell("Promovarea ta a fost aprobată de Comisar.");
             } catch (RuntimeException error) {
@@ -955,8 +957,8 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         }
         players.save(target.uuid(), state);
         if (nextRank < Rank.STAGIAR.level()) fireStatusChange(target, "demotat la Civil");
-        audit.record("demote", actor.name(), actor.uuid().toString(),
-                target.name(), target.uuid().toString(), "SUCCESS",
+        audit.record(AuditActions.DEMOTE, actor.name(), actor.uuid().toString(),
+                target.name(), target.uuid().toString(), AuditResults.SUCCESS,
                 "rank_changed,serviceBlocksDocked=" + docked);
         target.tell("Retrogradare: " + ctx.policies().rankName(state.rank) + ".");
         actor.tell(target.name() + " a fost retrogradat.");
@@ -983,8 +985,8 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         }
         players.save(target.uuid(), state);
         fireStatusChange(target, "suspendat din Strajă");
-        audit.record("suspend", actor.name(), actor.uuid().toString(),
-                target.name(), target.uuid().toString(), "SUCCESS",
+        audit.record(AuditActions.SUSPEND, actor.name(), actor.uuid().toString(),
+                target.name(), target.uuid().toString(), AuditResults.SUCCESS,
                 "suspended,requisitionDocked=" + docked);
         target.tell("Ai fost suspendat din Strajă.");
         actor.tell(target.name() + " a fost suspendat.");
@@ -1025,8 +1027,8 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         players.save(target.uuid(), state);
         roomAutoAssign.onPromotedToGuard(target);
         grantRankUp(target, state, rank);
-        audit.record("personnel_authorize", actor.name(), actor.uuid().toString(),
-                target.name(), target.uuid().toString(), "SUCCESS", "rank=" + rank);
+        audit.record(AuditActions.PERSONNEL_AUTHORIZE, actor.name(), actor.uuid().toString(),
+                target.name(), target.uuid().toString(), AuditResults.SUCCESS, "rank=" + rank);
         target.tell("Comisarul te-a autorizat direct în Strajă ca "
                 + ctx.policies().rankName(rank) + ".");
         actor.tell(target.name() + " autorizat direct ca " + ctx.policies().rankName(rank) + ".");
@@ -1041,15 +1043,15 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         GuardState state = players.state(target);
         if (!state.suspended || state.fired || state.resigned || state.rank < Rank.STAGIAR.level()) {
             actor.refuse("straja.duty.rejoin_state", "straja.remedy.ask_comisar");
-            audit.record("reinstate", actor.name(), actor.uuid().toString(),
-                    target.name(), target.uuid().toString(), "REFUSED", "target_not_suspended");
+            audit.record(AuditActions.REINSTATE, actor.name(), actor.uuid().toString(),
+                    target.name(), target.uuid().toString(), AuditResults.REFUSED, "target_not_suspended");
             return false;
         }
         state.suspended = false;
         players.save(target.uuid(), state);
         roomAutoAssign.onPromotedToGuard(target);
-        audit.record("reinstate", actor.name(), actor.uuid().toString(),
-                target.name(), target.uuid().toString(), "SUCCESS", "reinstated");
+        audit.record(AuditActions.REINSTATE, actor.name(), actor.uuid().toString(),
+                target.name(), target.uuid().toString(), AuditResults.SUCCESS, "reinstated");
         target.tell("Ai fost reintegrat în Strajă ca " + ctx.policies().rankName(state.rank) + ".");
         actor.tell(target.name() + " a fost reintegrat.");
         return true;
@@ -1079,8 +1081,8 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         state.resignationRank = null;
         players.save(target.uuid(), state);
         fireStatusChange(target, "îndepărtat din Strajă");
-        audit.record("fire", actor.name(), actor.uuid().toString(),
-                target.name(), target.uuid().toString(), "SUCCESS", "fired");
+        audit.record(AuditActions.FIRE, actor.name(), actor.uuid().toString(),
+                target.name(), target.uuid().toString(), AuditResults.SUCCESS, "fired");
         target.tell("Ai fost îndepărtat din Strajă.");
         actor.tell(target.name() + " a fost îndepărtat din Strajă.");
     }
@@ -1154,8 +1156,8 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             if (applyCoreResult(player, state, free)) {
                 captureDutyFaction(player, state);
                 players.save(player.uuid(), state);
-                audit.record("duty_start", player.name(), player.uuid().toString(),
-                        player.name(), player.uuid().toString(), "SUCCESS", "free_shift");
+                audit.record(AuditActions.DUTY_START, player.name(), player.uuid().toString(),
+                        player.name(), player.uuid().toString(), AuditResults.SUCCESS, "free_shift");
                 player.tell("Tură liberă începută. Ești plătit pe oră; "
                         + "termini tura când dorești de la secretară sau cu /straja stop.");
             }
@@ -1185,8 +1187,8 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
                         + state.requiredRounds + " runde complete de patrulare.");
             }
             players.save(player.uuid(), state);
-            audit.record("duty_start", player.name(), player.uuid().toString(),
-                    player.name(), player.uuid().toString(), "SUCCESS", "started");
+            audit.record(AuditActions.DUTY_START, player.name(), player.uuid().toString(),
+                    player.name(), player.uuid().toString(), AuditResults.SUCCESS, "started");
             player.tell("Serviciu început. Primul checkpoint: " + state.route.get(0) + ". Ai "
                     + state.missionMinutes.get(state.route.get(0)) + " minute.");
         }
@@ -1211,8 +1213,8 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         markDutyActivity(player, state, now());
         Result result = DutyEngine.activateCheckpoint(state, id, now(), salaryFor(player, state), setup.missionMinutes, ctx.policies());
         if (applyCoreResult(player, state, result)) {
-            audit.record("duty_checkpoint", player.name(), player.uuid().toString(),
-                    player.name(), player.uuid().toString(), "SUCCESS", id);
+            audit.record(AuditActions.DUTY_CHECKPOINT, player.name(), player.uuid().toString(),
+                    player.name(), player.uuid().toString(), AuditResults.SUCCESS, id);
         }
     }
 
@@ -1243,8 +1245,8 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         markDutyActivity(player, state, now());
         Result result = DutyEngine.endDuty(state, "voluntary_stop", now(), salaryFor(player, state), ctx.policies());
         if (applyCoreResult(player, state, result)) {
-            audit.record("duty_stop", player.name(), player.uuid().toString(),
-                    player.name(), player.uuid().toString(), "SUCCESS", "voluntary_stop");
+            audit.record(AuditActions.DUTY_STOP, player.name(), player.uuid().toString(),
+                    player.name(), player.uuid().toString(), AuditResults.SUCCESS, "voluntary_stop");
         }
     }
 
@@ -1347,8 +1349,8 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             if (!cancelled.ok()) player.refuse("straja.duty.err.resignation_not_pending", "straja.remedy.secretary");
             else {
                 players.save(player.uuid(), state);
-                audit.record("resignation_cancel", player.name(), player.uuid().toString(),
-                        player.name(), player.uuid().toString(), "SUCCESS", "cancelled");
+                audit.record(AuditActions.RESIGNATION_CANCEL, player.name(), player.uuid().toString(),
+                        player.name(), player.uuid().toString(), AuditResults.SUCCESS, "cancelled");
                 player.tell("Cererea de demisie a fost anulată.");
             }
             return;
@@ -1365,8 +1367,8 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             }
             players.save(player.uuid(), state);
             fireStatusChange(player, "demisie în preaviz");
-            audit.record("resignation_start", player.name(), player.uuid().toString(),
-                    player.name(), player.uuid().toString(), "SUCCESS", "notice_started");
+            audit.record(AuditActions.RESIGNATION_START, player.name(), player.uuid().toString(),
+                    player.name(), player.uuid().toString(), AuditResults.SUCCESS, "notice_started");
             player.tell("Demisia intră în preaviz pentru " + ctx.policies().resignationNoticeMinutes
                     + " minute. Camera rămâne a ta în acest interval ca să-ți strângi lucrurile. După expirare semnează la Comisaru' sau cere anularea.");
             return;
@@ -1384,8 +1386,8 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         }
         players.save(player.uuid(), state);
         fireStatusChange(player, "demisie semnată");
-        audit.record("resignation_complete", player.name(), player.uuid().toString(),
-                player.name(), player.uuid().toString(), "SUCCESS", "completed");
+        audit.record(AuditActions.RESIGNATION_COMPLETE, player.name(), player.uuid().toString(),
+                player.name(), player.uuid().toString(), AuditResults.SUCCESS, "completed");
         player.tell("Demisie semnată. Camera a fost eliberată, iar cooldown-ul este de "
                 + ctx.policies().resignationCooldownDays + " zile. Soldul acumulat rămâne disponibil.");
     }
@@ -1433,8 +1435,8 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         state.applicationState = "AUTHORIZED";
         state.quizIndex = ctx.policies().quiz.size();
         players.save(player.uuid(), state);
-        audit.record("rejoin", player.name(), player.uuid().toString(),
-                player.name(), player.uuid().toString(), "SUCCESS", "rejoined");
+        audit.record(AuditActions.REJOIN, player.name(), player.uuid().toString(),
+                player.name(), player.uuid().toString(), AuditResults.SUCCESS, "rejoined");
         roomAutoAssign.onPromotedToGuard(player);
         player.tell("Reîncadrare aprobată automat: " + ctx.policies().rankName(restored)
                 + ". Ofițerii revin cel mult ca Locotenent.");
@@ -1497,14 +1499,14 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
                 state.salaryPaymentError = null;
                 state.salaryPayoutId = null;
                 players.save(player.uuid(), state);
-                audit.record("salary_payout", player.name(), player.uuid().toString(),
-                        player.name(), player.uuid().toString(), "SUCCESS", "recovered_receipt");
+                audit.record(AuditActions.SALARY_PAYOUT, player.name(), player.uuid().toString(),
+                        player.name(), player.uuid().toString(), AuditResults.SUCCESS, "recovered_receipt");
                 player.tell("Salariu plătit în monede fizice.");
             } else {
                 state.salaryPaymentStatus = "REVIEW";
                 state.salaryPaymentError = "unconfirmed_previous_attempt";
                 players.save(player.uuid(), state);
-                audit.record("salary_payout", player.name(), player.uuid().toString(),
+                audit.record(AuditActions.SALARY_PAYOUT, player.name(), player.uuid().toString(),
                         player.name(), player.uuid().toString(), "FAILED", "unconfirmed_previous_attempt");
                 player.refuse("straja.duty.payment_unconfirmed", "straja.remedy.ask_comisar");
             }
@@ -1532,8 +1534,8 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         state.salaryPayoutId = null;
         state.salaryDeliveredDenominations = payout.delivered();
         players.save(player.uuid(), state);
-        audit.record("salary_payout", player.name(), player.uuid().toString(),
-                player.name(), player.uuid().toString(), "SUCCESS", recovered ? "recovered_receipt" : "paid");
+        audit.record(AuditActions.SALARY_PAYOUT, player.name(), player.uuid().toString(),
+                player.name(), player.uuid().toString(), AuditResults.SUCCESS, recovered ? "recovered_receipt" : "paid");
         player.tell("Salariu plătit în monede fizice.");
     }
 
@@ -1566,8 +1568,8 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         }
         state.foodReadyAt = now() + ctx.policies().foodCooldownMinutes * DutyEngine.MINUTE_MS;
         players.save(player.uuid(), state);
-        audit.record("food_claim", player.name(), player.uuid().toString(),
-                player.name(), player.uuid().toString(), "SUCCESS", "claimed");
+        audit.record(AuditActions.FOOD_CLAIM, player.name(), player.uuid().toString(),
+                player.name(), player.uuid().toString(), AuditResults.SUCCESS, "claimed");
         player.tell("Ai primit " + ctx.policies().foodAmount + " pâini.");
     }
 
@@ -1582,8 +1584,8 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             return;
         }
         if (equipment.giveKit(player, state)) {
-            audit.record("kit_claim", player.name(), player.uuid().toString(),
-                    player.name(), player.uuid().toString(), "SUCCESS",
+            audit.record(AuditActions.KIT_CLAIM, player.name(), player.uuid().toString(),
+                    player.name(), player.uuid().toString(), AuditResults.SUCCESS,
                     Rank.of(state.rank).name());
         }
     }
@@ -1606,8 +1608,8 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         long docked = Math.min(points, state.requisitionPoints);
         state.requisitionPoints -= docked;
         players.save(target.uuid(), state);
-        audit.record("merit_dock", actor.name(), actor.uuid().toString(),
-                target.name(), target.uuid().toString(), "SUCCESS",
+        audit.record(AuditActions.MERIT_DOCK, actor.name(), actor.uuid().toString(),
+                target.name(), target.uuid().toString(), AuditResults.SUCCESS,
                 "requisition-" + docked + " (rămas " + state.requisitionPoints + ")");
         target.tell("Comisaru' ți-a retras " + docked + " puncte de rechiziție. Sold: "
                 + state.requisitionPoints + ".");

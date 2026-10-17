@@ -9,6 +9,8 @@ import com.dwurdy.straja.domain.model.FineTask;
 import com.dwurdy.straja.domain.model.Sentence;
 import java.util.ArrayList;
 import java.util.List;
+import com.dwurdy.straja.domain.model.AuditActions;
+import com.dwurdy.straja.domain.model.AuditResults;
 
 /** Formal case paperwork generated from the existing sentence/task graph. */
 public final class ArrestRecordService {
@@ -36,8 +38,8 @@ public final class ArrestRecordService {
         ArrestRecord record = populate(data, sentence);
         data.records.add(record);
         ctx.arrestRecords().write(data);
-        audit.record("arrest_record_created", "system", "", record.id,
-                record.detaineeUuid, "SUCCESS", "sentence=" + sentence.id);
+        audit.record(AuditActions.ARREST_RECORD_CREATED, "system", "", record.id,
+                record.detaineeUuid, AuditResults.SUCCESS, "sentence=" + sentence.id);
         return record;
     }
 
@@ -57,8 +59,8 @@ public final class ArrestRecordService {
         record.jailedAt = record.jailedAt == null ? now() : record.jailedAt;
         record.guardNotes = clean(notes);
         ctx.arrestRecords().write(data);
-        audit.record("arrest_record_finalized", "system", "", record.id,
-                record.detaineeUuid, "SUCCESS", "");
+        audit.record(AuditActions.ARREST_RECORD_FINALIZED, "system", "", record.id,
+                record.detaineeUuid, AuditResults.SUCCESS, "");
         return record;
     }
 

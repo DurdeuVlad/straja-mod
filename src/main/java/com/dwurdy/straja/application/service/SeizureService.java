@@ -13,6 +13,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import com.dwurdy.straja.domain.model.AuditActions;
+import com.dwurdy.straja.domain.model.AuditResults;
 
 /**
  * LAW-004 seizure engine: the authoritative arrest-time inventory pipeline.
@@ -111,7 +113,7 @@ public final class SeizureService {
                     dropAtEvidenceOrPlayer(target, site, checkpoints,
                             stack.itemId(), stack.count());
                 } catch (RuntimeException ignored) {}
-                audit.record("seizure_route_failure", "system", "", target.name(),
+                audit.record(AuditActions.SEIZURE_ROUTE_FAILURE, "system", "", target.name(),
                         uuid, "FAIL", stack.itemId() + " x" + stack.count());
             }
         }
@@ -132,7 +134,7 @@ public final class SeizureService {
         rec.confiscatedFully = dropped == 0;
         reg.legacyWantedUntil().remove(uuid);
         ctx.prisonerRegister().write(reg);
-        audit.record("seizure", "system", "", target.name(), uuid, "SUCCESS",
+        audit.record(AuditActions.SEIZURE, "system", "", target.name(), uuid, AuditResults.SUCCESS,
                 "contraband=" + contraband + " personal=" + personal
                         + " dropped=" + dropped + " lockers=" + rec.personalLocker.size());
         giveReport(target, rec, site, contraband, personal, dropped);
@@ -166,8 +168,8 @@ public final class SeizureService {
             }
         }
         rec.personalLocker = new ArrayList<>();
-        audit.record("locker_release", "system", "", target.name(),
-                uuidOf(target), "SUCCESS", "restored=" + restored);
+        audit.record(AuditActions.LOCKER_RELEASE, "system", "", target.name(),
+                uuidOf(target), AuditResults.SUCCESS, "restored=" + restored);
     }
 
     /**
@@ -271,8 +273,8 @@ public final class SeizureService {
         ctx.prisonerRegister().write(reg);
         if (restored > 0) {
             target.tell("Bunurile tale din dulapul personal au fost restituite.");
-            audit.record("locker_release", "system", "", target.name(),
-                    uuidOf(target), "SUCCESS", "pending restored=" + restored);
+            audit.record(AuditActions.LOCKER_RELEASE, "system", "", target.name(),
+                    uuidOf(target), AuditResults.SUCCESS, "pending restored=" + restored);
         }
     }
 
@@ -322,8 +324,8 @@ public final class SeizureService {
             }
         }
         if (seized > 0) {
-            audit.record("camp_exit_seizure", "system", "", target.name(),
-                    uuidOf(target), "SUCCESS",
+            audit.record(AuditActions.CAMP_EXIT_SEIZURE, "system", "", target.name(),
+                    uuidOf(target), AuditResults.SUCCESS,
                     "site=" + (site == null ? "" : site.id)
                             + " seized=" + seized + " dropped=" + dropped);
         }
@@ -389,8 +391,8 @@ public final class SeizureService {
             }
         }
         if (seized > 0) {
-            audit.record("forgery_seizure", "system", "", target.name(),
-                    uuidOf(target), "SUCCESS",
+            audit.record(AuditActions.FORGERY_SEIZURE, "system", "", target.name(),
+                    uuidOf(target), AuditResults.SUCCESS,
                     "site=" + (site == null ? "" : site.id)
                             + " seized=" + seized + " dropped=" + dropped);
         }

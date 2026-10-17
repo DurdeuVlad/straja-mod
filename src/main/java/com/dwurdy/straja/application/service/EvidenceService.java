@@ -21,6 +21,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import com.dwurdy.straja.domain.model.AuditActions;
+import com.dwurdy.straja.domain.model.AuditResults;
 
 /** Server-side search snapshots, one-stack confiscation, and custody history. */
 public final class EvidenceService {
@@ -61,9 +63,9 @@ public final class EvidenceService {
         SearchDenial failure = eligibilityFailure(guard, target);
         if (failure != null) {
             guard.refuse(failure.key(), failure.remedy());
-            audit.record("search_started", guard.name(), uuid(guard),
+            audit.record(AuditActions.SEARCH_STARTED, guard.name(), uuid(guard),
                     target != null ? target.name() : "", target != null ? uuid(target) : "",
-                    "REFUSED", failure.key());
+                    AuditResults.REFUSED, failure.key());
             return null;
         }
         String token = ctx.ids().token();
@@ -75,8 +77,8 @@ public final class EvidenceService {
         }
         sessions.put(token, new SearchSession(guard.uuid(), target.uuid(),
                 guard.dimension(), target.dimension(), now(), slots));
-        audit.record("search_started", guard.name(), uuid(guard),
-                target.name(), uuid(target), "SUCCESS", "read_only_snapshot");
+        audit.record(AuditActions.SEARCH_STARTED, guard.name(), uuid(guard),
+                target.name(), uuid(target), AuditResults.SUCCESS, "read_only_snapshot");
         guard.tell("Percheziție deschisă pentru " + target.name()
                 + ". Inventarul este doar pentru citire.");
         return new RoleplayExpansionUseCase.SearchView(token, target.name(), List.copyOf(slots));
@@ -93,8 +95,8 @@ public final class EvidenceService {
         PlayerGateway target = ctx.server().findPlayer(session.targetUuid);
         if (target == null || eligibilityFailure(guard, target) != null) {
             if (guard != null) guard.refuse("straja.evidence.search_moved", "straja.remedy.retry");
-            audit.record("item_confiscated", name(guard), uuid(guard),
-                    session.targetUuid.toString(), "", "REFUSED", "context_changed");
+            audit.record(AuditActions.ITEM_CONFISCATED, name(guard), uuid(guard),
+                    session.targetUuid.toString(), "", AuditResults.REFUSED, "context_changed");
             return false;
         }
         RoleplayExpansionUseCase.SearchSlot selected = session.slot(slot);
@@ -105,8 +107,8 @@ public final class EvidenceService {
         ItemView current = target.inventory().stackAt(slot);
         if (!sameStack(selected.item(), current)) {
             guard.refuse("straja.evidence.item_changed", "straja.remedy.retry");
-            audit.record("item_confiscated", guard.name(), uuid(guard),
-                    target.name(), uuid(target), "REFUSED", "stale_slot");
+            audit.record(AuditActions.ITEM_CONFISCATED, guard.name(), uuid(guard),
+                    target.name(), uuid(target), AuditResults.REFUSED, "stale_slot");
             return false;
         }
         EvidenceStore data = store();
@@ -115,14 +117,14 @@ public final class EvidenceService {
         ItemSpec previewReceipt = confiscationReceipt(previewId);
         if (!guard.inventory().canReceive(List.of(previewBag))) {
             guard.refuse("straja.evidence.bag_full", "straja.remedy.retry");
-            audit.record("item_confiscated", guard.name(), uuid(guard),
-                    target.name(), uuid(target), "REFUSED", "guard_inventory_full");
+            audit.record(AuditActions.ITEM_CONFISCATED, guard.name(), uuid(guard),
+                    target.name(), uuid(target), AuditResults.REFUSED, "guard_inventory_full");
             return false;
         }
         if (!target.inventory().canReceive(List.of(previewReceipt))) {
             guard.refuse("straja.evidence.target_full", "straja.remedy.retry");
-            audit.record("item_confiscated", guard.name(), uuid(guard),
-                    target.name(), uuid(target), "REFUSED", "target_inventory_full");
+            audit.record(AuditActions.ITEM_CONFISCATED, guard.name(), uuid(guard),
+                    target.name(), uuid(target), AuditResults.REFUSED, "target_inventory_full");
             return false;
         }
         ItemView taken = target.inventory().extract(slot, amount);
@@ -177,9 +179,9 @@ public final class EvidenceService {
             guard.refuse("straja.evidence.doc_deferred", "straja.remedy.wait");
             target.tell("Dovada fizică va fi reîncercată la reconectare.");
         }
-        audit.record("item_confiscated", guard.name(), uuid(guard),
+        audit.record(AuditActions.ITEM_CONFISCATED, guard.name(), uuid(guard),
                 target.name(), uuid(target),
-                bagDelivered && receiptDelivered ? "SUCCESS" : "SUCCESS_PENDING_DELIVERY", evidence.id);
+                bagDelivered && receiptDelivered ? AuditResults.SUCCESS : "SUCCESS_PENDING_DELIVERY", evidence.id);
         return true;
     }
 
@@ -230,8 +232,8 @@ public final class EvidenceService {
         evidence.currentCustodianName = actor.name();
         evidence.currentLocation = "archive";
         ctx.evidence().write(data);
-        audit.record("evidence_deposit", actor.name(), uuid(actor),
-                evidence.id, evidence.sourcePlayerUuid, "SUCCESS", "");
+        audit.record(AuditActions.EVIDENCE_DEPOSIT, actor.name(), uuid(actor),
+                evidence.id, evidence.sourcePlayerUuid, AuditResults.SUCCESS, "");
         actor.tell("Proba " + evidence.id + " a fost depusă în Arhivă.");
         return true;
     }
@@ -264,8 +266,8 @@ public final class EvidenceService {
         evidence.currentCustodianName = owner.name();
         evidence.currentLocation = "player";
         ctx.evidence().write(data);
-        audit.record("evidence_return", actor.name(), uuid(actor),
-                evidence.id, owner.name(), "SUCCESS", "");
+        audit.record(AuditActions.EVIDENCE_RETURN, actor.name(), uuid(actor),
+                evidence.id, owner.name(), AuditResults.SUCCESS, "");
         return true;
     }
 
@@ -291,8 +293,8 @@ public final class EvidenceService {
         evidence.currentCustodianName = recipient.name();
         evidence.currentLocation = players.isOnDutyGuard(recipient) ? recipient.dimension() : "archive";
         ctx.evidence().write(data);
-        audit.record("evidence_transfer", actor.name(), uuid(actor), evidence.id,
-                uuid(recipient), "SUCCESS", safeReason);
+        audit.record(AuditActions.EVIDENCE_TRANSFER, actor.name(), uuid(actor), evidence.id,
+                uuid(recipient), AuditResults.SUCCESS, safeReason);
         actor.tell("Proba " + evidence.id + " a fost transferată lui " + recipient.name() + ".");
         return true;
     }
@@ -317,8 +319,8 @@ public final class EvidenceService {
         evidence.currentCustodianName = "";
         evidence.currentLocation = "destroyed";
         ctx.evidence().write(data);
-        audit.record("evidence_destroy", actor.name(), uuid(actor), evidence.id,
-                evidence.sourcePlayerUuid, "SUCCESS", safeReason);
+        audit.record(AuditActions.EVIDENCE_DESTROY, actor.name(), uuid(actor), evidence.id,
+                evidence.sourcePlayerUuid, AuditResults.SUCCESS, safeReason);
         actor.tell("Proba " + evidence.id + " a fost marcată ca distrusă.");
         return true;
     }

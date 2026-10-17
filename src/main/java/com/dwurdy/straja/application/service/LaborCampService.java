@@ -14,6 +14,8 @@ import com.dwurdy.straja.domain.model.StrajaPolicies;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import com.dwurdy.straja.domain.model.AuditActions;
+import com.dwurdy.straja.domain.model.AuditResults;
 
 /**
  * LAW-006 labor camps: perimeter registration, quartermaster/exit links,
@@ -190,8 +192,8 @@ public final class LaborCampService {
         store.put(camp);
         ctx.laborCamps().write(store);
         actor.tellKey("straja.camp.registered", id, camp.name);
-        audit.record("camp_register", actor.name(), uuidOf(actor), id, "",
-                "SUCCESS", "bounds=" + boundsKey(bounds));
+        audit.record(AuditActions.CAMP_REGISTER, actor.name(), uuidOf(actor), id, "",
+                AuditResults.SUCCESS, "bounds=" + boundsKey(bounds));
         return true;
     }
 
@@ -207,8 +209,8 @@ public final class LaborCampService {
         camp.quartermasterDeskId = desk.id;
         commit(camp);
         actor.tellKey("straja.camp.linked_desk", camp.id, desk.id);
-        audit.record("camp_link_desk", actor.name(), uuidOf(actor), camp.id, "",
-                "SUCCESS", "desk=" + desk.id);
+        audit.record(AuditActions.CAMP_LINK_DESK, actor.name(), uuidOf(actor), camp.id, "",
+                AuditResults.SUCCESS, "desk=" + desk.id);
         return true;
     }
 
@@ -224,8 +226,8 @@ public final class LaborCampService {
         camp.exitCheckpointId = site.id;
         commit(camp);
         actor.tellKey("straja.camp.linked_exit", camp.id, site.id);
-        audit.record("camp_link_exit", actor.name(), uuidOf(actor), camp.id, "",
-                "SUCCESS", "site=" + site.id);
+        audit.record(AuditActions.CAMP_LINK_EXIT, actor.name(), uuidOf(actor), camp.id, "",
+                AuditResults.SUCCESS, "site=" + site.id);
         return true;
     }
 
@@ -281,8 +283,8 @@ public final class LaborCampService {
                 camp.freedomMode == FreedomPriceMode.FLAT
                         ? formatCoins(camp.freedomFlatPrice)
                         : String.valueOf(camp.freedomFineMultiplier));
-        audit.record("camp_freedom_price", actor.name(), uuidOf(actor), camp.id, "",
-                "SUCCESS", "mode=" + camp.freedomMode + " value=" + value);
+        audit.record(AuditActions.CAMP_FREEDOM_PRICE, actor.name(), uuidOf(actor), camp.id, "",
+                AuditResults.SUCCESS, "mode=" + camp.freedomMode + " value=" + value);
         return true;
     }
 
@@ -312,8 +314,8 @@ public final class LaborCampService {
         }
         commit(camp);
         actor.tellKey("straja.camp.spawn_set", camp.id, kind, point.key());
-        audit.record("camp_spawn", actor.name(), uuidOf(actor), camp.id, "",
-                "SUCCESS", kind + "=" + point.key());
+        audit.record(AuditActions.CAMP_SPAWN, actor.name(), uuidOf(actor), camp.id, "",
+                AuditResults.SUCCESS, kind + "=" + point.key());
         return true;
     }
 
@@ -336,7 +338,7 @@ public final class LaborCampService {
         store.remove(camp.id);
         ctx.laborCamps().write(store);
         actor.tellKey("straja.camp.unregistered", camp.id);
-        audit.record("camp_unregister", actor.name(), uuidOf(actor), camp.id, "", "SUCCESS", "");
+        audit.record(AuditActions.CAMP_UNREGISTER, actor.name(), uuidOf(actor), camp.id, "", AuditResults.SUCCESS, "");
         return true;
     }
 

@@ -10,6 +10,8 @@ import com.dwurdy.straja.domain.model.GuardState;
 import com.dwurdy.straja.domain.model.Rank;
 import com.dwurdy.straja.domain.model.SetupData;
 import com.dwurdy.straja.domain.model.Text;
+import com.dwurdy.straja.domain.model.AuditActions;
+import com.dwurdy.straja.domain.model.AuditResults;
 
 /**
  * §25 emergency system. Two mechanisms share one persisted state: a TTL-bound
@@ -44,8 +46,8 @@ public class EmergencyService implements EmergencyUseCase {
         broadcast(urgencyText(state));
         actor.tell(Text.STRAJA_PREFIX + "Urgență emisă (" + ctx.policies().emergencyUrgencyTtlMinutes
                 + " min): " + state.urgencyMessage);
-        audit.record("emergency_alert", actor.name(), actor.uuid().toString(),
-                actor.name(), actor.uuid().toString(), "SUCCESS", state.urgencyMessage);
+        audit.record(AuditActions.EMERGENCY_ALERT, actor.name(), actor.uuid().toString(),
+                actor.name(), actor.uuid().toString(), AuditResults.SUCCESS, state.urgencyMessage);
     }
 
     @Override
@@ -59,8 +61,8 @@ public class EmergencyService implements EmergencyUseCase {
         state.clearUrgency();
         ctx.emergency().write(state);
         broadcast(Text.STRAJA_PREFIX + "Urgența a fost ridicată.");
-        audit.record("emergency_clear", actor.name(), actor.uuid().toString(),
-                actor.name(), actor.uuid().toString(), "SUCCESS", "");
+        audit.record(AuditActions.EMERGENCY_CLEAR, actor.name(), actor.uuid().toString(),
+                actor.name(), actor.uuid().toString(), AuditResults.SUCCESS, "");
     }
 
     @Override
@@ -91,8 +93,8 @@ public class EmergencyService implements EmergencyUseCase {
                 + "; patrulele noi cer " + state.requiredRounds + " runde complete.");
         actor.tell(Text.STRAJA_PREFIX + "Stare de urgență activă: ×" + state.payMultiplier
                 + " plată, " + state.requiredRounds + " runde/patrulă.");
-        audit.record("emergency_start", actor.name(), actor.uuid().toString(),
-                actor.name(), actor.uuid().toString(), "SUCCESS",
+        audit.record(AuditActions.EMERGENCY_START, actor.name(), actor.uuid().toString(),
+                actor.name(), actor.uuid().toString(), AuditResults.SUCCESS,
                 "multiplier=" + state.payMultiplier + ";rounds=" + state.requiredRounds
                         + (state.reason != null ? ";reason=" + state.reason : ""));
     }
@@ -109,8 +111,8 @@ public class EmergencyService implements EmergencyUseCase {
         ctx.emergency().write(state);
         broadcast(Text.STRAJA_PREFIX + "Starea de urgență a fost încheiată. Plata revine la tariful normal.");
         actor.tell(Text.STRAJA_PREFIX + "Stare de urgență încheiată. Soldurile acumulate rămân neschimbate.");
-        audit.record("emergency_end", actor.name(), actor.uuid().toString(),
-                actor.name(), actor.uuid().toString(), "SUCCESS", "");
+        audit.record(AuditActions.EMERGENCY_END, actor.name(), actor.uuid().toString(),
+                actor.name(), actor.uuid().toString(), AuditResults.SUCCESS, "");
     }
 
     @Override

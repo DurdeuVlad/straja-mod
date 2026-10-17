@@ -9,6 +9,8 @@ import com.dwurdy.straja.domain.model.StrajaPolicies;
 
 import java.util.ArrayList;
 import java.util.List;
+import com.dwurdy.straja.domain.model.AuditActions;
+import com.dwurdy.straja.domain.model.AuditResults;
 
 /**
  * Paper archive: folders, sheets, signatures, numbered carbon copies and
@@ -168,7 +170,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
         if (enabled) store.archivists.put(target.uuid().toString(), target.name());
         else store.archivists.remove(target.uuid().toString());
         ctx.archive().write(store);
-        audit.record("archive_role", actor.name(), actor.uuid().toString(), target.name(), target.uuid().toString(), "SUCCESS", enabled ? "granted" : "revoked");
+        audit.record(AuditActions.ARCHIVE_ROLE, actor.name(), actor.uuid().toString(), target.name(), target.uuid().toString(), AuditResults.SUCCESS, enabled ? "granted" : "revoked");
         actor.tell("Arhivista " + target.name() + (enabled ? " autorizată." : " dezactivată."));
         return true;
     }
@@ -201,7 +203,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
         folder.createdAt = now();
         store.folders.put(folder.id, folder);
         ctx.archive().write(store);
-        audit.record("archive_folder_create", player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), "SUCCESS", "created folderId=" + folder.id);
+        audit.record(AuditActions.ARCHIVE_FOLDER_CREATE, player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), AuditResults.SUCCESS, "created folderId=" + folder.id);
         player.tell("Dosar creat: " + folder.id + " — " + folder.title + " [" + folder.status + "]");
         return true;
     }
@@ -289,8 +291,8 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
             folder.readers.add(reader);
             ctx.archive().write(store);
         }
-        audit.record("archive_folder_issue", player.name(), player.uuid().toString(),
-                target.name(), target.uuid().toString(), "SUCCESS",
+        audit.record(AuditActions.ARCHIVE_FOLDER_ISSUE, player.name(), player.uuid().toString(),
+                target.name(), target.uuid().toString(), AuditResults.SUCCESS,
                 "folderId=" + folder.id);
         player.tell("Dosarul " + folder.id + " a fost emis pentru " + target.name() + ".");
         target.tell("Ai primit dosarul " + folder.id + " — " + folder.title + ".");
@@ -334,7 +336,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
         store.sheets.put(sheet.id, sheet);
         folder.sheetIds.add(sheet.id);
         ctx.archive().write(store);
-        audit.record("archive_sheet_create", player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), "SUCCESS", "draft_created sheetId=" + sheet.id + " folderId=" + folder.id);
+        audit.record(AuditActions.ARCHIVE_SHEET_CREATE, player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), AuditResults.SUCCESS, "draft_created sheetId=" + sheet.id + " folderId=" + folder.id);
         player.tell("Foaie creată: " + sheet.id + " — " + sheet.title + " [DRAFT]");
         return true;
     }
@@ -363,7 +365,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
         sheet.content = content == null ? "" : content;
         sheet.updatedAt = now();
         ctx.archive().write(store);
-        audit.record("archive_sheet_write", player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), "SUCCESS", "draft_updated sheetId=" + sheet.id);
+        audit.record(AuditActions.ARCHIVE_SHEET_WRITE, player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), AuditResults.SUCCESS, "draft_updated sheetId=" + sheet.id);
         player.tell("Draft salvat: " + sheet.id + ".");
         return true;
     }
@@ -432,7 +434,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
         sheet.submittedAt = now();
         sheet.updatedAt = now();
         ctx.archive().write(store);
-        audit.record("archive_sheet_submit", player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), "SUCCESS", "pending_signature sheetId=" + sheet.id);
+        audit.record(AuditActions.ARCHIVE_SHEET_SUBMIT, player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), AuditResults.SUCCESS, "pending_signature sheetId=" + sheet.id);
         player.tell("Foaia " + sheet.id + " așteaptă semnătura Comisarului sau a unui ofițer (Căpitan+).");
         return true;
     }
@@ -497,7 +499,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
         sheet.signatureReason = reason == null || reason.isBlank() ? "verificat" : reason.trim();
         sheet.updatedAt = now();
         ctx.archive().write(store);
-        audit.record("archive_sheet_sign", player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), "SUCCESS", "signed sheetId=" + sheet.id + " signer=" + player.name());
+        audit.record(AuditActions.ARCHIVE_SHEET_SIGN, player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), AuditResults.SUCCESS, "signed sheetId=" + sheet.id + " signer=" + player.name());
         player.refuse("straja.archive.signed_locked", "straja.remedy.fix_retry", sheet.id);
         return true;
     }
@@ -518,7 +520,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
         sheet.revoked = true;
         sheet.updatedAt = now();
         ctx.archive().write(store);
-        audit.record("archive_sheet_revoke", player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), "SUCCESS", "revoked sheetId=" + sheet.id);
+        audit.record(AuditActions.ARCHIVE_SHEET_REVOKE, player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), AuditResults.SUCCESS, "revoked sheetId=" + sheet.id);
         player.tell("Actul " + sheet.id + " a fost revocat.");
         return true;
     }
@@ -617,7 +619,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
         operation.status = pending > 0 ? "COMPLETED_WITH_PENDING" : "COMPLETED";
         operation.completedAt = now();
         ctx.archive().write(store);
-        audit.record("archive_sheet_copy", player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), "SUCCESS",
+        audit.record(AuditActions.ARCHIVE_SHEET_COPY, player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), AuditResults.SUCCESS,
                 (pending > 0 ? "copies_created_with_pending" : "copies_created") + " sheetId=" + sheet.id + " count=" + requested + " pending=" + pending);
         player.tell("Au fost generate " + requested + " copii numerotate ale " + sheet.id + (pending > 0 ? "; unele rămân pending pentru retry." : "."));
         return true;
@@ -692,7 +694,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
         }
         store.copies.add(copy);
         ctx.archive().write(store);
-        audit.record("archive_envelope_pack", player.name(), player.uuid().toString(), targetName, null, "PENDING", "prepared_before_source_consume sheetId=" + sheet.id + " copyId=" + copy.id);
+        audit.record(AuditActions.ARCHIVE_ENVELOPE_PACK, player.name(), player.uuid().toString(), targetName, null, AuditResults.PENDING, "prepared_before_source_consume sheetId=" + sheet.id + " copyId=" + copy.id);
         copy.sourceState = "CONSUMING";
         copy.sourceConsumeStartedAt = now();
         ctx.archive().write(store);
@@ -701,7 +703,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
             copy.sourceState = "NOT_CONSUMED";
             copy.deliveryError = "source_consume_failed";
             ctx.archive().write(store);
-            audit.record("archive_envelope_pack", player.name(), player.uuid().toString(), targetName, null, "FAILED", "source_consume_failed sheetId=" + sheet.id);
+            audit.record(AuditActions.ARCHIVE_ENVELOPE_PACK, player.name(), player.uuid().toString(), targetName, null, "FAILED", "source_consume_failed sheetId=" + sheet.id);
             player.refuse("straja.archive.env_consume_fail", "straja.remedy.retry");
             return false;
         }
@@ -717,7 +719,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
             }
         }
         ctx.archive().write(store);
-        audit.record("archive_envelope_pack", player.name(), player.uuid().toString(), targetName, null, "SUCCESS",
+        audit.record(AuditActions.ARCHIVE_ENVELOPE_PACK, player.name(), player.uuid().toString(), targetName, null, AuditResults.SUCCESS,
                 ("DELIVERED".equals(copy.status) ? "official_envelope" : "official_envelope_pending") + " sheetId=" + sheet.id + " copyId=" + copy.id);
         player.tell("DELIVERED".equals(copy.status)
                 ? "Plicul oficial a fost pregătit pentru " + targetName + "."
@@ -790,8 +792,8 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
         copy.deliveredAt = now();
         store.copies.add(copy);
         ctx.archive().write(store);
-        audit.record("archive_document_issue", player.name(), player.uuid().toString(),
-                target.name(), targetUuid, "SUCCESS",
+        audit.record(AuditActions.ARCHIVE_DOCUMENT_ISSUE, player.name(), player.uuid().toString(),
+                target.name(), targetUuid, AuditResults.SUCCESS,
                 "sheetId=" + sheet.id + " copyId=" + copy.id);
         player.tell("Actul " + sheet.id + " a fost emis pentru " + target.name() + ".");
         target.tell("Ai primit actul oficial " + sheet.id + " — " + sheet.title + ".");
@@ -816,8 +818,8 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
             if (malformed) {
                 iterator.remove();
                 changed = true;
-                audit.record("archive_delivery", player.name(), player.uuid().toString(),
-                        "", "", "SUCCESS", "malformed_copy_discarded");
+                audit.record(AuditActions.ARCHIVE_DELIVERY, player.name(), player.uuid().toString(),
+                        "", "", AuditResults.SUCCESS, "malformed_copy_discarded");
                 continue;
             }
             if (!"PENDING".equals(copy.status)) continue;
@@ -832,8 +834,8 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
                 copy.status = "FAILED";
                 copy.deliveryError = sheet == null ? "missing_sheet" : "revoked";
                 changed = true;
-                audit.record("archive_delivery", player.name(), player.uuid().toString(),
-                        copy.recipientName, copy.recipientUuid, "SUCCESS",
+                audit.record(AuditActions.ARCHIVE_DELIVERY, player.name(), player.uuid().toString(),
+                        copy.recipientName, copy.recipientUuid, AuditResults.SUCCESS,
                         "copy_discarded reason=" + copy.deliveryError + " copyId=" + copy.id);
                 continue;
             }
@@ -851,7 +853,7 @@ public class ArchiveService implements ArchiveRoleplayUseCase {
             } else {
                 copy.deliveryError = "delivery_failed";
                 changed = true;
-                audit.record("archive_delivery", player.name(), player.uuid().toString(),
+                audit.record(AuditActions.ARCHIVE_DELIVERY, player.name(), player.uuid().toString(),
                         copy.recipientName, copy.recipientUuid, "FAILED",
                         "delivery_failed copyId=" + copy.id);
             }

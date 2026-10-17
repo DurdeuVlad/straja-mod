@@ -12,6 +12,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import com.dwurdy.straja.domain.model.AuditActions;
+import com.dwurdy.straja.domain.model.AuditResults;
 
 /**
  * Runtime policy overrides: the Comisar (or an op/console) edits curated keys
@@ -102,9 +104,9 @@ public class PolicyService implements PolicyConfigUseCase {
         Map<String, String> overrides = new LinkedHashMap<>(store.read());
         overrides.put(key, rawValue.trim());
         boolean persisted = store.write(overrides);
-        audit.record("policy_set", actor.name(), actor.uuid().toString(),
+        audit.record(AuditActions.POLICY_SET, actor.name(), actor.uuid().toString(),
                 actor.name(), actor.uuid().toString(),
-                persisted ? "SUCCESS" : "PERSIST_FAILED", key);
+                persisted ? AuditResults.SUCCESS : "PERSIST_FAILED", key);
         actor.tell(key + " = " + PolicyRegistry.read(ctx.policies(), key)
                 + (persisted
                         ? " — aplicat imediat și salvat în " + store.describe() + "."
@@ -125,9 +127,9 @@ public class PolicyService implements PolicyConfigUseCase {
         // Restore the configured (TOML) default through the same strict path.
         String baselineValue = PolicyRegistry.read(baseline, key);
         PolicyRegistry.apply(ctx.policies(), key, baselineValue);
-        audit.record("policy_reset", actor.name(), actor.uuid().toString(),
+        audit.record(AuditActions.POLICY_RESET, actor.name(), actor.uuid().toString(),
                 actor.name(), actor.uuid().toString(),
-                persisted ? "SUCCESS" : "PERSIST_FAILED", key);
+                persisted ? AuditResults.SUCCESS : "PERSIST_FAILED", key);
         actor.tell(key + " resetat la valoarea configurată: " + baselineValue
                 + (persisted ? "." : " (dar fișierul nu s-a putut actualiza)."));
     }

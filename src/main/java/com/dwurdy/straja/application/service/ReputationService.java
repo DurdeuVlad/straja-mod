@@ -12,6 +12,8 @@ import com.dwurdy.straja.application.port.out.PlayerGateway;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import com.dwurdy.straja.domain.model.AuditActions;
+import com.dwurdy.straja.domain.model.AuditResults;
 
 /** Persistent civic history, deliberately separate from rank and merit. */
 public final class ReputationService {
@@ -120,8 +122,8 @@ public final class ReputationService {
         data.events.put(event.id, event);
         data.idempotency.put(key, event.id);
         ctx.reputation().write(data);
-        audit.record("reputation_delta", event.actorName, event.actorUuid,
-                event.id, event.playerUuid, "SUCCESS",
+        audit.record(AuditActions.REPUTATION_DELTA, event.actorName, event.actorUuid,
+                event.id, event.playerUuid, AuditResults.SUCCESS,
                 event.sourceType + ":" + event.sourceRecordId + " delta=" + event.delta);
         return event;
     }
@@ -171,8 +173,8 @@ public final class ReputationService {
                     "Uciderea unei persoane aflate în custodie", false);
             incidents.createDisciplinaryFlag(killer, victim,
                     "Execuție în custodie; necesită analiză Comisar.");
-            audit.record("guard_lethal_force_flag", killer.name(), uuid(killer),
-                    victim.name(), uuid(victim), "SUCCESS", "restrained_target");
+            audit.record(AuditActions.GUARD_LETHAL_FORCE_FLAG, killer.name(), uuid(killer),
+                    victim.name(), uuid(victim), AuditResults.SUCCESS, "restrained_target");
             return;
         }
         boolean lawful = killerGuard && !restrained
@@ -196,8 +198,8 @@ public final class ReputationService {
         apply(killer, killer, source, deathId, delta,
                 lawful ? "Forță letală în context ostil și autoritate activă"
                         : "Moartea finală a unui jucător", false);
-        audit.record("lethal_force", killer.name(), uuid(killer),
-                victim.name(), uuid(victim), "SUCCESS", lawful ? "lawful_context" : source);
+        audit.record(AuditActions.LETHAL_FORCE, killer.name(), uuid(killer),
+                victim.name(), uuid(victim), AuditResults.SUCCESS, lawful ? "lawful_context" : source);
     }
 
     public synchronized ReputationEvent recordJailerAssault(PlayerGateway attacker,
@@ -325,8 +327,8 @@ public final class ReputationService {
             ReputationEvent stored = data.events.get(original.id);
             if (stored != null) stored.voided = true;
             ctx.reputation().write(data);
-            audit.record("reputation_reversal", actor == null ? "Sistem" : actor.name(),
-                    uuid(actor), original.id, original.playerUuid, "SUCCESS", reversal.id);
+            audit.record(AuditActions.REPUTATION_REVERSAL, actor == null ? "Sistem" : actor.name(),
+                    uuid(actor), original.id, original.playerUuid, AuditResults.SUCCESS, reversal.id);
         }
         return reversal;
     }

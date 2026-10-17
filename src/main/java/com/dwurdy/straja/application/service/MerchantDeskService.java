@@ -16,6 +16,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import com.dwurdy.straja.domain.model.AuditActions;
+import com.dwurdy.straja.domain.model.AuditResults;
 
 /**
  * LAW-005 / AT5 merchant desks: an NPC-attended buy counter whose sold goods
@@ -92,8 +94,8 @@ public final class MerchantDeskService {
         store.put(desk);
         ctx.merchantDesks().write(store);
         actor.tellKey("straja.desk.created", deskId, deskId);
-        audit.record("desk_create", actor.name(), uuidOf(actor), deskId, "",
-                "SUCCESS", "npc=" + npcRef);
+        audit.record(AuditActions.DESK_CREATE, actor.name(), uuidOf(actor), deskId, "",
+                AuditResults.SUCCESS, "npc=" + npcRef);
         return true;
     }
 
@@ -107,7 +109,7 @@ public final class MerchantDeskService {
         store.remove(deskId);
         ctx.merchantDesks().write(store);
         actor.tellKey("straja.desk.removed", deskId);
-        audit.record("desk_remove", actor.name(), uuidOf(actor), deskId, "", "SUCCESS", "");
+        audit.record(AuditActions.DESK_REMOVE, actor.name(), uuidOf(actor), deskId, "", AuditResults.SUCCESS, "");
         return true;
     }
 
@@ -132,8 +134,8 @@ public final class MerchantDeskService {
         }
         store.put(desk);
         ctx.merchantDesks().write(store);
-        audit.record("desk_price", actor.name(), uuidOf(actor), deskId, "",
-                "SUCCESS", itemId + "=" + price);
+        audit.record(AuditActions.DESK_PRICE, actor.name(), uuidOf(actor), deskId, "",
+                AuditResults.SUCCESS, itemId + "=" + price);
         return true;
     }
 
@@ -258,8 +260,8 @@ public final class MerchantDeskService {
         campStore.put(camp);
         ctx.laborCamps().write(campStore);
         actor.tellKey("straja.desk.quartermaster_ok", desk.id, campId, items.size());
-        audit.record("desk_quartermaster", actor.name(), uuidOf(actor), deskId, "",
-                "SUCCESS", "camp=" + campId + " items=" + items.size());
+        audit.record(AuditActions.DESK_QUARTERMASTER, actor.name(), uuidOf(actor), deskId, "",
+                AuditResults.SUCCESS, "camp=" + campId + " items=" + items.size());
         return true;
     }
 
@@ -468,8 +470,8 @@ public final class MerchantDeskService {
                     residue += owed;
                 }
                 seller.refuse("straja.desk.payment_failed", "straja.remedy.retry");
-                audit.record("desk_sale", seller.name(), uuidOf(seller), desk.id, "",
-                        "REFUSED", "payment_failed_after_commit; goods reclaimed"
+                audit.record(AuditActions.DESK_SALE, seller.name(), uuidOf(seller), desk.id, "",
+                        AuditResults.REFUSED, "payment_failed_after_commit; goods reclaimed"
                                 + (residue > 0 ? "; residue=" + residue : ""));
                 return false;
             }
@@ -483,8 +485,8 @@ public final class MerchantDeskService {
         entry.creditedToLabor = laborCredit;
         store.appendTrade(entry, LEDGER_KEEP);
         ctx.merchantDesks().write(store);
-        audit.record("desk_sale", seller.name(), uuidOf(seller), desk.id, "",
-                "SUCCESS", "items=" + placed + " base=" + baseUnits
+        audit.record(AuditActions.DESK_SALE, seller.name(), uuidOf(seller), desk.id, "",
+                AuditResults.SUCCESS, "items=" + placed + " base=" + baseUnits
                         + (laborCredit ? " labor" : " cash")
                         + (returned > 0 ? " returned=" + returned : ""));
         if (laborCredit) {
@@ -558,7 +560,7 @@ public final class MerchantDeskService {
 
     private boolean refuseAuthority(PlayerGateway actor, String op) {
         actor.refuse("straja.desk.rank", "straja.remedy.jailer");
-        audit.record(op, actor.name(), uuidOf(actor), "", "", "REFUSED", "missing_authority");
+        audit.record(op, actor.name(), uuidOf(actor), "", "", AuditResults.REFUSED, "missing_authority");
         return false;
     }
 

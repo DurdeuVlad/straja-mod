@@ -17,6 +17,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Set;
+import com.dwurdy.straja.domain.model.AuditActions;
+import com.dwurdy.straja.domain.model.AuditResults;
 
 /**
  * #246 / #245 M1 — central registry of serial-marked regulated artifacts and
@@ -145,8 +147,8 @@ public class ArtifactRegistryService {
         store.licenses.put(licenseKey(license.holderUuid, type), license);
         store.storeRevision++;
         repository.write(store);
-        audit.record("license_grant", actor.name(), uuid(actor),
-                target.name(), uuid(target), "SUCCESS",
+        audit.record(AuditActions.LICENSE_GRANT, actor.name(), uuid(actor),
+                target.name(), uuid(target), AuditResults.SUCCESS,
                 "licenseId=" + license.licenseId + " type=" + type.name());
         target.tell("Ai primit licența de " + licenseLabel(type) + " (" + license.licenseId + ").");
         if (!uuid(actor).equalsIgnoreCase(uuid(target))) {
@@ -181,8 +183,8 @@ public class ArtifactRegistryService {
         license.revokedByUuid = uuid(actor);
         store.storeRevision++;
         repository.write(store);
-        audit.record("license_revoke", actor.name(), uuid(actor),
-                target.name(), uuid(target), "SUCCESS",
+        audit.record(AuditActions.LICENSE_REVOKE, actor.name(), uuid(actor),
+                target.name(), uuid(target), AuditResults.SUCCESS,
                 "licenseId=" + license.licenseId + " type=" + type.name());
         target.tell("Licența ta de " + licenseLabel(type) + " (" + license.licenseId
                 + ") a fost revocată.");
@@ -297,8 +299,8 @@ public class ArtifactRegistryService {
         store.nextSerial = number + 1;
         store.storeRevision++;
         repository.write(store);
-        audit.record("artifact_register", actor.name(), uuid(actor),
-                holder.name(), uuid(holder), "SUCCESS",
+        audit.record(AuditActions.ARTIFACT_REGISTER, actor.name(), uuid(actor),
+                holder.name(), uuid(holder), AuditResults.SUCCESS,
                 "serial=" + serial + " item=" + record.itemId
                         + " pendingUntil=" + record.pendingUntil);
         actor.tell("Marca " + record.marking + " înregistrată pentru " + record.holderName
@@ -344,7 +346,7 @@ public class ArtifactRegistryService {
             store.storeRevision++;
             repository.write(store);
         }
-        audit.record("artifact_mark_failed", actor.name(), uuid(actor),
+        audit.record(AuditActions.ARTIFACT_MARK_FAILED, actor.name(), uuid(actor),
                 holder.name(), uuid(holder), "FAIL", "serial=" + serial);
         actor.refuse("straja.artifact.mark_failed", "straja.remedy.retry", "#" + serial);
         return null;
@@ -487,8 +489,8 @@ public class ArtifactRegistryService {
         record.status = ArtifactStatus.REVOKED.name();
         store.storeRevision++;
         repository.write(store);
-        audit.record("artifact_revoke", actor.name(), uuid(actor),
-                record.holderName, record.holderUuid, "SUCCESS", "serial=" + record.serial);
+        audit.record(AuditActions.ARTIFACT_REVOKE, actor.name(), uuid(actor),
+                record.holderName, record.holderUuid, AuditResults.SUCCESS, "serial=" + record.serial);
         actor.tell("Marca " + record.marking + " a fost revocată.");
         return true;
     }
@@ -541,8 +543,8 @@ public class ArtifactRegistryService {
             actor.refuse("straja.artifact.seal_failed", "straja.remedy.retry");
             return false;
         }
-        audit.record("crate_seal", actor.name(), uuid(actor),
-                actor.name(), uuid(actor), "SUCCESS", "sealId=" + data.get(SEAL_ID));
+        audit.record(AuditActions.CRATE_SEAL, actor.name(), uuid(actor),
+                actor.name(), uuid(actor), AuditResults.SUCCESS, "sealId=" + data.get(SEAL_ID));
         actor.tell("Lada militară a fost sigilată pe numele tău.");
         return true;
     }
@@ -579,8 +581,8 @@ public class ArtifactRegistryService {
             actor.refuse("straja.artifact.unseal_failed", "straja.remedy.retry");
             return false;
         }
-        audit.record("crate_unseal", actor.name(), uuid(actor),
-                actor.name(), uuid(actor), "SUCCESS", "sealedBy=" + sealedBy);
+        audit.record(AuditActions.CRATE_UNSEAL, actor.name(), uuid(actor),
+                actor.name(), uuid(actor), AuditResults.SUCCESS, "sealedBy=" + sealedBy);
         actor.tell("Sigiliul lăzii a fost rupt.");
         return true;
     }

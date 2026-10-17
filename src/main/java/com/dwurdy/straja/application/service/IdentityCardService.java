@@ -17,6 +17,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.regex.Pattern;
+import com.dwurdy.straja.domain.model.AuditActions;
+import com.dwurdy.straja.domain.model.AuditResults;
 
 /** Persistent, UUID-bound identity cards with a physical item projection. */
 public class IdentityCardService implements IdentityCardRoleplayUseCase {
@@ -195,8 +197,8 @@ public class IdentityCardService implements IdentityCardRoleplayUseCase {
         store.nextCardNumber = number == Integer.MAX_VALUE ? number : number + 1;
         ctx.identityCards().write(store);
 
-        audit.record("identity_card_issue", auditActor.name(), uuid(auditActor),
-                target.name(), uuid(target), "SUCCESS", "cardId=" + id);
+        audit.record(AuditActions.IDENTITY_CARD_ISSUE, auditActor.name(), uuid(auditActor),
+                target.name(), uuid(target), AuditResults.SUCCESS, "cardId=" + id);
         target.tell("Ai primit buletinul " + id + ". Este valabil până la " + date(card.expiresAt) + ".");
         if (!uuid(auditActor).equalsIgnoreCase(uuid(target))) {
             auditActor.tell("Buletinul " + id + " a fost emis pentru " + target.name() + ".");
@@ -272,8 +274,8 @@ public class IdentityCardService implements IdentityCardRoleplayUseCase {
         store.nextCardNumber = number == Integer.MAX_VALUE ? number : number + 1;
         ctx.identityCards().write(store);
 
-        audit.record("identity_card_forge", actor.name(), uuid(actor),
-                target.name(), uuid(target), "SUCCESS",
+        audit.record(AuditActions.IDENTITY_CARD_FORGE, actor.name(), uuid(actor),
+                target.name(), uuid(target), AuditResults.SUCCESS,
                 "cardId=" + id + (tier == null ? "" : " tier=" + tier.name()));
         actor.tell("Buletin contrafăcut " + id + " pregătit pentru " + target.name() + ".");
         return true;
@@ -379,8 +381,8 @@ public class IdentityCardService implements IdentityCardRoleplayUseCase {
         card.revokedByName = safeName(actor);
         card.revocationReason = note;
         ctx.identityCards().write(store);
-        audit.record("identity_card_revoke", actor.name(), uuid(actor),
-                card.holderName, card.holderUuid, "SUCCESS", "cardId=" + id + " reason=" + note);
+        audit.record(AuditActions.IDENTITY_CARD_REVOKE, actor.name(), uuid(actor),
+                card.holderName, card.holderUuid, AuditResults.SUCCESS, "cardId=" + id + " reason=" + note);
         actor.tell("Buletinul " + id + " a fost revocat.");
         return true;
     }

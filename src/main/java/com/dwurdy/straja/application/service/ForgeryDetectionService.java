@@ -8,6 +8,8 @@ import com.dwurdy.straja.domain.model.SnapshotItem;
 import com.dwurdy.straja.domain.model.StrajaPolicies;
 import java.util.ArrayList;
 import java.util.List;
+import com.dwurdy.straja.domain.model.AuditActions;
+import com.dwurdy.straja.domain.model.AuditResults;
 
 /**
  * #248 / #245 M3 — the keen-eye ladder. Two detection surfaces over one
@@ -227,8 +229,8 @@ public final class ForgeryDetectionService {
                     : f.item().data(ArtifactRegistryService.SERIAL_KEY).isBlank()
                             ? f.item().data(ArtifactRegistryService.MARK_KEY)
                             : f.item().data(ArtifactRegistryService.SERIAL_KEY);
-            audit.record("forgery_detected", detector, actorUuid, traveler.name(),
-                    traveler.uuid().toString(), "SUCCESS",
+            audit.record(AuditActions.FORGERY_DETECTED, detector, actorUuid, traveler.name(),
+                    traveler.uuid().toString(), AuditResults.SUCCESS,
                     "inspector=" + detector + " offense=" + f.offense()
                             + " item=" + (f.item() == null ? "" : f.item().itemId)
                             + " verdict=" + f.verdict()

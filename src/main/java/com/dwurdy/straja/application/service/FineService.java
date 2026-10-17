@@ -16,6 +16,8 @@ import com.dwurdy.straja.domain.model.StrajaPolicies;
 import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import com.dwurdy.straja.domain.model.AuditActions;
+import com.dwurdy.straja.domain.model.AuditResults;
 
 /**
  * Fines, appeals, escalation, recovery tasks, hearing warrants and jailer
@@ -332,13 +334,13 @@ public class FineService implements FineRoleplayUseCase {
         if (!target.giveVerified(noticeStack(fine))) {
             fine.status = "DELIVERY_FAILED";
             ctx.fines().write(data);
-            audit.record("fine_issue", issuer.name(), issuer.uuid().toString(), target.name(), target.uuid().toString(), "FAILED", "inventory_delivery_failed fineId=" + fine.id);
+            audit.record(AuditActions.FINE_ISSUE, issuer.name(), issuer.uuid().toString(), target.name(), target.uuid().toString(), "FAILED", "inventory_delivery_failed fineId=" + fine.id);
             issuer.refuse("straja.fine.notice_fail", "straja.remedy.ask_comisar");
             return false;
         }
         data.drafts.remove(issuer.uuid().toString());
         ctx.fines().write(data);
-        audit.record("fine_issue", issuer.name(), issuer.uuid().toString(), target.name(), target.uuid().toString(), "SUCCESS", "issued fineId=" + fine.id + " amount=" + fine.amount);
+        audit.record(AuditActions.FINE_ISSUE, issuer.name(), issuer.uuid().toString(), target.name(), target.uuid().toString(), AuditResults.SUCCESS, "issued fineId=" + fine.id + " amount=" + fine.amount);
         target.tell("Ai primit amenda " + fine.id + ": " + fine.amount + " monede pentru " + fine.law + ". Plata se face la recepționistă.");
         issuer.tell("Amenda " + fine.id + " a fost emisă și predată. Registrul rămâne reutilizabil.");
         // DEBT-2: a fine landing on an in-custody prisoner triggers the levy.
@@ -380,8 +382,8 @@ public class FineService implements FineRoleplayUseCase {
         data.fines.add(fine);
         boolean delivered = target.giveVerified(noticeStack(fine));
         ctx.fines().write(data);
-        audit.record("fine_issue", issuer.name(), issuer.uuid().toString(), target.name(),
-                target.uuid().toString(), "SUCCESS",
+        audit.record(AuditActions.FINE_ISSUE, issuer.name(), issuer.uuid().toString(), target.name(),
+                target.uuid().toString(), AuditResults.SUCCESS,
                 "system_issue fineId=" + fine.id + " amount=" + fine.amount
                         + (delivered ? "" : " notice_undelivered"));
         target.tell("Ai primit amenda " + fine.id + ": " + fine.amount + " monede pentru "
@@ -469,7 +471,7 @@ public class FineService implements FineRoleplayUseCase {
         attempt.previousStatus = previousStatus;
         fine.paymentAttempt = attempt;
         ctx.fines().write(data);
-        audit.record("fine_payment_review", player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), "STARTED", "payment_boundary fineId=" + fine.id + " amount=" + fine.amount);
+        audit.record(AuditActions.FINE_PAYMENT_REVIEW, player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), "STARTED", "payment_boundary fineId=" + fine.id + " amount=" + fine.amount);
         var withdrawal = ctx.currency().withdraw(player, due);
         attempt.removedValue = withdrawal.removed();
         attempt.error = withdrawal.error() == null ? "" : withdrawal.error();
@@ -480,7 +482,7 @@ public class FineService implements FineRoleplayUseCase {
                 fine.paymentAttempt = null;
             }
             ctx.fines().write(data);
-            audit.record("fine_pay", player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), "FAILED",
+            audit.record(AuditActions.FINE_PAY, player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), "FAILED",
                     (fine.paymentAttempt != null ? "payment_review" : "no_debit") + " fineId=" + fine.id + " removedValue=" + withdrawal.removed());
             if (fine.paymentAttempt != null) {
                 player.refuse("straja.fine.pay_failed_review", "straja.remedy.wait");
@@ -503,7 +505,7 @@ public class FineService implements FineRoleplayUseCase {
             }
         }
         ctx.fines().write(data);
-        audit.record("fine_pay", player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), "SUCCESS", "paid_at_reception fineId=" + fine.id + " amount=" + fine.amount);
+        audit.record(AuditActions.FINE_PAY, player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), AuditResults.SUCCESS, "paid_at_reception fineId=" + fine.id + " amount=" + fine.amount);
         player.tell("Amenda " + fine.id + " a fost plătită la recepționistă.");
         finePaidHook.accept(fine);
         return true;
@@ -531,7 +533,7 @@ public class FineService implements FineRoleplayUseCase {
             fine.paymentAttempt = null;
             fine.paymentReviewResolvedAt = now();
             ctx.fines().write(data);
-            audit.record("fine_payment_review", player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), "SUCCESS", "retry_authorized fineId=" + fine.id);
+            audit.record(AuditActions.FINE_PAYMENT_REVIEW, player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), AuditResults.SUCCESS, "retry_authorized fineId=" + fine.id);
             player.tell("Verificarea a fost închisă fără debitare; plata poate fi încercată din nou.");
             return true;
         }
@@ -547,7 +549,7 @@ public class FineService implements FineRoleplayUseCase {
             }
             fine.paymentAttempt = null;
             ctx.fines().write(data);
-            audit.record("fine_payment_review", player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), "SUCCESS", "marked_paid_by_commissioner fineId=" + fine.id);
+            audit.record(AuditActions.FINE_PAYMENT_REVIEW, player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), AuditResults.SUCCESS, "marked_paid_by_commissioner fineId=" + fine.id);
             player.tell("Amenda " + fine.id + " a fost marcată ca plătită după verificarea tranzacției.");
             finePaidHook.accept(fine);
             return true;
@@ -603,7 +605,7 @@ public class FineService implements FineRoleplayUseCase {
         if (abuse.attempts.size() >= Math.max(1, p().appealMaxPerWindow)) {
             abuse.blockedUntil = now() + Math.max(1, p().appealAbuseBlockRealDays) * DAY_MS;
             ctx.fines().write(data);
-            audit.record("fine_appeal_block", player.name(), key, player.name(), key, "SUCCESS", "appeal_spam attempts=" + abuse.attempts.size());
+            audit.record(AuditActions.FINE_APPEAL_BLOCK, player.name(), key, player.name(), key, AuditResults.SUCCESS, "appeal_spam attempts=" + abuse.attempts.size());
             player.refuse("straja.fine.appeals_blocked", "straja.remedy.wait");
             return false;
         }
@@ -624,7 +626,7 @@ public class FineService implements FineRoleplayUseCase {
         fine.appealSubmittedAt = filedAt;
         fine.appealLastTickAt = filedAt;
         ctx.fines().write(data);
-        audit.record("fine_appeal_submit", player.name(), key, fine.issuer, fine.issuerUuid, "SUCCESS", "pending_review fineId=" + fine.id + " appealId=" + appeal.id);
+        audit.record(AuditActions.FINE_APPEAL_SUBMIT, player.name(), key, fine.issuer, fine.issuerUuid, AuditResults.SUCCESS, "pending_review fineId=" + fine.id + " appealId=" + appeal.id);
         player.tell("Contestația " + appeal.id + " a fost depusă. Plata și escaladarea sunt suspendate până la decizie.");
         return true;
     }
@@ -687,7 +689,7 @@ public class FineService implements FineRoleplayUseCase {
         appeal.decisionReason = trimmedReason;
         ctx.fines().write(data);
         if (voided) fineVoidedHook.accept(player, fine);
-        audit.record("fine_appeal_review", player.name(), player.uuid().toString(), fine.target, fine.targetUuid, "SUCCESS", appeal.decision + " fineId=" + fine.id + " appealId=" + appeal.id);
+        audit.record(AuditActions.FINE_APPEAL_REVIEW, player.name(), player.uuid().toString(), fine.target, fine.targetUuid, AuditResults.SUCCESS, appeal.decision + " fineId=" + fine.id + " appealId=" + appeal.id);
         PlayerGateway target = ctx.server().findPlayer(fine.target);
         if (target != null) {
             target.tell("Contestația " + appeal.id + " a primit decizia: " + appeal.decision + ("WAIVED".equals(fine.status) ? ". Amenda a fost iertată." : "."));
@@ -746,7 +748,7 @@ public class FineService implements FineRoleplayUseCase {
             task.assigneeName = player.name();
         }
         ctx.fines().write(data);
-        audit.record("fine_task_accept", player.name(), key, null, null, "SUCCESS", "accepted taskId=" + task.id);
+        audit.record(AuditActions.FINE_TASK_ACCEPT, player.name(), key, null, null, AuditResults.SUCCESS, "accepted taskId=" + task.id);
         player.tell("Misiunea " + task.id + " a fost preluată (" + task.assignees.size() + "/" + Math.max(1, task.maxAssignees) + "). Adu cetățeanul la destinație.");
         return true;
     }
@@ -789,7 +791,7 @@ public class FineService implements FineRoleplayUseCase {
         task.presentedBy = player.name();
         fine.status = "ARREST_PENDING";
         ctx.fines().write(data);
-        audit.record("fine_present", player.name(), player.uuid().toString(), target.name(), target.uuid().toString(), "SUCCESS", "payment_requested taskId=" + task.id + " fineId=" + fine.id);
+        audit.record(AuditActions.FINE_PRESENT, player.name(), player.uuid().toString(), target.name(), target.uuid().toString(), AuditResults.SUCCESS, "payment_requested taskId=" + task.id + " fineId=" + fine.id);
         target.tell("Ești la recepționistă pentru plata amenzii " + fine.id
                 + ". Achită amenda la recepționistă sau declară-i refuzul (dosar " + task.id + ").");
         player.tell("Plata a fost solicitată. Arestarea este permisă doar după refuzul explicit al cetățeanului.");
@@ -818,7 +820,7 @@ public class FineService implements FineRoleplayUseCase {
         ctx.fines().write(data);
         target.tell("Ai fost adus la audiere. Nu ai fost trimis la pușcărie.");
         commissioner.tell("Mandatul " + task.id + " a fost executat.");
-        audit.record("hearing_warrant_present", player.name(), player.uuid().toString(), target.name(), target.uuid().toString(), "SUCCESS", "commissioner_present taskId=" + task.id);
+        audit.record(AuditActions.HEARING_WARRANT_PRESENT, player.name(), player.uuid().toString(), target.name(), target.uuid().toString(), AuditResults.SUCCESS, "commissioner_present taskId=" + task.id);
         player.tell("Audierea pentru " + task.id + " a fost înregistrată.");
         return true;
     }
@@ -857,7 +859,7 @@ public class FineService implements FineRoleplayUseCase {
         task.arrestedByUuid = player.uuid().toString();
         task.arrestedAt = now();
         ctx.fines().write(data);
-        audit.record("jailer_assault_arrest", player.name(), player.uuid().toString(), target.name(), target.uuid().toString(), "SUCCESS", "captured_alive taskId=" + task.id + " sentenceId=" + sentence.id);
+        audit.record(AuditActions.JAILER_ASSAULT_ARREST, player.name(), player.uuid().toString(), target.name(), target.uuid().toString(), AuditResults.SUCCESS, "captured_alive taskId=" + task.id + " sentenceId=" + sentence.id);
         player.tell("Arestarea pentru vătămarea Temnicerului a fost înregistrată.");
         payArrestReward(player, task, null, true);
         return true;
@@ -889,7 +891,7 @@ public class FineService implements FineRoleplayUseCase {
         task.refusedBy = player.name();
         ctx.fines().write(data);
         fineRefusedHook.accept(task);
-        audit.record("fine_refuse", player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), "SUCCESS", "payment_refused taskId=" + task.id + " fineId=" + fine.id);
+        audit.record(AuditActions.FINE_REFUSE, player.name(), player.uuid().toString(), player.name(), player.uuid().toString(), AuditResults.SUCCESS, "payment_refused taskId=" + task.id + " fineId=" + fine.id);
         if (task.assignee != null) {
             PlayerGateway assignee = ctx.server().findPlayer(task.assignee);
             if (assignee != null) assignee.tell("Cetățeanul a refuzat plata amenzii " + fine.id
@@ -957,7 +959,7 @@ public class FineService implements FineRoleplayUseCase {
         fine.onlineElapsedMs = 0;
         fine.onlineLastTickAt = 0;
         ctx.fines().write(data);
-        audit.record("fine_arrest", player.name(), player.uuid().toString(), target.name(), target.uuid().toString(), "SUCCESS", "payment_refused taskId=" + task.id + " fineId=" + task.fineId + " sentenceId=" + sentence.id);
+        audit.record(AuditActions.FINE_ARREST, player.name(), player.uuid().toString(), target.name(), target.uuid().toString(), AuditResults.SUCCESS, "payment_refused taskId=" + task.id + " fineId=" + task.fineId + " sentenceId=" + sentence.id);
         player.tell("Arestul a fost înregistrat: " + sentence.id + ".");
         payArrestReward(player, task, fine, true);
         return true;
@@ -1005,20 +1007,20 @@ public class FineService implements FineRoleplayUseCase {
         }
         int payable = Math.min(reward, Math.max(0, p().arrestMaxDailyPayout - state.arrestRewardDayTotal));
         if (payable <= 0) {
-            audit.record("arrest_reward", officer.name(), officer.uuid().toString(),
+            audit.record(AuditActions.ARREST_REWARD, officer.name(), officer.uuid().toString(),
                     task.target, task.targetUuid, "FAILED", "daily_cap taskId=" + task.id);
             officer.refuse("straja.fine.daily_reward_cap", "straja.remedy.wait");
             return false;
         }
         if (!ctx.currency().available()) {
-            audit.record("arrest_reward", officer.name(), officer.uuid().toString(),
+            audit.record(AuditActions.ARREST_REWARD, officer.name(), officer.uuid().toString(),
                     task.target, task.targetUuid, "FAILED", "currency_unavailable taskId=" + task.id);
             officer.refuse("straja.fine.reward_fail", "straja.remedy.retry");
             return false;
         }
         var payout = ctx.currency().deposit(officer, payable, payoutId);
         if (!payout.ok()) {
-            audit.record("arrest_reward", officer.name(), officer.uuid().toString(),
+            audit.record(AuditActions.ARREST_REWARD, officer.name(), officer.uuid().toString(),
                     task.target, task.targetUuid, "FAILED",
                     "taskId=" + task.id + " delivered=" + payout.delivered()
                             + " error=" + payout.error());
@@ -1027,8 +1029,8 @@ public class FineService implements FineRoleplayUseCase {
         }
         state.arrestRewardDayTotal += payable;
         players.save(officer.uuid(), state);
-        audit.record("arrest_reward", officer.name(), officer.uuid().toString(),
-                task.target, task.targetUuid, "SUCCESS",
+        audit.record(AuditActions.ARREST_REWARD, officer.name(), officer.uuid().toString(),
+                task.target, task.targetUuid, AuditResults.SUCCESS,
                 (alive ? "captured_alive" : "suspect_killed") + " taskId=" + task.id
                         + " amount=" + payable);
         officer.tell("Recompensă de arestare: " + payable + " monede"
@@ -1110,8 +1112,8 @@ public class FineService implements FineRoleplayUseCase {
             }
             changed = true;
             ctx.fines().write(data);
-            audit.record("suspect_killed", killer.name(), killer.uuid().toString(),
-                    victim.name(), victim.uuid().toString(), "SUCCESS",
+            audit.record(AuditActions.SUSPECT_KILLED, killer.name(), killer.uuid().toString(),
+                    victim.name(), victim.uuid().toString(), AuditResults.SUCCESS,
                     "taskId=" + task.id + (fine != null ? " fineId=" + fine.id : ""));
             killer.tell("Suspectul " + victim.name() + " a fost ucis. Misiunea " + task.id
                     + " este închisă; recompensa este redusă.");
@@ -1168,7 +1170,7 @@ public class FineService implements FineRoleplayUseCase {
             if (onDutyGuard(candidate)) candidate.tell("Mandat de audiere " + task.id + ": adu " + task.target + " la biroul Comisaru'.");
         }
         target.tell("Un mandat de audiere a fost pus pe numele tău. Gărzile te vor conduce la biroul Comisaru'.");
-        audit.record("hearing_warrant_issue", player.name(), player.uuid().toString(), target.name(), target.uuid().toString(), "SUCCESS", "signed_warrant taskId=" + task.id);
+        audit.record(AuditActions.HEARING_WARRANT_ISSUE, player.name(), player.uuid().toString(), target.name(), target.uuid().toString(), AuditResults.SUCCESS, "signed_warrant taskId=" + task.id);
         player.tell("Mandatul " + task.id + " a fost emis și semnat de " + player.name() + ".");
         return true;
     }
@@ -1187,7 +1189,7 @@ public class FineService implements FineRoleplayUseCase {
                 task.injuryAmount = jailerAssaultAmount("KILLED");
                 task.updatedAt = now();
                 ctx.fines().write(data);
-                audit.record("jailer_assault_mission", attacker.name(), attacker.uuid().toString(), jailerName, null, "SUCCESS", "severity_upgraded taskId=" + task.id);
+                audit.record(AuditActions.JAILER_ASSAULT_MISSION, attacker.name(), attacker.uuid().toString(), jailerName, null, AuditResults.SUCCESS, "severity_upgraded taskId=" + task.id);
             }
             return task;
         }
@@ -1212,7 +1214,7 @@ public class FineService implements FineRoleplayUseCase {
             }
         }
         attacker.tell("Un mandat de arest a fost emis pentru vătămarea Temnicerului. Gărzile vor veni după tine.");
-        audit.record("jailer_assault_mission", attacker.name(), attacker.uuid().toString(), jailerName, null, "SUCCESS", result.toLowerCase() + " taskId=" + task.id);
+        audit.record(AuditActions.JAILER_ASSAULT_MISSION, attacker.name(), attacker.uuid().toString(), jailerName, null, AuditResults.SUCCESS, result.toLowerCase() + " taskId=" + task.id);
         return task;
     }
 
@@ -1310,7 +1312,7 @@ public class FineService implements FineRoleplayUseCase {
                     changed = true;
                     PlayerGateway target = ctx.server().findPlayer(fine.target);
                     if (target != null) target.tell("Contestația " + fine.appeal.id + " nu a primit decizie în termen. Amenda " + fine.id + " a fost iertată automat.");
-                    audit.record("fine_appeal_auto_waive", null, null, fine.target, fine.targetUuid, "SUCCESS", "review_timeout fineId=" + fine.id);
+                    audit.record(AuditActions.FINE_APPEAL_AUTO_WAIVE, null, null, fine.target, fine.targetUuid, AuditResults.SUCCESS, "review_timeout fineId=" + fine.id);
                 }
                 continue;
             }
@@ -1389,7 +1391,7 @@ public class FineService implements FineRoleplayUseCase {
                 }
             }
             changed = true;
-            audit.record("fine_escalate", null, null, fine.target, fine.targetUuid, "SUCCESS", "online_minecraft_days fineId=" + fine.id + " taskId=" + taskId + " cycle=" + fine.recoveryCycle);
+            audit.record(AuditActions.FINE_ESCALATE, null, null, fine.target, fine.targetUuid, AuditResults.SUCCESS, "online_minecraft_days fineId=" + fine.id + " taskId=" + taskId + " cycle=" + fine.recoveryCycle);
             target.tell("Amenda " + fine.id + " a fost escaladată la secretariat; prezintă-te la recepționistă.");
         }
         if (changed && (persistNow || current - lastPersistAt >= PERSIST_MS)) {

@@ -27,6 +27,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import com.dwurdy.straja.domain.model.Text;
+import com.dwurdy.straja.domain.model.AuditActions;
+import com.dwurdy.straja.domain.model.AuditResults;
 
 /**
  * Enforcement mechanics: cuff consent flow, surrender, direct cuffs, cuff keys,
@@ -348,7 +350,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
         if (!policy.ok()) {
             policyDeny(issuer, policy);
             audit.record(auditAction, issuer.name(), uuidOf(issuer),
-                    target == null ? "" : target.name(), uuidOrEmpty(target), "REFUSED", policy.reason());
+                    target == null ? "" : target.name(), uuidOrEmpty(target), AuditResults.REFUSED, policy.reason());
             return false;
         }
         String targetKey = key(target);
@@ -393,7 +395,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
                     + ". Așteaptă acceptarea sau refuzul.");
         }
         audit.record(auditAction, issuer.name(), request.issuerUuid,
-                target.name(), request.targetUuid, "SUCCESS",
+                target.name(), request.targetUuid, AuditResults.SUCCESS,
                 ("SURRENDER".equals(kind) ? "knockout_consent_requested" : "consent_requested")
                         + " requestId=" + request.id);
         return true;
@@ -460,9 +462,9 @@ public class CustodyService implements CustodyRoleplayUseCase {
             ctx.custody().write(store);
             player.refuse("straja.custody.cuff_invalid", "straja.remedy.retry");
             if (issuer != null) issuer.refuse("straja.custody.cuff_cancelled", "straja.remedy.retry");
-            audit.record("cuff_accept", issuer != null ? issuer.name() : player.name(),
+            audit.record(AuditActions.CUFF_ACCEPT, issuer != null ? issuer.name() : player.name(),
                     issuer != null ? uuidOf(issuer) : uuidOf(player),
-                    player.name(), uuidOf(player), "REFUSED", "issuer_no_longer_eligible requestId=" + request.id);
+                    player.name(), uuidOf(player), AuditResults.REFUSED, "issuer_no_longer_eligible requestId=" + request.id);
             return false;
         }
         if (store.cuffed.containsKey(key(player))) {
@@ -482,8 +484,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
         player.tell("Ai acceptat. Ești încătușat și primești efect de încetinire. Gardianul a primit cheia.");
         if (!keyDelivered) player.tell("Gardianul este offline; cheia va fi livrată când revine.");
         if (issuer != null) issuer.tell(player.name() + " a acceptat încătușarea.");
-        audit.record("cuff_accept", request.issuer, request.issuerUuid,
-                player.name(), uuidOf(player), "SUCCESS", "accepted requestId=" + request.id);
+        audit.record(AuditActions.CUFF_ACCEPT, request.issuer, request.issuerUuid,
+                player.name(), uuidOf(player), AuditResults.SUCCESS, "accepted requestId=" + request.id);
         return true;
     }
 
@@ -503,8 +505,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
             return false;
         }
         resolveDowned(player, "CUFFED");
-        audit.record("surrender_accept", player.name(), uuidOf(player),
-                player.name(), uuidOf(player), "SUCCESS",
+        audit.record(AuditActions.SURRENDER_ACCEPT, player.name(), uuidOf(player),
+                player.name(), uuidOf(player), AuditResults.SUCCESS,
                 "accepted requestId=" + request.id + " issuer=" + request.issuer);
         return true;
     }
@@ -530,8 +532,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
         if (issuer != null) issuer.tell(player.name() + " a refuzat predarea și a rămas inconștient.");
         startDowned(player, issuer != null ? issuer : player, "surrender_refused");
         player.tell("Ai refuzat predarea. Ai leșinat și vei reveni după cooldown.");
-        audit.record("surrender_refuse", player.name(), uuidOf(player),
-                request.issuer, request.issuerUuid, "SUCCESS",
+        audit.record(AuditActions.SURRENDER_REFUSE, player.name(), uuidOf(player),
+                request.issuer, request.issuerUuid, AuditResults.SUCCESS,
                 "target_refused_and_unconscious requestId=" + request.id);
         return true;
     }
@@ -552,8 +554,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
         var policy = cuffTargetPolicy(issuer, target);
         if (!policy.ok()) {
             policyDeny(issuer, policy);
-            audit.record("cuff_apply", issuer.name(), uuidOf(issuer),
-                    target.name(), uuidOf(target), "REFUSED", policy.reason());
+            audit.record(AuditActions.CUFF_APPLY, issuer.name(), uuidOf(issuer),
+                    target.name(), uuidOf(target), AuditResults.REFUSED, policy.reason());
             return new ApplyResult(false, policy.reason());
         }
         var store = store();
@@ -576,8 +578,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
         if (!keyDelivered) target.tell("Gardianul este fără spațiu; cheia va fi livrată când inventarul permite.");
         issuer.tell(target.name() + (surrendered ? " s-a predat și a fost încătușat." : " a fost încătușat automat.")
                 + (keyDelivered ? "" : " Cheia a fost pusă în așteptare până când inventarul permite."));
-        audit.record("cuff_apply", issuer.name(), uuidOf(issuer),
-                target.name(), uuidOf(target), "SUCCESS", reason == null ? "direct" : reason);
+        audit.record(AuditActions.CUFF_APPLY, issuer.name(), uuidOf(issuer),
+                target.name(), uuidOf(target), AuditResults.SUCCESS, reason == null ? "direct" : reason);
         return new ApplyResult(true, "");
     }
 
@@ -711,8 +713,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
             if (item == null || blank(item.itemId) || item.count <= 0) {
                 iterator.remove();
                 changed = true;
-                audit.record("custody_recovery", null, null,
-                        player.name(), uuidOf(player), "SUCCESS", "malformed_pending_item");
+                audit.record(AuditActions.CUSTODY_RECOVERY, null, null,
+                        player.name(), uuidOf(player), AuditResults.SUCCESS, "malformed_pending_item");
                 continue;
             }
             var spec = new ItemSpec(item.itemId, item.count,
@@ -901,8 +903,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
             var target = findStored(state.playerUuid, state.playerName);
             if (target != null) target.stopRiding();
             if (stopCarriedState(store, state, "system", reason)) {
-                audit.record("carry_recovery", "system", "",
-                        state.playerName, state.playerUuid, "SUCCESS", reason);
+                audit.record(AuditActions.CARRY_RECOVERY, "system", "",
+                        state.playerName, state.playerUuid, AuditResults.SUCCESS, reason);
                 changed = true;
             }
         }
@@ -923,8 +925,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
             var target = findStored(state.playerUuid, state.playerName);
             if (target != null) target.stopRiding();
             if (stopCarriedState(store, state, playerUuid, reason)) {
-                audit.record("carry_recovery", player.name(), playerUuid,
-                        state.playerName, state.playerUuid, "SUCCESS", reason);
+                audit.record(AuditActions.CARRY_RECOVERY, player.name(), playerUuid,
+                        state.playerName, state.playerUuid, AuditResults.SUCCESS, reason);
                 changed = true;
             }
         }
@@ -949,8 +951,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
             if (physical) continue;
             if (target != null) target.stopRiding();
             if (stopCarriedState(store, state, "system", "physical_desync")) {
-                audit.record("carry_recovery", "system", "",
-                        state.playerName, state.playerUuid, "SUCCESS", "physical_desync");
+                audit.record(AuditActions.CARRY_RECOVERY, "system", "",
+                        state.playerName, state.playerUuid, AuditResults.SUCCESS, "physical_desync");
                 changed = true;
             }
         }
@@ -1044,8 +1046,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
                     target.setHealth(1);
                     target.tell("Resuscitarea a expirat. Ai rămas inconștient.");
                 }
-                audit.record("resuscitation_timeout", "system", "",
-                        state.playerName, state.playerUuid, "SUCCESS", "timeout");
+                audit.record(AuditActions.RESUSCITATION_TIMEOUT, "system", "",
+                        state.playerName, state.playerUuid, AuditResults.SUCCESS, "timeout");
             }
         }
         return changed;
@@ -1109,8 +1111,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
             boolean malformed = blank(bound.targetUuid) && blank(bound.target);
             if (malformed || !validRestraintIdentity(bound.issuer, bound.issuerUuid)) {
                 store.bound.remove(playerKey);
-                audit.record("custody_recovery", bound.issuer, bound.issuerUuid,
-                        player.name(), uuidOf(player), "SUCCESS",
+                audit.record(AuditActions.CUSTODY_RECOVERY, bound.issuer, bound.issuerUuid,
+                        player.name(), uuidOf(player), AuditResults.SUCCESS,
                         malformed ? "malformed_record kind=bound" : "ineligible_issuer kind=bound");
                 changed = true;
             }
@@ -1123,8 +1125,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
                     && !store.bound.containsKey(playerKey);
             if (malformed || badIssuer || orphan) {
                 store.headSacks.remove(playerKey);
-                audit.record("custody_recovery", sack.issuer, sack.issuerUuid,
-                        player.name(), uuidOf(player), "SUCCESS",
+                audit.record(AuditActions.CUSTODY_RECOVERY, sack.issuer, sack.issuerUuid,
+                        player.name(), uuidOf(player), AuditResults.SUCCESS,
                         malformed ? "malformed_record kind=head_sack"
                                 : badIssuer ? "ineligible_issuer kind=head_sack"
                                 : "orphan_head_sack");
@@ -1134,8 +1136,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
         var downed = store.downed.get(playerKey);
         if (malformedDowned(downed)) {
             store.downed.remove(playerKey);
-            audit.record("custody_recovery", null, null,
-                    player.name(), uuidOf(player), "SUCCESS", "malformed_record kind=downed");
+            audit.record(AuditActions.CUSTODY_RECOVERY, null, null,
+                    player.name(), uuidOf(player), AuditResults.SUCCESS, "malformed_record kind=downed");
             changed = true;
         }
         if (changed) ctx.custody().write(store);
@@ -1181,8 +1183,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
         if (!changed) return;
         ctx.custody().write(store);
         for (String id : discarded) {
-            audit.record("custody_request_discard", player.name(), uuidOf(player),
-                    "", "", "SUCCESS", "logout requestId=" + id);
+            audit.record(AuditActions.CUSTODY_REQUEST_DISCARD, player.name(), uuidOf(player),
+                    "", "", AuditResults.SUCCESS, "logout requestId=" + id);
         }
     }
 
@@ -1245,8 +1247,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
         }
         if (!changed) return;
         ctx.custody().write(store);
-        audit.record("custody_death_recovery", player.name(), uuidOf(player),
-                player.name(), uuidOf(player), "SUCCESS",
+        audit.record(AuditActions.CUSTODY_DEATH_RECOVERY, player.name(), uuidOf(player),
+                player.name(), uuidOf(player), AuditResults.SUCCESS,
                 "restraint_cleared discardedRequests=" + discarded);
     }
 
@@ -1381,8 +1383,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
                 : "Cătușele au fost deschise de " + issuer.name() + " cu " + kind.toLowerCase() + ".");
         issuer.tell(target.name() + (openedCuffs && cutRope ? " a fost eliberat complet."
                 : cutRope ? " nu mai este legat." : " nu mai este încătușat."));
-        audit.record("restraint_release", issuer.name(), uuidOf(issuer),
-                target.name(), uuidOf(target), "SUCCESS",
+        audit.record(AuditActions.RESTRAINT_RELEASE, issuer.name(), uuidOf(issuer),
+                target.name(), uuidOf(target), AuditResults.SUCCESS,
                 kind.toLowerCase() + " openedCuffs=" + openedCuffs + " cutRope=" + cutRope);
         return true;
     }
@@ -1422,8 +1424,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
         String mode = state.restraintMode.name();
         target.tell("Modul cătușelor este acum " + mode + ".");
         issuer.tell(target.name() + " — modul cătușelor: " + mode + ".");
-        audit.record("restraint_mode", issuer.name(), uuidOf(issuer),
-                target.name(), uuidOf(target), "SUCCESS", mode);
+        audit.record(AuditActions.RESTRAINT_MODE, issuer.name(), uuidOf(issuer),
+                target.name(), uuidOf(target), AuditResults.SUCCESS, mode);
         return true;
     }
 
@@ -1458,8 +1460,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
         restraintReleasedHook.accept(actor, target);
         target.tell("Cătușele au fost eliberate de Comisaru'.");
         actor.tell(target.name() + " a fost eliberat de urgență.");
-        audit.record("cuff_emergency_release", actor.name(), uuidOf(actor),
-                target.name(), uuidOf(target), "SUCCESS", "commissioner_override");
+        audit.record(AuditActions.CUFF_EMERGENCY_RELEASE, actor.name(), uuidOf(actor),
+                target.name(), uuidOf(target), AuditResults.SUCCESS, "commissioner_override");
         return true;
     }
 
@@ -1563,8 +1565,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
                 Math.max(20, ctx.policies().ropeSlownessTicks), ctx.policies().ropeSlownessAmplifier);
         target.tell("Ai fost legat cu Frânghia. Nu poți folosi inventarul sau obiectele. Doar alt jucător o poate tăia.");
         issuer.tell(target.name() + " a fost legat. Frânghia poate fi tăiată doar de alt jucător cu Foarfeca.");
-        audit.record("rope_apply", issuer.name(), uuidOf(issuer),
-                target.name(), uuidOf(target), "SUCCESS", record.reason);
+        audit.record(AuditActions.ROPE_APPLY, issuer.name(), uuidOf(issuer),
+                target.name(), uuidOf(target), AuditResults.SUCCESS, record.reason);
         return true;
     }
 
@@ -1624,8 +1626,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
                 Math.max(20, ctx.policies().headSackBlindnessTicks), 0);
         target.tell("Ți s-a pus Sacul de Captiv. Pentru îndepărtare, cere ajutorul temnicerului sau al Comisarului.");
         issuer.tell(target.name() + " poartă acum Sacul de Captiv.");
-        audit.record("head_sack_apply", issuer.name(), uuidOf(issuer),
-                target.name(), uuidOf(target), "SUCCESS", "restrained_target");
+        audit.record(AuditActions.HEAD_SACK_APPLY, issuer.name(), uuidOf(issuer),
+                target.name(), uuidOf(target), AuditResults.SUCCESS, "restrained_target");
         return true;
     }
 
@@ -1656,8 +1658,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
         store.headSacks.remove(playerKey);
         ctx.custody().write(store);
         player.tell("Ți-ai dat jos Sacul de Captiv.");
-        audit.record("head_sack_remove", player.name(), uuidOf(player),
-                player.name(), uuidOf(player), "SUCCESS", "self_remove issuer=" + record.issuer);
+        audit.record(AuditActions.HEAD_SACK_REMOVE, player.name(), uuidOf(player),
+                player.name(), uuidOf(player), AuditResults.SUCCESS, "self_remove issuer=" + record.issuer);
         return true;
     }
 
@@ -1717,8 +1719,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
 
         var eligibility = CustodyTransitionEngine.giveUpEligibility(state, uuidOf(player));
         if (!eligibility.ok()) {
-            audit.record("give_up", player.name(), uuidOf(player),
-                    player.name(), uuidOf(player), "REFUSED", "code=" + eligibility.code());
+            audit.record(AuditActions.GIVE_UP, player.name(), uuidOf(player),
+                    player.name(), uuidOf(player), AuditResults.REFUSED, "code=" + eligibility.code());
             return false;
         }
 
@@ -1730,8 +1732,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
                 "", "", StateProvider.NATIVE, "give_up", 0);
         var result = CustodyTransitionEngine.apply(state, transition, ctx.policies());
         if (!result.ok() && !result.idempotent()) {
-            audit.record("give_up", player.name(), uuidOf(player),
-                    player.name(), uuidOf(player), "REFUSED", "code=" + result.code());
+            audit.record(AuditActions.GIVE_UP, player.name(), uuidOf(player),
+                    player.name(), uuidOf(player), AuditResults.REFUSED, "code=" + result.code());
             return false;
         }
 
@@ -1746,8 +1748,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
         player.closeMenu();
         player.setHealth(0);
         player.tellKey("straja.give_up.result");
-        audit.record("give_up", player.name(), uuidOf(player),
-                player.name(), uuidOf(player), "SUCCESS", "transition=" + transition.id());
+        audit.record(AuditActions.GIVE_UP, player.name(), uuidOf(player),
+                player.name(), uuidOf(player), AuditResults.SUCCESS, "transition=" + transition.id());
         return true;
     }
 
@@ -1816,8 +1818,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
                 Math.max(20, ctx.policies().downedSlownessTicks), ctx.policies().downedSlownessAmplifier);
         player.tell("Ai leșinat. Te vei trezi peste " + (cooldown / 1000) + " secunde în același loc.");
         if (source != null) source.tell(player.name() + " a leșinat și nu poate fi ucis de mecanica Străjii.");
-        audit.record("downed_start", record.source, record.sourceUuid,
-                player.name(), record.targetUuid, "SUCCESS", record.reason);
+        audit.record(AuditActions.DOWNED_START, record.source, record.sourceUuid,
+                player.name(), record.targetUuid, AuditResults.SUCCESS, record.reason);
         return record;
     }
 
@@ -1846,8 +1848,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
         player.tell("Ți-ai revenit. Poți acționa din nou.");
         store.downed.remove(playerKey);
         ctx.custody().write(store);
-        audit.record("downed_wake", player.name(), uuidOf(player),
-                player.name(), uuidOf(player), "SUCCESS",
+        audit.record(AuditActions.DOWNED_WAKE, player.name(), uuidOf(player),
+                player.name(), uuidOf(player), AuditResults.SUCCESS,
                 (reason == null ? "cooldown_complete" : reason));
         return true;
     }
@@ -1890,8 +1892,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
             player.closeMenu();
         }
         ctx.custody().write(store);
-        audit.record("jail_enter", "system", "", player.name(), uuidOf(player),
-                "SUCCESS", "destination=" + destination + " action=" + action);
+        audit.record(AuditActions.JAIL_ENTER, "system", "", player.name(), uuidOf(player),
+                AuditResults.SUCCESS, "destination=" + destination + " action=" + action);
         return true;
     }
 
@@ -1924,8 +1926,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
             player.setHealth(Math.max(1, player.maxHealth() * ratio));
         }
         ctx.custody().write(store);
-        audit.record("jail_release", "system", "", player.name(), uuidOf(player),
-                "SUCCESS", "canonical_jail_cleared");
+        audit.record(AuditActions.JAIL_RELEASE, "system", "", player.name(), uuidOf(player),
+                AuditResults.SUCCESS, "canonical_jail_cleared");
         return true;
     }
 
@@ -1958,8 +1960,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
         store.downed.remove(playerKey);
         ctx.custody().write(store);
         player.closeMenu();
-        audit.record("downed_transport", player.name(), uuidOf(player),
-                player.name(), uuidOf(player), "SUCCESS",
+        audit.record(AuditActions.DOWNED_TRANSPORT, player.name(), uuidOf(player),
+                player.name(), uuidOf(player), AuditResults.SUCCESS,
                 "destination=" + destination + " reason="
                         + (record == null ? "canonical_custody" : record.reason));
         return true;
@@ -2011,8 +2013,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
             stopCarriedState(store, state, uuidOf(carrier), "mount_failed");
             ctx.custody().write(store);
             carrier.refuse("straja.custody.carry_sync", "straja.remedy.retry");
-            audit.record("carry_start", carrier.name(), uuidOf(carrier),
-                    target.name(), uuidOf(target), "REFUSED", "mount_failed");
+            audit.record(AuditActions.CARRY_START, carrier.name(), uuidOf(carrier),
+                    target.name(), uuidOf(target), AuditResults.REFUSED, "mount_failed");
             return false;
         }
 
@@ -2020,8 +2022,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
         target.tell("Ești transportat de " + carrier.name()
                 + ". Timpul tău de inconștiență este pus pe pauză temporar.");
         carrier.tell("Transporți pe " + target.name() + ".");
-        audit.record("carry_start", carrier.name(), uuidOf(carrier),
-                target.name(), uuidOf(target), "SUCCESS",
+        audit.record(AuditActions.CARRY_START, carrier.name(), uuidOf(carrier),
+                target.name(), uuidOf(target), AuditResults.SUCCESS,
                 "deadline=" + state.transportDeadlineAt);
         return true;
     }
@@ -2048,9 +2050,9 @@ public class CustodyService implements CustodyRoleplayUseCase {
         ctx.custody().write(store);
         target.tell("Ai fost lăsat jos și revii la starea ta de custodie.");
         if (carrier != null) carrier.tell("Ai lăsat jos pe " + target.name() + ".");
-        audit.record("carry_stop", carrier == null ? "system" : carrier.name(),
+        audit.record(AuditActions.CARRY_STOP, carrier == null ? "system" : carrier.name(),
                 carrier == null ? "" : uuidOf(carrier), target.name(), uuidOf(target),
-                "SUCCESS", reason == null ? "manual_drop" : reason);
+                AuditResults.SUCCESS, reason == null ? "manual_drop" : reason);
         return true;
     }
 
@@ -2103,8 +2105,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
         target.closeMenu();
         target.tell("Resuscitarea a început. Nu te mișca și așteaptă ajutorul.");
         rescuer.tell("Resuscitezi pe " + target.name() + ". Rămâi aproape până la final.");
-        audit.record("resuscitation_start", rescuer.name(), uuidOf(rescuer),
-                target.name(), uuidOf(target), "SUCCESS",
+        audit.record(AuditActions.RESUSCITATION_START, rescuer.name(), uuidOf(rescuer),
+                target.name(), uuidOf(target), AuditResults.SUCCESS,
                 "deadline=" + state.resuscitationDeadlineAt);
         return true;
     }
@@ -2142,8 +2144,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
             target.closeMenu();
             target.tell("Resuscitarea a reușit. Poți acționa din nou.");
             rescuer.tell(target.name() + " și-a revenit.");
-            audit.record("resuscitation_complete", rescuer.name(), uuidOf(rescuer),
-                    target.name(), uuidOf(target), "SUCCESS", "progress=" + progress);
+            audit.record(AuditActions.RESUSCITATION_COMPLETE, rescuer.name(), uuidOf(rescuer),
+                    target.name(), uuidOf(target), AuditResults.SUCCESS, "progress=" + progress);
         }
         ctx.custody().write(store);
         return true;
@@ -2193,10 +2195,10 @@ public class CustodyService implements CustodyRoleplayUseCase {
         if (rescuer != null && rescuer.isOnline()) {
             rescuer.tell("Resuscitarea a fost întreruptă: " + reason + ".");
         }
-        audit.record("resuscitation_interrupt",
+        audit.record(AuditActions.RESUSCITATION_INTERRUPT,
                 rescuer == null ? "system" : rescuer.name(),
                 rescuer == null ? "" : uuidOf(rescuer),
-                state.playerName, state.playerUuid, "SUCCESS", reason);
+                state.playerName, state.playerUuid, AuditResults.SUCCESS, reason);
         return true;
     }
 
@@ -2290,7 +2292,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
         if (isDowned(target)) {
             issuer.refuse("straja.custody.already_downed", "straja.remedy.wait", target.name());
             audit.record(auditAction, issuer.name(), uuidOf(issuer),
-                    target.name(), uuidOf(target), "REFUSED", "already_downed");
+                    target.name(), uuidOf(target), AuditResults.REFUSED, "already_downed");
             return new DamageDecision(DamageAction.CANCEL, "already_downed");
         }
         boolean lethal = targetHealth > 0 && damage >= targetHealth + targetAbsorption;
@@ -2306,7 +2308,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
             issuer.refuse("straja.custody.ko_no_cuffs", "straja.remedy.jailer");
             target.tell(weapon + " te-a doborât, dar gardianul nu avea Cătușe disponibile.");
             audit.record(auditAction, issuer.name(), uuidOf(issuer),
-                    target.name(), uuidOf(target), "SUCCESS", "no_cuffs_available");
+                    target.name(), uuidOf(target), AuditResults.SUCCESS, "no_cuffs_available");
             return new DamageDecision(DamageAction.CANCEL, "no_cuffs_available");
         }
         requestSurrender(issuer, target);
@@ -2357,7 +2359,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
                 explicitHardKill, vampireEligible, vampireDbnoActive);
         var decision = LethalEventResolver.resolve(context, ctx.policies());
         if (decision.outcome() != LethalEventResolver.Outcome.STRAJA_DOWNED) {
-            audit.record("lethal_resolve",
+            audit.record(AuditActions.LETHAL_RESOLVE,
                     source == null ? "system" : source.name(),
                     source == null ? "" : uuidOf(source),
                     target.name(), uuidOf(target), decision.outcome().name(),
@@ -2371,7 +2373,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
                     "STRAJA_DOWNED_TRANSITION_FAILED",
                     false);
         }
-        audit.record("lethal_resolve",
+        audit.record(AuditActions.LETHAL_RESOLVE,
                 source == null ? "system" : source.name(),
                 source == null ? "" : uuidOf(source),
                 target.name(), uuidOf(target), decision.outcome().name(),
@@ -2463,8 +2465,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
         store.bound.remove(targetKey);
         store.headSacks.remove(targetKey);
         if (target != null) restraintReleasedHook.accept(findStored(record.issuerUuid, record.issuer), target);
-        audit.record("cuff_recovery", record.issuer, record.issuerUuid,
-                record.target, record.targetUuid, "SUCCESS", "issuer_no_longer_eligible");
+        audit.record(AuditActions.CUFF_RECOVERY, record.issuer, record.issuerUuid,
+                record.target, record.targetUuid, AuditResults.SUCCESS, "issuer_no_longer_eligible");
     }
 
     private boolean issuerStillEligible(CustodyStore.CuffRecord record) {
@@ -2510,8 +2512,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
             var request = entry.getValue();
             if (request == null || blank(request.id)) {
                 store.cuffRequests.remove(entry.getKey());
-                audit.record("custody_recovery", "", "", "", "",
-                        "SUCCESS", "malformed_record kind=request key=" + entry.getKey());
+                audit.record(AuditActions.CUSTODY_RECOVERY, "", "", "", "",
+                        AuditResults.SUCCESS, "malformed_record kind=request key=" + entry.getKey());
                 changed = true;
             } else if (request.expiresAt <= now()) {
                 store.cuffRequests.remove(entry.getKey());
@@ -2536,8 +2538,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
             var record = entry.getValue();
             if (record == null || (blank(record.targetUuid) && blank(record.target))) {
                 store.cuffed.remove(entry.getKey());
-                audit.record("custody_recovery", "", "", "", "",
-                        "SUCCESS", "malformed_record kind=cuffed key=" + entry.getKey());
+                audit.record(AuditActions.CUSTODY_RECOVERY, "", "", "", "",
+                        AuditResults.SUCCESS, "malformed_record kind=cuffed key=" + entry.getKey());
                 changed = true;
                 continue;
             }
@@ -2567,8 +2569,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
                 // (a cuffed fugitive remains restrained until released).
                 if (!detained && record.escortLostAt == null) {
                     record.escortLostAt = now();
-                    audit.record("cuff_tether", record.issuer, record.issuerUuid,
-                            target.name(), record.targetUuid, "SUCCESS",
+                    audit.record(AuditActions.CUFF_TETHER, record.issuer, record.issuerUuid,
+                            target.name(), record.targetUuid, AuditResults.SUCCESS,
                             "escort_lost reason="
                                     + (issuer == null ? "officer_missing" : "dimension"));
                     changed = true;
@@ -2607,8 +2609,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
                         restraintReleasedHook.accept(issuer, target);
                         target.tell("Cătușele s-au rupt după ce ai ieșit din raza gardianului.");
                         issuer.tell(target.name() + " a ieșit din raza cătușelor; acestea s-au rupt.");
-                        audit.record("cuff_expire", issuer.name(), record.issuerUuid,
-                                target.name(), record.targetUuid, "SUCCESS",
+                        audit.record(AuditActions.CUFF_EXPIRE, issuer.name(), record.issuerUuid,
+                                target.name(), record.targetUuid, AuditResults.SUCCESS,
                                 "distance_timeout distance=" + (int) maxDistance);
                         changed = true;
                         continue;
@@ -2623,8 +2625,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
                         // prisoner back to the officer instead of letting the
                         // leash stretch silently.
                         target.teleport(issuer.dimension(), issuer.x(), issuer.y(), issuer.z());
-                        audit.record("cuff_tether", issuer.name(), record.issuerUuid,
-                                target.name(), record.targetUuid, "SUCCESS",
+                        audit.record(AuditActions.CUFF_TETHER, issuer.name(), record.issuerUuid,
+                                target.name(), record.targetUuid, AuditResults.SUCCESS,
                                 "teleport_clamp distance=" + (int) dist);
                     } else {
                         // Drag: a shove toward the officer proportional to
@@ -2644,8 +2646,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
             var record = entry.getValue();
             if (record == null || (blank(record.targetUuid) && blank(record.target))) {
                 store.bound.remove(entry.getKey());
-                audit.record("custody_recovery", "", "", "", "",
-                        "SUCCESS", "malformed_record kind=bound key=" + entry.getKey());
+                audit.record(AuditActions.CUSTODY_RECOVERY, "", "", "", "",
+                        AuditResults.SUCCESS, "malformed_record kind=bound key=" + entry.getKey());
                 changed = true;
                 continue;
             }
@@ -2664,8 +2666,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
                 if (hunter == null || !hunter.dimension().equals(target.dimension())) {
                     if (record.escortLostAt == 0) {
                         record.escortLostAt = now();
-                        audit.record("bounty_escort", record.issuer, record.issuerUuid,
-                                target.name(), record.targetUuid, "SUCCESS",
+                        audit.record(AuditActions.BOUNTY_ESCORT, record.issuer, record.issuerUuid,
+                                target.name(), record.targetUuid, AuditResults.SUCCESS,
                                 "escort_lost reason="
                                         + (hunter == null ? "hunter_missing" : "dimension"));
                         changed = true;
@@ -2675,8 +2677,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
                         // the captive is free to be re-hunted.
                         store.bound.remove(entry.getKey());
                         target.tell("Vânătorul a dispărut — frânghia a cedat.");
-                        audit.record("bounty_escort", record.issuer, record.issuerUuid,
-                                target.name(), record.targetUuid, "SUCCESS",
+                        audit.record(AuditActions.BOUNTY_ESCORT, record.issuer, record.issuerUuid,
+                                target.name(), record.targetUuid, AuditResults.SUCCESS,
                                 "escort_lost_timeout");
                         changed = true;
                         continue;
@@ -2702,8 +2704,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
                             store.bound.remove(entry.getKey());
                             target.tell("Frânghia s-a rupt — ai scăpat de vânător.");
                             hunter.tell(target.name() + " ți-a scăpat: frânghia s-a rupt la distanță.");
-                            audit.record("bounty_escort", record.issuer, record.issuerUuid,
-                                    target.name(), record.targetUuid, "SUCCESS",
+                            audit.record(AuditActions.BOUNTY_ESCORT, record.issuer, record.issuerUuid,
+                                    target.name(), record.targetUuid, AuditResults.SUCCESS,
                                     "rope_broken distance=" + (int) dist);
                             changed = true;
                             continue;
@@ -2716,8 +2718,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
                         if (dist > clamp) {
                             target.teleport(hunter.dimension(),
                                     hunter.x(), hunter.y(), hunter.z());
-                            audit.record("bounty_escort", record.issuer, record.issuerUuid,
-                                    target.name(), record.targetUuid, "SUCCESS",
+                            audit.record(AuditActions.BOUNTY_ESCORT, record.issuer, record.issuerUuid,
+                                    target.name(), record.targetUuid, AuditResults.SUCCESS,
                                     "teleport_clamp distance=" + (int) dist);
                         } else {
                             double nx = dx / dist, ny = dy / dist, nz = dz / dist;
@@ -2741,10 +2743,10 @@ public class CustodyService implements CustodyRoleplayUseCase {
                     && !store.bound.containsKey(entry.getKey());
             if (malformed || badIssuer || orphan) {
                 store.headSacks.remove(entry.getKey());
-                audit.record("custody_recovery",
+                audit.record(AuditActions.CUSTODY_RECOVERY,
                         record == null ? "" : record.issuer,
                         record == null ? "" : record.issuerUuid, "", "",
-                        "SUCCESS", (malformed ? "malformed_record kind=head_sack"
+                        AuditResults.SUCCESS, (malformed ? "malformed_record kind=head_sack"
                                 : badIssuer ? "ineligible_issuer kind=head_sack"
                                 : "orphan_head_sack")
                                 + " key=" + entry.getKey());
@@ -2760,8 +2762,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
             var record = entry.getValue();
             if (malformedDowned(record)) {
                 store.downed.remove(entry.getKey());
-                audit.record("custody_recovery", "", "", "", "",
-                        "SUCCESS", "malformed_record kind=downed key=" + entry.getKey());
+                audit.record(AuditActions.CUSTODY_RECOVERY, "", "", "", "",
+                        AuditResults.SUCCESS, "malformed_record kind=downed key=" + entry.getKey());
                 changed = true;
                 continue;
             }
@@ -2798,8 +2800,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
                 target.closeMenu();
                 target.tell("Ți-ai revenit. Poți acționa din nou.");
                 store.downed.remove(entry.getKey());
-                audit.record("downed_wake", target.name(), uuidOf(target),
-                        target.name(), uuidOf(target), "SUCCESS", "cooldown_complete");
+                audit.record(AuditActions.DOWNED_WAKE, target.name(), uuidOf(target),
+                        target.name(), uuidOf(target), AuditResults.SUCCESS, "cooldown_complete");
                 changed = true;
                 continue;
             }

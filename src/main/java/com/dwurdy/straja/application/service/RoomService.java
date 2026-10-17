@@ -16,6 +16,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import com.dwurdy.straja.domain.model.AuditActions;
+import com.dwurdy.straja.domain.model.AuditResults;
 
 /**
  * Guard housing: bounded room discovery, ownership, waitlist and protection.
@@ -181,7 +183,7 @@ public class RoomService implements RoomRoleplayUseCase {
         data.rooms.add(room);
         refreshSign(room, data);
         trimAndSave(data);
-        audit.record("room_create", player.name(), player.uuid().toString(), id, null, "SUCCESS", "bounds " + (room.maxX - room.minX + 1) + "x" + (room.maxY - room.minY + 1) + "x" + (room.maxZ - room.minZ + 1));
+        audit.record(AuditActions.ROOM_CREATE, player.name(), player.uuid().toString(), id, null, AuditResults.SUCCESS, "bounds " + (room.maxX - room.minX + 1) + "x" + (room.maxY - room.minY + 1) + "x" + (room.maxZ - room.minZ + 1));
         player.tell("Camera " + id + " a fost descoperită și înregistrată. Semnul se actualizează automat după atribuiri.");
         processWaitlist();
         return room;

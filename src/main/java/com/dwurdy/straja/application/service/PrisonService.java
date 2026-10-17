@@ -15,6 +15,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import com.dwurdy.straja.domain.model.AuditActions;
+import com.dwurdy.straja.domain.model.AuditResults;
 
 /**
  * Prison: bounded cells, sentences with online-active-only time, waitlist,
@@ -124,7 +126,7 @@ public class PrisonService implements PrisonRoleplayUseCase {
         var geometryErrorKey = validateCellGeometry(cell);
         if (geometryErrorKey != null) {
             actor.refuse(geometryErrorKey, "straja.remedy.fix_retry");
-            audit.record("prison_cell_create", actor.name(), uuidOf(actor), id, "", "REFUSED", "invalid_geometry");
+            audit.record(AuditActions.PRISON_CELL_CREATE, actor.name(), uuidOf(actor), id, "", AuditResults.REFUSED, "invalid_geometry");
             return false;
         }
         cell.createdAt = now();
@@ -132,8 +134,8 @@ public class PrisonService implements PrisonRoleplayUseCase {
         data.cells.add(cell);
         ctx.prison().write(data);
         actor.tell("Celula " + id + " a fost creată.");
-        audit.record("prison_cell_create", actor.name(), uuidOf(actor),
-                "", "", "SUCCESS", "cellId=" + id);
+        audit.record(AuditActions.PRISON_CELL_CREATE, actor.name(), uuidOf(actor),
+                "", "", AuditResults.SUCCESS, "cellId=" + id);
         processWaitlist();
         return true;
     }
@@ -308,9 +310,9 @@ public class PrisonService implements PrisonRoleplayUseCase {
                            String reason, String siteId) {
         if (!ctx.policies().prisonEnabled) {
             if (actor != null) actor.refuse("straja.prison.disabled", "straja.remedy.ask_comisar");
-            audit.record("prison_arrest", actor == null ? "" : actor.name(),
+            audit.record(AuditActions.PRISON_ARREST, actor == null ? "" : actor.name(),
                     actor == null ? "" : uuidOf(actor), target.name(), uuidOf(target),
-                    "REFUSED", "prison_disabled");
+                    AuditResults.REFUSED, "prison_disabled");
             return null;
         }
         var data = store();
@@ -419,9 +421,9 @@ public class PrisonService implements PrisonRoleplayUseCase {
             online.tell("Ai fost arestat pentru " + sentence.sentenceDays
                     + " zi(e) de Minecraft. Timpul se consumă doar când ești online și activ.");
         }
-        audit.record("prison_arrest", actor == null ? "" : actor.name(),
+        audit.record(AuditActions.PRISON_ARREST, actor == null ? "" : actor.name(),
                 actor == null ? "" : uuidOf(actor), sentence.target, sentence.targetUuid,
-                "SUCCESS", "sentenceId=" + sentence.id + " days=" + sentenceDays);
+                AuditResults.SUCCESS, "sentenceId=" + sentence.id + " days=" + sentenceDays);
         return sentence;
     }
 
@@ -458,8 +460,8 @@ public class PrisonService implements PrisonRoleplayUseCase {
         }
         if (wasHunted) {
             target.tell("Ai fost readus în custodie.");
-            audit.record("prison_recapture", "", "", sentence.target, uuid,
-                    "SUCCESS", "sentenceId=" + sentence.id);
+            audit.record(AuditActions.PRISON_RECAPTURE, "", "", sentence.target, uuid,
+                    AuditResults.SUCCESS, "sentenceId=" + sentence.id);
         }
     }
 
@@ -484,9 +486,9 @@ public class PrisonService implements PrisonRoleplayUseCase {
         }
         if (!actor.isOp() && !players.hasCapability(actor, Capability.EXECUTE_ARRESTS)) {
             actor.refuse("straja.prison.release_rank", "straja.remedy.jailer");
-            audit.record("prison_release", actor.name(), uuidOf(actor),
+            audit.record(AuditActions.PRISON_RELEASE, actor.name(), uuidOf(actor),
                     target.name(), uuidOf(target),
-                    "REFUSED", "missing_authority");
+                    AuditResults.REFUSED, "missing_authority");
             return false;
         }
         var data = store();
@@ -501,8 +503,8 @@ public class PrisonService implements PrisonRoleplayUseCase {
         if (!releaseSentence(data, sentence, target, "FORCED_RELEASE", null,
                 actor, players.isCommissioner(actor) || actor.isOp())) return false;
         ctx.prison().write(data);
-        audit.record("prison_release", actor.name(), uuidOf(actor),
-                sentence.target, sentence.targetUuid, "SUCCESS",
+        audit.record(AuditActions.PRISON_RELEASE, actor.name(), uuidOf(actor),
+                sentence.target, sentence.targetUuid, AuditResults.SUCCESS,
                 "FORCED_RELEASE reason=" + (reason == null ? "" : reason));
         return true;
     }
@@ -654,9 +656,9 @@ public class PrisonService implements PrisonRoleplayUseCase {
     public boolean transferToCamp(PlayerGateway actor, PlayerGateway target, String campId) {
         if (!players.hasCapability(actor, Capability.EXECUTE_ARRESTS)) {
             actor.refuse("straja.prison.release_rank", "straja.remedy.jailer");
-            audit.record("camp_transfer", actor.name(), uuidOf(actor),
+            audit.record(AuditActions.CAMP_TRANSFER, actor.name(), uuidOf(actor),
                     target == null ? campId : target.name(), "",
-                    "REFUSED", "missing_authority");
+                    AuditResults.REFUSED, "missing_authority");
             return false;
         }
         if (target == null || !target.isOnline()) {
@@ -712,8 +714,8 @@ public class PrisonService implements PrisonRoleplayUseCase {
             deliverToCamp(target, camp, true);
             target.tellKey("straja.camp.transferred", camp.name.isBlank() ? camp.id : camp.name);
             actor.tellKey("straja.camp.transfer_done", target.name(), camp.id);
-            audit.record("camp_transfer", actor.name(), uuidOf(actor),
-                    target.name(), sentence.targetUuid, "SUCCESS", "camp=" + camp.id);
+            audit.record(AuditActions.CAMP_TRANSFER, actor.name(), uuidOf(actor),
+                    target.name(), sentence.targetUuid, AuditResults.SUCCESS, "camp=" + camp.id);
             return true;
         }
         actor.refuse("straja.prison.handover_retry", "straja.remedy.jailer");
@@ -736,8 +738,8 @@ public class PrisonService implements PrisonRoleplayUseCase {
             var target = findFor(sentence);
             if (!releaseSentence(data, sentence, target, "BAIL_PAID")) return false;
             ctx.prison().write(data);
-            audit.record("prison_release", "bounty_bail", "",
-                    sentence.target, targetUuid, "SUCCESS", "BAIL_PAID");
+            audit.record(AuditActions.PRISON_RELEASE, "bounty_bail", "",
+                    sentence.target, targetUuid, AuditResults.SUCCESS, "BAIL_PAID");
             return true;
         }
         return false;
@@ -816,8 +818,8 @@ public class PrisonService implements PrisonRoleplayUseCase {
             target.tellKey("straja.camp.transferred",
                     camp.name.isBlank() ? camp.id : camp.name);
         }
-        audit.record("camp_transfer", "system", "", sentence.target,
-                sentence.targetUuid, "SUCCESS", "camp=" + camp.id + " source=" + source);
+        audit.record(AuditActions.CAMP_TRANSFER, "system", "", sentence.target,
+                sentence.targetUuid, AuditResults.SUCCESS, "camp=" + camp.id + " source=" + source);
         return true;
     }
 
@@ -864,8 +866,8 @@ public class PrisonService implements PrisonRoleplayUseCase {
                             sentence.target, owed, campName);
                 }
                 if (notify) debt.notifyTransferOrder(sentence.targetUuid, target, owed, campName);
-                audit.record("prison_release", actor, actorUuid, sentence.target,
-                        sentence.targetUuid, "REFUSED",
+                audit.record(AuditActions.PRISON_RELEASE, actor, actorUuid, sentence.target,
+                        sentence.targetUuid, AuditResults.REFUSED,
                         "debt_gate camp=" + camp.id + " owed=" + owed
                                 + " threshold=" + threshold);
                 return false;
@@ -877,8 +879,8 @@ public class PrisonService implements PrisonRoleplayUseCase {
                     "straja.remedy.debt_release", owed, threshold);
         }
         if (notify) debt.notifyReleaseDenied(sentence.targetUuid, target, owed, threshold);
-        audit.record("prison_release", actor, actorUuid, sentence.target,
-                sentence.targetUuid, "REFUSED",
+        audit.record(AuditActions.PRISON_RELEASE, actor, actorUuid, sentence.target,
+                sentence.targetUuid, AuditResults.REFUSED,
                 "debt_gate cell owed=" + owed + " threshold=" + threshold);
         return false;
     }
@@ -929,8 +931,8 @@ public class PrisonService implements PrisonRoleplayUseCase {
             var target = findFor(sentence);
             if (releaseSentence(data, sentence, target, "SERVED_LABOR", camp)) {
                 ctx.prison().write(data);
-                audit.record("camp_labor_release", "system", "",
-                        sentence.target, targetUuid, "SUCCESS",
+                audit.record(AuditActions.CAMP_LABOR_RELEASE, "system", "",
+                        sentence.target, targetUuid, AuditResults.SUCCESS,
                         "camp=" + camp.id + " paid=" + rec.laborAccount
                                 + " price=" + price);
                 return true;
@@ -948,8 +950,8 @@ public class PrisonService implements PrisonRoleplayUseCase {
     public boolean releaseById(PlayerGateway actor, String targetId) {
         if (!actor.isOp() && !players.hasCapability(actor, Capability.EXECUTE_ARRESTS)) {
             actor.refuse("straja.prison.release_rank", "straja.remedy.jailer");
-            audit.record("prison_release", actor.name(), uuidOf(actor),
-                    targetId, "", "REFUSED", "missing_authority");
+            audit.record(AuditActions.PRISON_RELEASE, actor.name(), uuidOf(actor),
+                    targetId, "", AuditResults.REFUSED, "missing_authority");
             return false;
         }
         var online = ctx.server().findPlayer(targetId);
@@ -974,8 +976,8 @@ public class PrisonService implements PrisonRoleplayUseCase {
                 actor, players.isCommissioner(actor) || actor.isOp())) return false;
         ctx.prison().write(data);
         actor.tellKey("straja.prison.released_offline", sentence.target);
-        audit.record("prison_release", actor.name(), uuidOf(actor),
-                sentence.target, sentence.targetUuid, "SUCCESS",
+        audit.record(AuditActions.PRISON_RELEASE, actor.name(), uuidOf(actor),
+                sentence.target, sentence.targetUuid, AuditResults.SUCCESS,
                 "FORCED_RELEASE offline targetId=" + targetId);
         return true;
     }
@@ -1119,8 +1121,8 @@ public class PrisonService implements PrisonRoleplayUseCase {
             sentence.status = "CANCELLED";
             releaseInvalidAssignments(data, sentence, player);
             ctx.prison().write(data);
-            audit.record("prison_recover", player.name(), uuidOf(player),
-                    sentence.target, sentence.targetUuid, "SUCCESS",
+            audit.record(AuditActions.PRISON_RECOVER, player.name(), uuidOf(player),
+                    sentence.target, sentence.targetUuid, AuditResults.SUCCESS,
                     "malformed_sentence_cancelled");
             return;
         }
@@ -1182,8 +1184,8 @@ public class PrisonService implements PrisonRoleplayUseCase {
             data.waitlist.add(entry);
         }
         ctx.prison().write(data);
-        audit.record("prison_recover", player.name(), uuidOf(player),
-                sentence.target, sentence.targetUuid, "SUCCESS",
+        audit.record(AuditActions.PRISON_RECOVER, player.name(), uuidOf(player),
+                sentence.target, sentence.targetUuid, AuditResults.SUCCESS,
                 "missing_cell_assignment sentenceId=" + sentence.id);
     }
 
@@ -1201,8 +1203,8 @@ public class PrisonService implements PrisonRoleplayUseCase {
             if (malformed || claims) {
                 data.assignments.remove(cellId);
                 changed = true;
-                audit.record("prison_recover", player.name(), uuidOf(player),
-                        sentence.target, sentence.targetUuid, "SUCCESS",
+                audit.record(AuditActions.PRISON_RECOVER, player.name(), uuidOf(player),
+                        sentence.target, sentence.targetUuid, AuditResults.SUCCESS,
                         (malformed ? "malformed_assignment_released" : "assignment_released")
                                 + " cellId=" + cellId);
             }
@@ -1215,8 +1217,8 @@ public class PrisonService implements PrisonRoleplayUseCase {
         boolean removed = data.waitlist.removeIf(e -> e == null
                 || (blank(e.sentenceId) && blank(e.targetUuid) && blank(e.target)));
         if (removed) {
-            audit.record("prison_recover", player.name(), uuidOf(player),
-                    sentence.target, sentence.targetUuid, "SUCCESS",
+            audit.record(AuditActions.PRISON_RECOVER, player.name(), uuidOf(player),
+                    sentence.target, sentence.targetUuid, AuditResults.SUCCESS,
                     "malformed_waitlist_discarded sentenceId=" + sentence.id);
         }
         return removed;
@@ -1437,8 +1439,8 @@ public class PrisonService implements PrisonRoleplayUseCase {
             target.setGameMode(prior);
             target.tell("Ai evadat din custodie. Ești căutat — gardienii te vor prinde din nou.");
         }
-        audit.record("prison_fugitive", "", "", sentence.target, uuid,
-                "SUCCESS", "escape sentenceId=" + sentence.id
+        audit.record(AuditActions.PRISON_FUGITIVE, "", "", sentence.target, uuid,
+                AuditResults.SUCCESS, "escape sentenceId=" + sentence.id
                         + " escapes=" + rec.escapeCount);
     }
 
@@ -1515,9 +1517,9 @@ public class PrisonService implements PrisonRoleplayUseCase {
                 && rec.status != PrisonerStatus.IN_CAMP)) return;
         rec.status = PrisonerStatus.ESCORTED;
         ctx.prisonerRegister().write(reg);
-        audit.record("prison_escort", officer == null ? "system" : officer.name(),
+        audit.record(AuditActions.PRISON_ESCORT, officer == null ? "system" : officer.name(),
                 officer == null ? "" : uuidOf(officer), sentence.target,
-                sentence.targetUuid, "SUCCESS", "escort_start sentenceId=" + sentence.id);
+                sentence.targetUuid, AuditResults.SUCCESS, "escort_start sentenceId=" + sentence.id);
     }
 
     // ------------------------------------------------------------ locker pool picks

@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import com.dwurdy.straja.domain.model.AuditActions;
 
 /**
  * Straja Storage: protected-zone theft watch, deposit routing, and guard aggro.
@@ -132,7 +133,7 @@ public final class StorageService {
             store.clearThief(key);
             ctx.npcGuards().finishQuestForTeam(
                     ctx.policies().storageHuntTeam, ctx.policies().storageHuntQuestId);
-            audit.record("storage_thief_cleared", "storage", "", key, key, "ARRESTED", "offline");
+            audit.record(AuditActions.STORAGE_THIEF_CLEARED, "storage", "", key, key, "ARRESTED", "offline");
         }
         save(store);
     }
@@ -196,7 +197,7 @@ public final class StorageService {
             ctx.npcGuards().setFactionPoints(player.uuid(), ctx.policies().storageFactionId, 0);
             announceTheft(player.name());
             ctx.npcGuards().startQuestForTeam(ctx.policies().storageHuntTeam, ctx.policies().storageHuntQuestId);
-            audit.record("storage_thief_marked", "storage", "", player.name(), key,
+            audit.record(AuditActions.STORAGE_THIEF_MARKED, "storage", "", player.name(), key,
                     "FLAGGED", "units=" + units);
         }
         store.markThief(key, rec.addOwed(units));
@@ -232,7 +233,7 @@ public final class StorageService {
             default -> "straja.storage.thief_cleared";
         };
         for (var p : ctx.server().onlinePlayers()) p.tellKey(msgKey, player.name());
-        audit.record("storage_thief_cleared", "storage", "", player.name(), key,
+        audit.record(AuditActions.STORAGE_THIEF_CLEARED, "storage", "", player.name(), key,
                 release.name(), "rep=" + rep);
     }
 
@@ -458,7 +459,7 @@ public final class StorageService {
         if (leftover > 0) {
             ctx.containers().dropItem(dest.dimension(), dest.x(), dest.y(), dest.z(), itemId, leftover);
         }
-        audit.record("storage_deposit", "storage", "", playerName, "", "OK",
+        audit.record(AuditActions.STORAGE_DEPOSIT, "storage", "", playerName, "", "OK",
                 count + "x " + itemId + " (leftover " + leftover + ")");
         return new DepositResult(true, inserted, leftover);
     }
@@ -555,7 +556,7 @@ public final class StorageService {
         zoneCorners.clear();
         save(store);
         admin.tellKey("straja.storage.cfg_reset");
-        audit.record("storage_cfg_reset", admin.name(), admin.uuid().toString(), "", "", "RESET", "");
+        audit.record(AuditActions.STORAGE_CFG_RESET, admin.name(), admin.uuid().toString(), "", "", "RESET", "");
     }
 
     // ------------------------------------------------------------ reporting
