@@ -412,6 +412,40 @@ a dig site fill the tunnel for good; a prisoner covering their own hole only
 hides the block — the record stays findable. All detections reach the FUN-6
 board at ROUTINE/ENLISTED.
 
+## 15c. Prison economy & jobs (FUN-10)
+
+**Work beyond mining.** Job posts (`/straja jobpost add|remove|list`,
+Comisar+) declare a station of one of the configured job types
+(`straja.prisonJobs` — `id=req,count=quota=cooldown=pay=standing` syntax).
+Kitchen, laundry and smithing ship as defaults alongside mining: different
+inputs, quotas, cooldown pacing, pay and standing weight. Prisoners click a
+post to see their remaining quota; once goods are in hand the next click
+extracts them and settles exactly once per run (idempotent run tokens),
+crediting `laborAccount` and `standing`. Non-prisoners touching a post see a
+hint, not a job. The post claims the click — a station block is work
+furniture, not a chest.
+
+**Standing.** Every register record carries a durable `standing` score —
+job settles add `pay * standingWeight`, detected tunnels/jams subtract
+configured penalties, and a positive settle can never push a record
+negative. It shows in `/straja status` and is the durable stat FUN-11
+parole reads.
+
+**Small-society trade.** `/straja trade <prisoner> [price]` offers the held
+stack; the buyer answers `/straja trade accept|decline` inside
+`tradeOfferSeconds`. Trades are atomic: the buyer's inventory is checked
+before anything moves, stacks transfer with full SNBT/custom data, and
+labor credit only moves both ways once. Price `0` or the `favor` mode
+issues a physical `straja:iou_note` instead — a stealable paper favor, not
+spendable money. `/straja iou <prisoner> <note>` hands one directly.
+
+**Inspection pressure.** Every `inspectionCallIntervalMinutes` the board
+posts one ROUTINE cell-search call (open inspection calls are not
+duplicated; a closed-without-search call frees the slot for the next
+sweep). `/straja search` at the called cell resolves it — the FUN-9
+inspection (tunnels, jams, contraband) runs, contraband is confiscated
+with a seizure record, and detection penalties hit standing.
+
 ## 16. Explicit non-goals / postponed decisions
 
 - Jailer/item-dependent custody expansion is postponed for now.

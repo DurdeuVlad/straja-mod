@@ -73,6 +73,7 @@ public final class StrajaRuntime {
     private final com.dwurdy.straja.application.service.ManhuntService manhunts;
     private final com.dwurdy.straja.application.service.TransferService transfers;
     private final com.dwurdy.straja.application.service.EscapeService escapes;
+    private com.dwurdy.straja.application.service.PrisonJobService prisonJobs;
     private final com.dwurdy.straja.application.service.BoloService bolos;
     private final com.dwurdy.straja.application.service.BountyService bounties;
     private final com.dwurdy.straja.application.service.ProtocolService protocol;
@@ -205,7 +206,8 @@ public final class StrajaRuntime {
                 new SavedStores.MerchantDesks(stores),
                 new com.dwurdy.straja.adapter.out.minecraft.MinecraftContainerGateway(server),
                 com.dwurdy.straja.adapter.out.npc.customnpcs.CustomNpcsGuardGateway.create(server),
-                new com.dwurdy.straja.adapter.out.minecraft.MinecraftDeepScanGateway(server));
+                new com.dwurdy.straja.adapter.out.minecraft.MinecraftDeepScanGateway(server),
+                new SavedStores.Jobs(stores));
 
         this.v2PersonnelRepository = new SavedStores.Personnel(stores);
         this.v2PromotionRepository = new SavedStores.Promotions(stores);
@@ -422,6 +424,12 @@ public final class StrajaRuntime {
         this.escapes.useManhunts(this.manhunts);
         this.escapes.useRolls(RollSource.system());
         this.prison.useEscapes(this.escapes);
+        // FUN-10: camp jobs, the labor-credit market, IOU favors, standing,
+        // and inspection calls — the small economy behind the wire.
+        this.prisonJobs = new com.dwurdy.straja.application.service.PrisonJobService(
+                ctx, players, audit);
+        this.prisonJobs.useDispatch(this.dispatch);
+        this.escapes.useJobs(this.prisonJobs);
         this.evidence = new com.dwurdy.straja.application.service.EvidenceService(ctx, players, audit);
         this.arrestRecords = new com.dwurdy.straja.application.service.ArrestRecordService(ctx, players, audit);
         this.reputation = new com.dwurdy.straja.application.service.ReputationService(
@@ -665,6 +673,7 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.service.ManhuntService manhunts() { return manhunts; }
     public com.dwurdy.straja.application.service.TransferService transfers() { return transfers; }
     public com.dwurdy.straja.application.service.EscapeService escapes() { return escapes; }
+    public com.dwurdy.straja.application.service.PrisonJobService prisonJobs() { return prisonJobs; }
     public com.dwurdy.straja.application.service.BoloService bolos() { return bolos; }
 
     public com.dwurdy.straja.application.service.BountyService bounties() { return bounties; }

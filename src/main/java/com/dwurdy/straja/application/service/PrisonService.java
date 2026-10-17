@@ -1474,6 +1474,15 @@ public class PrisonService implements PrisonRoleplayUseCase {
         player.tell("Detenție: " + sentence.status + " | celulă: "
                 + (sentence.cellId.isEmpty() ? "așteptare" : sentence.cellId)
                 + " | timp activ rămas: " + Math.ceil(sentence.remainingActiveMs / 60000.0) + " minute.");
+        // FUN-10: the prisoner sees the account and the standing parole reads.
+        var rec = ctx.prisonerRegister().read().prisoner(sentence.targetUuid);
+        if (rec != null) {
+            int doneJobs = ctx.jobs() == null ? 0
+                    : ctx.jobs().read().completedCount(sentence.targetUuid);
+            player.tell("Cont de muncă: " + rec.laborAccount
+                    + " | reputație: " + rec.standing
+                    + " | cote încheiate: " + doneJobs);
+        }
     }
 
     /**

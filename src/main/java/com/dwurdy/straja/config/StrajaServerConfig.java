@@ -350,6 +350,12 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.IntValue TUNNEL_FOUND_PENALTY_MINUTES;
     public static final ModConfigSpec.DoubleValue INSPECTION_RADIUS;
     public static final ModConfigSpec.IntValue ESCAPE_RETENTION_LIMIT;
+    public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> JOB_DEFS;
+    public static final ModConfigSpec.IntValue TRADE_OFFER_MS;
+    public static final ModConfigSpec.IntValue STANDING_TUNNEL_PENALTY;
+    public static final ModConfigSpec.IntValue STANDING_JAM_PENALTY;
+    public static final ModConfigSpec.IntValue INSPECTION_CALL_INTERVAL_MINUTES;
+    public static final ModConfigSpec.IntValue JOB_RETENTION_LIMIT;
     public static final ModConfigSpec.DoubleValue ESCORT_TETHER_RADIUS;
     public static final ModConfigSpec.DoubleValue ESCORT_GATE_BYPASS_RADIUS;
     public static final ModConfigSpec.DoubleValue ESCORT_TELEPORT_DISTANCE;
@@ -1334,6 +1340,34 @@ public final class StrajaServerConfig {
                 .defineInRange("retentionLimit", defaults.escapeRetentionLimit, 10, 100000);
         B.pop();
 
+        B.push("jobs");
+        JOB_DEFS = B.comment(
+                        "Posted camp job quotas, one per line:",
+                        "id|label|item:count+item:count|pay|standing|cooldownSeconds")
+                .defineListAllowEmpty(List.of("defs"),
+                        new ArrayList<>(defaults.jobDefs),
+                        () -> "kitchen|Bucătărie|minecraft:bread:4|6|1|600",
+                        StrajaServerConfig::isNonBlankString);
+        TRADE_OFFER_MS = B.comment(
+                        "Milliseconds a prisoner market offer waits for an",
+                        "answer before it lapses.")
+                .defineInRange("tradeOfferMs", defaults.tradeOfferMs, 5000, 600000);
+        STANDING_TUNNEL_PENALTY = B.comment(
+                        "Standing lost when a digger's tunnel is discovered.")
+                .defineInRange("standingTunnelPenalty", defaults.standingTunnelPenalty, 0, 1000);
+        STANDING_JAM_PENALTY = B.comment(
+                        "Standing lost when a traced lock jam names the actor.")
+                .defineInRange("standingJamPenalty", defaults.standingJamPenalty, 0, 1000);
+        INSPECTION_CALL_INTERVAL_MINUTES = B.comment(
+                        "Minutes between routine cell-inspection dispatch",
+                        "calls; 0 disables the quota pressure.")
+                .defineInRange("inspectionCallIntervalMinutes",
+                        defaults.inspectionCallIntervalMinutes, 0, 10080);
+        JOB_RETENTION_LIMIT = B.comment(
+                        "Bound on retained job runs and settled trades.")
+                .defineInRange("retentionLimit", defaults.jobRetentionLimit, 10, 100000);
+        B.pop();
+
         B.push("audit");
         AUDIT_ENABLED = B.define("enabled", true);
         AUDIT_RETENTION_LIMIT = B.defineInRange("retentionLimit", 500, 10, 100000);
@@ -1721,6 +1755,12 @@ public final class StrajaServerConfig {
         p.tunnelFoundPenaltyMinutes = TUNNEL_FOUND_PENALTY_MINUTES.get();
         p.inspectionRadius = INSPECTION_RADIUS.get();
         p.escapeRetentionLimit = ESCAPE_RETENTION_LIMIT.get();
+        p.jobDefs = new ArrayList<>(JOB_DEFS.get());
+        p.tradeOfferMs = TRADE_OFFER_MS.get();
+        p.standingTunnelPenalty = STANDING_TUNNEL_PENALTY.get();
+        p.standingJamPenalty = STANDING_JAM_PENALTY.get();
+        p.inspectionCallIntervalMinutes = INSPECTION_CALL_INTERVAL_MINUTES.get();
+        p.jobRetentionLimit = JOB_RETENTION_LIMIT.get();
         p.transferRideEnabled = TRANSFER_RIDE_ENABLED.get();
         p.transferMinRideBlocks = TRANSFER_MIN_RIDE_BLOCKS.get();
         p.transferEscortWaitMinutes = TRANSFER_ESCORT_WAIT_MINUTES.get();

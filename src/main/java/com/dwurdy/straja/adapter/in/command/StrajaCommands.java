@@ -179,6 +179,48 @@ public final class StrajaCommands {
                         .postRemove(p, StringArgumentType.getString(c, "id"))))));
         root.then(post);
 
+        // FUN-10: prison economy — job board, labor-credit market trades,
+        // and signed favor notes between prisoners.
+        root.then(Commands.literal("job")
+                .executes(c -> player(c, StrajaRuntime.get().prisonJobs()::jobStatus)));
+        var jobpost = adminOnly(Commands.literal("jobpost"));
+        jobpost.then(Commands.literal("list")
+                .executes(c -> player(c, StrajaRuntime.get().prisonJobs()::postList)));
+        jobpost.then(Commands.literal("add").then(Commands.argument("id", StringArgumentType.word())
+                .then(Commands.argument("jobId", StringArgumentType.word())
+                        .executes(c -> player(c, p -> StrajaRuntime.get().prisonJobs()
+                                .postAdd(p, StringArgumentType.getString(c, "id"),
+                                        StringArgumentType.getString(c, "jobId"), 4.0, "")))
+                        .then(Commands.argument("radius", IntegerArgumentType.integer(2, 32))
+                                .executes(c -> player(c, p -> StrajaRuntime.get().prisonJobs()
+                                        .postAdd(p, StringArgumentType.getString(c, "id"),
+                                                StringArgumentType.getString(c, "jobId"),
+                                                IntegerArgumentType.getInteger(c, "radius"), "")))))));
+        jobpost.then(Commands.literal("remove").then(Commands.argument("id", StringArgumentType.word())
+                .executes(c -> player(c, p -> StrajaRuntime.get().prisonJobs()
+                        .postRemove(p, StringArgumentType.getString(c, "id"))))));
+        root.then(jobpost);
+        var trade = Commands.literal("trade");
+        trade.then(Commands.argument("player", StringArgumentType.word())
+                .then(Commands.argument("price", IntegerArgumentType.integer(0))
+                        .executes(c -> player(c, p -> StrajaRuntime.get().prisonJobs()
+                                .tradeOffer(p, StringArgumentType.getString(c, "player"),
+                                        IntegerArgumentType.getInteger(c, "price"))))));
+        trade.then(Commands.literal("accept")
+                .executes(c -> player(c, p -> StrajaRuntime.get().prisonJobs()
+                        .tradeAnswer(p, true))));
+        trade.then(Commands.literal("decline")
+                .executes(c -> player(c, p -> StrajaRuntime.get().prisonJobs()
+                        .tradeAnswer(p, false))));
+        root.then(trade);
+        var iou = Commands.literal("iou");
+        iou.then(Commands.argument("player", StringArgumentType.word())
+                .then(Commands.argument("text", StringArgumentType.greedyString())
+                        .executes(c -> player(c, p -> StrajaRuntime.get().prisonJobs()
+                                .iou(p, StringArgumentType.getString(c, "player"),
+                                        StringArgumentType.getString(c, "text"))))));
+        root.then(iou);
+
         var special = adminOnly(Commands.literal("special"));
         special.then(Commands.literal("start").then(Commands.argument("player", EntityArgument.player())
                 .executes(c -> { StrajaRuntime.get().guards().specialStart(actor(c), target(c, "player")); return 1; })));
@@ -2625,6 +2667,9 @@ public final class StrajaCommands {
                 new PlayerHelpEntry("/straja transfer", "straja.help.player.cmd.transfer"),
                 new PlayerHelpEntry("/straja bribe", "straja.help.player.cmd.bribe"),
                 new PlayerHelpEntry("/straja search", "straja.help.player.cmd.search"),
+                new PlayerHelpEntry("/straja job", "straja.help.player.cmd.job"),
+                new PlayerHelpEntry("/straja trade", "straja.help.player.cmd.trade"),
+                new PlayerHelpEntry("/straja iou", "straja.help.player.cmd.iou"),
                 new PlayerHelpEntry("/straja stop", "straja.help.player.cmd.stop"));
 
         /** Commands advertised by the player orientation — all must stay permission-0. */

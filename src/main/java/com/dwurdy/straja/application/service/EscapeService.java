@@ -28,6 +28,7 @@ public final class EscapeService {
     private CustodyService custody;
     private DispatchService dispatch;
     private ManhuntService manhunts;
+    private PrisonJobService jobs;
     private RollSource rolls = RollSource.system();
 
     /** Blending prisoners: uuid → grace expiry. Memory-only by design —
@@ -50,6 +51,8 @@ public final class EscapeService {
     public void useDispatch(DispatchService dispatch) { this.dispatch = dispatch; }
     public void useManhunts(ManhuntService manhunts) { this.manhunts = manhunts; }
     public void useRolls(RollSource rolls) { this.rolls = rolls == null ? RollSource.system() : rolls; }
+    /** FUN-10: inspection searches settle standing hits and close quota calls. */
+    public void useJobs(PrisonJobService jobs) { this.jobs = jobs; }
 
     private EscapeStore store() {
         var data = ctx.escapes().read();
@@ -446,6 +449,10 @@ public final class EscapeService {
                     prison.extendSentence(t.diggerUuid,
                             Math.max(1, ctx.policies().tunnelFoundPenaltyMinutes) * 60_000L,
                             "tunnel_found");
+                if (jobs != null && !t.diggerUuid.isBlank())
+                    jobs.penalizeStanding(t.diggerUuid,
+                            Math.max(0, ctx.policies().standingTunnelPenalty),
+                            "tunnel_found");
                 notice("tunnel_found:" + t.id, "Tunel găsit la celula " + cell.id,
                         "inspecția lui " + guard.name(),
                         t.dimension, t.x + 0.5, t.y + 0.5, t.z + 0.5, "celula " + cell.id,
@@ -459,6 +466,9 @@ public final class EscapeService {
             found = true;
             guard.tell("§cBroasca celulei " + cell.id + " a fost forțată și s-a gripat"
                     + (cell.jammedByName.isBlank() ? "" : " — autor: " + cell.jammedByName) + ".");
+            if (jobs != null && !cell.jammedByUuid.isBlank())
+                jobs.penalizeStanding(cell.jammedByUuid,
+                        Math.max(0, ctx.policies().standingJamPenalty), "lock_jam");
         }
         // The occupant's contraband leaves with the inspector.
         var assignment = ctx.prison().read().assignments.get(cell.id);
@@ -480,6 +490,8 @@ public final class EscapeService {
         }
         if (!found) guard.tell("§7Celula " + cell.id + " e curată — nimic găsit.");
         else ctx.escapes().write(data);
+        // FUN-10: a finished search satisfies an open inspection mini-call.
+        if (jobs != null) jobs.completeInspection(guard, cell.id);
         audit.record(AuditActions.PRISON_CELL_CREATE, guard.name(), uuidOf(guard), cell.id, "",
                 AuditResults.SUCCESS, "inspect found=" + found);
         return true;
