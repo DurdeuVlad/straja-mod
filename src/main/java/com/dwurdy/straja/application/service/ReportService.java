@@ -6,6 +6,7 @@ import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.domain.model.ActivityReport;
 import com.dwurdy.straja.domain.model.ActivityReportStore;
 import com.dwurdy.straja.domain.model.ActivityReports;
+import com.dwurdy.straja.domain.model.DecisionWords;
 import com.dwurdy.straja.domain.model.Rank;
 import com.dwurdy.straja.domain.model.StrajaPolicies;
 
@@ -187,13 +188,13 @@ public class ReportService implements ReportUseCase {
             player.refuse("straja.report.not_pending", "straja.remedy.retry", id);
             return false;
         }
-        String normalized = decision == null ? "" : decision.trim().toLowerCase();
-        String status = switch (normalized) {
-            case "accept", "accepta", "acceptă" -> ActivityReport.ACCEPTED;
-            case "return", "returneaza", "returnează" -> ActivityReport.RETURNED;
-            case "call", "cheama", "cheamă" -> ActivityReport.COMISAR_REVIEW;
-            default -> null;
-        };
+        String status = DecisionWords.is(decision, DecisionWords.REPORT_ACCEPT)
+                ? ActivityReport.ACCEPTED
+                : DecisionWords.is(decision, DecisionWords.REPORT_RETURN)
+                        ? ActivityReport.RETURNED
+                        : DecisionWords.is(decision, DecisionWords.REPORT_SUMMON)
+                                ? ActivityReport.COMISAR_REVIEW
+                                : null;
         if (status == null) {
             player.refuse("straja.report.bad_decision", "straja.remedy.fix_retry");
             return false;

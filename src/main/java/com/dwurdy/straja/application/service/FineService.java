@@ -657,11 +657,11 @@ public class FineService implements FineRoleplayUseCase {
         Fine.Appeal appeal = fine.appeal;
         long reviewAt = now();
         boolean voided = false;
-        if (List.of("uphold", "mentine", "menține", "confirm").contains(action)) {
+        if (com.dwurdy.straja.domain.model.DecisionWords.FINE_UPHOLD.contains(action)) {
             fine.status = appeal.previousStatus == null || appeal.previousStatus.isEmpty() ? "ISSUED" : appeal.previousStatus;
             fine.onlineLastTickAt = reviewAt;
             appeal.decision = "UPHELD";
-        } else if (List.of("reduce", "redu", "micsoreaza", "micșorează").contains(action)) {
+        } else if (com.dwurdy.straja.domain.model.DecisionWords.FINE_REDUCE.contains(action)) {
             if (reducedAmount == null || !p().fineAllowedAmounts.contains(reducedAmount) || reducedAmount >= appeal.previousAmount) {
                 player.refuse("straja.fine.reduction_invalid", "straja.remedy.fix_retry");
                 return false;
@@ -671,7 +671,7 @@ public class FineService implements FineRoleplayUseCase {
             fine.onlineLastTickAt = reviewAt;
             appeal.decision = "REDUCED";
             appeal.reducedAmount = reducedAmount;
-        } else if (List.of("void", "anuleaza", "anulează", "iertare").contains(action)) {
+        } else if (com.dwurdy.straja.domain.model.DecisionWords.FINE_VOID.contains(action)) {
             fine.status = "WAIVED";
             fine.waivedAt = reviewAt;
             appeal.decision = "VOID";

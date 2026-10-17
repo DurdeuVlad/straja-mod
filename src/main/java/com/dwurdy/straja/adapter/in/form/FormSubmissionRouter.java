@@ -119,9 +119,8 @@ public final class FormSubmissionRouter {
             case FINE_APPEAL_REVIEW -> {
                 String decision = values.get("decision");
                 Integer reduced = parseInt(firstValue(values, "reduced-amount", "reducedAmount"));
-                boolean reduce = decision != null && java.util.List.of(
-                        "reduce", "redu", "micsoreaza", "micșorează")
-                        .contains(decision.toLowerCase());
+                boolean reduce = com.dwurdy.straja.domain.model.DecisionWords.is(
+                        decision, com.dwurdy.straja.domain.model.DecisionWords.FINE_REDUCE);
                 if (reduce && reduced == null) {
                     player.sendSystemMessage(refusal("straja.form.appeal_invalid", "straja.remedy.fix_retry"));
                     return;
@@ -186,12 +185,10 @@ public final class FormSubmissionRouter {
                     player.sendSystemMessage(refusal("straja.petition.gone", "straja.remedy.retry"));
                     return;
                 }
-                String normalized = values.getOrDefault("decision", "").trim().toLowerCase();
-                boolean approve = java.util.List.of(
-                        "aproba", "aprobă", "approve", "accept", "accepta", "acceptă")
-                        .contains(normalized);
-                boolean deny = java.util.List.of("respinge", "reject", "deny", "refuza", "refuză")
-                        .contains(normalized);
+                boolean approve = com.dwurdy.straja.domain.model.DecisionWords.is(
+                        values.get("decision"), com.dwurdy.straja.domain.model.DecisionWords.APPROVE);
+                boolean deny = com.dwurdy.straja.domain.model.DecisionWords.is(
+                        values.get("decision"), com.dwurdy.straja.domain.model.DecisionWords.DENY);
                 if (!approve && !deny) {
                     player.sendSystemMessage(refusal("straja.petition.bad_decision", "straja.remedy.fix_retry"));
                     return;
@@ -251,12 +248,10 @@ public final class FormSubmissionRouter {
                     player.sendSystemMessage(refusal("straja.join.gone", "straja.remedy.retry"));
                     return;
                 }
-                String normalized = values.getOrDefault("decision", "").trim().toLowerCase();
-                boolean approve = java.util.List.of(
-                        "aproba", "aprobă", "approve", "accept", "accepta", "acceptă")
-                        .contains(normalized);
-                boolean deny = java.util.List.of("respinge", "reject", "deny", "refuza", "refuză")
-                        .contains(normalized);
+                boolean approve = com.dwurdy.straja.domain.model.DecisionWords.is(
+                        values.get("decision"), com.dwurdy.straja.domain.model.DecisionWords.APPROVE);
+                boolean deny = com.dwurdy.straja.domain.model.DecisionWords.is(
+                        values.get("decision"), com.dwurdy.straja.domain.model.DecisionWords.DENY);
                 if (!approve && !deny) {
                     player.sendSystemMessage(refusal("straja.petition.bad_decision", "straja.remedy.fix_retry"));
                     return;

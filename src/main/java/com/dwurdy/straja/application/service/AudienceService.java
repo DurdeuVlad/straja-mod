@@ -5,6 +5,7 @@ import com.dwurdy.straja.application.port.in.AudienceUseCase;
 import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.domain.model.AudienceRequest;
 import com.dwurdy.straja.domain.model.AudienceStore;
+import com.dwurdy.straja.domain.model.DecisionWords;
 import com.dwurdy.straja.domain.model.Rank;
 import com.dwurdy.straja.domain.model.StrajaPolicies;
 import com.dwurdy.straja.domain.model.Text;
@@ -151,12 +152,14 @@ public class AudienceService implements AudienceUseCase {
             player.refuse("straja.audience.not_pending", "straja.remedy.retry", id);
             return false;
         }
-        String normalized = decision == null ? "" : decision.trim().toLowerCase();
-        String status = switch (normalized) {
-            case "resolve", "rezolva", "rezolvă", "accept", "accepta", "acceptă" -> AudienceRequest.RESOLVED;
-            case "dismiss", "respinge", "reject" -> AudienceRequest.DISMISSED;
-            default -> null;
-        };
+        String status;
+        if (DecisionWords.is(decision, DecisionWords.AUDIENCE_RESOLVE)) {
+            status = AudienceRequest.RESOLVED;
+        } else if (DecisionWords.is(decision, DecisionWords.AUDIENCE_DISMISS)) {
+            status = AudienceRequest.DISMISSED;
+        } else {
+            status = null;
+        }
         if (status == null) {
             player.refuse("straja.audience.bad_decision", "straja.remedy.fix_retry");
             return false;

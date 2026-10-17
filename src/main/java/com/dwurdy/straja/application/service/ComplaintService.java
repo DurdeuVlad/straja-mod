@@ -479,7 +479,7 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
             return false;
         }
         String action = decision == null ? "" : decision.toLowerCase();
-        if (List.of("retrage", "withdraw", "anuleaza", "anulează").contains(action)) {
+        if (com.dwurdy.straja.domain.model.DecisionWords.COMPLAINT_WITHDRAW.contains(action)) {
             String trimmed = reason == null ? "" : reason.trim();
             if (trimmed.isEmpty() || trimmed.length() > WITHDRAW_REASON_LIMIT) {
                 player.refuse("straja.complaint.withdraw_reason", "straja.remedy.fix_retry", WITHDRAW_REASON_LIMIT);
@@ -494,7 +494,7 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
             player.tell("Plângerea " + complaint.id + " a fost retrasă și trimisă în istoricul secției.");
             return true;
         }
-        if (!List.of("satisfy", "satisfacut", "satisfăcut", "satisfied", "accept", "confirm").contains(action)) {
+        if (!com.dwurdy.straja.domain.model.DecisionWords.COMPLAINT_SATISFY.contains(action)) {
             player.refuse("straja.complaint.decision_reception", "straja.remedy.reception");
             return false;
         }
@@ -602,8 +602,8 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
             player.refuse("straja.complaint.verify_secretary", "straja.remedy.secretary");
             return false;
         }
-        String action = decision == null ? "" : decision.toLowerCase();
-        if (List.of("return", "trimite-inapoi", "corectie").contains(action)) {
+        String action = com.dwurdy.straja.domain.model.DecisionWords.key(decision);
+        if (com.dwurdy.straja.domain.model.DecisionWords.COMPLAINT_RETURN.contains(action)) {
             complaint.status = "INVESTIGATING";
             complaint.reviewedBy = player.name();
             complaint.reviewNote = "Raport returnat pentru completări.";
@@ -611,7 +611,7 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
             player.tell("Dosarul a fost returnat pentru completări.");
             return true;
         }
-        if (List.of("dismiss", "respinge", "nefondat").contains(action)) {
+        if (com.dwurdy.straja.domain.model.DecisionWords.COMPLAINT_DISMISS.contains(action)) {
             complaint.status = "CLOSED";
             complaint.resolution = "UNFOUNDED";
             complaint.rewardTotal = 0;
@@ -623,7 +623,7 @@ public class ComplaintService implements ComplaintRoleplayUseCase {
             player.tell("Dosarul " + complaint.id + " a fost închis ca nefondat.");
             return true;
         }
-        if (!List.of("approve", "aproba", "rezolva", "resolve").contains(action)) {
+        if (!com.dwurdy.straja.domain.model.DecisionWords.COMPLAINT_RESOLVE.contains(action)) {
             player.refuse("straja.complaint.pick_action", "straja.remedy.fix_retry");
             return false;
         }
