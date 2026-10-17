@@ -151,7 +151,7 @@ public final class NpcRoles {
             case "v2-document-status" -> tellV2Documents(runtime, gw);
             case "v2-equipment-status" -> tellV2Equipment(runtime, gw);
             case "v2-campaign-status" -> tellV2Campaigns(runtime, gw);
-            case "v2-professional-work" -> tellV2ProfessionalWork(runtime, gw);
+            case "v2-professional-work" -> tellV2ProfessionalWork(player, runtime, gw);
             case "trades-list" -> tellTradesEnroll(player, runtime, gw);
             case "trades-promote" -> requestTradesPromotion(player, runtime, gw);
             case "application-submit" -> runtime.guardRecruitment().applyForStraja(gw);
@@ -356,7 +356,8 @@ public final class NpcRoles {
                 + " | cotă " + campaign.quantityAccepted + "/" + campaign.globalQuota));
     }
 
-    private static void tellV2ProfessionalWork(com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+    private static void tellV2ProfessionalWork(Player mcPlayer,
+                                               com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
                                                com.dwurdy.straja.application.port.out.PlayerGateway player) {
         var personnel = runtime.v2Personnel().find(player.uuid().toString());
         if (personnel == null || personnel.professions == null || personnel.professions.isEmpty()) {
@@ -374,10 +375,29 @@ public final class NpcRoles {
                     personnel.homeStationId, "", now,
                     "generator:" + profession + ":" + player.uuid() + ":" + (now / 86_400_000L),
                     runtime.v2Missions());
-            player.tell("Ofertă profesională V2: " + mission.id + " — " + mission.objective
-                    + " (scadentă la " + mission.dueAt + ").");
+            if (mcPlayer instanceof ServerPlayer serverPlayer) {
+                sendToolPrompt(serverPlayer,
+                        Component.literal("Ofertă profesională " + mission.id + " — " + mission.objective),
+                        Component.literal("Acceptă"),
+                        "v2-mission-claim:" + mission.id);
+            } else {
+                player.tell("Ofertă profesională V2: " + mission.id + " — " + mission.objective
+                        + " (scadentă la " + mission.dueAt + ").");
+            }
         } catch (RuntimeException error) {
             player.refuse("straja.npc.no_offer", "straja.remedy.wait", error.getMessage());
+        }
+    }
+
+    private static void claimV2Mission(com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                       com.dwurdy.straja.application.port.out.PlayerGateway gw,
+                                       String missionId) {
+        try {
+            var mission = runtime.v2Missions().claim(gw.uuid().toString(), missionId);
+            gw.tell("Misiune acceptată: " + mission.id + " — " + mission.objective
+                    + " (+" + mission.xpReward + " puncte de serviciu la finalizare).");
+        } catch (IllegalStateException | IllegalArgumentException e) {
+            gw.refuse("straja.npc.action_stale_mission", "straja.remedy.retry");
         }
     }
 
@@ -564,6 +584,9 @@ public final class NpcRoles {
             case "mission-join" -> runtime.missionRoleplay().join(gw, id);
             case "mission-accept" -> runtime.missionRoleplay().accept(gw, id);
             case "mission-decline" -> runtime.missionRoleplay().decline(gw, id);
+            case "mission-invite" -> openMissionForm(player, runtime, gw,
+                    com.dwurdy.straja.application.port.in.MissionRoleplayUseCase.Action.INVITE, id);
+            case "v2-mission-claim" -> claimV2Mission(runtime, gw, id);
             case "mission-complete" -> runtime.missionRoleplay().complete(gw, id);
             case "mission-reward" -> runtime.missionRoleplay().claimReward(gw, id);
             case "mission-reward-recover" -> runtime.missionRoleplay().recoverReward(gw, id);
@@ -1127,13 +1150,15 @@ public final class NpcRoles {
                             new FormSessionUseCase.Field(FormField.MINUTES, "Timp (minute)", 5, false),
                             new FormSessionUseCase.Field(FormField.START, "Începere", 16, false),
                             new FormSessionUseCase.Field(FormField.REWARD, "Recompensă", 10, false),
+                            new FormSessionUseCase.Field(FormField.XP, "Puncte serviciu (gol = automat)", 7, false, false),
                             new FormSessionUseCase.Field(FormField.OBJECTIVE, "Obiectiv", 2000, true)));
             case DRAFT_SCOPE -> new FormSessionUseCase.Request(
                     FormSessionUseCase.Action.MISSION_DRAFT_SCOPE, "",
-                    "Participanți ordin", "Configurează rangul minim și numărul maxim de participanți.",
+                    "Participanți ordin", "Configurează rangul minim, numărul maxim și recrutarea.",
                     java.util.List.of(
                             new FormSessionUseCase.Field(FormField.MINIMUM_RANK, "Rang minim", 16, false),
-                            new FormSessionUseCase.Field(FormField.MAX_ASSIGNEES, "Max participanți", 3, false)));
+                            new FormSessionUseCase.Field(FormField.MAX_ASSIGNEES, "Max participanți", 3, false),
+                            new FormSessionUseCase.Field(FormField.OPEN, "Deschis tuturor (da/nu)", 5, false, false)));
             case ADJUST_BUDGET -> new FormSessionUseCase.Request(
                     FormSessionUseCase.Action.MISSION_BUDGET_ADJUST, "",
                     "Ajustare buget", "Ore estimate și risc recalculează recompensa. "
@@ -1144,6 +1169,11 @@ public final class NpcRoles {
                             new FormSessionUseCase.Field(FormField.RISK, "Risc (multiplicator)", 6, false),
                             new FormSessionUseCase.Field(FormField.REWARD, "Recompensă (gol = calculată)", 10, false, false),
                             new FormSessionUseCase.Field(FormField.REASON, "Motiv depășire", 240, false, false)));
+            case INVITE -> new FormSessionUseCase.Request(
+                    FormSessionUseCase.Action.MISSION_INVITE, expected,
+                    "Alocare participant", "Numele jucătorului alocat la acest ordin; poate accepta sau refuza.",
+                    java.util.List.of(
+                            new FormSessionUseCase.Field(FormField.SUBJECT, "Jucător", 64, false)));
             default -> null;
         };
         if (request == null) return true;
@@ -1537,10 +1567,21 @@ public final class NpcRoles {
             }
             case "mission-join", "mission-accept", "mission-decline", "mission-complete",
                     "mission-report", "mission-fail", "mission-reward", "mission-reward-recover",
-                    "mission-template-issue" -> {
+                    "mission-template-issue", "mission-invite" -> {
                 var expected = missionActionFor(operation);
                 yield expected != null && runtime.missionRoleplay().availableActions(player)
                         .stream().anyMatch(a -> a.action() == expected && id.equals(a.missionId()));
+            }
+            case "v2-mission-claim" -> {
+                var mission = runtime.v2Missions().find(id);
+                String uuid = player.uuid().toString();
+                yield mission != null && (mission.v2Status
+                        == com.dwurdy.straja.domain.model.MissionStatus.AVAILABLE
+                        && uuid.equals(mission.beneficiaryUuid)
+                        || uuid.equals(mission.actorUuid)
+                        && (mission.v2Status == com.dwurdy.straja.domain.model.MissionStatus.CLAIMED
+                        || mission.v2Status == com.dwurdy.straja.domain.model.MissionStatus.IN_PROGRESS
+                        || mission.v2Status == com.dwurdy.straja.domain.model.MissionStatus.SUBMITTED));
             }
             case "custody-accept", "custody-refuse", "custody-release" -> {
                 var expected = custodyActionFor(operation);
@@ -1646,6 +1687,7 @@ public final class NpcRoles {
             case "mission-reward" -> com.dwurdy.straja.application.port.in.MissionRoleplayUseCase.Action.CLAIM_REWARD;
             case "mission-reward-recover" -> com.dwurdy.straja.application.port.in.MissionRoleplayUseCase.Action.RECOVER_REWARD;
             case "mission-template-issue" -> com.dwurdy.straja.application.port.in.MissionRoleplayUseCase.Action.ISSUE_TEMPLATE;
+            case "mission-invite" -> com.dwurdy.straja.application.port.in.MissionRoleplayUseCase.Action.INVITE;
             default -> null;
         };
     }

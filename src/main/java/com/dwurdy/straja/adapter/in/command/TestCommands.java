@@ -522,6 +522,7 @@ final class TestCommands {
                                                                                 IntegerArgumentType.getInteger(ctx, "minutes"),
                                                                                 StringArgumentType.getString(ctx, "start"),
                                                                                 IntegerArgumentType.getInteger(ctx, "reward"),
+                                                                                -1,
                                                                                 StringArgumentType.getString(ctx, "objective")))))))))));
 
         // §13 mission templates

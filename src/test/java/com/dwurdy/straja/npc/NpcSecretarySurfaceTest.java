@@ -44,6 +44,8 @@ class NpcSecretarySurfaceTest {
                                 new MissionRoleplayUseCase.AvailableAction(
                                         MissionRoleplayUseCase.Action.DRAFT_WRITE, ""),
                                 new MissionRoleplayUseCase.AvailableAction(
+                                        MissionRoleplayUseCase.Action.DRAFT_SCOPE, ""),
+                                new MissionRoleplayUseCase.AvailableAction(
                                         MissionRoleplayUseCase.Action.REPORT, "M-1"),
                                 new MissionRoleplayUseCase.AvailableAction(
                                         MissionRoleplayUseCase.Action.REPORT, "bad:key")),
@@ -74,7 +76,8 @@ class NpcSecretarySurfaceTest {
                                 "PROM-9", "Applicant Nine", "Locotenent"))));
 
         assertTrue(action(surface, "mission-draft-write").enabled());
-        assertEquals(4, action(surface, "mission-draft-write").inputs().size());
+        assertEquals(5, action(surface, "mission-draft-write").inputs().size());
+        assertEquals(3, action(surface, "mission-draft-scope").inputs().size());
         assertTrue(action(surface, "mission-report:M-1").enabled());
         assertTrue(action(surface, "complaint-list").enabled());
         assertTrue(action(surface, "fine-draft-write").enabled());

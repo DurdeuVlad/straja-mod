@@ -760,6 +760,7 @@
   "straja.mission.reward_early": "The reward can only be claimed after the mission is completed.",
   "straja.mission.reward_gone": "The reward does not exist or is not yours.",
   "straja.mission.reward_invalid": "The reward must be a whole number between 0 and %s coins.",
+  "straja.mission.xp_invalid": "The XP reward must be a whole number between 0 and %s service points.",
   "straja.mission.reward_invalid_state": "The mission reward is invalid.",
   "straja.mission.reward_offline": "The reward recipient must be online for collection.",
   "straja.mission.reward_over_limit": "The reward exceeds the calculated limit (%s B). Give a reason for the excess.",

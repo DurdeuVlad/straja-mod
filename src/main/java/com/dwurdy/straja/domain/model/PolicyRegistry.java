@@ -53,6 +53,7 @@ public final class PolicyRegistry {
         k("mission.maxCopiesPerDraft", "missionMaxCopiesPerDraft", Kind.INT);
         k("mission.maxRewardPool", "missionMaxRewardPool", Kind.INT);
         k("mission.maxRewardPerIssuerPerDay", "missionMaxRewardPerIssuerPerDay", Kind.INT);
+        k("mission.maxXpReward", "missionMaxXpReward", Kind.INT);
         k("mission.maxActivePerPlayer", "missionMaxActivePerPlayer", Kind.INT);
         k("mission.defaultMinimumRank", "missionDefaultMinimumRank", Kind.INT);
         k("mission.rewardOverrideMargin", "missionRewardOverrideMargin", Kind.DOUBLE);
@@ -315,6 +316,9 @@ public final class PolicyRegistry {
                 policies.downedCooldownSeconds = seconds;
                 policies.downedDurationSeconds = seconds;
                 return Result.pass();
+            }
+            if ("mission.maxXpReward".equals(path) && parsed instanceof Integer v && v < 0) {
+                parsed = 0; // a negative cap would silently disable all mission XP
             }
             // Collections mutate in place so adapters that captured the
             // reference at bootstrap (e.g. the coin provider) see the change.

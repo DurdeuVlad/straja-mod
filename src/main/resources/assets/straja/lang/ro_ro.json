@@ -760,6 +760,7 @@
   "straja.mission.reward_early": "Recompensa se poate ridica numai după completarea misiunii.",
   "straja.mission.reward_gone": "Recompensa nu există sau nu îți aparține.",
   "straja.mission.reward_invalid": "Recompensa trebuie să fie un număr întreg între 0 și %s monede.",
+  "straja.mission.xp_invalid": "Punctele de serviciu trebuie să fie un număr întreg între 0 și %s.",
   "straja.mission.reward_invalid_state": "Recompensa misiunii este invalidă; anunță Comisaru'.",
   "straja.mission.reward_offline": "Destinatarul recompensei trebuie să fie online pentru ridicare.",
   "straja.mission.reward_over_limit": "Recompensa depășește limita calculată (%s B). Precizează un motiv pentru depășire.",

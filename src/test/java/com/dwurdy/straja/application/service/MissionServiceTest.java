@@ -66,8 +66,8 @@ class MissionServiceTest {
 
     private Mission issueTeamMission(int maxAssignees) {
         holdCarnet(commissar);
-        missions.draftWrite(commissar, 60, "acum", 30, "Escortează transportul");
-        missions.draftScope(commissar, "junior", maxAssignees);
+        missions.draftWrite(commissar, 60, "acum", 30, -1, "Escortează transportul");
+        missions.draftScope(commissar, "junior", maxAssignees, false);
         missions.draftSign(commissar);
         missions.draftPackage(commissar);
         assertTrue(missions.issueDraft(commissar, g1));
@@ -228,8 +228,8 @@ class MissionServiceTest {
     @Test
     void carnetDraftFlowDeliversSealedOrder() {
         holdCarnet(commissar);
-        missions.draftWrite(commissar, 60, "acum", 30, "Escortează transportul");
-        missions.draftScope(commissar, "junior", 2);
+        missions.draftWrite(commissar, 60, "acum", 30, -1, "Escortează transportul");
+        missions.draftScope(commissar, "junior", 2, false);
         missions.draftSign(commissar);
         missions.draftPackage(commissar);
         assertTrue(missions.give(commissar, g1));
@@ -258,7 +258,7 @@ class MissionServiceTest {
     @Test
     void draftGiveFailsWithoutSealedPackage() {
         holdCarnet(commissar);
-        missions.draftWrite(commissar, 60, "acum", 30, "x");
+        missions.draftWrite(commissar, 60, "acum", 30, -1, "x");
         missions.draftSign(commissar); // not packaged
         assertFalse(missions.give(commissar, g1));
         assertTrue(commissar.told("ordin complet"));
@@ -267,7 +267,7 @@ class MissionServiceTest {
     @Test
     void giveFailsWhenInventoryCannotReceive() {
         holdCarnet(commissar);
-        missions.draftWrite(commissar, 60, "acum", 30, "x");
+        missions.draftWrite(commissar, 60, "acum", 30, -1, "x");
         missions.draftSign(commissar);
         missions.draftPackage(commissar);
         // fill g1's inventory completely
@@ -288,7 +288,7 @@ class MissionServiceTest {
     void giveChecksBudgetBeforeSendingPackage() {
         ctx.policies().missionMaxRewardPerIssuerPerDay = 10;
         holdCarnet(commissar);
-        missions.draftWrite(commissar, 60, "acum", 30, "x");
+        missions.draftWrite(commissar, 60, "acum", 30, -1, "x");
         missions.draftSign(commissar);
         missions.draftPackage(commissar);
         assertFalse(missions.give(commissar, g1));
@@ -304,7 +304,7 @@ class MissionServiceTest {
     @Test
     void givePackageFailureKeepsIssuedMissionWithPendingPackage() {
         holdCarnet(commissar);
-        missions.draftWrite(commissar, 60, "acum", 30, "x");
+        missions.draftWrite(commissar, 60, "acum", 30, -1, "x");
         missions.draftSign(commissar);
         missions.draftPackage(commissar);
         ((TestDelivery) ctx.delivery()).available = false;
@@ -650,7 +650,7 @@ class MissionServiceTest {
         holdCarnet(commissar);
         assertTrue(hasAction(commissar, MissionRoleplayUseCase.Action.DRAFT_WRITE, ""));
         assertFalse(hasAction(commissar, MissionRoleplayUseCase.Action.DRAFT_STATUS, ""));
-        missions.draftWrite(commissar, 60, "acum", 30, "Escortează transportul");
+        missions.draftWrite(commissar, 60, "acum", 30, -1, "Escortează transportul");
         assertTrue(hasAction(commissar, MissionRoleplayUseCase.Action.DRAFT_STATUS, ""));
         assertTrue(hasAction(commissar, MissionRoleplayUseCase.Action.DRAFT_SCOPE, ""));
         assertTrue(hasAction(commissar, MissionRoleplayUseCase.Action.DRAFT_SIGN, ""));
@@ -822,5 +822,159 @@ class MissionServiceTest {
         assertEquals(3, reloaded.minRank);
         assertTrue(ctx.missionTemplates().read().seeded,
                 "the seeded flag prevents re-seeding after a deliberate wipe");
+    }
+
+    // ------------------------------------------------------------ FUN-3: xp rewards + officer assignment
+
+    @Test
+    void draftXpDefaultsFromDurationAndCaps() {
+        Mission m = issueTeamMission(2);
+        // 60 minutes / 10-minute service blocks = 6 points
+        assertEquals(6, m.xpReward);
+
+        holdCarnet(lt);
+        missions.draftWrite(lt, 60, "acum", 30, 8, "x");
+        var drafts = ctx.missions().read().drafts;
+        assertEquals(8, drafts.get(lt.uuid().toString()).xpReward, "explicit xp is kept");
+
+        lt.messages.clear();
+        missions.draftWrite(lt, 60, "acum", 30, 999, "x");
+        assertEquals(8, drafts.get(lt.uuid().toString()).xpReward,
+                "over-cap xp refuses and leaves the previous draft untouched");
+        assertTrue(lt.told("între 0 și 12"), "the xp-cap refusal reaches the officer");
+    }
+
+    @Test
+    void completionGrantsXpOnceToEveryAssignee() {
+        Mission m = issueTeamMission(2);
+        assertEquals(6, m.xpReward);
+        assertTrue(missions.inviteByName(commissar, m.id, "g2"));
+        assertTrue(missions.join(g2, m.id));
+        missions.accept(g1, m.id);
+        missions.report(g1, m.id, "done");
+        long before1 = players.state(g1.uuid()).serviceBlocks;
+        long before2 = players.state(g2.uuid()).serviceBlocks;
+        assertTrue(missions.complete(commissar, m.id));
+        assertEquals(before1 + 6, players.state(g1.uuid()).serviceBlocks);
+        assertEquals(before2 + 6, players.state(g2.uuid()).serviceBlocks);
+        assertFalse(missions.complete(commissar, m.id), "completed latch blocks a second grant");
+        assertEquals(before1 + 6, players.state(g1.uuid()).serviceBlocks,
+                "xp must not double-grant on repeated completion attempts");
+        assertTrue(g2.told("puncte de serviciu"));
+    }
+
+    @Test
+    void issuerAssignsThroughInviteActionAndNonIssuerDoesNotSeeIt() {
+        Mission m = issueTeamMission(2);
+        assertTrue(hasAction(commissar, MissionRoleplayUseCase.Action.INVITE, m.id));
+        assertFalse(hasAction(g2, MissionRoleplayUseCase.Action.INVITE, m.id),
+                "participants never see the issuer's assign action");
+        assertFalse(hasAction(lt, MissionRoleplayUseCase.Action.INVITE, m.id),
+                "another officer cannot commandeer the issuer's order");
+
+        assertTrue(missions.inviteByName(commissar, m.id, "g2"));
+        assertTrue(hasAction(g2, MissionRoleplayUseCase.Action.JOIN, m.id),
+                "an assigned member accepts via the normal join action");
+        assertTrue(g2.told("invitat în misiunea"));
+    }
+
+    @Test
+    void inviteByNameRefusesOfflineTargetsAndNonAuthority() {
+        Mission m = issueTeamMission(2);
+        assertFalse(missions.inviteByName(commissar, m.id, "ghost-player"));
+        assertTrue(commissar.told("nu este conectat") || commissar.told("online"));
+        assertFalse(missions.inviteByName(g2, m.id, "g1"),
+                "non-issuers with no mission authority cannot assign");
+    }
+
+    @Test
+    void openRecruitmentLetsAnyEligibleMemberJoinWithoutInvite() {
+        holdCarnet(commissar);
+        missions.draftWrite(commissar, 60, "acum", 30, -1, "Lucrări la zid");
+        missions.draftScope(commissar, "junior", 2, true);
+        missions.draftSign(commissar);
+        missions.draftPackage(commissar);
+        assertTrue(missions.issueDraft(commissar, g1));
+        Mission m = latest();
+        assertTrue(m.openRecruitment);
+
+        assertTrue(hasAction(g2, MissionRoleplayUseCase.Action.JOIN, m.id),
+                "an open mission offers JOIN to any member meeting the rank");
+        assertTrue(missions.join(g2, m.id));
+        assertEquals(2, latest().assignees.size());
+    }
+
+    @Test
+    void issuerCannotJoinOwnOpenMission() {
+        holdCarnet(commissar);
+        missions.draftWrite(commissar, 60, "acum", 30, -1, "Rond deschis");
+        missions.draftScope(commissar, "junior", 2, true);
+        missions.draftSign(commissar);
+        missions.draftPackage(commissar);
+        assertTrue(missions.issueDraft(commissar, g1));
+        Mission m = latest();
+
+        assertFalse(hasAction(commissar, MissionRoleplayUseCase.Action.JOIN, m.id),
+                "the issuer never sees a join action on his own order");
+        assertFalse(missions.join(commissar, m.id),
+                "self-assignment would let an officer mint rewards for himself");
+    }
+
+    @Test
+    void joinEnforcesTheActiveMissionCap() {
+        ctx.policies().missionMaxActivePerPlayer = 1;
+        Mission first = issueTeamMission(2);
+        missions.accept(g1, first.id);
+        // a second open mission for g2 — g1 is at the cap
+        holdCarnet(commissar);
+        missions.draftWrite(commissar, 60, "acum", 30, -1, "Al doilea ordin");
+        missions.draftScope(commissar, "junior", 2, true);
+        missions.draftSign(commissar);
+        missions.draftPackage(commissar);
+        assertTrue(missions.issueDraft(commissar, g2));
+        Mission second = latest();
+        assertFalse(missions.join(g1, second.id), "join must respect missionMaxActivePerPlayer");
+        assertTrue(g1.told("ocupat") || g1.told("prea multe"));
+    }
+
+    @Test
+    void demotedIssuerCannotInviteThroughTheServiceGate() {
+        holdCarnet(lt);
+        missions.draftWrite(lt, 60, "acum", 30, -1, "x");
+        missions.draftScope(lt, "junior", 2, false);
+        missions.draftSign(lt);
+        missions.draftPackage(lt);
+        assertTrue(missions.issueDraft(lt, g1));
+        Mission m = latest();
+        setRank(lt, Rank.CIVIL);
+        assertFalse(missions.invite(lt, m.id, g2),
+                "a demoted issuer loses mission authority even on his own order");
+        assertFalse(missions.inviteByName(lt, m.id, "g2"));
+        setRank(lt, Rank.CAPITAN);
+    }
+
+    @Test
+    void openRecruitmentStillEnforcesMinimumRank() {
+        holdCarnet(commissar);
+        missions.draftWrite(commissar, 60, "acum", 30, -1, "Escortă riscantă");
+        missions.draftScope(commissar, "guard", 2, true);
+        missions.draftSign(commissar);
+        missions.draftPackage(commissar);
+        assertTrue(missions.issueDraft(commissar, g1));
+        Mission m = latest();
+
+        assertFalse(hasAction(g2, MissionRoleplayUseCase.Action.JOIN, m.id),
+                "Stagiar is below the 'guard' minimum rank");
+        assertFalse(missions.join(g2, m.id));
+        assertTrue(g2.told("rang"));
+    }
+
+    @Test
+    void templateDraftDerivesXpFromEstimatedHours() {
+        missions.templateCreate(commissar, "Paza", 1, 1.0, 1.0, 2, 90, "Obj", false);
+        holdCarnet(lt);
+        missions.draftFromTemplate(lt, "T4");
+        var draft = ctx.missions().read().drafts.get(lt.uuid().toString());
+        assertEquals(6, draft.xpReward, "1 estimated hour ≈ 6 ten-minute service blocks");
     }
 }

@@ -12,6 +12,7 @@ final class NpcPlayerSurface {
     private static final Set<String> PARAMETERIZED_ACTIONS = Set.of(
             "mission-join", "mission-accept", "mission-decline", "mission-report", "mission-fail",
             "mission-complete", "mission-reward", "mission-reward-recover", "mission-template-issue",
+            "mission-invite", "v2-mission-claim",
             "custody-accept", "custody-refuse", "custody-release",
             "complaint-claim", "complaint-join", "complaint-leave", "complaint-report",
             "complaint-review", "complaint-confirm", "complaint-withdraw",
@@ -471,6 +472,8 @@ final class NpcPlayerSurface {
                         .ifPresent(a -> actions.add(new ChatAction("Ridică recompensa #" + id, a)));
                 case RECOVER_REWARD -> parameterizedActionId("mission-reward-recover", id)
                         .ifPresent(a -> actions.add(new ChatAction("Recuperează recompensa #" + id, a)));
+                case INVITE -> parameterizedActionId("mission-invite", id)
+                        .ifPresent(a -> actions.add(new ChatAction("Alocă jucător la #" + id, a)));
             }
         }
         return List.copyOf(actions);

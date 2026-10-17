@@ -503,6 +503,7 @@ public final class NpcPresentationRuntime {
             case "mission-budget-adjust" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.MISSION_BUDGET_ADJUST;
             case "mission-report" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.MISSION_REPORT;
             case "mission-fail" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.MISSION_FAIL;
+            case "mission-invite" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.MISSION_INVITE;
             case "complaint-report" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.COMPLAINT_REPORT;
             case "complaint-withdraw" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.COMPLAINT_WITHDRAW;
             case "complaint-review" -> com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.COMPLAINT_REVIEW;
