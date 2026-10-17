@@ -74,6 +74,7 @@ public final class StrajaEvents {
         runtime.dispatch().tick();
         runtime.transfers().tick();
         runtime.escapes().tick();
+        runtime.prisonJobs().tick();
         // FUN-7: hunts decay to warrants; hunters get fading hints.
         runtime.manhunts().tick();
         // FUN-4: unsigned reports past deadline auto-file from the ledger.
@@ -646,6 +647,10 @@ public final class StrajaEvents {
                 // FUN-7: bolt cutters / crowbar on a cell door starts the
                 // tamper channel — consumed only when a door was found.
                 || runtime.prisonRoleplay().onCellTamper(gateway, dimension,
+                        pos.getX(), pos.getY(), pos.getZ())
+                // FUN-10: a declared work point is the job surface — the click
+                // reads the quota or settles the goods already in the bag.
+                || runtime.prisonJobs().onPostClick(gateway, dimension,
                         pos.getX(), pos.getY(), pos.getZ()))) {
             event.setCanceled(true);
             return;

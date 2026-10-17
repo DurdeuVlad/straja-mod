@@ -661,7 +661,8 @@ public final class Fakes {
                 new SavedStores.MerchantDesks(access),
                 new TestContainers(),
                 new TestNpcGuards(),
-                new TestDeepScan());
+                new TestDeepScan(),
+                new SavedStores.Jobs(access));
     }
 
     /** Returns the inventory snapshot staged for the scanned player. */

@@ -54,4 +54,5 @@ public record StrajaContext(
         MerchantDeskRepository merchantDesks,
         WorldContainerGateway containers,
         NpcGuardGateway npcGuards,
-        DeepScanGateway deepScan) {}
+        DeepScanGateway deepScan,
+        JobRepository jobs) {}

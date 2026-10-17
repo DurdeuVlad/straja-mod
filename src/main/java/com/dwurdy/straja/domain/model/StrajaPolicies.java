@@ -399,6 +399,28 @@ public class StrajaPolicies {
     /** Bound on retained tunnel records; oldest discovered are pruned. */
     public int escapeRetentionLimit = 100;
 
+    // FUN-10: prison economy — posted quota jobs, labor-credit market
+    // trades between prisoners, favor IOU notes, and inspection pressure.
+    /**
+     * Posted job definitions —
+     * {@code id|label|item:count+item:count|pay|standing|cooldownSeconds}.
+     */
+    public List<String> jobDefs = new ArrayList<>(List.of(
+            "kitchen|Bucătărie|minecraft:bread:4|6|1|600",
+            "laundry|Spălătorie|minecraft:white_wool:2|4|1|300",
+            "smithing|Fierărie|minecraft:iron_ingot:3|10|2|900",
+            "supply|Aprovizionare|minecraft:cobblestone:8|8|1|1200"));
+    /** A market trade offer expires unanswered after this many ms. */
+    public int tradeOfferMs = 60_000;
+    /** Standing hit recorded against a digger whose tunnel is found. */
+    public int standingTunnelPenalty = 3;
+    /** Standing hit when a jammed lock is traced back to a prisoner. */
+    public int standingJamPenalty = 1;
+    /** Routine inspection mini-calls raised on this cadence (minutes). */
+    public int inspectionCallIntervalMinutes = 20;
+    /** Bound on retained job runs and settled trade ledger rows. */
+    public int jobRetentionLimit = 200;
+
     public int nativeFactionMaxLength = 40;
 
     // §11: activity reports — a reporting interval runs per member; overdue

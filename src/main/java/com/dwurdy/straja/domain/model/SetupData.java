@@ -14,6 +14,8 @@ public class SetupData {
     public Map<String, RiskZone> riskZones = new LinkedHashMap<>();
     /** FUN-9: corruptible guard posts a prisoner can pay to look away. */
     public Map<String, BribePost> bribePosts = new LinkedHashMap<>();
+    /** FUN-10: declared work points where prisoners turn in job quotas. */
+    public Map<String, JobPost> jobPosts = new LinkedHashMap<>();
 
     /**
      * Fresh setup seeds the four reference checkpoint slots, all unplaced.
@@ -110,6 +112,24 @@ public class SetupData {
         public double z;
         public double radius = 6;
         public int price = 64;
+
+        public boolean contains(String dimension, double px, double py, double pz) {
+            if (!this.dimension.equals(dimension)) return false;
+            double dx = px - x, dy = py - y, dz = pz - z;
+            return dx * dx + dy * dy + dz * dz <= radius * radius;
+        }
+    }
+
+    /** FUN-10: a posted job quota point — prisoners read it and hand in goods. */
+    public static class JobPost {
+        public String id = "";
+        public String name = "";
+        public String jobId = "";
+        public String dimension = "minecraft:overworld";
+        public double x;
+        public double y;
+        public double z;
+        public double radius = 4;
 
         public boolean contains(String dimension, double px, double py, double pz) {
             if (!this.dimension.equals(dimension)) return false;

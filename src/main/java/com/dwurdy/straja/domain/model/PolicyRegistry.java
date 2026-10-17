@@ -81,6 +81,11 @@ public final class PolicyRegistry {
         k("escape.tunnelFoundPenaltyMinutes", "tunnelFoundPenaltyMinutes", Kind.INT);
         k("escape.inspectionRadius", "inspectionRadius", Kind.DOUBLE);
         k("escape.retentionLimit", "escapeRetentionLimit", Kind.INT);
+        k("jobs.tradeOfferMs", "tradeOfferMs", Kind.INT);
+        k("jobs.standingTunnelPenalty", "standingTunnelPenalty", Kind.INT);
+        k("jobs.standingJamPenalty", "standingJamPenalty", Kind.INT);
+        k("jobs.inspectionCallIntervalMinutes", "inspectionCallIntervalMinutes", Kind.INT);
+        k("jobs.retentionLimit", "jobRetentionLimit", Kind.INT);
         k("timers.foodCooldownMinutes", "foodCooldownMinutes", Kind.INT);
         k("timers.quizCooldownMinutes", "quizCooldownMinutes", Kind.INT);
         k("timers.resignationCooldownDays", "resignationCooldownDays", Kind.INT);
