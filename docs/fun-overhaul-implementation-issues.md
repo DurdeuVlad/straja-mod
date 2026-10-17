@@ -281,13 +281,14 @@ member-facing surface — it changes flow shape, not the authority model.
 **Expectation.** The confirmed career model ships mechanically true and
 self-explanatory:
 
-- **Part-time corps (volunteers):** three ranks per track, auto-advanced
-  by exam. Soldier path: Stagiar → Străjer → third rank (name TBD).
-  Specialist path: Zilier → Meșter → third rank (name TBD). Each step carries
-  more responsibility and more pay, and each is gated by a fixed-question
-  exam drawn from new info at that level — entry stays 5-of-6, later steps
-  use the ~10-question format. Wrong answers name the rule concept in one
-  line, never "read the manual."
+- **Part-time corps (volunteers):** three ranks per track, advanced by
+  XP (service blocks) plus the track's own gate. Soldier path:
+  Stagiar → Străjer → third rank (name TBD) — each step is a fixed,
+  learnable exam at the Instructor drawn from the rank's material; wrong
+  answers name the right one on the spot, a pass promotes immediately.
+  Specialist path: Zilier → Meșter → third rank (name TBD) — each step is a
+  one-line ask that **any officer** may stamp; specialist promotion never
+  waits on the Comisar and never exams.
 - **Specialist entry:** Zilier by leaving a request with a one-line reason
   at the Receptionist's «Meseriași — înscriere» action — the reason goes to
   review under the FUN-1 mode configured for trades intake (open decision:
@@ -297,9 +298,9 @@ self-explanatory:
   decision — never by exam. Each grade has its own rank, salary, and base
   authority; a higher rank can grant extra permissions beyond a member's
   base. Professions remain dossier flavor, not capability gates.
-- **Promotion:** part-time steps advance by their exam; officer promotions
-  are the petition → book → approve/deny loop — that is the whole loop, no
-  exams.
+- **Promotion:** soldier steps advance by exam; specialist steps advance by
+  officer-stamped ask; officer promotions are the petition → book →
+  approve/deny loop under the Comisar — that is the whole loop.
 - **No required reading anywhere:** every NPC menu leads with the
   contextually-right action; a member can reach the next step by clicking
   the top option at each desk. Rules and the manual stay as optional
@@ -316,7 +317,7 @@ self-explanatory:
   higher rank granted; dossier profession never gates an officer action.
 - A promotion request takes ≤2 fields (target implied, one reason line) and
   reaches the decider as a physical/digestible artifact; approve/deny is one
-  click for the Comisar.
+  click for the reviewing officer or Comisar.
 - Every refusal message across the modified surfaces terminates in a remedy
   action; no dead-end "access denied" strings.
 - `gameplay-decisions.md` is updated in the same change: officers are
