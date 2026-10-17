@@ -38,8 +38,18 @@ Rules:
 - Enlisted and trades members are field personnel: they patrol, respond to
   incidents and may use physical force/arrest mechanics as allowed by the
   rest of the mod.
-- Every promotion above the join step is a petition the Comisar reads and
-  approves or denies — service blocks and training modules stay advisory.
+- Part-time advancement runs on service blocks (the member's XP): the shared
+  `promotionServiceBlocks` table keys off the target's career step.
+- **Military steps** are a fixed, learnable exam at the Instructor: wrong
+  answers teach the right one on the spot, a failed attempt is retaken after
+  the cooldown, and a pass promotes immediately — the exam is the
+  authorization, nobody waits on a reviewer.
+- **Trades steps** are asks: once the member has the service blocks they file
+  a one-line petition and **any officer** may stamp it — the Comisar need not
+  be online for routine advancement.
+- **Officer-track (full-time) petitions** still carry the Comisar's seal.
+  Members may also file a part-time petition instead of taking the exam —
+  officer discretion stays available for exceptions.
 - All officer grades share the same broad non-Comisar authority; specialties
   (Instructor, Investigator, patrol lead, administrative roles) are
   role-play flavor carried on `professions`, not separate grades.

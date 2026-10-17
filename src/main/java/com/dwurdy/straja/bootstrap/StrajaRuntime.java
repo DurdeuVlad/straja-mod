@@ -289,6 +289,7 @@ public final class StrajaRuntime {
 
         this.players = new PlayerService(ctx);
         this.v2Missions.usePlayerService(players, policies);
+        this.v2Promotions.usePlayerService(players, policies);
         this.players.useV2Authority(v2Personnel, v2Authorization);
         this.audit = new AuditService(ctx);
         this.v2ComplaintEscalation.useAuditService(this.audit);

@@ -236,7 +236,11 @@ public final class SavedStores {
 
     public static class Promotions extends JsonBackedStore implements PromotionRepository {
         public Promotions(StoreAccess access) { super(access, "promotions"); }
-        @Override public PromotionStore read() { return readJsonVersioned(PromotionStore.class, PromotionStore::new, PromotionStore.CURRENT_SCHEMA_VERSION); }
+        @Override public PromotionStore read() {
+            PromotionStore store = readJsonVersioned(PromotionStore.class, PromotionStore::new, PromotionStore.CURRENT_SCHEMA_VERSION);
+            store.normalize();
+            return store;
+        }
         @Override public void write(PromotionStore store) { writeJson(store); }
     }
 

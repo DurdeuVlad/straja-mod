@@ -68,6 +68,12 @@ public final class AuthorizationService {
             if (!actor.hasAppointment(AppointmentType.COMMISSIONER, now))
                 return AuthorizationDecision.deny(AuthorizationDecision.ReasonCode.DENIED_APPOINTMENT);
         }
+        // Part-time steps are routine advancement — any officer may stamp
+        // them; full-time/officer-track decisions still need the Comisar.
+        if ("APPROVE_PROMOTION_PART_TIME".equals(capability)
+                && !actor.hasAppointment(AppointmentType.COMMISSIONER, now)
+                && !(actor.careerGrade != null && actor.careerGrade.isOfficer()))
+            return AuthorizationDecision.deny(AuthorizationDecision.ReasonCode.DENIED_APPOINTMENT);
         if ("ROUTINE_PATROL".equals(capability)
                 && actor.careerGrade != null
                 && (actor.careerGrade.isProfessional()
@@ -93,7 +99,8 @@ public final class AuthorizationService {
             requested = Capability.valueOf(capability);
         } catch (IllegalArgumentException error) {
             return switch (capability) {
-                case "AUTHORIZE_PERSONNEL", "APPROVE_PROMOTION" -> true;
+                case "AUTHORIZE_PERSONNEL", "APPROVE_PROMOTION",
+                        "APPROVE_PROMOTION_PART_TIME" -> true;
                 default -> false;
             };
         }

@@ -472,20 +472,10 @@ public final class NpcRoles {
             gw.refuse("straja.trades.promote.max", "straja.remedy.status");
             return;
         }
-        try {
-            // Trades shortcut files a petition (no reason field) — it lands
-            // READY_FOR_APPROVAL for the Comisar, same as the Secretary form.
-            var application = runtime.v2Promotions().submitPetition(gw.uuid().toString(), next, "");
-            String gradeName = runtime.policies().rankName(next);
-            if (player instanceof ServerPlayer serverPlayer) {
-                serverPlayer.sendSystemMessage(Component.translatable(
-                        "straja.trades.promote.requested", gradeName, application.applicationId));
-            } else {
-                gw.tellKey("straja.trades.promote.requested");
-            }
-        } catch (RuntimeException error) {
-            gw.refuse("straja.npc.promotion_refused", "straja.remedy.instructor", error.getMessage());
-        }
+        // The shared petition path re-derives the same target, applies the
+        // service-block gate with its earn-more remedy, and files the ask —
+        // reviewers stamp it through the standard promotion pipeline.
+        runtime.guardRecruitment().requestPetition(gw, "");
     }
 
     /**
@@ -1342,6 +1332,16 @@ public final class NpcRoles {
             player.sendSystemMessage(refusal("straja.duty.promotion_state", "straja.remedy.ask_comisar"));
             return true;
         }
+        // Fail fast on the XP gate instead of letting the member fill the
+        // form and get refused at submit.
+        int requiredBlocks = runtime.v2Promotions().requiredBlocks(target);
+        if (requiredBlocks > 0
+                && !runtime.v2Promotions().petitionXpSatisfied(gw.uuid().toString(), target)) {
+            player.sendSystemMessage(refusal("straja.duty.promotion_xp",
+                    "straja.remedy.earn_blocks",
+                    runtime.guardRecruitment().trainingView(gw).serviceBlocks() + "/" + requiredBlocks));
+            return true;
+        }
         if (!(player instanceof ServerPlayer serverPlayer)) return true;
         FormSessionBridge.open(serverPlayer, new FormSessionUseCase.Request(
                 FormSessionUseCase.Action.PETITION_REQUEST, "",
@@ -1358,14 +1358,14 @@ public final class NpcRoles {
                                         com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
                                         com.dwurdy.straja.application.port.out.PlayerGateway gw,
                                         String recordId) {
-        if (!runtime.playerQueries().isCommissioner(gw)) {
-            player.sendSystemMessage(refusal("straja.audience.decide_comisar", "straja.remedy.ask_comisar"));
-            return true;
-        }
         var application = runtime.v2Promotions().find(recordId);
         if (application == null || application.status
                 != com.dwurdy.straja.domain.model.PromotionStatus.READY_FOR_APPROVAL) {
             player.sendSystemMessage(refusal("straja.petition.gone", "straja.remedy.retry"));
+            return true;
+        }
+        if (!petitionReviewer(gw, runtime, application.targetGrade)) {
+            player.sendSystemMessage(refusal("straja.audience.decide_comisar", "straja.remedy.ask_comisar"));
             return true;
         }
         String advisory = "";
@@ -1397,14 +1397,14 @@ public final class NpcRoles {
                                                   com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
                                                   com.dwurdy.straja.application.port.out.PlayerGateway gw,
                                                   String recordId) {
-        if (!runtime.playerQueries().isCommissioner(gw)) {
-            player.sendSystemMessage(refusal("straja.audience.decide_comisar", "straja.remedy.ask_comisar"));
-            return true;
-        }
         var application = runtime.v2Promotions().find(recordId);
         if (application == null || application.status
                 != com.dwurdy.straja.domain.model.PromotionStatus.READY_FOR_APPROVAL) {
             player.sendSystemMessage(refusal("straja.petition.gone", "straja.remedy.retry"));
+            return true;
+        }
+        if (!petitionReviewer(gw, runtime, application.targetGrade)) {
+            player.sendSystemMessage(refusal("straja.audience.decide_comisar", "straja.remedy.ask_comisar"));
             return true;
         }
         if (!(player instanceof ServerPlayer serverPlayer)) return true;
@@ -1626,12 +1626,13 @@ public final class NpcRoles {
                         == com.dwurdy.straja.domain.model.JoinRequestStatus.PENDING;
             }
             case "petition-read", "petition-review" -> {
-                // Reviewer-bound and record-live: only the Comisar may open a
-                // petition, and only while it still awaits a decision.
-                if (!runtime.playerQueries().isCommissioner(player)) yield false;
+                // Reviewer-bound and record-live: the Comisar decides every
+                // petition; any officer may open part-time asks, and only
+                // while it still awaits a decision.
                 var application = runtime.v2Promotions().find(id);
                 yield application != null && application.status
-                        == com.dwurdy.straja.domain.model.PromotionStatus.READY_FOR_APPROVAL;
+                        == com.dwurdy.straja.domain.model.PromotionStatus.READY_FOR_APPROVAL
+                        && petitionReviewer(player, runtime, application.targetGrade);
             }
             case "incident-accept", "incident-join", "incident-leave", "incident-resolve" ->
                     runtime.expansionRoleplay().activeIncidents(player).stream()
@@ -1660,6 +1661,36 @@ public final class NpcRoles {
                     .anyMatch(o -> o.reserve() && id.equals(o.key()));
             default -> false;
         };
+    }
+
+    /**
+     * The petitions this reviewer may act on: all of them for the Comisar;
+     * part-time asks for an active officer.
+     */
+    private static java.util.List<com.dwurdy.straja.domain.model.PromotionApplication>
+            reviewablePetitions(com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                com.dwurdy.straja.application.port.out.PlayerGateway player) {
+        boolean commissioner = runtime.playerQueries().isCommissioner(player);
+        return runtime.v2Promotions().pendingPetitions().stream()
+                .filter(application -> commissioner
+                        || petitionReviewer(player, runtime, application.targetGrade))
+                .toList();
+    }
+
+    /**
+     * Who may open a promotion petition: the Comisar decides everything; any
+     * active officer may stamp a part-time step (specialist advancement by
+     * design needs no Comisar wait).
+     */
+    private static boolean petitionReviewer(
+            com.dwurdy.straja.application.port.out.PlayerGateway player,
+            com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+            com.dwurdy.straja.domain.model.CareerGrade target) {
+        if (runtime.playerQueries().isCommissioner(player)) return true;
+        if (target == null || target.fullTimeRequired()) return false;
+        var record = runtime.v2Personnel().find(player.uuid().toString());
+        return record != null && record.active()
+                && record.careerGrade != null && record.careerGrade.isOfficer();
     }
 
     private static com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.Action
@@ -1781,9 +1812,7 @@ public final class NpcRoles {
                         runtime.adminRoleplay().availableActions(gateway)));
                 actions.addAll(NpcPlayerSurface.petitionActions(
                         runtime.guardRecruitment().petitionTarget(gateway),
-                        runtime.playerQueries().isCommissioner(gateway)
-                                ? runtime.v2Promotions().pendingPetitions()
-                                : java.util.List.of(),
+                        reviewablePetitions(runtime, gateway),
                         grade -> runtime.policies().rankName(grade),
                         runtime.playerQueries()::displayName));
                 if (runtime.playerQueries().isCommissioner(gateway)) {

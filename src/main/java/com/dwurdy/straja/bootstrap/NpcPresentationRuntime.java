@@ -339,15 +339,7 @@ public final class NpcPresentationRuntime {
                     runtime.fineRoleplay().limits(),
                     runtime.guardRecruitment().petitionTarget(player)
                             .map(grade -> runtime.policies().rankName(grade)).orElse(null),
-                    runtime.playerQueries().isCommissioner(player)
-                            ? runtime.v2Promotions().pendingPetitions().stream()
-                                    .map(application -> new NpcSecretarySurfaceService.PetitionEntry(
-                                            application.applicationId,
-                                            runtime.playerQueries().displayName(application.subjectUuid),
-                                            application.targetGrade == null ? "?"
-                                                    : runtime.policies().rankName(application.targetGrade)))
-                                    .toList()
-                            : java.util.List.of()));
+                    petitionView(runtime, player)));
         }
         java.util.Optional<com.dwurdy.straja.application.port.in.GuardRecruitmentUseCase.QuizPrompt> prompt =
                 java.util.Optional.empty();
@@ -380,6 +372,34 @@ public final class NpcPresentationRuntime {
                     runtime.policies()::rankName);
         }
         return admission;
+    }
+
+    /**
+     * Promotion petitions visible to this viewer: the Comisar sees every
+     * request; an active officer sees the part-time asks they are allowed
+     * to stamp. Reviewer authority is re-checked when a petition is opened.
+     */
+    private static java.util.List<NpcSecretarySurfaceService.PetitionEntry> petitionView(
+            StrajaRuntime runtime, PlayerGateway player) {
+        boolean commissioner = runtime.playerQueries().isCommissioner(player);
+        boolean officer = !commissioner && isOfficerGrade(runtime, player);
+        if (!commissioner && !officer) return java.util.List.of();
+        return runtime.v2Promotions().pendingPetitions().stream()
+                .filter(application -> commissioner
+                        || (application.targetGrade != null
+                            && !application.targetGrade.fullTimeRequired()))
+                .map(application -> new NpcSecretarySurfaceService.PetitionEntry(
+                        application.applicationId,
+                        runtime.playerQueries().displayName(application.subjectUuid),
+                        application.targetGrade == null ? "?"
+                                : runtime.policies().rankName(application.targetGrade)))
+                .toList();
+    }
+
+    private static boolean isOfficerGrade(StrajaRuntime runtime, PlayerGateway player) {
+        var record = runtime.v2Personnel().find(player.uuid().toString());
+        return record != null && record.active()
+                && record.careerGrade != null && record.careerGrade.isOfficer();
     }
 
     /**
