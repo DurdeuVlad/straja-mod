@@ -347,7 +347,10 @@ public final class NpcPresentationRuntime {
                                             application.targetGrade == null ? "?"
                                                     : runtime.policies().rankName(application.targetGrade)))
                                     .toList()
-                            : java.util.List.of()));
+                            : java.util.List.of(),
+                    // FUN-1: the service itself gates the view to delegation
+                    // authorities; everyone else receives an empty console.
+                    runtime.delegation().surface(player)));
         }
         java.util.Optional<com.dwurdy.straja.application.port.in.GuardRecruitmentUseCase.QuizPrompt> prompt =
                 java.util.Optional.empty();

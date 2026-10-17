@@ -220,6 +220,39 @@ public class ReportService implements ReportUseCase {
         return true;
     }
 
+    /**
+     * Delegated review: the delegation engine accepts a pending report under
+     * the recorded authority — no player session required, and the authority
+     * must still hold commissioner status at review time. Delegation only
+     * accepts; returns and summons stay human.
+     */
+    public synchronized boolean reviewDelegated(String actorUuid, String actorName, String id) {
+        if (!players.isCommissioner(actorName, actorUuid == null ? null : uuid(actorUuid))) {
+            return false;
+        }
+        ActivityReportStore store = ctx.reports().read();
+        ActivityReport report = id == null ? null : store.reports.get(id.trim());
+        if (report == null || !ActivityReport.SUBMITTED.equals(report.status)) {
+            return false;
+        }
+        report.status = ActivityReport.ACCEPTED;
+        report.reviewedBy = actorName;
+        report.reviewNote = "";
+        report.reviewedAt = now();
+        ctx.reports().write(store);
+        audit.record(AuditActions.REPORT_REVIEW, actorName, actorUuid,
+                report.id, report.authorUuid, AuditResults.SUCCESS, ActivityReport.ACCEPTED);
+        return true;
+    }
+
+    private static java.util.UUID uuid(String raw) {
+        try {
+            return java.util.UUID.fromString(raw);
+        } catch (RuntimeException error) {
+            return null;
+        }
+    }
+
     private static String describeStatus(ActivityReport r) {
         return switch (r.status) {
             case ActivityReport.ACCEPTED -> "ACCEPTAT";
