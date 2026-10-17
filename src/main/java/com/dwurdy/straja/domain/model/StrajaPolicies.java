@@ -584,15 +584,10 @@ public class StrajaPolicies {
      */
     public String rankName(CareerGrade grade) {
         if (grade == null) return "";
-        return switch (grade) {
-            case MILITARY_STAGIAR -> rankName(1);
-            case MILITARY_STRAJER -> rankName(2);
-            case OFFICER_LOCOTENENT -> rankName(3);
-            case OFFICER_CAPITAN -> rankName(4);
-            case OFFICER_COLONEL -> rankName(5);
-            case PROFESSIONAL_ZILIER -> meseriasRankName(1);
-            case PROFESSIONAL_MESTER -> meseriasRankName(2);
-        };
+        if (grade.isProfessional()) {
+            return meseriasRankName(grade == CareerGrade.PROFESSIONAL_MESTER ? 2 : 1);
+        }
+        return rankName(grade.legacyRankLevel());
     }
 
     /** Configurable display name for a trades-path level. */

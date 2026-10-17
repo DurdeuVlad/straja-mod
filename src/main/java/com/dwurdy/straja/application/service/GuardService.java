@@ -907,13 +907,9 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         if (v2PromotionService != null) {
             v2PersonnelProjection.accept(actor);
             v2PersonnelProjection.accept(target);
-            var targetGrade = switch (Rank.of(players.state(target).rank + 1)) {
-                case GUARD -> com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STRAJER;
-                case LOCOTENENT -> com.dwurdy.straja.domain.model.CareerGrade.OFFICER_LOCOTENENT;
-                case CAPITAN -> com.dwurdy.straja.domain.model.CareerGrade.OFFICER_CAPITAN;
-                case COLONEL -> com.dwurdy.straja.domain.model.CareerGrade.OFFICER_COLONEL;
-                default -> null;
-            };
+            Rank targetRank = Rank.of(players.state(target).rank + 1);
+            var targetGrade = targetRank.atLeast(Rank.GUARD)
+                    ? com.dwurdy.straja.domain.model.CareerGrade.fromLegacyRank(targetRank) : null;
             if (targetGrade == null) { actor.refuse("straja.duty.target_no_promotion", "straja.remedy.instructor"); return; }
             try {
                 v2PromotionService.approveOpen(actor.uuid().toString(), target.uuid().toString(), targetGrade);

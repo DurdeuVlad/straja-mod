@@ -307,14 +307,9 @@ public final class StrajaRuntime {
         });
         this.guards.useV2PersonnelAuthorization((actor, target, rank) -> {
             try {
-                var grade = switch (com.dwurdy.straja.domain.model.Rank.of(rank)) {
-                    case STAGIAR -> com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STAGIAR;
-                    case GUARD -> com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STRAJER;
-                    case LOCOTENENT -> com.dwurdy.straja.domain.model.CareerGrade.OFFICER_LOCOTENENT;
-                    case CAPITAN -> com.dwurdy.straja.domain.model.CareerGrade.OFFICER_CAPITAN;
-                    case COLONEL -> com.dwurdy.straja.domain.model.CareerGrade.OFFICER_COLONEL;
-                    default -> com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STAGIAR;
-                };
+                var grade = com.dwurdy.straja.domain.model.CareerGrade.fromLegacyRank(
+                        com.dwurdy.straja.domain.model.Rank.of(rank));
+                if (grade == null) grade = com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STAGIAR;
                 v2Personnel.authorize(actor.uuid().toString(), target.uuid().toString(), grade,
                         grade.fullTimeRequired() ? com.dwurdy.straja.domain.model.EmploymentMode.FULL_TIME
                                 : com.dwurdy.straja.domain.model.EmploymentMode.PART_TIME,

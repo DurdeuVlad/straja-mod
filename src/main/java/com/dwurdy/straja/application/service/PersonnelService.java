@@ -393,14 +393,7 @@ public final class PersonnelService implements com.dwurdy.straja.application.por
         // suspended/terminated record from stale GuardState.
         PersonnelRecord existing = find(playerUuid.toString());
         if (existing != null) return existing;
-        CareerGrade grade = switch (Rank.of(legacy.rank)) {
-            case STAGIAR -> CareerGrade.MILITARY_STAGIAR;
-            case GUARD -> CareerGrade.MILITARY_STRAJER;
-            case LOCOTENENT -> CareerGrade.OFFICER_LOCOTENENT;
-            case CAPITAN -> CareerGrade.OFFICER_CAPITAN;
-            case COLONEL -> CareerGrade.OFFICER_COLONEL;
-            default -> null;
-        };
+        CareerGrade grade = CareerGrade.fromLegacyRank(Rank.of(legacy.rank));
         if (grade == null || !"AUTHORIZED".equals(legacy.applicationState)) return find(playerUuid.toString());
         PersonnelRecord created = authorizeInternal(actorUuid, playerUuid.toString(), grade,
                 grade.fullTimeRequired() ? EmploymentMode.FULL_TIME : EmploymentMode.PART_TIME,

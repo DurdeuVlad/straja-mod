@@ -273,14 +273,7 @@ public class PlayerService implements com.dwurdy.straja.application.port.in.Play
     private void applyV2Projection(UUID uuid, GuardState state) {
         PersonnelRecord record = v2Record(uuid);
         if (record == null || state == null) return;
-        state.rank = record.careerGrade == null ? Rank.CIVIL.level() : switch (record.careerGrade) {
-            case MILITARY_STAGIAR -> Rank.STAGIAR.level();
-            case MILITARY_STRAJER -> Rank.GUARD.level();
-            case OFFICER_LOCOTENENT -> Rank.LOCOTENENT.level();
-            case OFFICER_CAPITAN -> Rank.CAPITAN.level();
-            case OFFICER_COLONEL -> Rank.COLONEL.level();
-            case PROFESSIONAL_ZILIER, PROFESSIONAL_MESTER -> Rank.CIVIL.level();
-        };
+        state.rank = record.careerGrade == null ? Rank.CIVIL.level() : record.careerGrade.legacyRankLevel();
         state.applicationState = record.membershipStatus == com.dwurdy.straja.domain.model.PersonnelStatus.AUTHORIZED_ACTIVE
                 ? "AUTHORIZED" : state.applicationState;
         state.suspended = record.membershipStatus == com.dwurdy.straja.domain.model.PersonnelStatus.SUSPENDED;

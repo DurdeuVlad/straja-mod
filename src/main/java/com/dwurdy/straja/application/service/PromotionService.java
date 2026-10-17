@@ -145,9 +145,7 @@ public final class PromotionService implements com.dwurdy.straja.application.por
     }
 
     private static String display(CareerGrade grade) {
-        String name = grade == null ? "?" : grade.name();
-        int underscore = name.indexOf('_');
-        return underscore < 0 ? name : name.substring(underscore + 1);
+        return grade == null ? "?" : grade.displayName();
     }
 
     /** Open petitions awaiting the Comisar's decision, oldest first. */

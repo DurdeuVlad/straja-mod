@@ -142,7 +142,7 @@ public class AdminService implements AdminRoleplayUseCase {
             guards.authorizeAt(actor, target, rank);
             return;
         }
-        CareerGrade grade = gradeFor(rankOrGrade);
+        CareerGrade grade = CareerGrade.parse(rankOrGrade);
         if (grade == null) {
             actor.refuse("straja.admin.rank_unknown", "straja.remedy.fix_retry", rankOrGrade);
             return;
@@ -159,7 +159,7 @@ public class AdminService implements AdminRoleplayUseCase {
             v2Personnel.authorize(actor.uuid().toString(), target.uuid().toString(), grade,
                     grade.fullTimeRequired() ? EmploymentMode.FULL_TIME : EmploymentMode.PART_TIME,
                     "COMMISSIONER_DIRECT", "hq", "authorize:" + target.uuid());
-            actor.tell(name + " autorizat la gradul " + grade.name() + ".");
+            actor.tell(name + " autorizat la gradul " + ctx.policies().rankName(grade) + ".");
         } catch (RuntimeException error) {
             actor.refuse("straja.admin.auth_refused", "straja.remedy.retry", error.getMessage());
         }
@@ -172,28 +172,6 @@ public class AdminService implements AdminRoleplayUseCase {
         } catch (NumberFormatException ignored) {
             return null;
         }
-    }
-
-    /** Friendly aliases for grades whose enum names do not read naturally in chat. */
-    private static CareerGrade gradeFor(String token) {
-        if (token == null) return null;
-        String normalized = java.text.Normalizer
-                .normalize(token.trim(), java.text.Normalizer.Form.NFD)
-                .replaceAll("\\p{M}", "")
-                .toUpperCase(java.util.Locale.ROOT)
-                .replace(' ', '_').replace('-', '_');
-        CareerGrade parsed = CareerGrade.of(normalized);
-        if (parsed != null) return parsed;
-        return switch (normalized) {
-            case "STAGIAR" -> CareerGrade.MILITARY_STAGIAR;
-            case "STRAJER", "GENDARME", "JANDAR" -> CareerGrade.MILITARY_STRAJER;
-            case "ZILIER", "ZILER", "DAYMAN" -> CareerGrade.PROFESSIONAL_ZILIER;
-            case "MESTER", "MESERIAS", "TRADESMAN", "MAISTRU", "MASTER" -> CareerGrade.PROFESSIONAL_MESTER;
-            case "LOCOTENENT", "LIEUTENANT", "SERGENT", "SERGEANT" -> CareerGrade.OFFICER_LOCOTENENT;
-            case "CAPITAN", "CAPTAIN", "INSPECTOR" -> CareerGrade.OFFICER_CAPITAN;
-            case "COLONEL" -> CareerGrade.OFFICER_COLONEL;
-            default -> null;
-        };
     }
 
     @Override
