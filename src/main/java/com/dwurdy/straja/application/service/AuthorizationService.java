@@ -124,7 +124,7 @@ public final class AuthorizationService {
             case CREATE_MISSIONS, APPROVE_REWARDS, REVIEW_APPEALS,
                     WAIVE_EQUIPMENT_DEBT, MANAGE_CAMPAIGNS -> grade.isOfficer();
             case PROFESSIONAL_JOBS -> grade.isProfessional() || grade.isOfficer();
-            case AUTHORIZE_PERSONNEL, APPROVE_PROMOTION -> false;
+            case AUTHORIZE_PERSONNEL, APPROVE_PROMOTION, DELEGATE -> false;
         };
     }
 

@@ -234,4 +234,8 @@ public final class AuditActions {
     public static final String WANTED_ESCORT = "wanted_escort";
     public static final String WHIP_KNOCKOUT = "whip_knockout";
     public static final String WHISTLE = "whistle";
+    public static final String DELEGATION_POLICY = "delegation_policy";
+    public static final String DELEGATION_ORDER = "delegation_order";
+    public static final String DELEGATION_RESOLVE = "delegation_resolve";
+    public static final String DELEGATION_REVOKE = "delegation_revoke";
 }

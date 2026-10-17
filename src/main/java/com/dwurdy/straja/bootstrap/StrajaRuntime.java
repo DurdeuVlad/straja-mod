@@ -51,6 +51,7 @@ public final class StrajaRuntime {
     private final com.dwurdy.straja.application.service.ComplaintService complaints;
     private final com.dwurdy.straja.application.service.ReportService reports;
     private final com.dwurdy.straja.application.service.AudienceService audiences;
+    private final com.dwurdy.straja.application.service.DelegationService delegation;
     private final com.dwurdy.straja.application.service.EmergencyService emergency;
     private com.dwurdy.straja.application.service.AdminService admin;
     private com.dwurdy.straja.application.service.AdminToolService adminTools;
@@ -343,6 +344,10 @@ public final class StrajaRuntime {
         this.complaints.useV2Escalation(v2ComplaintEscalation);
         this.reports = new com.dwurdy.straja.application.service.ReportService(ctx, players, audit);
         this.audiences = new com.dwurdy.straja.application.service.AudienceService(ctx, players, audit);
+        this.delegation = new com.dwurdy.straja.application.service.DelegationService(
+                ctx, players, audit, new SavedStores.Delegations(stores),
+                v2JoinRequests, v2Promotions, audiences, reports,
+                () -> v2Generators.professions(), ctx.clock());
         this.emergency = new com.dwurdy.straja.application.service.EmergencyService(ctx, players, audit);
         this.rooms = new com.dwurdy.straja.application.service.RoomService(ctx, players, audit, ctx.world());
         this.archive = new com.dwurdy.straja.application.service.ArchiveService(ctx, players, audit);
@@ -610,6 +615,7 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.service.AuthorizationService v2Authorization() { return v2Authorization; }
     public com.dwurdy.straja.application.service.PromotionService v2Promotions() { return v2Promotions; }
     public com.dwurdy.straja.application.service.JoinRequestService v2JoinRequests() { return v2JoinRequests; }
+    public com.dwurdy.straja.application.service.DelegationService delegation() { return delegation; }
     public com.dwurdy.straja.application.service.StationService v2Stations() { return v2Stations; }
 
     /**

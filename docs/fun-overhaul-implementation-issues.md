@@ -51,16 +51,23 @@ Owner decisions already made (2026-10-17):
   salary, and the rule that a higher rank can grant extra permissions beyond
   a member's base.
 - **Entry rules:** exams exist **only** on the part-time corps' automatic
-  entries — and at each step, not just the first. Each part-time track has
-  **three ranks**; every step up comes with an exam drawn from new info,
-  more responsibility, and more money. For everything else (officer corps),
+  entries. Each part-time track has **three ranks**. The tracks advance
+  differently: soldier steps are exam-gated (each step up comes with an
+  exam drawn from new info, more responsibility, and more money);
+  specialist steps are approved by an officer — the member asks once they
+  hold the mission XP, an officer accepts or denies. For the officer corps,
   an authorized user can invite the player directly, or the candidate
   applies and a human decides. Promotion on officer tracks is petition →
   the Comisar gets a book via the Secretary → approve/deny.
-- **Quiz contract:** exams on the part-time tracks are fixed-question and
-  learnable by retaking — soldier entry starts at 5-of-6; later steps use
-  the ~10-question format. Third rank names and per-step exam sizes are open
-  decisions in FUN-2 (proposals inside).
+- **Mission-XP is the part-timer career currency:** officers plan missions
+  with money + XP rewards from a limited budget; part-timers take missions
+  at will from a GUI or are assigned by officers (FUN-3). XP gates every
+  part-time promotion step: soldiers then test up, specialists then ask an
+  officer up.
+- **Quiz contract:** exams are fixed-question and learnable by retaking —
+  soldier entry starts at 5-of-6; later soldier steps use the ~10-question
+  format. Third rank names and per-step exam sizes are open decisions in
+  FUN-2 (proposals inside).
 - **Players are the officers; Custom NPCs are the soldiers.** The enlisted
   fantasy is volunteering; the permanent fantasy is the officer corps doing
   "the challenging mental part" while NPC soldiers absorb the visible
@@ -115,7 +122,8 @@ timer. Protocol still happens — and stays audited — but it is executed by th
 institution.
 
 **Issues:** FUN-1 (delegated authority engine), FUN-2 (dumb-proof the
-flows), FUN-3 (paperwork absorption), FUN-4 (duty rework).
+flows), FUN-3 (part-timer work economy), FUN-4 (paperwork absorption),
+FUN-5 (duty rework).
 
 **Proof:** a new player goes from spawn to first paid duty without waiting on
 another player and without reading a single rule page; an on-duty member
@@ -129,7 +137,7 @@ from the member's real activity.
 prison break produces a call that reaches the right rank band within seconds;
 the responding member gets the chase, not a clipboard.
 
-**Issues:** FUN-5 (crime→dispatch pipeline), FUN-6 (prison break & manhunt
+**Issues:** FUN-6 (crime→dispatch pipeline), FUN-7 (prison break & manhunt
 mechanics).
 
 **Proof:** a player who downs a citizen and flees is hunted by dispatched
@@ -143,8 +151,8 @@ runners get escape windows.
 escape attempts, transfer-ride gambles, and parole play; every choice has a
 guard-side consequence.
 
-**Issues:** FUN-7 (transfer rides), FUN-8 (escape paths), FUN-9 (prison
-economy & jobs), FUN-10 (parole & appeal).
+**Issues:** FUN-8 (transfer rides), FUN-9 (escape paths), FUN-10 (prison
+economy & jobs), FUN-11 (parole & appeal).
 
 **Proof:** a prisoner moved from cell to camp is escorted by a real guard
 over a real route and gets at least one exploitable escape window; a
@@ -154,21 +162,23 @@ escapee is hunted under the M2 pipeline, not merely flagged.
 ## Dependency order
 
 `FUN-1` is the shared foundation: delegation policy, the decision ledger, and
-the digest surface are consumed by FUN-2 (request flows), FUN-3, FUN-4, FUN-5
-routing, and FUN-10 hearing intake. `FUN-2` unblocks the two join tracks it
-simplifies and hands every request type a clean delegation point. `FUN-5` is
-the foundation for FUN-6, FUN-7, and FUN-8 — all of them emit into the
-dispatch pipeline. `FUN-7` depends on custody/escort mechanics already in
-`CustodyService`; FUN-9 extends `LaborCampService`; FUN-10 depends on FUN-1
-(delegated hearing scheduling) and FUN-9 (work credit as good-behavior
-input).
+the digest surface are consumed by FUN-2 (request flows), FUN-3 (officer
+budgets), FUN-4, FUN-5, FUN-6 routing, and FUN-11 hearing intake. `FUN-2`
+unblocks the two join tracks it simplifies and hands every request type a
+clean delegation point; `FUN-3` supplies the mission-XP currency FUN-2's
+promotion gates read. `FUN-6` is the foundation for FUN-7, FUN-8, and
+FUN-9 — all of them emit into the dispatch pipeline. `FUN-8` depends on
+custody/escort mechanics already in `CustodyService`; FUN-10 extends
+`LaborCampService`; FUN-11 depends on FUN-1 (delegated hearing scheduling)
+and FUN-10 (work credit as good-behavior input).
 
 ```text
-FUN-1 ─┬─ FUN-2 ── FUN-3 ── FUN-4
-       └─ FUN-10 ◄── FUN-9
-FUN-5 ─┬─ FUN-6
-       ├─ FUN-7
-       └─ FUN-8
+FUN-1 ─┬─ FUN-2 ── FUN-3 ── FUN-4 ── FUN-5
+       │           ▲
+       └─ FUN-11 ◄── FUN-10
+FUN-6 ─┬─ FUN-7
+       ├─ FUN-8
+       └─ FUN-9
 ```
 
 M1 has no dependency on M2/M3 and can ship alone; M3's dispatch hooks degrade
@@ -252,7 +262,7 @@ notifications for routine delegated resolutions (existing low-noise rule);
 no UI beyond the Secretary/digest surfaces.
 
 **Dependencies.** None upstream — this is the foundation issue. Blocks FUN-2,
-FUN-3, FUN-4, FUN-10.
+FUN-3, FUN-4, FUN-5, FUN-11.
 
 **Verification.** Service tests: order matching, timeout firing across
 clock/restart, conflict-set rejection, revocation, audit completeness.
@@ -281,25 +291,27 @@ member-facing surface — it changes flow shape, not the authority model.
 **Expectation.** The confirmed career model ships mechanically true and
 self-explanatory:
 
-- **Part-time corps (volunteers):** three ranks per track, auto-advanced
-  by exam. Soldier path: Stagiar → Străjer → third rank (name TBD).
-  Specialist path: Zilier → Meșter → third rank (name TBD). Each step carries
-  more responsibility and more pay, and each is gated by a fixed-question
-  exam drawn from new info at that level — entry stays 5-of-6, later steps
-  use the ~10-question format. Wrong answers name the rule concept in one
-  line, never "read the manual."
+- **Part-time corps (volunteers):** three ranks per track. Soldier path:
+  Stagiar → Străjer → third rank (name TBD) — each step gated by mission
+  XP **and** a fixed-question exam drawn from new info at that level
+  (entry stays 5-of-6, later steps ~10 questions; wrong answers name the
+  rule concept in one line, never "read the manual"). Specialist path:
+  Zilier → Meșter → third rank (name TBD) — each step gated by mission XP
+  and approved by **any officer**, not only the Comisar: the member asks
+  for advancement, an officer accepts or denies ("for specialist paths you
+  can just ask to get promoted and an officer can accept it").
 - **Specialist entry:** Zilier by leaving a request with a one-line reason
   at the Receptionist's «Meseriași — înscriere» action — the reason goes to
-  review under the FUN-1 mode configured for trades intake (open decision:
-  whether specialist entry also exams — proposal below).
+  review under the FUN-1 mode configured for trades intake. No entry exam
+  on the specialist track — the human reason-review is the gate.
 - **Officers (permanent):** Locotenent → Căpitan → Colonel, entered by
   invitation from an authorized member **or** by application → human
   decision — never by exam. Each grade has its own rank, salary, and base
   authority; a higher rank can grant extra permissions beyond a member's
   base. Professions remain dossier flavor, not capability gates.
-- **Promotion:** part-time steps advance by their exam; officer promotions
-  are the petition → book → approve/deny loop — that is the whole loop, no
-  exams.
+- **Promotion:** military part-timer steps are exam + XP; specialist
+  part-timer steps are ask-officer + XP; officer promotions are the
+  petition → book → approve/deny loop — that is the whole loop.
 - **No required reading anywhere:** every NPC menu leads with the
   contextually-right action; a member can reach the next step by clicking
   the top option at each desk. Rules and the manual stay as optional
@@ -316,7 +328,8 @@ self-explanatory:
   higher rank granted; dossier profession never gates an officer action.
 - A promotion request takes ≤2 fields (target implied, one reason line) and
   reaches the decider as a physical/digestible artifact; approve/deny is one
-  click for the Comisar.
+  click. Specialist asks are decidable by any officer; soldier exams and
+  officer petitions stay on their existing deciders.
 - Every refusal message across the modified surfaces terminates in a remedy
   action; no dead-end "access denied" strings.
 - `gameplay-decisions.md` is updated in the same change: officers are
@@ -341,7 +354,7 @@ type: rework. Owner: unassigned (agent).
 
 **Non-goals.** No change to rank names or the ladder itself; no new
 authority paths (delegation config lives in FUN-1); no removal of the quiz;
-no mission/transport/dispatch changes (FUN-5 and later); no overhaul of the
+no mission/transport/dispatch changes (FUN-6 and later); no overhaul of the
 Comisar administration surface beyond the petition delivery.
 
 **Dependencies.** FUN-1 (the trades/promotion review mode is configured
@@ -353,15 +366,95 @@ live UAT: zero-to-Stagiar and zero-to-Zilier with no reading.
 
 **Open decisions.** Third-rank names and duties on both part-time tracks
 (proposal: soldier E3 = a lead/field-capable step feeding officer
-petitions; specialist E3 = senior tradesperson). Whether specialist entry
-exams too — the owner said part-timers "take exam at their first step too,"
-so proposal: yes, Zilier entry gets its own fixed quiz alongside the reason
-request. Exam size per step (6 → 10 → ?). Whether the third part-time rank
-is the eligibility gate for officer petitions. — **needs owner sign-off.**
+petitions; specialist E3 = senior tradesperson). Exam size per soldier
+step (6 → 10 → ?). Whether the third part-time rank is the eligibility
+gate for officer petitions. — **needs owner sign-off.** Resolved: the
+specialist track has no exams — steps are XP-gated and officer-approved
+(per the owner's work-economy direction in FUN-3); specialist entry stays
+reason-request with no quiz.
 
 ---
 
-## FUN-3 — Paperwork absorption: the institution writes, the player signs
+## FUN-3 — The part-timer work economy: mission table, officer assignments, XP
+
+**Intent.** The owner's model of the institution: "like real militarized
+police — officers plan missions with rewards (both XP and money) from a
+limited budget, and part-timers take at will from a GUI or are assigned
+missions by officers." Work for part-timers is not a chore queue — it is a
+mission market the institution stocks and officers curate. XP earned on
+missions is the promotion currency: soldiers then test up, specialists ask
+an officer up.
+
+**Expectation.**
+
+- **Mission planning:** an officer drafts a mission at the mission table /
+  Secretary (objective, budget-drawn money reward, XP reward, minimum rank,
+  deadline, assignees) from a **bounded officer budget** — the existing
+  `maxRewardPool`/`maxRewardPerIssuerPerDay` policy limits apply, and every
+  draw is auditable.
+- **Take at will:** part-timers (both tracks) browse open missions on a
+  native GUI — list, read brief, accept in one click. No command, no
+  paperwork: `mission-join`/`mission-accept` actions already exist and are
+  the entry points.
+- **Officer assignment:** an officer can assign a mission to a named
+  part-timer — the assignee gets the mission notice (persisted delivery,
+  accept/decline) rather than having it appear by magic.
+- **XP as career currency:** completed missions grant tracked XP per
+  member record. XP is the promotion gate: military steps require XP +
+  the step exam; specialist steps require XP + officer approval (the
+  petition an officer — not only the Comisar — can approve, per FUN-2's
+  promotion model). XP totals are visible to the member and to officers
+  reading the dossier.
+- **Assignment limits:** the existing per-player active-mission cap
+  (`maxActivePerPlayer`) applies; an assigned mission still requires
+  accept by the part-timer (assignment proposes, never forces).
+
+**Acceptance criteria.**
+
+- An officer with budget headroom can publish a mission with money + XP
+  rewards; overspending a configured budget refuses with a remedy.
+- A part-timer accepts an open mission from the GUI without commands; the
+  same mission can be offered as an officer assignment to a named member,
+  with accept/decline delivered online or at login.
+- Completing a mission credits XP (and money) exactly once — idempotent
+  against double-claim and restart; the member's XP total is queryable on
+  their status/dossier surfaces.
+- XP thresholds gate FUN-2 promotion steps: without the XP the exam/ask
+  actions refuse with the real next step ("earn XP on missions").
+- Reward draws consume the officer/issuer budget policy; every grant is
+  audit-trailed to issuer, mission, and recipient.
+
+**Context code cannot infer.** The budget is deliberately limited — the
+owner wants officers *planning*, not printing rewards. Assignment
+*proposes*: conscription-by-click is not the model; a part-timer always
+holds the final accept. XP is tracked on the member record (V2 personnel
+projection or the existing member-progression state — pick at design time),
+not on a book or client token.
+
+**Scope.** `MissionV2Service`/`MissionGeneratorService` assignment +
+XP-reward fields; member XP ledger (new persisted aggregate keyed by
+member, fed by mission completion claims); `AdminRoleplay`/`MissionRoleplay`
+assign surface; NPC mission-table actions; dossier/status XP display;
+budget policy keys. Issue type: feature. Owner: unassigned (agent).
+
+**Non-goals.** No change to campaign/incident missions; no officer-rank
+capability expansion (assignment rides existing mission-issue authority);
+no promotion-flow changes themselves (FUN-2 owns the flow shape — this
+issue supplies the XP currency it gates on); no economy pricing of XP.
+
+**Dependencies.** FUN-1 (officer budgets may ride delegation for routine
+approval), FUN-2 (promotion gates read XP). Consumed by FUN-4 reports
+(mission counts into activity) and FUN-10 (prison jobs share the work
+ledger vocabulary where sensible).
+
+**Verification.** Service tests: budget-draw refusal, assignment
+accept/decline delivery, idempotent XP grant across restart, XP-gate
+refusals. Live UAT: officer publishes a mission → specialist takes it →
+completes → XP + money credited → promotion step unlocked.
+
+---
+
+## FUN-4 — Paperwork absorption: the institution writes, the player signs
 
 **Intent.** Weekly activity reports, promotion petitions, complaints, and
 audience requests currently require the player to re-enter facts the system
@@ -425,7 +518,7 @@ form page or a delivered book.
 
 ---
 
-## FUN-4 — Duty is presence and response, not checkpoint chores
+## FUN-5 — Duty is presence and response, not checkpoint chores
 
 **Intent.** The default enlisted experience is walking a fixed route and
 standing at checkpoints against a deadline — a timer job, not policing. This
@@ -435,7 +528,7 @@ a punishment timer, and pay follows activity rather than taps.
 
 **Expectation.** Starting duty no longer binds the member to a rigid route
 deadline. A shift is a presence period during which the member receives work
-from the dispatch pipeline (FUN-5; until M2, from patrol events already in
+from the dispatch pipeline (FUN-6; until M2, from patrol events already in
 the system and ad-hoc Comisar missions). Checkpoints remain as declared beat
 locations — reaching one registers presence and surfaces local context
 (recent incidents, active BOLOs, wanted players nearby) — but missing a
@@ -473,10 +566,10 @@ Issue type: rework/feature. Owner: unassigned (agent).
 
 **Non-goals.** No removal of checkpoints as world features; no change to
 wage table values (rates stay configurable); emergency required-rounds
-contract preserved; dispatch content itself is FUN-5.
+contract preserved; dispatch content itself is FUN-6.
 
 **Dependencies.** FUN-1 (response participation may feed delegated verdicts).
-Soft dependency on FUN-5 for the full experience — ships meaningful alone.
+Soft dependency on FUN-6 for the full experience — ships meaningful alone.
 
 **Verification.** `DutyEngine` unit tests for mode transitions, accrual,
 idle pause, emergency interplay; reconnect/restart tests; live UAT of a
@@ -489,7 +582,7 @@ onboarding).
 
 ---
 
-## FUN-5 — Crime creates the call: the dispatch pipeline
+## FUN-6 — Crime creates the call: the dispatch pipeline
 
 **Intent.** Straja should react to what players actually do. Today citizen
 complaints create incidents, but direct player offenses — killing a citizen,
@@ -504,7 +597,7 @@ time-bounded work items pushed to on-duty members by rank band and
 proximity. Enlisted bands receive pursuit/respond calls (chase the fleeing
 suspect, respond to a fight); officers additionally receive hunt, transport,
 and coordination calls. A call shows what happened, where (last known area),
-who's wanted, and pays response credit under FUN-4's multiplier. Calls are
+who's wanted, and pays response credit under FUN-5's multiplier. Calls are
 accepted/declined; unaccepted calls escalate by severity to wider bands and
 ultimately the on-duty commander. The existing wanted/fugitive/BOLO flags
 remain the underlying state — dispatch is the notification and work-routing
@@ -538,7 +631,7 @@ type: feature. Owner: unassigned (agent).
 semantics (dispatch routes attention, it does not create warrants); no
 Discord output for routine calls.
 
-**Dependencies.** Feeds FUN-6, FUN-7, FUN-8 (all emit calls). Consumes FUN-4
+**Dependencies.** Feeds FUN-7, FUN-8, FUN-9 (all emit calls). Consumes FUN-5
 response pay. FUN-1 optional (delegated escalation of unanswered calls).
 
 **Verification.** Event-to-call mapping tests per source; routing band and
@@ -551,7 +644,7 @@ push only to on-duty).
 
 ---
 
-## FUN-6 — Prison breaks and manhunts that are fun for both sides
+## FUN-7 — Prison breaks and manhunts that are fun for both sides
 
 **Intent.** Cells today are inert boxes: leaving without release marks you
 fugitive. Other players can't meaningfully spring someone, and the hunt that
@@ -561,7 +654,7 @@ getting hunted for it — a playable loop.
 **Expectation.** Cells gain lock state and tamper mechanics: bolt cutters
 succeed only with no guard presence within a radius and after a noisy
 channel; lockpicks are faster on cheap cells; forced doors raise an alarm
-call through FUN-5. A freed prisoner plus every participant becomes wanted
+call through FUN-6. A freed prisoner plus every participant becomes wanted
 with a live manhunt call. Hunters get periodic position hints that decay
 with distance/time; runners get escape windows — manhunt ends when a
 configurable time elapses without the runners being re-cuffed, converting to
@@ -580,7 +673,7 @@ sentence.
 - Both sides see progress: hunters see hint freshness, runners see their
   pursuit status.
 - Guards can call off / the Comisar can pardon mid-hunt; all paths audited.
-- A break attempt during an active FUN-7 transfer ride uses the same
+- A break attempt during an active FUN-8 transfer ride uses the same
   pipeline.
 
 **Scope.** `PrisonService` cell/lock state and tamper mechanics; manhunt
@@ -592,7 +685,7 @@ adjustment on recapture. Issue type: feature. Owner: unassigned (agent).
 fugitive mechanics — manhunt layers on top; no NPC guard spawns (breaks
 succeed against *player absence*, detection is the counterplay).
 
-**Dependencies.** FUN-5. Consumes custody/escort state from `CustodyService`.
+**Dependencies.** FUN-6. Consumes custody/escort state from `CustodyService`.
 
 **Verification.** Tamper gating tests (item, radius, interruption); manhunt
 lifecycle tests including restart mid-hunt; hint decay tests; live UAT of a
@@ -604,7 +697,7 @@ Meșter track — proposal: yes).
 
 ---
 
-## FUN-7 — Prisoner transfer rides: escorted, ambushable, exploitable
+## FUN-8 — Prisoner transfer rides: escorted, ambushable, exploitable
 
 **Intent.** Camp transfer today is an automatic teleport with a book. The
 owner specifically wants transfers as events: a chained prisoner walked
@@ -614,12 +707,12 @@ prisoner, and any friends planning an ambush.
 **Expectation.** When a transfer is ordered (debt threshold, security
 downgrade, Comisar order, or post-hearing move), it becomes a **transfer
 ride**: the prisoner is chained (existing cuff/rope transport state) and a
-transfer call is dispatched (FUN-5). An accepting escort takes custody of the
+transfer call is dispatched (FUN-6). An accepting escort takes custody of the
 chain; the prisoner follows escort rules (existing escort proximity
 mechanics). The route posts waypoints; entering a declared **risk zone**
 (forest stretch, open field — configured per route) opens an escape window:
 if the escort strays beyond leash range, is downed, or dies, the chain breaks
-and the prisoner (and any ambushers) enter the FUN-6 manhunt. Clean delivery
+and the prisoner (and any ambushers) enter the FUN-7 manhunt. Clean delivery
 at the destination hands the prisoner to the receiving cell/camp, pays the
 escort a transport reward (mission budget formula), and records the ride.
 Failed rides return the prisoner to custody or convert to manhunt — never
@@ -655,7 +748,7 @@ Owner: unassigned (agent).
 kept for ordered transfers (auto-transfer remains only as admin fallback and
 for the case of zero online members, under policy); no NPC ambushers.
 
-**Dependencies.** FUN-5 (call routing), FUN-6 (manhunt on break), custody
+**Dependencies.** FUN-6 (call routing), FUN-7 (manhunt on break), custody
 escort mechanics (existing). Pays through the existing mission budget
 formula.
 
@@ -665,16 +758,16 @@ with a prisoner player.
 
 **Open decisions.** Minimum route length before a ride is required at all
 (proposal: same-station transfers stay instant); risk-zone defaults; whether
-the prisoner may bribe the escort mid-ride (ties to FUN-8/9 currencies).
+the prisoner may bribe the escort mid-ride (ties to FUN-9/9 currencies).
 
 ---
 
-## FUN-8 — Escape paths: dig, pick, bribe, blend
+## FUN-9 — Escape paths: dig, pick, bribe, blend
 
 **Intent.** A prisoner with no options is a player in a menu. This issue
 gives custody a decision space: several materially different escape paths,
 each with preparation, risk, detection surface, and consequence — feeding
-the FUN-5/6 response loop when discovered.
+the FUN-6/6 response loop when discovered.
 
 **Expectation.** Four path families inside cells/camp:
 
@@ -682,7 +775,7 @@ the FUN-5/6 response loop when discovered.
   discovered tunnels are fillable by guards/trades and earn the digger
   time when found.
 - **Pick** — faster, item-gated (lockpick/contraband item), on cell locks
-  (FUN-6 lock state); failed picks can jam and mark the lock.
+  (FUN-7 lock state); failed picks can jam and mark the lock.
 - **Bribe** — coin/contraband payment to a corruptible NPC guard post or to
   a player guard (consensual bribe offer through a bounded interaction);
   discovered bribes are crimes for both parties.
@@ -702,7 +795,7 @@ patrols a reason to walk the cells.
 - Contraband items used by pick/bribe/blend paths are physical, findable,
   and confiscated on detection.
 - Detection events (tunnel found, jammed lock, bribe witnessed) notify
-  on-duty through FUN-5 at low severity.
+  on-duty through FUN-6 at low severity.
 - Successful escapes funnel into the manhunt loop; recapture applies the
   existing sentence-extension rules.
 - All paths work inside camp perimeters too (camp has its own boundary
@@ -717,7 +810,7 @@ feature. Owner: unassigned (agent).
 no escape path that skips detection entirely; no prisoner vending of
 contraband to guards.
 
-**Dependencies.** FUN-5, FUN-6 (locks, manhunt); FUN-9 (contraband economy
+**Dependencies.** FUN-6, FUN-7 (locks, manhunt); FUN-10 (contraband economy
 supplies the items).
 
 **Verification.** Per-path state machine tests; inspection detection tests;
@@ -729,7 +822,7 @@ posts (proposal: both, with player-guard bribery flagged heavier in audit).
 
 ---
 
-## FUN-9 — Prison economy and jobs: a small society inside
+## FUN-10 — Prison economy and jobs: a small society inside
 
 **Intent.** Mining into a work account is a single treadmill. This issue
 makes the inside of a prison/camp a small economy with jobs, trade, and
@@ -738,13 +831,13 @@ favors — so time inside produces stories, not just hours.
 **Expectation.** Prisoners access posted jobs at camp/prison work points:
 mining (existing), smelting/smithing quotas, kitchen/laundry/cleaning tasks,
 and trades-member supply contracts. Jobs pay the work account at different
-rates and build a **standing** stat used by FUN-10 parole. A contraband
+rates and build a **standing** stat used by FUN-11 parole. A contraband
 market exists: smuggled-in items (from visitors, corrupt posts, or found
 stashes) trade between prisoners for work-account credit or favors; holding
-contraband is risk (FUN-8 inspection). Favors are non-currency social debt —
+contraband is risk (FUN-9 inspection). Favors are non-currency social debt —
 tracked as simple IOU notes between prisoners — usable for escort
 cooperation, alibis, or market credit. Guards get inspection quotas turned
-into dispatched mini-calls (FUN-5) so the economy has real pressure.
+into dispatched mini-calls (FUN-6) so the economy has real pressure.
 
 **Acceptance criteria.**
 
@@ -757,10 +850,10 @@ into dispatched mini-calls (FUN-5) so the economy has real pressure.
 - Market trades cannot duplicate value (item-for-credit swaps settle
   atomically).
 - Camp perimeter and cell inspections interact with held contraband exactly
-  as FUN-8 defines.
+  as FUN-9 defines.
 
 **Scope.** `LaborCampService` job registry + standing stat; prisoner market
-interaction; contraband item/flag plumbing shared with FUN-8; work-point NPC
+interaction; contraband item/flag plumbing shared with FUN-9; work-point NPC
 or block surfaces; `PolicyService` economy config. Issue type: feature.
 Owner: unassigned (agent).
 
@@ -768,8 +861,8 @@ Owner: unassigned (agent).
 internal until release settlement, which already exists); no prisoner
 vending to guards; no crafting trees beyond configured job quotas.
 
-**Dependencies.** FUN-8 shares the contraband flag; FUN-10 consumes standing.
-Soft on FUN-5 for inspection calls.
+**Dependencies.** FUN-9 shares the contraband flag; FUN-11 consumes standing.
+Soft on FUN-6 for inspection calls.
 
 **Verification.** Job settlement idempotency; trade atomicity; standing
 accumulation; inspection confiscation; live UAT of a market trade.
@@ -780,18 +873,18 @@ standing weight.
 
 ---
 
-## FUN-10 — Parole and appeal: the social route to freedom
+## FUN-11 — Parole and appeal: the social route to freedom
 
 **Intent.** Not every prisoner wants to dig. This issue builds the
 institutional route out — hearings, good behavior, advocates — so a
 cooperative prisoner has a real path that is itself roleplay.
 
 **Expectation.** Prisoners accumulate parole eligibility from standing
-(FUN-9), time served, paid debts, and clean recent record. At threshold they
+(FUN-10), time served, paid debts, and clean recent record. At threshold they
 may file for a hearing through the guard desk; hearings schedule onto a
 docket the Comisar/officers work through (delegation-eligible under FUN-1 —
 standing orders for routine parole criteria, digest for contested cases). A
-hearing is a real interaction: the prisoner appears (escorted, FUN-7 ride if
+hearing is a real interaction: the prisoner appears (escorted, FUN-8 ride if
 off-site), an **advocate** player may speak for them (any member or an
 outsider retained through a request), and the deciding officer weighs
 standing, victim objections (fines unpaid, complaint authors online get a
@@ -820,8 +913,8 @@ plumbing. Issue type: feature. Owner: unassigned (agent).
 **Non-goals.** No automatic parole without a hearing artifact; no parole for
 flagged escapees inside their cooldown; no jury/trial system.
 
-**Dependencies.** FUN-1 (delegated docket processing), FUN-9 (standing),
-FUN-7 (off-site hearing transport, optional path).
+**Dependencies.** FUN-1 (delegated docket processing), FUN-10 (standing),
+FUN-8 (off-site hearing transport, optional path).
 
 **Verification.** Eligibility computation tests; docket ordering/durability;
 condition-violation re-arrest; live UAT of a full hearing.

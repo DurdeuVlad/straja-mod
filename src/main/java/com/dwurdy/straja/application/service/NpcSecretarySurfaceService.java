@@ -3,6 +3,7 @@ package com.dwurdy.straja.application.service;
 import com.dwurdy.straja.application.port.in.AudienceUseCase;
 import com.dwurdy.straja.application.port.in.AdminRoleplayUseCase;
 import com.dwurdy.straja.application.port.in.ComplaintRoleplayUseCase;
+import com.dwurdy.straja.application.port.in.DelegationUseCase;
 import com.dwurdy.straja.application.port.in.FineRoleplayUseCase;
 import com.dwurdy.straja.application.port.in.GuardDutyUseCase;
 import com.dwurdy.straja.application.port.in.MissionRoleplayUseCase;
@@ -71,6 +72,7 @@ public final class NpcSecretarySurfaceService {
         }
         addPetitions(actions, inputs);
         addDuty(actions, inputs.duty());
+        addDelegation(actions, inputs);
         List<NpcSurfaceAction> result = List.copyOf(actions.values());
         List<NpcSurfaceSnapshot.DialogueNode> dialogue = published.dialogue().stream()
                 .map(node -> new NpcSurfaceSnapshot.DialogueNode(
@@ -312,6 +314,64 @@ public final class NpcSecretarySurfaceService {
         }
     }
 
+    /**
+     * FUN-1 delegation console: only rendered when the runtime feeds a
+     * delegation view (delegation authorities only). The digest rows reuse
+     * each queue's native review action — the digest batches the queues; it
+     * does not invent a parallel decision form.
+     */
+    private static void addDelegation(
+            Map<NpcContentId, NpcSurfaceAction> actions,
+            Inputs inputs) {
+        DelegationUseCase.SurfaceView view = inputs.delegation();
+        if (view == null) return;
+        if (view.digest().isEmpty() && view.policies().isEmpty()) return;
+        add(actions, "delegation-ledger",
+                "Instituția decide — " + view.digest().size() + " în așteptare · jurnal decizii");
+        for (DelegationUseCase.DigestEntry entry : view.digest()) {
+            if (entry == null || entry.reviewActionId() == null) continue;
+            add(actions, entry.reviewActionId(),
+                    "◈ " + entry.action().displayName() + " " + entry.requestId()
+                            + " — " + bounded(entry.subjectName(), 30));
+        }
+        for (DelegationUseCase.PolicyView policy : view.policies()) {
+            if (policy == null || policy.action() == null) continue;
+            com.dwurdy.straja.domain.model.DelegableAction action = policy.action();
+            add(actions, parameterized("delegation-mode", action.name()),
+                    "⚙ " + action.displayName() + ": " + delegationModeLabel(policy));
+            if (policy.mode() == com.dwurdy.straja.domain.model.DelegationMode.STANDING_ORDER) {
+                int options = 0;
+                for (DelegationUseCase.OrderOption option : view.orderOptions()) {
+                    if (option == null || !action.name().equals(option.action())) continue;
+                    if (++options > 6) break;
+                    add(actions, parameterized("delegation-order-"
+                                    + action.name().toLowerCase(java.util.Locale.ROOT),
+                                    option.filter()),
+                            "   + ordin: " + bounded(option.label(), 60));
+                }
+                for (DelegationUseCase.OrderView order : policy.orders()) {
+                    if (order == null || !order.active()) continue;
+                    add(actions, parameterized("delegation-revoke", order.orderId()),
+                            "   − retrage ordin " + order.orderId() + " (" + order.filter() + ")");
+                }
+            }
+            if (policy.mode() == com.dwurdy.straja.domain.model.DelegationMode.TIMEOUT) {
+                add(actions, parameterized("delegation-window", action.name()),
+                        "   fereastră " + (policy.timeoutMillis() / 3_600_000L)
+                                + "h — apasă pentru schimbare");
+            }
+        }
+    }
+
+    private static String delegationModeLabel(DelegationUseCase.PolicyView policy) {
+        return switch (policy.mode()) {
+            case MANUAL -> "manual — un om decide";
+            case DIGEST -> "digest — se semnează în masă";
+            case STANDING_ORDER -> "ordin permanent — se rezolvă singure";
+            case TIMEOUT -> "presupus după " + (policy.timeoutMillis() / 3_600_000L) + "h";
+        };
+    }
+
     private static void addDuty(
             Map<NpcContentId, NpcSurfaceAction> actions, GuardDutyUseCase.DutyView view) {
         if (view == null) return;
@@ -391,7 +451,11 @@ public final class NpcSecretarySurfaceService {
              *  they cannot petition (top rank, ineligible state). */
             String petitionTargetName,
             /** Open promotion petitions — populated only for reviewers. */
-            List<PetitionEntry> petitions) {
+            List<PetitionEntry> petitions,
+            /** FUN-1 delegation console — populated only for delegation
+             *  authorities; {@link DelegationUseCase.SurfaceView#empty()}
+             *  otherwise. */
+            DelegationUseCase.SurfaceView delegation) {
         public Inputs {
             missions = List.copyOf(Objects.requireNonNull(missions, "missions"));
             complaints = List.copyOf(Objects.requireNonNull(complaints, "complaints"));
@@ -402,6 +466,7 @@ public final class NpcSecretarySurfaceService {
             bolos = List.copyOf(Objects.requireNonNull(bolos, "bolos"));
             administration = List.copyOf(Objects.requireNonNull(administration, "administration"));
             petitions = List.copyOf(Objects.requireNonNull(petitions, "petitions"));
+            delegation = Objects.requireNonNull(delegation, "delegation");
             Objects.requireNonNull(complaintLimits, "complaintLimits");
             Objects.requireNonNull(fineLimits, "fineLimits");
         }

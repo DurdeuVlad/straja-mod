@@ -177,15 +177,57 @@ public class AudienceService implements AudienceUseCase {
         player.tell(AudienceRequest.RESOLVED.equals(status)
                 ? "Cererea " + request.id + " a fost rezolvată."
                 : "Cererea " + request.id + " a fost respinsă.");
-        // If the requester is online, tell them now instead of waiting for login.
-        var requester = ctx.server().findPlayer(request.requesterUuid);
-        if (requester != null) {
-            AudienceStore fresh = ctx.audiences().read();
-            AudienceRequest current = fresh.requests.get(request.id);
-            if (current != null) deliverOutcome(fresh, current, requester);
-            ctx.audiences().write(fresh);
-        }
+        deliverToRequester(request.id);
         return true;
+    }
+
+    /**
+     * Delegated resolution: the delegation engine resolves the request under
+     * the recorded authority — no player session required. The authority must
+     * still hold commissioner status at resolution time; a lost appointment
+     * fails closed. {@code status} must be RESOLVED or DISMISSED.
+     */
+    public synchronized boolean resolveDelegated(String actorUuid, String actorName,
+                                                 String id, String status, String note) {
+        if (!players.isCommissioner(actorName, actorUuid == null ? null : uuid(actorUuid))) {
+            return false;
+        }
+        if (!AudienceRequest.RESOLVED.equals(status) && !AudienceRequest.DISMISSED.equals(status)) {
+            return false;
+        }
+        AudienceStore store = ctx.audiences().read();
+        AudienceRequest request = id == null ? null : store.requests.get(id.trim());
+        if (request == null || !AudienceRequest.PENDING.equals(request.status)) {
+            return false;
+        }
+        request.status = status;
+        request.resolvedBy = actorName;
+        request.resolutionNote = Text.bounded(note, Text.REASON_LIMIT);
+        request.resolvedAt = now();
+        request.outcomeDelivered = false;
+        ctx.audiences().write(store);
+        audit.record(AuditActions.AUDIENCE_REVIEW, actorName, actorUuid,
+                request.id, request.requesterUuid, AuditResults.SUCCESS, status);
+        deliverToRequester(request.id);
+        return true;
+    }
+
+    private void deliverToRequester(String requestId) {
+        AudienceStore store = ctx.audiences().read();
+        AudienceRequest request = store.requests.get(requestId);
+        if (request == null) return;
+        var requester = ctx.server().findPlayer(request.requesterUuid);
+        if (requester == null) return;
+        deliverOutcome(store, request, requester);
+        ctx.audiences().write(store);
+    }
+
+    private static java.util.UUID uuid(String raw) {
+        try {
+            return java.util.UUID.fromString(raw);
+        } catch (RuntimeException error) {
+            return null;
+        }
     }
 
     @Override

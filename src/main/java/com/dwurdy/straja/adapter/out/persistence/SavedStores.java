@@ -246,6 +246,12 @@ public final class SavedStores {
         @Override public void write(JoinRequestStore store) { writeJson(store); }
     }
 
+    public static class Delegations extends JsonBackedStore implements DelegationRepository {
+        public Delegations(StoreAccess access) { super(access, "delegations"); }
+        @Override public DelegationStore read() { return readJsonVersioned(DelegationStore.class, DelegationStore::new, DelegationStore.CURRENT_SCHEMA_VERSION); }
+        @Override public void write(DelegationStore store) { writeJson(store); }
+    }
+
     public static class Stations extends JsonBackedStore implements StationRepository {
         public Stations(StoreAccess access) { super(access, "stations"); }
         @Override public StationStore read() { return readJsonVersioned(StationStore.class, StationStore::defaults, StationStore.CURRENT_SCHEMA_VERSION); }
