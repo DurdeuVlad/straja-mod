@@ -541,7 +541,7 @@ public final class NpcRoles {
         com.dwurdy.straja.adapter.in.form.FormSessionBridge.open(serverPlayer,
                 new com.dwurdy.straja.application.port.in.FormSessionUseCase.Request(
                         com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.JOIN_REVIEW,
-                        request.requestId + "_" + request.version,
+                        com.dwurdy.straja.domain.model.ReviewRef.encode(request.requestId, request.version),
                         "Decide cererea " + request.requestId,
                         "Decizie: aproba sau respinge (motiv opțional, trimis solicitantului).",
                         java.util.List.of(
@@ -1391,7 +1391,7 @@ public final class NpcRoles {
         readPetition(player, runtime, gw, recordId);
         FormSessionBridge.open(serverPlayer, new FormSessionUseCase.Request(
                 FormSessionUseCase.Action.PETITION_REVIEW,
-                application.applicationId + "_" + application.version,
+                com.dwurdy.straja.domain.model.ReviewRef.encode(application.applicationId, application.version),
                 "Decide cererea " + application.applicationId,
                 "Decizie: aproba sau respinge (motiv opțional, trimis solicitantului).",
                 java.util.List.of(

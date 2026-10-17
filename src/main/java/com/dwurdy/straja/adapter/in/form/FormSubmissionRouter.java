@@ -173,19 +173,9 @@ public final class FormSubmissionRouter {
                 // recordId carries "<appId>_<version>" from the review form —
                 // the version the reviewer actually read. Provider surfaces
                 // pass the bare id, which resolves the current version.
-                String raw = submission.recordId() == null ? "" : submission.recordId();
-                String appId = raw;
-                Long expected = null;
-                int cut = raw.lastIndexOf('_');
-                if (cut > 0) {
-                    try {
-                        expected = Long.parseLong(raw.substring(cut + 1));
-                        appId = raw.substring(0, cut);
-                    } catch (NumberFormatException ignored) {
-                        appId = raw;
-                        expected = null;
-                    }
-                }
+                var ref = com.dwurdy.straja.domain.model.ReviewRef.parse(submission.recordId());
+                String appId = ref.id();
+                Long expected = ref.version();
                 var application = v2Promotions.find(appId);
                 if (application == null || application.status
                         != com.dwurdy.straja.domain.model.PromotionStatus.READY_FOR_APPROVAL) {
@@ -248,19 +238,9 @@ public final class FormSubmissionRouter {
             case JOIN_REVIEW -> {
                 // recordId carries "<requestId>_<version>" — the version the
                 // reviewer actually read; a changed petition fails closed.
-                String raw = submission.recordId() == null ? "" : submission.recordId();
-                String requestId = raw;
-                Long expected = null;
-                int cut = raw.lastIndexOf('_');
-                if (cut > 0) {
-                    try {
-                        expected = Long.parseLong(raw.substring(cut + 1));
-                        requestId = raw.substring(0, cut);
-                    } catch (NumberFormatException ignored) {
-                        requestId = raw;
-                        expected = null;
-                    }
-                }
+                var ref = com.dwurdy.straja.domain.model.ReviewRef.parse(submission.recordId());
+                String requestId = ref.id();
+                Long expected = ref.version();
                 var request = v2JoinRequests.find(requestId);
                 if (request == null || request.status
                         != com.dwurdy.straja.domain.model.JoinRequestStatus.PENDING) {
