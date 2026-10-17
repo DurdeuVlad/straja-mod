@@ -308,6 +308,12 @@ public class StrajaPolicies {
     // at most one tell per cooldown window regardless of request count.
     public int audienceNotifyCooldownSeconds = 60;
 
+    // Delegation: the engine sweeps pending request queues at this cadence;
+    // the default timeout-presumption window applies when a queue's policy
+    // does not set its own.
+    public int delegationSweepSeconds = 10;
+    public int delegationTimeoutHours = 48;
+
     // §4: bracketed rank prefix on chat / TAB / nameplate — per-surface flags;
     // the composition uses the configurable rank display names.
     public boolean rankPrefixChat = true;

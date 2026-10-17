@@ -29,7 +29,8 @@ public enum Capability {
     AUTHORIZE_PERSONNEL,
     ISSUE_DOCUMENTS,
     WAIVE_EQUIPMENT_DEBT,
-    MANAGE_CAMPAIGNS;
+    MANAGE_CAMPAIGNS,
+    DELEGATE;
 
     private static final Map<Rank, Set<Capability>> MATRIX = new EnumMap<>(Rank.class);
 

@@ -339,7 +339,10 @@ public final class NpcPresentationRuntime {
                     runtime.fineRoleplay().limits(),
                     runtime.guardRecruitment().petitionTarget(player)
                             .map(grade -> runtime.policies().rankName(grade)).orElse(null),
-                    petitionView(runtime, player)));
+                    petitionView(runtime, player),
+                    // FUN-1: the service itself gates the view to delegation
+                    // authorities; everyone else receives an empty console.
+                    runtime.delegation().surface(player)));
         }
         java.util.Optional<com.dwurdy.straja.application.port.in.GuardRecruitmentUseCase.QuizPrompt> prompt =
                 java.util.Optional.empty();

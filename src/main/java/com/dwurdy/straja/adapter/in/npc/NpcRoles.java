@@ -227,6 +227,7 @@ public final class NpcRoles {
                     com.dwurdy.straja.application.port.in.FineRoleplayUseCase.Action.DRAFT_WRITE, "");
             case "fine-warrant" -> openFineForm(player, runtime, gw,
                     com.dwurdy.straja.application.port.in.FineRoleplayUseCase.Action.HEARING_WARRANT, "");
+            case "delegation-ledger" -> tellDelegationLedger(runtime, gw);
             case "complaint-list" -> runtime.complaintRoleplay().list(gw);
             case "complaint-submit" -> openComplaintForm(player, runtime, gw,
                     com.dwurdy.straja.application.port.in.ComplaintRoleplayUseCase.Action.SUBMIT, "");
@@ -563,6 +564,13 @@ public final class NpcRoles {
                                                        com.dwurdy.straja.application.port.out.PlayerGateway gw) {
         String operation = action.operation();
         String id = action.recordId();
+        // FUN-1: dynamic order-issue ops ("delegation-order-<ACTION>:<filter>")
+        // re-gate authority and mode inside the service on every click.
+        if (operation != null && operation.startsWith("delegation-order-")) {
+            runtime.delegation().issueOrder(
+                    gw, operation.substring("delegation-order-".length()), id);
+            return true;
+        }
         if (!isStillValidForPlayer(operation, id, runtime, gw)) {
             player.sendSystemMessage(refusal("straja.npc.action_stale", "straja.remedy.retry"));
             return false;
@@ -635,6 +643,9 @@ public final class NpcRoles {
             case "petition-read" -> readPetition(player, runtime, gw, id);
             case "petition-review" -> openPetitionReviewForm(player, runtime, gw, id);
             case "audience-review" -> openAudienceReviewForm(player, runtime, gw, id);
+            case "delegation-mode" -> runtime.delegation().cycleMode(gw, id);
+            case "delegation-window" -> runtime.delegation().cycleTimeout(gw, id);
+            case "delegation-revoke" -> runtime.delegation().revokeOrder(gw, id);
             case "admin-dossier" -> runtime.adminRoleplay().dossier(gw, id);
             case "admin-promote" -> runtime.adminRoleplay().promote(gw, id);
             case "admin-demote" -> runtime.adminRoleplay().demote(gw, id);
@@ -1023,6 +1034,24 @@ public final class NpcRoles {
             player.tell(bolo.id() + " — " + bolo.subject() + " — " + bolo.reason()
                     + " — " + bolo.authority()
                     + (bolo.arrestAuthority() ? " [task autoritativ]" : " [INFORMARE]"));
+        }
+    }
+
+    private static void tellDelegationLedger(com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                             com.dwurdy.straja.application.port.out.PlayerGateway player) {
+        var decisions = runtime.delegation().recentDecisions(player, 12);
+        if (decisions.isEmpty()) {
+            player.refuse("straja.delegation.ledger_empty", "straja.remedy.wait");
+            return;
+        }
+        player.tell("— Jurnal decizii delegate —");
+        for (var decision : decisions) {
+            player.tell("• " + decision.action + " " + decision.requestId + " → "
+                    + decision.outcome
+                    + (decision.orderId == null || decision.orderId.isBlank()
+                            ? "" : " (" + decision.orderId + ")")
+                    + (decision.presumed ? " [presupus]" : "")
+                    + " — " + decision.authorityName);
         }
     }
 
@@ -1639,6 +1668,9 @@ public final class NpcRoles {
                             .anyMatch(incident -> id.equals(incident.id()));
             case "bolo-cancel" -> runtime.expansionRoleplay().activeBolos(player).stream()
                     .anyMatch(bolo -> id.equals(bolo.id()));
+            // FUN-1: delegation ops re-gate authority inside the service on
+            // every click — a stale console click resolves safely anyway.
+            case "delegation-mode", "delegation-window", "delegation-revoke" -> true;
             case "evidence-deposit", "evidence-return", "evidence-transfer", "evidence-destroy" -> runtime.evidence().recordsFor(player).stream()
                     .anyMatch(record -> id.equals(record.id));
             case "admin-dossier", "admin-promote", "admin-demote", "admin-suspend",

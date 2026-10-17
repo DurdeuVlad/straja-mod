@@ -66,6 +66,9 @@ public final class StrajaEvents {
         runtime.storage().tick();
         runtime.checkpoints().tick();
         runtime.bounties().tick();
+        // FUN-1: the delegation engine sweeps pending request queues at its own
+        // configured cadence (delegation.sweepSeconds); the call itself is cheap.
+        runtime.delegation().tick();
         if (runtime.serverGateway().tickCount() % 20 != 0) return;
         runtime.v2Mobilizations().expireDue();
         runtime.v2Campaigns().expireDue();

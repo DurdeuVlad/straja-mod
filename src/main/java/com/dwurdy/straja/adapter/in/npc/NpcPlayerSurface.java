@@ -37,7 +37,8 @@ final class NpcPlayerSurface {
             "tool-survey-stamp",
             "armory-buy", "armory-reserve",
             "duty-checkpoint",
-            "trades-enroll");
+            "trades-enroll",
+            "delegation-mode", "delegation-window", "delegation-revoke");
 
     enum RoleRoute { RECEPTIONIST, SECRETARY, JAILER, ARCHIVIST, TRAINER, RECRUITER, ARMORER, INSPECTOR, UNKNOWN }
 
@@ -359,7 +360,13 @@ final class NpcPlayerSurface {
 
     static Optional<String> parameterizedActionId(String operation, String recordId) {
         String id = recordId == null ? "" : recordId.trim();
-        if (!PARAMETERIZED_ACTIONS.contains(operation) || !RECORD_ID.matcher(id).matches()) {
+        // FUN-1: standing-order issue ops carry the queue name in the
+        // operation ("delegation-order-<action>:<filter>") — dynamic but
+        // bounded, so it joins the parameterized space by prefix.
+        boolean known = PARAMETERIZED_ACTIONS.contains(operation)
+                || (operation != null && operation.startsWith("delegation-order-")
+                        && operation.length() <= 64);
+        if (!known || !RECORD_ID.matcher(id).matches()) {
             return Optional.empty();
         }
         return Optional.of(operation + ":" + id);
