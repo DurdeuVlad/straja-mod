@@ -48,6 +48,17 @@ public final class PolicyRegistry {
         k("dispatch.callTtlMinutes", "dispatchCallTtlMinutes", Kind.INT);
         k("dispatch.maxPushTargets", "dispatchMaxPushTargets", Kind.INT);
         k("dispatch.retentionLimit", "dispatchRetentionLimit", Kind.INT);
+        k("cell.tamperSeconds", "cellTamperSeconds", Kind.INT);
+        k("cell.tamperQuickSeconds", "cellTamperQuickSeconds", Kind.INT);
+        k("cell.tamperRange", "cellTamperRange", Kind.DOUBLE);
+        k("cell.brokenMinutes", "cellBrokenMinutes", Kind.INT);
+        k("manhunt.guardDetectRadius", "manhuntGuardDetectRadius", Kind.DOUBLE);
+        k("manhunt.minutes", "manhuntMinutes", Kind.INT);
+        k("manhunt.hintSeconds", "manhuntHintSeconds", Kind.INT);
+        k("manhunt.hintBaseRadius", "manhuntHintBaseRadius", Kind.INT);
+        k("manhunt.hintGrowthPerMinute", "manhuntHintGrowthPerMinute", Kind.DOUBLE);
+        k("manhunt.recapturePenaltyDays", "manhuntRecapturePenaltyDays", Kind.INT);
+        k("manhunt.retentionLimit", "manhuntRetentionLimit", Kind.INT);
         k("dispatch.enlistedMaxRank", "dispatchEnlistedMaxRank", Kind.INT);
         k("timers.foodCooldownMinutes", "foodCooldownMinutes", Kind.INT);
         k("timers.quizCooldownMinutes", "quizCooldownMinutes", Kind.INT);

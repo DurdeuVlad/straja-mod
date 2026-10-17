@@ -34,4 +34,10 @@ public interface PrisonRoleplayUseCase {
 
     /** Consumes an armed locker pick; true when the click was used. */
     boolean onPickClick(PlayerGateway admin, String dimension, int x, int y, int z);
+
+    /**
+     * FUN-7: right-click on a cell door with a break tool starts the tamper
+     * channel. Returns true when the click was consumed.
+     */
+    boolean onCellTamper(PlayerGateway breaker, String dimension, int x, int y, int z);
 }

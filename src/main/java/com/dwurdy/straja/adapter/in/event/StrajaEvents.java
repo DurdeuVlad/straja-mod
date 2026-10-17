@@ -72,6 +72,8 @@ public final class StrajaEvents {
         if (runtime.serverGateway().tickCount() % 20 != 0) return;
         // FUN-6: unanswered calls widen through the band ladder or expire.
         runtime.dispatch().tick();
+        // FUN-7: hunts decay to warrants; hunters get fading hints.
+        runtime.manhunts().tick();
         // FUN-4: unsigned reports past deadline auto-file from the ledger.
         runtime.reportService().autoFileSweep();
         runtime.v2Mobilizations().expireDue();
@@ -629,7 +631,11 @@ public final class StrajaEvents {
                 && (runtime.storage().onPickClick(gateway, dimension, pos.getX(), pos.getY(), pos.getZ())
                 || runtime.prisonRoleplay().onPickClick(gateway, dimension, pos.getX(), pos.getY(), pos.getZ())
                 || runtime.checkpoints().onPickClick(gateway, dimension, pos.getX(), pos.getY(), pos.getZ())
-                || runtime.desks().onPickClick(gateway, dimension, pos.getX(), pos.getY(), pos.getZ()))) {
+                || runtime.desks().onPickClick(gateway, dimension, pos.getX(), pos.getY(), pos.getZ())
+                // FUN-7: bolt cutters / crowbar on a cell door starts the
+                // tamper channel — consumed only when a door was found.
+                || runtime.prisonRoleplay().onCellTamper(gateway, dimension,
+                        pos.getX(), pos.getY(), pos.getZ()))) {
             event.setCanceled(true);
             return;
         }

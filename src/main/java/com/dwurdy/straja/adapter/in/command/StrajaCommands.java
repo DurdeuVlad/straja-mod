@@ -106,6 +106,14 @@ public final class StrajaCommands {
                 .executes(c -> player(c, p -> StrajaRuntime.get().dispatch()
                         .decline(p, StringArgumentType.getString(c, "call"))))));
         root.then(dispatch);
+        // FUN-7: an officer calls off a hunt (the Comisar's pardon shares it);
+        // the service re-checks authority on every call.
+        var manhunt = Commands.literal("manhunt");
+        manhunt.executes(c -> player(c, p -> StrajaRuntime.get().manhunts().status(p)));
+        manhunt.then(Commands.literal("off").then(Commands.argument("id", StringArgumentType.string())
+                .executes(c -> player(c, p -> StrajaRuntime.get().manhunts()
+                        .callOff(p, StringArgumentType.getString(c, "id"), "command")))));
+        root.then(manhunt);
 
         var special = adminOnly(Commands.literal("special"));
         special.then(Commands.literal("start").then(Commands.argument("player", EntityArgument.player())
@@ -811,6 +819,13 @@ public final class StrajaCommands {
                                                                                                 IntegerArgumentType.getInteger(c, "maxX"),
                                                                                                 IntegerArgumentType.getInteger(c, "maxY"),
                                                                                                 IntegerArgumentType.getInteger(c, "maxZ")))))))))))));
+        // FUN-7: lock tiers — WEAK locks fall to the crowbar, STANDARD needs cutters.
+        node.then(Commands.literal("locktier")
+                .then(Commands.argument("cell", StringArgumentType.word())
+                        .then(Commands.argument("tier", StringArgumentType.word())
+                                .executes(c -> player(c, p -> StrajaRuntime.get().prison()
+                                        .setCellLockTier(p, StringArgumentType.getString(c, "cell"),
+                                                StringArgumentType.getString(c, "tier")))))));
         // M4: locker-pool administration — arm a pick, then click chests.
         node.then(Commands.literal("pick")
                 .then(Commands.literal("locker")
@@ -2542,6 +2557,7 @@ public final class StrajaCommands {
                 new PlayerHelpEntry("/straja license", "straja.help.player.cmd.license"),
                 new PlayerHelpEntry("/straja inspect", "straja.help.player.cmd.inspect"),
                 new PlayerHelpEntry("/straja dispatch", "straja.help.player.cmd.dispatch"),
+                new PlayerHelpEntry("/straja manhunt", "straja.help.player.cmd.manhunt"),
                 new PlayerHelpEntry("/straja stop", "straja.help.player.cmd.stop"));
 
         /** Commands advertised by the player orientation — all must stay permission-0. */

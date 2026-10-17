@@ -995,5 +995,13 @@
   "straja.petition.gone": "That petition is no longer awaiting a decision.",
   "straja.petition.bad_decision": "Unknown decision — write aproba or respinge.",
   "straja.petition.denied": "You cannot decide this petition.",
-  "straja.remedy.travel": "Travel to the call's dimension first."
+  "straja.remedy.travel": "Travel to the call's dimension first.",
+  "straja.cell.tamper_duty": "You cannot force locks while on duty.",
+  "straja.cell.tamper_tier": "The crowbar only opens weak locks — this cell needs bolt cutters.",
+  "straja.cell.tamper_busy": "Someone is already working on that lock.",
+  "straja.cell.tamper_guard": "A guard is too close — the lock cannot be forced quietly.",
+  "straja.manhunt.calloff_rank": "Only an officer or the Commissioner can call off a hunt.",
+  "straja.manhunt.inactive": "That manhunt is not active anymore.",
+  "straja.help.player.cmd.manhunt": "call off an active manhunt (officers)",
+  "straja.cell.unknown": "No cell with that id."
 }
