@@ -5,6 +5,7 @@ import com.dwurdy.straja.application.port.in.FineRoleplayUseCase;
 import com.dwurdy.straja.domain.model.NpcContentId;
 import com.dwurdy.straja.domain.model.NpcSurfaceAction;
 import com.dwurdy.straja.domain.model.NpcSurfaceSnapshot;
+import com.dwurdy.straja.domain.model.Text;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -151,11 +152,11 @@ public final class NpcCivicSurfaceService {
         if (joinProfessions != null) {
             for (String profession : joinProfessions) {
                 if (profession == null) continue;
-                String normalized = profession.trim().toUpperCase(java.util.Locale.ROOT);
+                String normalized = Text.normalize(profession);
                 add(actions, parameterized("join-request", normalized),
                         "Depune cerere de muncă — "
-                                + normalized.toLowerCase(java.util.Locale.ROOT),
-                        List.of(field("reason", "Motiv (opțional)", 500, false)));
+                                + Text.displayLower(normalized),
+                        List.of(field("reason", "Motiv (opțional)", Text.REASON_LIMIT, false)));
             }
         }
         if (joinRequests != null) {
@@ -166,9 +167,10 @@ public final class NpcCivicSurfaceService {
                                 + bounded(request.subjectName(), 40) + ")", List.of());
                 add(actions, parameterized("join-review", request.requestId()),
                         "Decide " + request.requestId() + " — "
-                                + request.profession().toLowerCase(java.util.Locale.ROOT),
+                                + Text.displayLower(request.profession()),
                         List.of(field("decision", "Decizie (aproba / respinge)", 16, true),
-                                field("note", "Motiv pentru solicitant", 500, false)));
+                                field("note", "Motiv pentru solicitant",
+                                        Text.REASON_LIMIT, false)));
             }
         }
     }

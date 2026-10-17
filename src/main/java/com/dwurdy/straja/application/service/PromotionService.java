@@ -14,11 +14,9 @@ import com.dwurdy.straja.domain.model.PromotionApplication;
 import com.dwurdy.straja.domain.model.PromotionStatus;
 import com.dwurdy.straja.domain.model.PromotionStore;
 import com.dwurdy.straja.domain.model.QualificationEvidence;
+import com.dwurdy.straja.domain.model.Text;
 
 public final class PromotionService implements com.dwurdy.straja.application.port.in.PromotionV2UseCase {
-    /** Server-side cap on petition/decision text — matches the form fields. */
-    private static final int REASON_LIMIT = 500;
-
     private final PromotionRepository promotions;
     private final PersonnelRepository personnel;
     private final AuthorizationService authorization;
@@ -92,8 +90,7 @@ public final class PromotionService implements com.dwurdy.straja.application.por
     public synchronized PromotionApplication submitPetition(String subjectUuid, CareerGrade targetGrade,
                                                              String reason) {
         PromotionApplication application = submit(subjectUuid, targetGrade);
-        String normalized = reason == null ? "" : reason.trim();
-        if (normalized.length() > REASON_LIMIT) normalized = normalized.substring(0, REASON_LIMIT);
+        String normalized = Text.bounded(reason, Text.REASON_LIMIT);
         if (!isOpen(application.status)) return application;
         if (application.status == PromotionStatus.READY_FOR_APPROVAL
                 && normalized.equals(application.petitionReason)) {
@@ -195,7 +192,7 @@ public final class PromotionService implements com.dwurdy.straja.application.por
             throw new IllegalStateException("DENIED_ASSESSMENT_AUTHORITY");
         if (assessmentFingerprint == null || assessmentFingerprint.isBlank())
             throw new IllegalArgumentException("trusted assessment fingerprint required");
-        String normalized = result == null ? "" : result.trim().toUpperCase(java.util.Locale.ROOT);
+        String normalized = Text.normalize(result);
         if (!"PASS".equals(normalized) && !"FAIL".equals(normalized))
             throw new IllegalArgumentException("assessment result must be PASS or FAIL");
         return addEvidenceInternal(applicationId, actorUuid, kind, "COMMISSIONER_ASSESSMENT",
@@ -409,9 +406,7 @@ public final class PromotionService implements com.dwurdy.straja.application.por
         }
         application.status = PromotionStatus.REJECTED;
         application.reviewedBy = actorUuid == null ? "" : actorUuid;
-        String trimmed = reason == null ? "" : reason.trim();
-        application.decisionReason = trimmed.length() > REASON_LIMIT
-                ? trimmed.substring(0, REASON_LIMIT) : trimmed;
+        application.decisionReason = Text.bounded(reason, Text.REASON_LIMIT);
         application.decisionAt = clock.nowMillis();
         application.version++;
         store.storeRevision++;

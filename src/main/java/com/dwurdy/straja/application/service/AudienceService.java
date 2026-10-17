@@ -7,6 +7,7 @@ import com.dwurdy.straja.domain.model.AudienceRequest;
 import com.dwurdy.straja.domain.model.AudienceStore;
 import com.dwurdy.straja.domain.model.Rank;
 import com.dwurdy.straja.domain.model.StrajaPolicies;
+import com.dwurdy.straja.domain.model.Text;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -18,8 +19,6 @@ import java.util.List;
  * next status check or login.
  */
 public class AudienceService implements AudienceUseCase {
-    private static final int REASON_LIMIT = 500;
-
     private final StrajaContext ctx;
     private final PlayerService players;
     private final AuditService audit;
@@ -65,12 +64,11 @@ public class AudienceService implements AudienceUseCase {
             player.refuse("straja.audience.members_only", "straja.remedy.reception");
             return false;
         }
-        String text = reason == null ? "" : reason.trim();
+        String text = Text.bounded(reason, Text.REASON_LIMIT);
         if (text.isBlank()) {
             player.refuse("straja.audience.need_reason", "straja.remedy.fix_retry");
             return false;
         }
-        if (text.length() > REASON_LIMIT) text = text.substring(0, REASON_LIMIT);
         long now = now();
         String uuid = player.uuid().toString();
         AudienceStore store = ctx.audiences().read();
@@ -165,7 +163,7 @@ public class AudienceService implements AudienceUseCase {
         }
         request.status = status;
         request.resolvedBy = player.name();
-        request.resolutionNote = note == null ? "" : note.trim();
+        request.resolutionNote = Text.bounded(note, Text.REASON_LIMIT);
         request.resolvedAt = now();
         request.outcomeDelivered = false;
         ctx.audiences().write(store);

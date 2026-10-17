@@ -9,6 +9,7 @@ import com.dwurdy.straja.domain.model.JoinRequestStatus;
 import com.dwurdy.straja.domain.model.JoinRequestStore;
 import com.dwurdy.straja.domain.model.PersonnelRecord;
 import com.dwurdy.straja.domain.model.PersonnelStatus;
+import com.dwurdy.straja.domain.model.Text;
 
 /**
  * Petition-gated entry into the trades: a civilian files a work petition at
@@ -19,9 +20,6 @@ import com.dwurdy.straja.domain.model.PersonnelStatus;
  * fails closed.
  */
 public final class JoinRequestService implements com.dwurdy.straja.application.port.in.JoinRequestUseCase {
-    /** Server-side cap on petition/decision text — matches the form fields. */
-    private static final int REASON_LIMIT = 500;
-
     private final JoinRequestRepository requests;
     private final PersonnelService personnel;
     private final AuthorizationService authorization;
@@ -51,15 +49,12 @@ public final class JoinRequestService implements com.dwurdy.straja.application.p
     public synchronized JoinRequest submit(String subjectUuid, String profession, String reason) {
         if (subjectUuid == null || subjectUuid.isBlank())
             throw new IllegalArgumentException("subject required");
-        String normalizedProfession = profession == null ? ""
-                : profession.trim().toUpperCase(java.util.Locale.ROOT);
+        String normalizedProfession = Text.normalize(profession);
         java.util.Set<String> allowed = professions == null ? java.util.Set.of() : professions.get();
         if (normalizedProfession.isEmpty() || allowed == null || !allowed.contains(normalizedProfession))
             throw new IllegalArgumentException("JOIN_UNKNOWN_PROFESSION");
         requireEligibleSubject(subjectUuid);
-        String normalizedReason = reason == null ? "" : reason.trim();
-        if (normalizedReason.length() > REASON_LIMIT)
-            normalizedReason = normalizedReason.substring(0, REASON_LIMIT);
+        String normalizedReason = Text.bounded(reason, Text.REASON_LIMIT);
 
         JoinRequestStore store = requests.read();
         if (store.requests == null) store.requests = new java.util.LinkedHashMap<>();
@@ -162,9 +157,7 @@ public final class JoinRequestService implements com.dwurdy.straja.application.p
         persisted.status = JoinRequestStatus.REJECTED;
         persisted.reviewedBy = actorUuid;
         persisted.decisionAt = clock.nowMillis();
-        String trimmed = reason == null ? "" : reason.trim();
-        persisted.decisionReason = trimmed.length() > REASON_LIMIT
-                ? trimmed.substring(0, REASON_LIMIT) : trimmed;
+        persisted.decisionReason = Text.bounded(reason, Text.REASON_LIMIT);
         persisted.version++;
         store.storeRevision++;
         requests.write(store);
@@ -204,7 +197,7 @@ public final class JoinRequestService implements com.dwurdy.straja.application.p
         if (decided.status == JoinRequestStatus.APPROVED) {
             player.tell("[Straja] Cererea ta de muncă " + decided.requestId
                     + " a fost aprobată — ești acum Zilier ("
-                    + decided.profession.toLowerCase(java.util.Locale.ROOT) + ").");
+                    + Text.displayLower(decided.profession) + ").");
         } else {
             player.tell("[Straja] Cererea ta de muncă " + decided.requestId + " a fost respinsă"
                     + (decided.decisionReason.isBlank() ? "." : ": " + decided.decisionReason));

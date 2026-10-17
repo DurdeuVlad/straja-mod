@@ -11,6 +11,7 @@ import com.dwurdy.straja.application.port.in.RoleplayExpansionUseCase;
 import com.dwurdy.straja.domain.model.NpcContentId;
 import com.dwurdy.straja.domain.model.NpcSurfaceAction;
 import com.dwurdy.straja.domain.model.NpcSurfaceSnapshot;
+import com.dwurdy.straja.domain.model.Text;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -296,7 +297,7 @@ public final class NpcSecretarySurfaceService {
         if (inputs.petitionTargetName() != null && !inputs.petitionTargetName().isBlank()) {
             add(actions, "petition-request",
                     "Cere avansarea la " + inputs.petitionTargetName(),
-                    List.of(field("reason", "Motiv (opțional)", 500, false)));
+                    List.of(field("reason", "Motiv (opțional)", Text.REASON_LIMIT, false)));
         }
         for (PetitionEntry petition : inputs.petitions()) {
             if (petition == null) continue;
@@ -306,7 +307,8 @@ public final class NpcSecretarySurfaceService {
             add(actions, parameterized("petition-review", petition.applicationId()),
                     "Decide " + petition.applicationId() + " → " + petition.targetName(),
                     List.of(field("decision", "Decizie (aproba / respinge)", 16, true),
-                            field("note", "Motiv pentru solicitant", 500, false)));
+                            field("note", "Motiv pentru solicitant",
+                                    Text.REASON_LIMIT, false)));
         }
     }
 

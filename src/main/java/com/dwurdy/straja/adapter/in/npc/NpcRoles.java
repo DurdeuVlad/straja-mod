@@ -475,8 +475,7 @@ public final class NpcRoles {
                                             com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
                                             com.dwurdy.straja.application.port.out.PlayerGateway gw,
                                             String profession) {
-        String normalized = profession == null ? ""
-                : profession.trim().toUpperCase(java.util.Locale.ROOT);
+        String normalized = com.dwurdy.straja.domain.model.Text.normalize(profession);
         if (!runtime.v2Generators().professions().contains(normalized)) {
             gw.refuse("straja.trades.refused.unknown", "straja.remedy.fix_retry");
             return;
@@ -486,10 +485,11 @@ public final class NpcRoles {
                 new com.dwurdy.straja.application.port.in.FormSessionUseCase.Request(
                         com.dwurdy.straja.application.port.in.FormSessionUseCase.Action.JOIN_REQUEST,
                         normalized,
-                        "Cerere de muncă — " + normalized.toLowerCase(java.util.Locale.ROOT),
+                        "Cerere de muncă — " + com.dwurdy.straja.domain.model.Text.displayLower(normalized),
                         "Scrie motivul pentru care vrei să te înscrii la meseriași (opțional).",
                         java.util.List.of(new com.dwurdy.straja.application.port.in.FormSessionUseCase.Field(
-                                "reason", "Motiv", 500, true, false))));
+                                "reason", "Motiv",
+                                com.dwurdy.straja.domain.model.Text.REASON_LIMIT, true, false))));
     }
 
     /** Hands the reviewer a written book with the work-petition text. */
@@ -513,7 +513,7 @@ public final class NpcRoles {
                         "Cerere de muncă\n\n"
                                 + "ID: " + request.requestId + "\n"
                                 + "Solicitant: " + subjectName + "\n"
-                                + "Meserie: " + request.profession.toLowerCase(java.util.Locale.ROOT),
+                                + "Meserie: " + com.dwurdy.straja.domain.model.Text.displayLower(request.profession),
                         "Motivul solicitantului:\n\n"
                                 + (request.reason.isBlank()
                                         ? "(fără motiv scris)" : request.reason)));
@@ -548,7 +548,8 @@ public final class NpcRoles {
                                 new com.dwurdy.straja.application.port.in.FormSessionUseCase.Field(
                                         "decision", "Decizie", 16, false),
                                 new com.dwurdy.straja.application.port.in.FormSessionUseCase.Field(
-                                        "note", "Motiv pentru solicitant", 500, true, false))));
+                                        "note", "Motiv pentru solicitant",
+                                        com.dwurdy.straja.domain.model.Text.REASON_LIMIT, true, false))));
         return true;
     }
 
@@ -1290,7 +1291,8 @@ public final class NpcRoles {
                 FormSessionUseCase.Action.AUDIENCE_REQUEST, "",
                 "Cerere de audiență", "Scrie motivul pentru care ceri audiență la Comisar.",
                 java.util.List.of(new FormSessionUseCase.Field(
-                        "reason", "Motiv", 500, true))));
+                        "reason", "Motiv",
+                        com.dwurdy.straja.domain.model.Text.REASON_LIMIT, true))));
         return true;
     }
 
@@ -1304,7 +1306,8 @@ public final class NpcRoles {
                 "Decide cererea " + recordId, "Decizie: resolve sau dismiss (notă opțională).",
                 java.util.List.of(
                         new FormSessionUseCase.Field("decision", "Decizie", 16, false),
-                        new FormSessionUseCase.Field("note", "Notă pentru solicitant", 500, true, false))));
+                        new FormSessionUseCase.Field("note", "Notă pentru solicitant",
+                                com.dwurdy.straja.domain.model.Text.REASON_LIMIT, true, false))));
         return true;
     }
 
@@ -1322,7 +1325,8 @@ public final class NpcRoles {
                 "Cerere de avansare", "Scrie motivul pentru care ceri avansarea la "
                         + runtime.policies().rankName(target) + " (opțional).",
                 java.util.List.of(new FormSessionUseCase.Field(
-                        "reason", "Motiv", 500, true, false))));
+                        "reason", "Motiv",
+                        com.dwurdy.straja.domain.model.Text.REASON_LIMIT, true, false))));
         return true;
     }
 
@@ -1392,7 +1396,8 @@ public final class NpcRoles {
                 "Decizie: aproba sau respinge (motiv opțional, trimis solicitantului).",
                 java.util.List.of(
                         new FormSessionUseCase.Field("decision", "Decizie", 16, false),
-                        new FormSessionUseCase.Field("note", "Motiv pentru solicitant", 500, true, false))));
+                        new FormSessionUseCase.Field("note", "Motiv pentru solicitant",
+                                com.dwurdy.straja.domain.model.Text.REASON_LIMIT, true, false))));
         return true;
     }
 
