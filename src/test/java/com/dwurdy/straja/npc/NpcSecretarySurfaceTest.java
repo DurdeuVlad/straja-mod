@@ -67,7 +67,7 @@ class NpcSecretarySurfaceTest {
                                 com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.Action.PROMOTE,
                                 "member-1", "Member One")),
                         new GuardDutyUseCase.DutyView(
-                                false, true, "checkpoint_1", false, false, true,
+                                false, true, "checkpoint_1", false, false, false, true,
                                 false, false, false, false, false, false),
                         new ComplaintRoleplayUseCase.Limits(120, 240, 180),
                         new FineRoleplayUseCase.Limits(80, 240, 200, 160, 180),

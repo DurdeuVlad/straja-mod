@@ -482,6 +482,7 @@
   "straja.duty.not_on_duty": "You are not on duty.",
   "straja.duty.patrol_at_secretary": "Patrol duty starts at the secretary. Go to the Straja Secretary to start your shift.",
   "straja.duty.patrol_blocked": "Central authorization does not allow patrols at the current station.",
+  "straja.duty.work_blocked": "Work shifts are for the professional track. Ask the Commissioner for a trades posting.",
   "straja.duty.payment_unconfirmed": "The previous payment could not be confirmed; blocked pending the Commissioner's review.",
   "straja.duty.points_short": "%s more service points are needed.",
   "straja.duty.promote_comisar": "Promotions are the Commissioner's final call.",

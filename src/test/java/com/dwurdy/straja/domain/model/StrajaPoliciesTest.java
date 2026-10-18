@@ -80,6 +80,31 @@ class StrajaPoliciesTest {
     }
 
     @Test
+    void salaryPerGradeCarriesTheAnnouncedRates() {
+        var p = new StrajaPolicies();
+        // Part-time branches: 1/2/4 Brass = 64/128/256 Bronze.
+        assertEquals(64, p.salaryPerHour(com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STAGIAR));
+        assertEquals(128, p.salaryPerHour(com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STRAJER));
+        assertEquals(256, p.salaryPerHour(com.dwurdy.straja.domain.model.CareerGrade.MILITARY_SERGEANT));
+        assertEquals(64, p.salaryPerHour(com.dwurdy.straja.domain.model.CareerGrade.PROFESSIONAL_ZILIER));
+        assertEquals(128, p.salaryPerHour(com.dwurdy.straja.domain.model.CareerGrade.PROFESSIONAL_MESERIAS));
+        assertEquals(256, p.salaryPerHour(com.dwurdy.straja.domain.model.CareerGrade.PROFESSIONAL_MESTER));
+        // Officer corps: 8/16/24/32 Brass = 512/1024/1536/2048 Bronze.
+        assertEquals(512, p.salaryPerHour(com.dwurdy.straja.domain.model.CareerGrade.OFFICER_LOCOTENENT));
+        assertEquals(1024, p.salaryPerHour(com.dwurdy.straja.domain.model.CareerGrade.OFFICER_CAPITAN));
+        assertEquals(1536, p.salaryPerHour(com.dwurdy.straja.domain.model.CareerGrade.OFFICER_MAIOR));
+        assertEquals(2048, p.salaryPerHour(com.dwurdy.straja.domain.model.CareerGrade.OFFICER_COLONEL));
+        // An unmapped rung earns its conservative legacy projection, not zero.
+        p.salaryPerGrade.remove("MILITARY_SERGEANT");
+        assertEquals(128, p.salaryPerHour(com.dwurdy.straja.domain.model.CareerGrade.MILITARY_SERGEANT));
+        assertEquals(0, p.salaryPerHour((com.dwurdy.straja.domain.model.CareerGrade) null));
+        // The grade map round-trips through the server config encoding.
+        var parsed = StrajaPolicies.parseStringIntMap(
+                StrajaPolicies.formatStringIntMap(p.salaryPerGrade));
+        assertEquals(p.salaryPerGrade, parsed);
+    }
+
+    @Test
     void kitsRoundTripPreservesRanksAndCounts() {
         var defaults = new StrajaPolicies();
         var parsed = StrajaPolicies.parseKits(StrajaPolicies.formatKits(defaults.kits));

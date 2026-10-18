@@ -75,10 +75,13 @@ public class StrajaPolicies {
     public int missionMinMinutes = 1;
     public int missionMaxMinutes = 240;
     public int missionMaxScheduleDays = 7;
-    public int missionMaxReward = 250;
+    // Reward caps scale with the announced wage table: the per-mission
+    // ceiling is ~10h of Străjer duty, the pool and per-issuer-day budgets
+    // ~4× that, keeping the old relative bounds under the new rates.
+    public int missionMaxReward = 1280;
     public int missionMaxCopiesPerDraft = 4;
-    public int missionMaxRewardPool = 1000;
-    public int missionMaxRewardPerIssuerPerDay = 1000;
+    public int missionMaxRewardPool = 5120;
+    public int missionMaxRewardPerIssuerPerDay = 5120;
     public int missionMaxActivePerPlayer = 3;
     public int missionDefaultMinimumRank = 1;
     public int missionMaxAssignees = 4;
@@ -250,12 +253,28 @@ public class StrajaPolicies {
         return !jailerGuardImmunity || !attackerOnDutyGuard;
     }
 
-    // salary — hourly wage per docs/gameplay-decisions.md §10:
-    // Stagiar 16, Străjer 24, Locotenent 36, Căpitan 64, Colonel 96,
-    // Comisar 128 Bronze/h, accrued continuously at salaryGranularitySeconds
-    // with sub-coin carry.
-    public Map<Integer, Integer> salaryPerHour = new LinkedHashMap<>(Map.of(1, 16, 2, 24, 3, 36, 4, 64, 5, 96));
-    public int salaryCommissionerPerHour = 128;
+    // salary — hourly wage keyed by legacy rank level (V1 fallback and the
+    // mission/transfer pricing baseline). Defaults match the announced
+    // distribution in Bronze (64 Bronze = 1 Brass): Stagiar 64 (1 Brass),
+    // Străjer 128 (2), Locotenent 512 (8), Căpitan 1024 (16), Colonel 2048
+    // (32). Accrued continuously at salaryGranularitySeconds with sub-coin
+    // carry. V2 members resolve through {@link #salaryPerHour(CareerGrade)}
+    // so rungs the level ladder cannot express (Sergent, Meseriaș, Maior)
+    // keep their own announced rates.
+    public Map<Integer, Integer> salaryPerHour = new LinkedHashMap<>(Map.of(
+            1, 64, 2, 128, 3, 512, 4, 1024, 5, 2048));
+
+    /** Hourly wage in Bronze per V2 career grade — the announced rates:
+     *  part-time 1/2/4 Brass (64/128/256 Bronze), officers 8/16/24/32 Brass
+     *  (512/1024/1536/2048 Bronze). Missing entries fall back to the legacy
+     *  level-keyed {@link #salaryPerHour} at the grade's projection. */
+    public Map<String, Integer> salaryPerGrade = new LinkedHashMap<>(Map.of(
+            "MILITARY_STAGIAR", 64, "MILITARY_STRAJER", 128, "MILITARY_SERGEANT", 256,
+            "PROFESSIONAL_ZILIER", 64, "PROFESSIONAL_MESERIAS", 128, "PROFESSIONAL_MESTER", 256,
+            "OFFICER_LOCOTENENT", 512, "OFFICER_CAPITAN", 1024, "OFFICER_MAIOR", 1536,
+            "OFFICER_COLONEL", 2048));
+
+    public int salaryCommissionerPerHour = 2560;
     public int salaryGranularitySeconds = 60;
     public int serviceBlockMinutes = 10;
     public int salaryMaxPaidMinutesPerDay = 240;
@@ -733,6 +752,17 @@ public class StrajaPolicies {
 
     public int salaryPerHour(int rank) {
         return salaryPerHour.getOrDefault(rank, 0);
+    }
+
+    /**
+     * Hourly wage for a V2 career grade: {@link #salaryPerGrade} first
+     * (announced per-rung rates), then the legacy level-keyed map at the
+     * grade's conservative projection so an unmapped new rung still earns
+     * the rung below it rather than nothing.
+     */
+    public int salaryPerHour(CareerGrade grade) {
+        if (grade == null) return 0;
+        return salaryPerGrade.getOrDefault(grade.name(), salaryPerHour(grade.legacyRankLevel()));
     }
 
     /** Configurable display name for a rank level; falls back to the enum name. */

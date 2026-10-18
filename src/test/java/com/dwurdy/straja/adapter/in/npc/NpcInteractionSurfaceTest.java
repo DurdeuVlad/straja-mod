@@ -347,7 +347,7 @@ class NpcInteractionSurfaceTest {
             boolean canClaimKit, boolean canBeginResignation,
             boolean canConfirmResignation, boolean canCancelResignation, boolean canRejoin) {
         return new com.dwurdy.straja.application.port.in.GuardDutyUseCase.DutyView(
-                activeGuard, canStart, checkpointId, canStop, canClaimSalary, canViewCoins,
+                activeGuard, canStart, checkpointId, canStop, false, canClaimSalary, canViewCoins,
                 canClaimFood, canClaimKit, canBeginResignation,
                 canConfirmResignation, canCancelResignation, canRejoin);
     }

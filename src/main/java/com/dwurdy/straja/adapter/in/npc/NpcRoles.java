@@ -177,6 +177,7 @@ public final class NpcRoles {
             case "reputation-correction" -> openReputationCorrectionForm(player);
             case "duty-start" -> runtime.guardDuty().startDuty(gw);
             case "duty-stop" -> runtime.guardDuty().stopDuty(gw);
+            case "work-start" -> runtime.guardDuty().startWorkShift(gw);
             case "duty-salary" -> runtime.guardDuty().salary(gw);
             case "duty-coins" -> runtime.guardDuty().coins(gw);
             case "duty-food" -> runtime.guardDuty().food(gw);

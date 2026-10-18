@@ -389,6 +389,9 @@ final class NpcPlayerSurface {
         if (view.canStop()) {
             actions.add(new ChatAction("Încheie serviciul", "duty-stop"));
         }
+        if (view.canStartWork()) {
+            actions.add(new ChatAction("Începe tura de lucru", "work-start"));
+        }
         if (view.canClaimSalary()) {
             actions.add(new ChatAction("Ridică salariul", "duty-salary"));
         }

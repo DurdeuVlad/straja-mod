@@ -555,7 +555,7 @@ class GuardServiceTest {
         TestPlayer p = recruitToStagiar();
         standAt(p, 1);
         guards.startDuty(p);
-        // move every ~30s for 10 minutes -> 10 paid minutes at Stagiar 16/h
+        // move every ~30s for 10 minutes -> 10 paid minutes at Stagiar 64/h
         for (int i = 0; i < 20; i++) {
             p.x += 1.0;
             clock.advance(30_000);
@@ -564,7 +564,7 @@ class GuardServiceTest {
         var state = players.state(p.uuid());
         assertTrue(state.duty);
         long bonus = ctx.policies().promotionBonusHours * ctx.policies().salaryPerHour(1);
-        assertEquals(bonus + 2, state.unpaidSalary); // 600s x 16/3600 = 2.67 -> 2 coins, fraction carried
+        assertEquals(bonus + 10, state.unpaidSalary); // 600s x 64/3600 = 10.67 -> 10 coins, fraction carried
         assertEquals(1, state.serviceBlocks); // 10 minutes = 1 service point
         assertEquals(ctx.policies().requisitionPointsPerBlock, state.requisitionPoints,
                 "each service block also accrues spendable requisition points");
@@ -585,8 +585,8 @@ class GuardServiceTest {
         }
         guards.salary(p);
         var currency = (Fakes.TestCurrency) ctx.currency();
-        long expected = ctx.policies().promotionBonusHours * ctx.policies().salaryPerHour(1) + 2;
-        assertEquals(expected, currency.balance); // rank-up bonus + 10min at Stagiar 16/h
+        long expected = ctx.policies().promotionBonusHours * ctx.policies().salaryPerHour(1) + 10;
+        assertEquals(expected, currency.balance); // rank-up bonus + 10min at Stagiar 64/h
         // replay: the same payout must not double-deliver
         guards.salary(p);
         assertEquals(expected, currency.balance);
@@ -1146,6 +1146,118 @@ class GuardServiceTest {
         assertEquals("voluntary_stop", state.lastEndReason);
         assertTrue(countItem(senior, "minecraft:iron_sword") > 0 || countItem(senior, "minecraft:diamond_sword") > 0,
                 "owned gear stays after a free shift ends");
+    }
+
+    // ------------------------------------------------------------ work shifts (announced part-time pay)
+
+    private TestPlayer tradesman(com.dwurdy.straja.domain.model.CareerGrade grade, String name) {
+        TestPlayer p = server.add(name);
+        v2Personnel.authorize("bootstrap", p.uuid().toString(), grade,
+                com.dwurdy.straja.domain.model.EmploymentMode.PART_TIME,
+                "TEST", "hq", "auth:" + name);
+        return p;
+    }
+
+    @Test
+    void workShiftPaysTheProfessionalHourlyRate() {
+        TestPlayer p = tradesman(com.dwurdy.straja.domain.model.CareerGrade.PROFESSIONAL_MESERIAS,
+                "meserias");
+        guards.startWorkShift(p);
+        var state = players.state(p.uuid());
+        assertTrue(state.duty);
+        assertEquals("WORK", state.mode);
+        guards.tickPlayerDuty(p); // stamps the movement marker before the shift ages
+        // one hour on site, moving every 30s — the announced 2-Brass rate (128 Bronze)
+        for (int i = 0; i < 120; i++) {
+            p.x += 1.0;
+            clock.advance(30_000);
+            guards.tickPlayerDuty(p);
+        }
+        state = players.state(p.uuid());
+        assertTrue(state.duty);
+        assertEquals(128, state.unpaidSalary, "Meseriaș earns the announced 2-Brass hourly rate");
+        assertTrue(state.serviceBlocks > 0, "work shifts bank promotion service credit");
+        assertTrue(state.requisitionPoints > 0, "work shifts accrue requisition points like duty");
+    }
+
+    @Test
+    void workShiftStopsWithRegularStopAndSkipsSecretary() {
+        TestPlayer p = tradesman(com.dwurdy.straja.domain.model.CareerGrade.PROFESSIONAL_MESTER,
+                "maistru");
+        guards.startWorkShift(p);
+        guards.tickPlayerDuty(p); // stamps the movement marker before the shift ages
+        for (int i = 0; i < 120; i++) {
+            p.x += 1.0;
+            clock.advance(30_000);
+            guards.tickPlayerDuty(p);
+        }
+        guards.stopDuty(p);
+        var state = players.state(p.uuid());
+        assertFalse(state.duty);
+        assertEquals("voluntary_stop", state.lastEndReason);
+        assertEquals(256, state.unpaidSalary, "Maistru earns the announced 4-Brass hourly rate");
+    }
+
+    @Test
+    void workShiftAfkPausesAndResumesAccrual() {
+        TestPlayer p = tradesman(com.dwurdy.straja.domain.model.CareerGrade.PROFESSIONAL_ZILIER,
+                "zilier");
+        guards.startWorkShift(p);
+        guards.tickPlayerDuty(p); // first tick stamps the movement marker
+        clock.advance(3600_000L); // an hour without moving
+        guards.tickPlayerDuty(p);
+        var state = players.state(p.uuid());
+        assertTrue(state.duty);
+        assertTrue(state.salaryActivityPaused, "AFK tradesmen stop earning like AFK soldiers");
+        p.x += 5.0;
+        clock.advance(1_000);
+        guards.tickPlayerDuty(p);
+        assertFalse(players.state(p.uuid()).salaryActivityPaused, "movement resumes the wage");
+    }
+
+    @Test
+    void workShiftRefusesCiviliansAndSwornEnlisted() {
+        TestPlayer civilian = server.add("civil");
+        guards.startWorkShift(civilian);
+        assertFalse(players.state(civilian.uuid()).duty);
+
+        TestPlayer soldier = recruitToStagiar();
+        guards.startWorkShift(soldier);
+        assertFalse(players.state(soldier.uuid()).duty,
+                "the military track patrols; the work shift is the trades surface");
+    }
+
+    @Test
+    void workShiftHonorsMemberStateSuspensions() {
+        TestPlayer p = tradesman(com.dwurdy.straja.domain.model.CareerGrade.PROFESSIONAL_ZILIER,
+                "zilier_state");
+        // V2 lifecycle flags are projected from the personnel record —
+        // suspend the member the authoritative way.
+        v2Personnel.suspend("commissioner", p.uuid().toString(), "TEST");
+        guards.startWorkShift(p);
+        assertFalse(players.state(p.uuid()).duty,
+                "a suspended tradesman cannot start a paid work shift");
+
+        v2Personnel.reinstate("commissioner", p.uuid().toString());
+        var state = players.state(p.uuid());
+        state.resignationPending = true;
+        players.save(p.uuid(), state);
+        guards.startWorkShift(p);
+        assertFalse(players.state(p.uuid()).duty,
+                "a resigning member cannot start a paid work shift");
+    }
+
+    @Test
+    void dutyViewOffersWorkShiftToTrades() {
+        TestPlayer p = tradesman(com.dwurdy.straja.domain.model.CareerGrade.PROFESSIONAL_ZILIER,
+                "zilier_view");
+        var view = guards.dutyView(p);
+        assertTrue(view.canStartWork());
+        assertFalse(view.canStart());
+        guards.startWorkShift(p);
+        var onShift = guards.dutyView(p);
+        assertFalse(onShift.canStartWork());
+        assertTrue(onShift.canStop(), "a trades member can always end their own work shift");
     }
 
     @Test

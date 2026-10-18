@@ -703,16 +703,16 @@ class MissionServiceTest {
     }
 
     @Test
-    void strajerTemplateTwoHoursRisk15Calculates72PerParticipant() {
+    void strajerTemplateTwoHoursRisk15Calculates384PerParticipant() {
         missions.templateCreate(commissar, "Interventie", 2, 2.0, 1.5, 2, 120, "Obj", true);
         holdCarnet(lt);
         missions.draftFromTemplate(lt, "T4");
         MissionDraft draft = draftOf(lt);
         assertNotNull(draft);
-        assertEquals(72, draft.reward,
-                "Străjer 24 B/h × 2 h × risc 1.5 = 72 B/participant");
-        assertEquals(144, draft.rewardPool,
-                "two paid participants reserve a 144 B maximum budget");
+        assertEquals(384, draft.reward,
+                "Străjer 128 B/h × 2 h × risc 1.5 = 384 B/participant");
+        assertEquals(768, draft.rewardPool,
+                "two paid participants reserve a 768 B maximum budget");
         assertEquals("T4", draft.templateId);
         assertTrue(draft.supersedesPatrol);
         assertEquals(2, draft.maxCopies);
@@ -723,12 +723,12 @@ class MissionServiceTest {
         missions.templateCreate(commissar, "Runda", 2, 2.0, 1.0, 1, 60, "Obj", false);
         holdCarnet(lt);
         missions.draftFromTemplate(lt, "T4");
-        assertEquals(48, draftOf(lt).reward, "24 B/h × 2 h × 1.0");
+        assertEquals(256, draftOf(lt).reward, "128 B/h × 2 h × 1.0");
         ctx.policies().salaryPerHour.put(2, 36);
         missions.draftFromTemplate(lt, "T4");
         assertEquals(72, draftOf(lt).reward,
                 "template rewards re-derive from the live wage table, not a stored value");
-        ctx.policies().salaryPerHour.put(2, 24);
+        ctx.policies().salaryPerHour.put(2, 128);
     }
 
     @Test
@@ -763,16 +763,16 @@ class MissionServiceTest {
         missions.templateCreate(commissar, "Interventie", 2, 2.0, 1.5, 1, 120, "Obj", false);
         holdCarnet(lt);
         missions.draftFromTemplate(lt, "T4");
-        // calculated 72; margin 25% → limit 90; explicit 100 needs a reason
-        missions.draftAdjust(lt, "2", "1.5", "100", "");
-        assertEquals(72, draftOf(lt).reward,
+        // calculated 384; margin 25% → limit 480; explicit 500 needs a reason
+        missions.draftAdjust(lt, "2", "1.5", "500", "");
+        assertEquals(384, draftOf(lt).reward,
                 "an over-limit override without a reason must not apply");
         assertTrue(lt.told("Precizează un motiv"));
-        missions.draftAdjust(lt, "2", "1.5", "100", "amenințare iminentă");
-        assertEquals(100, draftOf(lt).reward);
+        missions.draftAdjust(lt, "2", "1.5", "500", "amenințare iminentă");
+        assertEquals(500, draftOf(lt).reward);
         assertEquals("amenințare iminentă", draftOf(lt).overrideReason);
         assertTrue(audit.tail(30).stream().anyMatch(e ->
-                "mission_reward_override".equals(e.action) && e.details.contains("requested=100")),
+                "mission_reward_override".equals(e.action) && e.details.contains("requested=500")),
                 "the over-limit override must be audited");
     }
 
@@ -781,7 +781,7 @@ class MissionServiceTest {
         missions.templateCreate(commissar, "Interventie", 2, 2.0, 1.5, 1, 120, "Obj", false);
         holdCarnet(lt);
         missions.draftFromTemplate(lt, "T4");
-        missions.draftAdjust(lt, "2", "1.5", "80", ""); // 80 ≤ 90 limit
+        missions.draftAdjust(lt, "2", "1.5", "80", ""); // 80 ≤ 480 limit
         assertEquals(80, draftOf(lt).reward);
     }
 
@@ -796,16 +796,16 @@ class MissionServiceTest {
         Mission m = latest();
         assertEquals("T4", m.templateId);
         assertTrue(m.supersedesPatrol);
-        assertEquals(72, m.reward);
-        assertEquals(72, m.issuerBudgetAmount);
+        assertEquals(384, m.reward);
+        assertEquals(384, m.issuerBudgetAmount);
         missions.accept(g1, m.id);
         missions.report(g1, m.id, "terminat");
         var currency = (TestCurrency) ctx.currency();
         int calls = currency.depositCalls;
         assertTrue(missions.complete(commissar, m.id));
         assertTrue(currency.depositCalls > calls,
-                "completion auto-pays the online participant the calculated 72 B");
-        assertEquals(72, currency.lastAmount);
+                "completion auto-pays the online participant the calculated 384 B");
+        assertEquals(384, currency.lastAmount);
         calls = currency.depositCalls;
         assertFalse(missions.claimReward(g1, m.id),
                 "the already-paid claim must refuse a second payout");
