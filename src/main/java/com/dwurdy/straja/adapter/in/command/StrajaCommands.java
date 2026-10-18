@@ -221,6 +221,55 @@ public final class StrajaCommands {
                                         StringArgumentType.getString(c, "text"))))));
         root.then(iou);
 
+        // FUN-11: parole & appeal — the social route out. Prisoners file onto
+        // the docket and track eligibility; officers open hearings, victims
+        // object inside a bounded window, advocates consent to speak, and the
+        // decision lands PAROLED / DENIED / CONDITIONAL.
+        var parole = Commands.literal("parole");
+        parole.executes(c -> player(c, StrajaRuntime.get().parole()::status));
+        parole.then(Commands.literal("file")
+                .executes(c -> player(c, p -> StrajaRuntime.get().parole()
+                        .file(p, "PAROLE", "")))
+                .then(Commands.argument("reason", StringArgumentType.greedyString())
+                        .executes(c -> player(c, p -> StrajaRuntime.get().parole()
+                                .file(p, "PAROLE",
+                                        StringArgumentType.getString(c, "reason"))))));
+        parole.then(Commands.literal("appeal")
+                .executes(c -> player(c, p -> StrajaRuntime.get().parole()
+                        .file(p, "APPEAL", "")))
+                .then(Commands.argument("reason", StringArgumentType.greedyString())
+                        .executes(c -> player(c, p -> StrajaRuntime.get().parole()
+                                .file(p, "APPEAL",
+                                        StringArgumentType.getString(c, "reason"))))));
+        parole.then(Commands.literal("checkin")
+                .executes(c -> player(c, StrajaRuntime.get().parole()::checkIn)));
+        parole.then(Commands.literal("settle")
+                .executes(c -> player(c, p -> StrajaRuntime.get().parole().settle(p))));
+        parole.then(Commands.literal("docket")
+                .executes(c -> player(c, StrajaRuntime.get().parole()::docket)));
+        parole.then(Commands.literal("open").then(Commands.argument("id", StringArgumentType.word())
+                .executes(c -> player(c, p -> StrajaRuntime.get().parole()
+                        .open(p, StringArgumentType.getString(c, "id"))))));
+        parole.then(Commands.literal("decide")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("outcome", StringArgumentType.word())
+                                .executes(c -> player(c, p -> StrajaRuntime.get().parole()
+                                        .decide(p, StringArgumentType.getString(c, "id"),
+                                                StringArgumentType.getString(c, "outcome")))))));
+        parole.then(Commands.literal("object").then(Commands.argument("id", StringArgumentType.word())
+                .executes(c -> player(c, p -> StrajaRuntime.get().parole()
+                        .object(p, StringArgumentType.getString(c, "id"))))));
+        parole.then(Commands.literal("advocate").then(Commands.argument("player", StringArgumentType.word())
+                .executes(c -> player(c, p -> StrajaRuntime.get().parole()
+                        .advocate(p, StringArgumentType.getString(c, "player"))))));
+        parole.then(Commands.literal("agree")
+                .executes(c -> player(c, p -> StrajaRuntime.get().parole()
+                        .advocateAnswer(p, true))));
+        parole.then(Commands.literal("decline")
+                .executes(c -> player(c, p -> StrajaRuntime.get().parole()
+                        .advocateAnswer(p, false))));
+        root.then(parole);
+
         var special = adminOnly(Commands.literal("special"));
         special.then(Commands.literal("start").then(Commands.argument("player", EntityArgument.player())
                 .executes(c -> { StrajaRuntime.get().guards().specialStart(actor(c), target(c, "player")); return 1; })));
@@ -2670,6 +2719,7 @@ public final class StrajaCommands {
                 new PlayerHelpEntry("/straja job", "straja.help.player.cmd.job"),
                 new PlayerHelpEntry("/straja trade", "straja.help.player.cmd.trade"),
                 new PlayerHelpEntry("/straja iou", "straja.help.player.cmd.iou"),
+                new PlayerHelpEntry("/straja parole", "straja.help.player.cmd.parole"),
                 new PlayerHelpEntry("/straja stop", "straja.help.player.cmd.stop"));
 
         /** Commands advertised by the player orientation — all must stay permission-0. */

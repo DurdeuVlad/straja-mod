@@ -75,6 +75,7 @@ public final class StrajaEvents {
         runtime.transfers().tick();
         runtime.escapes().tick();
         runtime.prisonJobs().tick();
+        runtime.parole().tick();
         // FUN-7: hunts decay to warrants; hunters get fading hints.
         runtime.manhunts().tick();
         // FUN-4: unsigned reports past deadline auto-file from the ledger.

@@ -421,6 +421,26 @@ public class StrajaPolicies {
     /** Bound on retained job runs and settled trade ledger rows. */
     public int jobRetentionLimit = 200;
 
+    // FUN-11: parole & appeal hearings.
+    /** Minimum FUN-10 standing before a prisoner may file for a hearing. */
+    public int paroleMinStanding = 50;
+    /** Percent of the active sentence's active time already served. */
+    public int paroleMinServedPercent = 50;
+    /** Clean-record window — no escape flag inside this many hours. */
+    public int paroleCleanHours = 48;
+    /** Bounded victim-objection window once a hearing opens (minutes). */
+    public int paroleObjectionMinutes = 5;
+    /** Cooldown before a DENIED prisoner may refile (hours). */
+    public int paroleRefusalCooldownHours = 24;
+    /** Parole window length — the parolee stays marked until it ends (hours). */
+    public int paroleLengthHours = 72;
+    /** Check-in cadence — a missed deadline flags the parolee wanted (hours). */
+    public int paroleCheckInHours = 12;
+    /** Labor-account bail a CONDITIONAL outcome demands (0 = free release). */
+    public int paroleBailAmount = 100;
+    /** Conditional settlement window (hours) before the hearing lapses. */
+    public int paroleConditionalHours = 24;
+
     public int nativeFactionMaxLength = 40;
 
     // §11: activity reports — a reporting interval runs per member; overdue

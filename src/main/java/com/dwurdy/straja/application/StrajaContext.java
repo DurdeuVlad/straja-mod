@@ -55,4 +55,5 @@ public record StrajaContext(
         WorldContainerGateway containers,
         NpcGuardGateway npcGuards,
         DeepScanGateway deepScan,
-        JobRepository jobs) {}
+        JobRepository jobs,
+        ParoleRepository paroles) {}

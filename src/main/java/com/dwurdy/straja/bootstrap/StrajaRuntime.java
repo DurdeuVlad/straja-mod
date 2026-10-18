@@ -74,6 +74,7 @@ public final class StrajaRuntime {
     private final com.dwurdy.straja.application.service.TransferService transfers;
     private final com.dwurdy.straja.application.service.EscapeService escapes;
     private com.dwurdy.straja.application.service.PrisonJobService prisonJobs;
+    private com.dwurdy.straja.application.service.ParoleService parole;
     private final com.dwurdy.straja.application.service.BoloService bolos;
     private final com.dwurdy.straja.application.service.BountyService bounties;
     private final com.dwurdy.straja.application.service.ProtocolService protocol;
@@ -207,7 +208,8 @@ public final class StrajaRuntime {
                 new com.dwurdy.straja.adapter.out.minecraft.MinecraftContainerGateway(server),
                 com.dwurdy.straja.adapter.out.npc.customnpcs.CustomNpcsGuardGateway.create(server),
                 new com.dwurdy.straja.adapter.out.minecraft.MinecraftDeepScanGateway(server),
-                new SavedStores.Jobs(stores));
+                new SavedStores.Jobs(stores),
+                new SavedStores.Paroles(stores));
 
         this.v2PersonnelRepository = new SavedStores.Personnel(stores);
         this.v2PromotionRepository = new SavedStores.Promotions(stores);
@@ -430,6 +432,12 @@ public final class StrajaRuntime {
                 ctx, players, audit);
         this.prisonJobs.useDispatch(this.dispatch);
         this.escapes.useJobs(this.prisonJobs);
+        // FUN-11: the parole docket — FUN-10 standing feeds eligibility,
+        // FUN-1 delegation sweeps CLEAN hearings, violations re-flag wanted.
+        this.parole = new com.dwurdy.straja.application.service.ParoleService(
+                ctx, players, audit);
+        this.parole.usePrison(this.prison);
+        this.delegation.useParole(this.parole);
         this.evidence = new com.dwurdy.straja.application.service.EvidenceService(ctx, players, audit);
         this.arrestRecords = new com.dwurdy.straja.application.service.ArrestRecordService(ctx, players, audit);
         this.reputation = new com.dwurdy.straja.application.service.ReputationService(
@@ -674,6 +682,7 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.service.TransferService transfers() { return transfers; }
     public com.dwurdy.straja.application.service.EscapeService escapes() { return escapes; }
     public com.dwurdy.straja.application.service.PrisonJobService prisonJobs() { return prisonJobs; }
+    public com.dwurdy.straja.application.service.ParoleService parole() { return parole; }
     public com.dwurdy.straja.application.service.BoloService bolos() { return bolos; }
 
     public com.dwurdy.straja.application.service.BountyService bounties() { return bounties; }

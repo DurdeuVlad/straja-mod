@@ -356,6 +356,15 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.IntValue STANDING_JAM_PENALTY;
     public static final ModConfigSpec.IntValue INSPECTION_CALL_INTERVAL_MINUTES;
     public static final ModConfigSpec.IntValue JOB_RETENTION_LIMIT;
+    public static final ModConfigSpec.IntValue PAROLE_MIN_STANDING;
+    public static final ModConfigSpec.IntValue PAROLE_MIN_SERVED_PERCENT;
+    public static final ModConfigSpec.IntValue PAROLE_CLEAN_HOURS;
+    public static final ModConfigSpec.IntValue PAROLE_OBJECTION_MINUTES;
+    public static final ModConfigSpec.IntValue PAROLE_REFUSAL_COOLDOWN_HOURS;
+    public static final ModConfigSpec.IntValue PAROLE_LENGTH_HOURS;
+    public static final ModConfigSpec.IntValue PAROLE_CHECK_IN_HOURS;
+    public static final ModConfigSpec.IntValue PAROLE_BAIL_AMOUNT;
+    public static final ModConfigSpec.IntValue PAROLE_CONDITIONAL_HOURS;
     public static final ModConfigSpec.DoubleValue ESCORT_TETHER_RADIUS;
     public static final ModConfigSpec.DoubleValue ESCORT_GATE_BYPASS_RADIUS;
     public static final ModConfigSpec.DoubleValue ESCORT_TELEPORT_DISTANCE;
@@ -1368,6 +1377,36 @@ public final class StrajaServerConfig {
                 .defineInRange("retentionLimit", defaults.jobRetentionLimit, 10, 100000);
         B.pop();
 
+        B.push("parole");
+        PAROLE_MIN_STANDING = B.comment(
+                        "FUN-10 standing needed before a prisoner may file.")
+                .defineInRange("minStanding", defaults.paroleMinStanding, 0, 100000);
+        PAROLE_MIN_SERVED_PERCENT = B.comment(
+                        "Percent of active sentence time already served.")
+                .defineInRange("minServedPercent", defaults.paroleMinServedPercent, 0, 100);
+        PAROLE_CLEAN_HOURS = B.comment(
+                        "Hours with no escape flag before parole is eligible.")
+                .defineInRange("cleanHours", defaults.paroleCleanHours, 0, 100000);
+        PAROLE_OBJECTION_MINUTES = B.comment(
+                        "Minutes online victims get to object at a hearing.")
+                .defineInRange("objectionMinutes", defaults.paroleObjectionMinutes, 0, 1440);
+        PAROLE_REFUSAL_COOLDOWN_HOURS = B.comment(
+                        "Hours a DENIED prisoner waits before refiling.")
+                .defineInRange("refusalCooldownHours", defaults.paroleRefusalCooldownHours, 0, 100000);
+        PAROLE_LENGTH_HOURS = B.comment(
+                        "Hours a parolee stays under conditions.")
+                .defineInRange("lengthHours", defaults.paroleLengthHours, 1, 100000);
+        PAROLE_CHECK_IN_HOURS = B.comment(
+                        "Hours between required parolee check-ins.")
+                .defineInRange("checkInHours", defaults.paroleCheckInHours, 1, 100000);
+        PAROLE_BAIL_AMOUNT = B.comment(
+                        "Labor-account bail a CONDITIONAL outcome demands.")
+                .defineInRange("bailAmount", defaults.paroleBailAmount, 0, 1000000);
+        PAROLE_CONDITIONAL_HOURS = B.comment(
+                        "Hours a CONDITIONAL decision waits for settlement.")
+                .defineInRange("conditionalHours", defaults.paroleConditionalHours, 1, 100000);
+        B.pop();
+
         B.push("audit");
         AUDIT_ENABLED = B.define("enabled", true);
         AUDIT_RETENTION_LIMIT = B.defineInRange("retentionLimit", 500, 10, 100000);
@@ -1761,6 +1800,15 @@ public final class StrajaServerConfig {
         p.standingJamPenalty = STANDING_JAM_PENALTY.get();
         p.inspectionCallIntervalMinutes = INSPECTION_CALL_INTERVAL_MINUTES.get();
         p.jobRetentionLimit = JOB_RETENTION_LIMIT.get();
+        p.paroleMinStanding = PAROLE_MIN_STANDING.get();
+        p.paroleMinServedPercent = PAROLE_MIN_SERVED_PERCENT.get();
+        p.paroleCleanHours = PAROLE_CLEAN_HOURS.get();
+        p.paroleObjectionMinutes = PAROLE_OBJECTION_MINUTES.get();
+        p.paroleRefusalCooldownHours = PAROLE_REFUSAL_COOLDOWN_HOURS.get();
+        p.paroleLengthHours = PAROLE_LENGTH_HOURS.get();
+        p.paroleCheckInHours = PAROLE_CHECK_IN_HOURS.get();
+        p.paroleBailAmount = PAROLE_BAIL_AMOUNT.get();
+        p.paroleConditionalHours = PAROLE_CONDITIONAL_HOURS.get();
         p.transferRideEnabled = TRANSFER_RIDE_ENABLED.get();
         p.transferMinRideBlocks = TRANSFER_MIN_RIDE_BLOCKS.get();
         p.transferEscortWaitMinutes = TRANSFER_ESCORT_WAIT_MINUTES.get();
