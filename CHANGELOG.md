@@ -1,31 +1,75 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 — 2026-10-18
+
+The Straja career epic: the faction now matches the public recruitment
+announcement — two part-time corps, a four-grade officer ladder, announced
+hourly wages, weekly activity minimums, and officer postings — on top of the
+FUN overhaul (delegated authority, work economy, paperwork, duty presence,
+dispatch, prison escapes, prison economy, parole). All persisted stores
+upgrade in place; no world migration is required over 0.4.0.
+
+### Announced rank & pay parity (RPP-1..4)
+
+- Military part-time: **Stagiar → Străjer → Sergent**; professional:
+  **Zilier → Meseriaș → Maistru**; officers:
+  **Locotenent → Căpitan → Maior → Colonel**. `CareerGrade.nextGrade()` is
+  the single transition source; demotion returns officers to their origin
+  track's top rung.
+- Announced hourly wages at the 64:1 bronze ratio — part-time
+  64/128/256, officers 512/1024/1536/2048 — via grade-keyed
+  `salaryPerGrade` (legacy level-keyed map stays as fallback for non-V2
+  records). Mission reward caps rescaled to the wage economy.
+- **Trades work shifts** (`WORK` duty mode): professional members earn
+  hourly like enlisted — same accrual engine, same anti-AFK gate, no
+  routes or checkpoints, stoppable via `/straja stop`.
+- **Weekly minimum activity**: `lastActiveAt` stamps on login + duty;
+  dossiers flag `INACTIVE` past `weeklyInactivityDays` (default 7).
+  `/straja absence <days> [reason]` files an audited Comandament notice
+  (≤ `absenceMaxNoticeDays`, default 30); returning early clears it.
+- **Officer postings**: `POSTING` appointments carry a Comandament-set
+  title + station + jurisdiction — sections and specialist desks —
+  audited and revocable via `/straja admin personnel post|revoke`.
+  Organizational only; capabilities stay grade-uniform by design.
+
+### Duty presence (RP-friendly AFK + disconnect handling)
+
+- Anti-AFK grace 90s → **15min** and **chat counts as activity** —
+  presence on an RP server is talking, not shuffling.
+- Disconnect **pauses the shift**: the wage clock resets at rejoin so
+  offline minutes never pay. Away longer than
+  `dutyAutoEndOfflineMinutes` (default 5, 0 disables) auto-ends the
+  shift with earned wages still claimable, audited.
+
+### FUN overhaul (#264–#273)
+
+- FUN-1 delegated authority — bounded standing orders + revocation for
+  safe delegable actions, fail-closed everywhere else.
+- FUN-3 work economy; FUN-4 paperwork; FUN-5 duty presence; FUN-6
+  dispatch pipeline; FUN-7 prison breaks; FUN-8 transfer rides; FUN-9
+  escape paths; FUN-10 prison economy; FUN-11 parole & appeal hearings.
 
 ### Rank remodel + petition flows
 
-- Career ladder remodelled: enlisted **Stagiar → Străjer** (part-time,
-  auto-join), trades **Zilier → Meșter** (part-time, petition-join), officer
-  corps **Locotenent → Căpitan → Colonel** (full-time, petition-promote).
-  Comisar stays an appointment flag, not a ladder step.
 - **Persisted saves migrate on load**: legacy grade names (`SERGENT`,
-  `STAGIAR_SPECIALIST`, `SPECIALIST`, `MAISTRU`, `INSPECTOR`) remap to the
-  new enum; unknown values still fail closed into corrupt-backup. Checkpoint
-  `roleBans` keep matching migrated records via legacy role aliases.
+  `STAGIAR_SPECIALIST`, `SPECIALIST`, `MAISTRU`, `INSPECTOR`) remap —
+  persisted `MILITARY_SERGENT` still means Locotenent, as it always did.
+  Unknown values fail closed into corrupt-backup; checkpoint `roleBans`
+  keep matching migrated records via legacy role aliases.
 - All officer grades share the full non-Comisar capability set;
   professional-origin officers keep the mobilization-gated patrol rule.
 - **Join quiz simplified**: fixed-order 6-question bank, pass at ≥5/6,
   per-question feedback, cooldown + full retake on failure.
 - **Promotion petitions at the Secretary**: "Cere avansarea" files an
-  optional-reason petition straight to review — no evidence/readiness
-  stages. The Comisar reads each petition as a written book (with advisory
-  service stats) and stamps Aprobă/Respinge in a form bound to the
-  application version, so a stale review fails closed. Outcomes reach the
-  applicant live or on next login.
+  optional-reason petition straight to review. The Comisar reads each
+  petition as a written book (with advisory service stats) and stamps
+  Aprobă/Respinge in a form bound to the application version, so a stale
+  review fails closed. Outcomes reach the applicant live or on next
+  login.
 - **Trades join petitions at the Receptionist**: choosing a profession
-  opens a work-petition form; the Comisar reviews at the Receptionist and
-  approval enrolls a part-time Zilier. Sworn members, suspended and fired
-  records cannot petition.
+  opens a work-petition form; the Comisar reviews and approval enrolls a
+  part-time Zilier. Sworn members, suspended and fired records cannot
+  petition.
 - Admin `promote` now means "approve the member's filed petition"; the
   legacy direct rank-bump path is removed.
 
