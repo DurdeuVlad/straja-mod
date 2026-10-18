@@ -920,9 +920,12 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
 
     private List<StrajaPolicies.QuizQuestion> examBank(
             com.dwurdy.straja.domain.model.CareerGrade target) {
-        int level = target.legacyRankLevel();
+        // Soldier steps are exam-gated; keying by career step lets each new
+        // rung draw a deeper pool (SERGEANT at step 3 sees more than STRAJER
+        // at step 2) where legacyRankLevel could not tell them apart.
+        int step = target.careerStep();
         return ctx.policies().trainingQuiz.stream()
-                .filter(q -> q.minRank() <= level)
+                .filter(q -> q.minRank() <= step)
                 .toList();
     }
 

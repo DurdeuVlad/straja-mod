@@ -1289,12 +1289,12 @@ class GuardServiceTest {
         guards.requestPromotion(p);
         assertTrue(p.told("puncte de serviciu"));
         assertNull(v2Promotions.findOpen(p.uuid().toString(),
-                com.dwurdy.straja.domain.model.CareerGrade.PROFESSIONAL_MESTER));
+                com.dwurdy.straja.domain.model.CareerGrade.PROFESSIONAL_MESERIAS));
         // With the XP banked, the ask files into the officer review queue.
         setBlocks(p, 60);
         guards.requestPromotion(p);
         assertNotNull(v2Promotions.findOpen(p.uuid().toString(),
-                com.dwurdy.straja.domain.model.CareerGrade.PROFESSIONAL_MESTER));
+                com.dwurdy.straja.domain.model.CareerGrade.PROFESSIONAL_MESERIAS));
     }
 
     @Test

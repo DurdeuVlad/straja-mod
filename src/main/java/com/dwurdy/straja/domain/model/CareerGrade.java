@@ -2,23 +2,29 @@ package com.dwurdy.straja.domain.model;
 
 /**
  * Career ladder: two part-time tracks feed a shared full-time officer
- * corps. Enlisted (auto-join by quiz) STAGIAR → STRAJER; trades
- * (petition-join) ZILIER → MESTER; officers (petition-promote, full-time)
- * LOCOTENENT → CAPITAN → COLONEL. All officer grades share the same broad
- * mechanical authority — specialties are RP flavor via professions and
- * rankName, not capability gates.
+ * corps, matching the announced distribution — enlisted (auto-join by
+ * quiz) STAGIAR → STRAJER → SERGEANT; trades (petition-join) ZILIER →
+ * MESERIAS → MESTER ("Maistru"); officers (petition-promote, full-time)
+ * LOCOTENENT → CAPITAN → MAIOR → COLONEL. All officer grades share the
+ * same broad mechanical authority — specialties are RP flavor via
+ * professions and rankName, not capability gates.
  *
  * <p>Persisted by enum name in Gson stores; {@link #of(String)} maps the
  * pre-remodel names so old saves read forward instead of failing closed
- * into corrupt_backup.
+ * into corrupt_backup. The third enlisted rung is named SERGEANT rather
+ * than SERGENT specifically so the persisted name MILITARY_SERGENT keeps
+ * resolving to the pre-remodel officer tier (LOCOTENENT).
  */
 public enum CareerGrade {
     MILITARY_STAGIAR(CareerTrack.MILITARY, false, "Stagiar"),
     MILITARY_STRAJER(CareerTrack.MILITARY, false, "Străjer"),
+    MILITARY_SERGEANT(CareerTrack.MILITARY, false, "Sergent"),
     PROFESSIONAL_ZILIER(CareerTrack.PROFESSIONAL, false, "Zilier"),
-    PROFESSIONAL_MESTER(CareerTrack.PROFESSIONAL, false, "Meșter"),
+    PROFESSIONAL_MESERIAS(CareerTrack.PROFESSIONAL, false, "Meseriaș"),
+    PROFESSIONAL_MESTER(CareerTrack.PROFESSIONAL, false, "Maistru"),
     OFFICER_LOCOTENENT(CareerTrack.OFFICER, true, "Locotenent"),
     OFFICER_CAPITAN(CareerTrack.OFFICER, true, "Căpitan"),
+    OFFICER_MAIOR(CareerTrack.OFFICER, true, "Maior"),
     OFFICER_COLONEL(CareerTrack.OFFICER, true, "Colonel");
 
     private final CareerTrack track;
@@ -58,32 +64,40 @@ public enum CareerGrade {
 
     /**
      * The inverse bridge: this grade's level on the legacy {@link Rank}
-     * ladder. Trades grades read as CIVIL — the V1 ladder has no trades rung.
+     * ladder. Trades grades read as CIVIL — the V1 ladder has no trades
+     * rung — and the added rungs project conservatively onto the nearest
+     * lower rung the V1 ladder can express (SERGEANT → GUARD, MAIOR →
+     * CAPITAN); grade-aware surfaces distinguish what the projection cannot.
      */
     public int legacyRankLevel() {
         return switch (this) {
             case MILITARY_STAGIAR -> Rank.STAGIAR.level();
-            case MILITARY_STRAJER -> Rank.GUARD.level();
+            case MILITARY_STRAJER, MILITARY_SERGEANT -> Rank.GUARD.level();
             case OFFICER_LOCOTENENT -> Rank.LOCOTENENT.level();
-            case OFFICER_CAPITAN -> Rank.CAPITAN.level();
+            case OFFICER_CAPITAN, OFFICER_MAIOR -> Rank.CAPITAN.level();
             case OFFICER_COLONEL -> Rank.COLONEL.level();
-            case PROFESSIONAL_ZILIER, PROFESSIONAL_MESTER -> Rank.CIVIL.level();
+            case PROFESSIONAL_ZILIER, PROFESSIONAL_MESERIAS,
+                    PROFESSIONAL_MESTER -> Rank.CIVIL.level();
         };
     }
 
     /**
      * Next petitionable grade, or null at the top of the ladder. The two
      * part-time tracks both feed OFFICER_LOCOTENENT; officers climb
-     * LT → CPT → COL. Single source of truth for promotion transitions.
+     * LT → CPT → MAIOR → COL. Single source of truth for promotion
+     * transitions.
      */
     public CareerGrade nextGrade() {
         return switch (this) {
             case MILITARY_STAGIAR -> MILITARY_STRAJER;
-            case MILITARY_STRAJER -> OFFICER_LOCOTENENT;
-            case PROFESSIONAL_ZILIER -> PROFESSIONAL_MESTER;
+            case MILITARY_STRAJER -> MILITARY_SERGEANT;
+            case MILITARY_SERGEANT -> OFFICER_LOCOTENENT;
+            case PROFESSIONAL_ZILIER -> PROFESSIONAL_MESERIAS;
+            case PROFESSIONAL_MESERIAS -> PROFESSIONAL_MESTER;
             case PROFESSIONAL_MESTER -> OFFICER_LOCOTENENT;
             case OFFICER_LOCOTENENT -> OFFICER_CAPITAN;
-            case OFFICER_CAPITAN -> OFFICER_COLONEL;
+            case OFFICER_CAPITAN -> OFFICER_MAIOR;
+            case OFFICER_MAIOR -> OFFICER_COLONEL;
             case OFFICER_COLONEL -> null;
         };
     }
@@ -96,26 +110,32 @@ public enum CareerGrade {
     public CareerGrade previousGrade() {
         return switch (this) {
             case MILITARY_STRAJER -> MILITARY_STAGIAR;
-            case PROFESSIONAL_MESTER -> PROFESSIONAL_ZILIER;
+            case MILITARY_SERGEANT -> MILITARY_STRAJER;
+            case PROFESSIONAL_MESERIAS -> PROFESSIONAL_ZILIER;
+            case PROFESSIONAL_MESTER -> PROFESSIONAL_MESERIAS;
             case OFFICER_CAPITAN -> OFFICER_LOCOTENENT;
-            case OFFICER_COLONEL -> OFFICER_CAPITAN;
+            case OFFICER_MAIOR -> OFFICER_CAPITAN;
+            case OFFICER_COLONEL -> OFFICER_MAIOR;
             case MILITARY_STAGIAR, PROFESSIONAL_ZILIER, OFFICER_LOCOTENENT -> null;
         };
     }
 
     /**
-     * The grade's rung on its career ladder, shared across tracks: both
-     * entry grades are step 1, both second grades are step 2, officers
-     * climb from 3. Promotion XP thresholds key off this so the two
-     * part-time tracks share one policy table.
+     * The grade's rung on its career ladder, shared across tracks: entry
+     * grades are step 1, second grades step 2, third grades step 3, and
+     * the officer corps climbs steps 4–7. Promotion XP thresholds and the
+     * exam bank key off this so the two part-time tracks share one policy
+     * table and each soldier step draws a deeper pool than the last.
      */
     public int careerStep() {
         return switch (this) {
             case MILITARY_STAGIAR, PROFESSIONAL_ZILIER -> 1;
-            case MILITARY_STRAJER, PROFESSIONAL_MESTER -> 2;
-            case OFFICER_LOCOTENENT -> 3;
-            case OFFICER_CAPITAN -> 4;
-            case OFFICER_COLONEL -> 5;
+            case MILITARY_STRAJER, PROFESSIONAL_MESERIAS -> 2;
+            case MILITARY_SERGEANT, PROFESSIONAL_MESTER -> 3;
+            case OFFICER_LOCOTENENT -> 4;
+            case OFFICER_CAPITAN -> 5;
+            case OFFICER_MAIOR -> 6;
+            case OFFICER_COLONEL -> 7;
         };
     }
 
@@ -136,10 +156,13 @@ public enum CareerGrade {
         return switch (normalized) {
             case "STAGIAR" -> MILITARY_STAGIAR;
             case "STRAJER", "GENDARME", "JANDAR" -> MILITARY_STRAJER;
+            case "SERGENT", "SERGEANT" -> MILITARY_SERGEANT;
             case "ZILIER", "ZILER", "DAYMAN" -> PROFESSIONAL_ZILIER;
-            case "MESTER", "MESERIAS", "TRADESMAN", "MAISTRU", "MASTER" -> PROFESSIONAL_MESTER;
-            case "LOCOTENENT", "LIEUTENANT", "SERGENT", "SERGEANT" -> OFFICER_LOCOTENENT;
+            case "MESERIAS" -> PROFESSIONAL_MESERIAS;
+            case "MESTER", "TRADESMAN", "MAISTRU", "MASTER" -> PROFESSIONAL_MESTER;
+            case "LOCOTENENT", "LIEUTENANT" -> OFFICER_LOCOTENENT;
             case "CAPITAN", "CAPTAIN", "INSPECTOR" -> OFFICER_CAPITAN;
+            case "MAIOR", "MAJOR" -> OFFICER_MAIOR;
             case "COLONEL" -> OFFICER_COLONEL;
             default -> null;
         };

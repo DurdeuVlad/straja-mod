@@ -277,12 +277,22 @@ public class StrajaPolicies {
             1, "Stagiar", 2, "Străjer", 3, "Locotenent", 4, "Căpitan", 5, "Colonel"));
 
     // trades (Meseriași) path display names — 1=Zilier (part-time day-hand),
-    // 2=Meșter (experienced tradesman; petitions into the officer corps).
+    // 2=Meseriaș (journeyman), 3=Maistru (master tradesman; petitions into
+    // the officer corps).
     public Map<Integer, String> meseriasRankNames = new LinkedHashMap<>(Map.of(
-            1, "Zilier", 2, "Meșter"));
+            1, "Zilier", 2, "Meseriaș", 3, "Maistru"));
 
-    // promotions
-    public Map<Integer, Integer> promotionServiceBlocks = new LinkedHashMap<>(Map.of(2, 60, 3, 180));
+    /** Per-grade display overrides keyed by enum name — covers the rungs the
+     *  level-keyed maps cannot express (Sergent and Maior project onto
+     *  Străjer/Căpitan). Professional rungs keep their names in
+     *  {@link #meseriasRankNames}; seeded values are defaults, not overrides
+     *  that would shadow those config surfaces. */
+    public Map<String, String> gradeNames = new LinkedHashMap<>(Map.of(
+            "MILITARY_SERGEANT", "Sergent", "OFFICER_MAIOR", "Maior"));
+
+    // promotions — keyed by CareerGrade.careerStep (1–7).
+    public Map<Integer, Integer> promotionServiceBlocks = new LinkedHashMap<>(Map.of(
+            2, 60, 3, 120, 4, 180, 5, 240, 6, 300, 7, 360));
     /** Rank-up bonus in hours of the new rank's hourly wage, credited to
      * unpaidSalary on every effective promotion. */
     public int promotionBonusHours = 5;
@@ -732,16 +742,21 @@ public class StrajaPolicies {
     }
 
     /**
-     * Display name for a V2 career grade across all tracks: the sworn
-     * enlisted ladder and the officer corps use {@link #rankNames}; the
-     * trades (Meseriași) ladder uses {@link #meseriasRankNames}.
+     * Display name for a V2 career grade across all tracks: {@link
+     * #gradeNames} wins first (rungs the level ladder cannot express), the
+     * trades (Meseriași) ladder uses {@link #meseriasRankNames} keyed by
+     * career step, and grades with a faithful legacy projection use {@link
+     * #rankNames}; anything else falls back to the enum display name.
      */
     public String rankName(CareerGrade grade) {
         if (grade == null) return "";
+        String configured = gradeNames.get(grade.name());
+        if (configured != null && !configured.isBlank()) return configured;
         if (grade.isProfessional()) {
-            return meseriasRankName(grade == CareerGrade.PROFESSIONAL_MESTER ? 2 : 1);
+            return meseriasRankName(grade.careerStep());
         }
-        return rankName(grade.legacyRankLevel());
+        return CareerGrade.fromLegacyRank(Rank.of(grade.legacyRankLevel())) == grade
+                ? rankName(grade.legacyRankLevel()) : grade.displayName();
     }
 
     /** Configurable display name for a trades-path level. */

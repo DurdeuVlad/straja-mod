@@ -510,11 +510,14 @@ class V2FoundationTest {
     void rankNamesResolvePerTrackForDisplay() {
         var policies = new com.dwurdy.straja.domain.model.StrajaPolicies();
         assertEquals("Străjer", policies.rankName(CareerGrade.MILITARY_STRAJER));
+        assertEquals("Sergent", policies.rankName(CareerGrade.MILITARY_SERGEANT));
         assertEquals("Locotenent", policies.rankName(CareerGrade.OFFICER_LOCOTENENT));
         assertEquals("Căpitan", policies.rankName(CareerGrade.OFFICER_CAPITAN));
+        assertEquals("Maior", policies.rankName(CareerGrade.OFFICER_MAIOR));
         assertEquals("Colonel", policies.rankName(CareerGrade.OFFICER_COLONEL));
         assertEquals("Zilier", policies.rankName(CareerGrade.PROFESSIONAL_ZILIER));
-        assertEquals("Meșter", policies.rankName(CareerGrade.PROFESSIONAL_MESTER));
+        assertEquals("Meseriaș", policies.rankName(CareerGrade.PROFESSIONAL_MESERIAS));
+        assertEquals("Maistru", policies.rankName(CareerGrade.PROFESSIONAL_MESTER));
         policies.meseriasRankNames.put(1, "Zirist");
         assertEquals("Zirist", policies.rankName(CareerGrade.PROFESSIONAL_ZILIER));
     }
@@ -536,18 +539,28 @@ class V2FoundationTest {
                 () -> promotions.approve("commissioner", "missing", 0));
 
         // Player leaves a request; commissioner records review evidence, marks ready, approves.
-        var application = promotions.submit("worker", CareerGrade.PROFESSIONAL_MESTER);
+        var application = promotions.submit("worker", CareerGrade.PROFESSIONAL_MESERIAS);
         promotions.recordCommissionerEvidence(application.applicationId, "commissioner",
                 "REVIEW", "PASS", null, "review:" + application.applicationId);
         promotions.markReady(application.applicationId);
-        promotions.approveOpen("commissioner", "worker", CareerGrade.PROFESSIONAL_MESTER);
+        promotions.approveOpen("commissioner", "worker", CareerGrade.PROFESSIONAL_MESERIAS);
 
         var record = personnel.find("worker");
-        assertEquals(CareerGrade.PROFESSIONAL_MESTER, record.careerGrade);
-        // Meșter stays part-time; only officer petitions confer full-time.
+        assertEquals(CareerGrade.PROFESSIONAL_MESERIAS, record.careerGrade);
+        // Meseriaș stays part-time; only officer petitions confer full-time.
         assertEquals(EmploymentMode.PART_TIME, record.employmentMode);
 
-        // Second step: Meșter petitions into the officer corps — approval
+        // Middle rung cleared, the tradesman climbs to Maistru — the top
+        // part-time rung — still without leaving part-time employment.
+        var middle = promotions.submit("worker", CareerGrade.PROFESSIONAL_MESTER);
+        promotions.recordCommissionerEvidence(middle.applicationId, "commissioner",
+                "REVIEW", "PASS", null, "review:" + middle.applicationId);
+        promotions.markReady(middle.applicationId);
+        promotions.approveOpen("commissioner", "worker", CareerGrade.PROFESSIONAL_MESTER);
+        assertEquals(CareerGrade.PROFESSIONAL_MESTER, personnel.find("worker").careerGrade);
+        assertEquals(EmploymentMode.PART_TIME, personnel.find("worker").employmentMode);
+
+        // Final step: Maistru petitions into the officer corps — approval
         // upgrades the member to full-time employment.
         var top = promotions.submit("worker", CareerGrade.OFFICER_LOCOTENENT);
         promotions.recordCommissionerEvidence(top.applicationId, "commissioner",

@@ -130,16 +130,20 @@ class CareerRemodelTest {
 
     @Test
     void ladderShapeHoldsPartTimeEnlistedTradesAndFullTimeOfficers() {
-        assertEquals(7, CareerGrade.values().length);
+        assertEquals(10, CareerGrade.values().length);
         assertEquals(6, Rank.values().length);
         assertFalse(CareerGrade.MILITARY_STAGIAR.fullTimeRequired());
         assertFalse(CareerGrade.MILITARY_STRAJER.fullTimeRequired());
+        assertFalse(CareerGrade.MILITARY_SERGEANT.fullTimeRequired());
         assertFalse(CareerGrade.PROFESSIONAL_ZILIER.fullTimeRequired());
+        assertFalse(CareerGrade.PROFESSIONAL_MESERIAS.fullTimeRequired());
         assertFalse(CareerGrade.PROFESSIONAL_MESTER.fullTimeRequired());
         assertTrue(CareerGrade.PROFESSIONAL_ZILIER.isProfessional());
+        assertTrue(CareerGrade.PROFESSIONAL_MESERIAS.isProfessional());
         assertTrue(CareerGrade.PROFESSIONAL_MESTER.isProfessional());
         for (var officer : new CareerGrade[]{CareerGrade.OFFICER_LOCOTENENT,
-                CareerGrade.OFFICER_CAPITAN, CareerGrade.OFFICER_COLONEL}) {
+                CareerGrade.OFFICER_CAPITAN, CareerGrade.OFFICER_MAIOR,
+                CareerGrade.OFFICER_COLONEL}) {
             assertTrue(officer.fullTimeRequired());
             assertTrue(officer.isOfficer());
             assertFalse(officer.isProfessional());
@@ -150,21 +154,31 @@ class CareerRemodelTest {
     void transitionMatrixFollowsTheTwoTrackLadder() {
         authorize("stagiar", CareerGrade.MILITARY_STAGIAR, EmploymentMode.PART_TIME);
         authorize("strajer", CareerGrade.MILITARY_STRAJER, EmploymentMode.PART_TIME);
+        authorize("sergent", CareerGrade.MILITARY_SERGEANT, EmploymentMode.PART_TIME);
         authorize("zilier", CareerGrade.PROFESSIONAL_ZILIER, EmploymentMode.PART_TIME);
+        authorize("meserias", CareerGrade.PROFESSIONAL_MESERIAS, EmploymentMode.PART_TIME);
         authorize("mester", CareerGrade.PROFESSIONAL_MESTER, EmploymentMode.PART_TIME);
         authorize("lt", CareerGrade.OFFICER_LOCOTENENT, EmploymentMode.FULL_TIME);
         authorize("cpt", CareerGrade.OFFICER_CAPITAN, EmploymentMode.FULL_TIME);
+        authorize("maior", CareerGrade.OFFICER_MAIOR, EmploymentMode.FULL_TIME);
 
         assertDoesNotThrow(() -> promotions.submit("stagiar", CareerGrade.MILITARY_STRAJER));
-        assertDoesNotThrow(() -> promotions.submit("strajer", CareerGrade.OFFICER_LOCOTENENT));
-        assertDoesNotThrow(() -> promotions.submit("zilier", CareerGrade.PROFESSIONAL_MESTER));
+        assertDoesNotThrow(() -> promotions.submit("strajer", CareerGrade.MILITARY_SERGEANT));
+        assertDoesNotThrow(() -> promotions.submit("sergent", CareerGrade.OFFICER_LOCOTENENT));
+        assertDoesNotThrow(() -> promotions.submit("zilier", CareerGrade.PROFESSIONAL_MESERIAS));
+        assertDoesNotThrow(() -> promotions.submit("meserias", CareerGrade.PROFESSIONAL_MESTER));
         assertDoesNotThrow(() -> promotions.submit("mester", CareerGrade.OFFICER_LOCOTENENT));
         assertDoesNotThrow(() -> promotions.submit("lt", CareerGrade.OFFICER_CAPITAN));
-        assertDoesNotThrow(() -> promotions.submit("cpt", CareerGrade.OFFICER_COLONEL));
+        assertDoesNotThrow(() -> promotions.submit("cpt", CareerGrade.OFFICER_MAIOR));
+        assertDoesNotThrow(() -> promotions.submit("maior", CareerGrade.OFFICER_COLONEL));
 
         // No skipping rungs, no cross-track enlisted hops, officers are terminal.
         assertThrows(IllegalArgumentException.class,
-                () -> promotions.submit("stagiar", CareerGrade.OFFICER_LOCOTENENT));
+                () -> promotions.submit("stagiar", CareerGrade.MILITARY_SERGEANT));
+        assertThrows(IllegalArgumentException.class,
+                () -> promotions.submit("strajer", CareerGrade.OFFICER_LOCOTENENT));
+        assertThrows(IllegalArgumentException.class,
+                () -> promotions.submit("zilier", CareerGrade.PROFESSIONAL_MESTER));
         assertThrows(IllegalArgumentException.class,
                 () -> promotions.submit("zilier", CareerGrade.MILITARY_STRAJER));
         assertThrows(IllegalArgumentException.class,
@@ -178,7 +192,7 @@ class CareerRemodelTest {
 
     @Test
     void officerApprovalUpgradesToFullTimeFromEitherOrigin() {
-        authorize("mil", CareerGrade.MILITARY_STRAJER, EmploymentMode.PART_TIME);
+        authorize("mil", CareerGrade.MILITARY_SERGEANT, EmploymentMode.PART_TIME);
         authorize("pro", CareerGrade.PROFESSIONAL_MESTER, EmploymentMode.PART_TIME);
 
         petitionToReady("mil", CareerGrade.OFFICER_LOCOTENENT);
@@ -203,7 +217,7 @@ class CareerRemodelTest {
 
     @Test
     void petitionerCannotApproveTheirOwnPromotion() {
-        authorize("self", CareerGrade.OFFICER_CAPITAN, EmploymentMode.FULL_TIME);
+        authorize("self", CareerGrade.OFFICER_MAIOR, EmploymentMode.FULL_TIME);
         personnel.appoint("bootstrap", "self", AppointmentType.COMMISSIONER, "hq", "", null);
         petitionToReady("self", CareerGrade.OFFICER_COLONEL);
         var app = promotions.findOpen("self", CareerGrade.OFFICER_COLONEL);
@@ -217,9 +231,10 @@ class CareerRemodelTest {
     void everyOfficerGradeHoldsTheFullNonCommissionerCapabilitySet() {
         authorize("lt", CareerGrade.OFFICER_LOCOTENENT, EmploymentMode.FULL_TIME);
         authorize("cpt", CareerGrade.OFFICER_CAPITAN, EmploymentMode.FULL_TIME);
+        authorize("maior", CareerGrade.OFFICER_MAIOR, EmploymentMode.FULL_TIME);
         authorize("col2", CareerGrade.OFFICER_COLONEL, EmploymentMode.FULL_TIME);
         var auth = new AuthorizationService(people, clock);
-        for (String officer : new String[]{"lt", "cpt", "col2"}) {
+        for (String officer : new String[]{"lt", "cpt", "maior", "col2"}) {
             for (String cap : new String[]{"USE_CUFFS", "EXECUTE_ARRESTS", "ISSUE_FINES",
                     "ROUTINE_PATROL", "INVESTIGATE_COMPLAINTS", "MOBILIZE_PLAYERS",
                     "CREATE_MISSIONS", "APPROVE_REWARDS", "REVIEW_APPEALS", "VERIFY_REPORTS",
@@ -235,15 +250,20 @@ class CareerRemodelTest {
     void enlistedAndTradesKeepTheirReducedCaps() {
         authorize("stagiar", CareerGrade.MILITARY_STAGIAR, EmploymentMode.PART_TIME);
         authorize("strajer", CareerGrade.MILITARY_STRAJER, EmploymentMode.PART_TIME);
+        authorize("sergent", CareerGrade.MILITARY_SERGEANT, EmploymentMode.PART_TIME);
         authorize("zilier", CareerGrade.PROFESSIONAL_ZILIER, EmploymentMode.PART_TIME);
+        authorize("meserias", CareerGrade.PROFESSIONAL_MESERIAS, EmploymentMode.PART_TIME);
         authorize("mester", CareerGrade.PROFESSIONAL_MESTER, EmploymentMode.PART_TIME);
         var auth = new AuthorizationService(people, clock);
         assertFalse(auth.allowed(AuthorizationContext.of("stagiar", "USE_CUFFS")));
         assertTrue(auth.allowed(AuthorizationContext.of("strajer", "USE_CUFFS")));
+        assertTrue(auth.allowed(AuthorizationContext.of("sergent", "USE_CUFFS")));
         assertFalse(auth.allowed(AuthorizationContext.of("strajer", "CREATE_MISSIONS")));
         assertTrue(auth.allowed(AuthorizationContext.of("zilier", "PROFESSIONAL_JOBS")));
+        assertTrue(auth.allowed(AuthorizationContext.of("meserias", "PROFESSIONAL_JOBS")));
         assertTrue(auth.allowed(AuthorizationContext.of("mester", "PROFESSIONAL_JOBS")));
         assertFalse(auth.allowed(AuthorizationContext.of("zilier", "ISSUE_FINES")));
+        assertFalse(auth.allowed(AuthorizationContext.of("meserias", "ISSUE_FINES")));
         // Trades patrol only inside an active mobilization scope — unchanged.
         assertFalse(auth.allowed(AuthorizationContext.of("mester", "ROUTINE_PATROL")));
     }
@@ -258,6 +278,9 @@ class CareerRemodelTest {
                 java.util.Set.of("PROFESSIONAL_SPECIALIST", "PROFESSIONAL_MAISTRU")));
         assertTrue(CareerGrade.PROFESSIONAL_ZILIER.legacyRoleNames().contains("PROFESSIONAL_STAGIAR_SPECIALIST"));
         assertTrue(CareerGrade.MILITARY_STRAJER.legacyRoleNames().isEmpty());
+        assertTrue(CareerGrade.MILITARY_SERGEANT.legacyRoleNames().isEmpty());
+        assertTrue(CareerGrade.PROFESSIONAL_MESERIAS.legacyRoleNames().isEmpty());
+        assertTrue(CareerGrade.OFFICER_MAIOR.legacyRoleNames().isEmpty());
         assertTrue(CareerGrade.OFFICER_COLONEL.legacyRoleNames().isEmpty());
     }
 
@@ -280,7 +303,7 @@ class CareerRemodelTest {
 
     @Test
     void petitionLandsReadyForApprovalSkippingEvidence() {
-        authorize("mil", CareerGrade.MILITARY_STRAJER, EmploymentMode.PART_TIME);
+        authorize("mil", CareerGrade.MILITARY_SERGEANT, EmploymentMode.PART_TIME);
         var application = promotions.submitPetition("mil", CareerGrade.OFFICER_LOCOTENENT,
                 "vreau în corpul ofițeresc");
         assertEquals(PromotionStatus.READY_FOR_APPROVAL, application.status);
@@ -291,7 +314,7 @@ class CareerRemodelTest {
 
     @Test
     void petitionResubmissionUpdatesOpenReasonAndBumpsVersion() {
-        authorize("mil", CareerGrade.MILITARY_STRAJER, EmploymentMode.PART_TIME);
+        authorize("mil", CareerGrade.MILITARY_SERGEANT, EmploymentMode.PART_TIME);
         var first = promotions.submitPetition("mil", CareerGrade.OFFICER_LOCOTENENT, "motiv vechi");
         var second = promotions.submitPetition("mil", CareerGrade.OFFICER_LOCOTENENT, "motiv nou");
         assertEquals(first.applicationId, second.applicationId);
@@ -304,22 +327,22 @@ class CareerRemodelTest {
     @Test
     void petitionResubmissionAfterRecordChangeRepinsAndStaysApprovable() {
         authorize("zilier", CareerGrade.PROFESSIONAL_ZILIER, EmploymentMode.PART_TIME);
-        var first = promotions.submitPetition("zilier", CareerGrade.PROFESSIONAL_MESTER, "motiv");
+        var first = promotions.submitPetition("zilier", CareerGrade.PROFESSIONAL_MESERIAS, "motiv");
         // A routine record write — e.g. a second profession approved through a
         // join petition while this one awaited review — bumps the member's
         // personnel version and must not wedge the open petition.
         personnel.assignProfession("commissioner", "zilier", "FIERAR");
-        var refiled = promotions.submitPetition("zilier", CareerGrade.PROFESSIONAL_MESTER, "motiv");
+        var refiled = promotions.submitPetition("zilier", CareerGrade.PROFESSIONAL_MESERIAS, "motiv");
         assertEquals(first.applicationId, refiled.applicationId);
         assertTrue(refiled.version > first.version);
         promotions.approve("commissioner", refiled.applicationId, refiled.version);
-        assertEquals(CareerGrade.PROFESSIONAL_MESTER, personnel.find("zilier").careerGrade);
+        assertEquals(CareerGrade.PROFESSIONAL_MESERIAS, personnel.find("zilier").careerGrade);
     }
 
     @Test
     void stalePetitionWithoutResubmissionStillFailsClosed() {
         authorize("zilier", CareerGrade.PROFESSIONAL_ZILIER, EmploymentMode.PART_TIME);
-        var application = promotions.submitPetition("zilier", CareerGrade.PROFESSIONAL_MESTER, "motiv");
+        var application = promotions.submitPetition("zilier", CareerGrade.PROFESSIONAL_MESERIAS, "motiv");
         personnel.assignProfession("commissioner", "zilier", "FIERAR");
         assertThrows(IllegalStateException.class,
                 () -> promotions.approve("commissioner", application.applicationId, application.version));
@@ -330,9 +353,9 @@ class CareerRemodelTest {
     @Test
     void recordChangeAfterRefilingStillBlocksApproval() {
         authorize("zilier", CareerGrade.PROFESSIONAL_ZILIER, EmploymentMode.PART_TIME);
-        promotions.submitPetition("zilier", CareerGrade.PROFESSIONAL_MESTER, "motiv");
+        promotions.submitPetition("zilier", CareerGrade.PROFESSIONAL_MESERIAS, "motiv");
         personnel.assignProfession("commissioner", "zilier", "FIERAR");
-        var refiled = promotions.submitPetition("zilier", CareerGrade.PROFESSIONAL_MESTER, "motiv");
+        var refiled = promotions.submitPetition("zilier", CareerGrade.PROFESSIONAL_MESERIAS, "motiv");
         // Re-pinning does not weaken the pin: a change after the last filing
         // still fails the optimistic-concurrency check at decision time.
         personnel.assignProfession("commissioner", "zilier", "TESLAR");
@@ -345,10 +368,10 @@ class CareerRemodelTest {
     void anyOfficerStampsPartTimePetition() {
         authorize("zilier", CareerGrade.PROFESSIONAL_ZILIER, EmploymentMode.PART_TIME);
         authorize("lt", CareerGrade.OFFICER_LOCOTENENT, EmploymentMode.FULL_TIME);
-        var application = promotions.submitPetition("zilier", CareerGrade.PROFESSIONAL_MESTER, "motiv");
+        var application = promotions.submitPetition("zilier", CareerGrade.PROFESSIONAL_MESERIAS, "motiv");
         var decided = promotions.approve("lt", application.applicationId, application.version);
         assertEquals(PromotionStatus.APPROVED, decided.status);
-        assertEquals(CareerGrade.PROFESSIONAL_MESTER, personnel.find("zilier").careerGrade);
+        assertEquals(CareerGrade.PROFESSIONAL_MESERIAS, personnel.find("zilier").careerGrade);
     }
 
     @Test
@@ -366,7 +389,7 @@ class CareerRemodelTest {
     void plainMemberCannotStampPartTimePetition() {
         authorize("zilier", CareerGrade.PROFESSIONAL_ZILIER, EmploymentMode.PART_TIME);
         authorize("strajer", CareerGrade.MILITARY_STRAJER, EmploymentMode.PART_TIME);
-        var application = promotions.submitPetition("zilier", CareerGrade.PROFESSIONAL_MESTER, "motiv");
+        var application = promotions.submitPetition("zilier", CareerGrade.PROFESSIONAL_MESERIAS, "motiv");
         assertThrows(IllegalStateException.class,
                 () -> promotions.approve("strajer", application.applicationId, application.version));
     }
@@ -385,7 +408,7 @@ class CareerRemodelTest {
 
     @Test
     void identicalPetitionResubmissionWithoutRecordChangeStaysIdempotent() {
-        authorize("mil", CareerGrade.MILITARY_STRAJER, EmploymentMode.PART_TIME);
+        authorize("mil", CareerGrade.MILITARY_SERGEANT, EmploymentMode.PART_TIME);
         var first = promotions.submitPetition("mil", CareerGrade.OFFICER_LOCOTENENT, "motiv");
         var second = promotions.submitPetition("mil", CareerGrade.OFFICER_LOCOTENENT, "motiv");
         assertEquals(first.applicationId, second.applicationId);
@@ -394,7 +417,7 @@ class CareerRemodelTest {
 
     @Test
     void petitionReasonIsCappedAtServiceLimit() {
-        authorize("mil", CareerGrade.MILITARY_STRAJER, EmploymentMode.PART_TIME);
+        authorize("mil", CareerGrade.MILITARY_SERGEANT, EmploymentMode.PART_TIME);
         var application = promotions.submitPetition("mil", CareerGrade.OFFICER_LOCOTENENT,
                 "x".repeat(700));
         assertEquals(500, application.petitionReason.length());
@@ -405,11 +428,11 @@ class CareerRemodelTest {
     void petitionReviewDecisionsAreAudited() {
         var audit = new AuditService(Fakes.context(new Fakes.TestServer(), clock));
         promotions.useAuditService(audit);
-        authorize("mil", CareerGrade.MILITARY_STRAJER, EmploymentMode.PART_TIME);
+        authorize("mil", CareerGrade.MILITARY_SERGEANT, EmploymentMode.PART_TIME);
         authorize("zilier", CareerGrade.PROFESSIONAL_ZILIER, EmploymentMode.PART_TIME);
         var approved = promotions.submitPetition("mil", CareerGrade.OFFICER_LOCOTENENT, "motiv");
         promotions.approve("commissioner", approved.applicationId, approved.version);
-        var denied = promotions.submitPetition("zilier", CareerGrade.PROFESSIONAL_MESTER, "motiv");
+        var denied = promotions.submitPetition("zilier", CareerGrade.PROFESSIONAL_MESERIAS, "motiv");
         promotions.reject("commissioner", denied.applicationId, "nu acum");
 
         var reviews = audit.tail(50).stream()
@@ -425,10 +448,10 @@ class CareerRemodelTest {
     @Test
     void petitionApproveFlipsGradeWithoutEvidence() {
         authorize("zilier", CareerGrade.PROFESSIONAL_ZILIER, EmploymentMode.PART_TIME);
-        var application = promotions.submitPetition("zilier", CareerGrade.PROFESSIONAL_MESTER,
+        var application = promotions.submitPetition("zilier", CareerGrade.PROFESSIONAL_MESERIAS,
                 "pricep meseria");
         promotions.approve("commissioner", application.applicationId, application.version);
-        assertEquals(CareerGrade.PROFESSIONAL_MESTER, personnel.find("zilier").careerGrade);
+        assertEquals(CareerGrade.PROFESSIONAL_MESERIAS, personnel.find("zilier").careerGrade);
     }
 
     @Test
@@ -462,7 +485,7 @@ class CareerRemodelTest {
         var gateway = new Fakes.TestPlayer("zilier", 1);
         String zilier = gateway.uuid().toString();
         authorize(zilier, CareerGrade.PROFESSIONAL_ZILIER, EmploymentMode.PART_TIME);
-        var application = promotions.submitPetition(zilier, CareerGrade.PROFESSIONAL_MESTER, "");
+        var application = promotions.submitPetition(zilier, CareerGrade.PROFESSIONAL_MESERIAS, "");
         promotions.reject("commissioner", application.applicationId, "insuficient");
 
         promotions.deliverOutcome(gateway);

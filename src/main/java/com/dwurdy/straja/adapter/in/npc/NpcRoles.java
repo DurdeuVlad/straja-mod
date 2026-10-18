@@ -463,13 +463,7 @@ public final class NpcRoles {
             gw.refuse("straja.trades.promote.not_member", "straja.remedy.retry");
             return;
         }
-        var next = switch (personnel.careerGrade) {
-            case PROFESSIONAL_ZILIER ->
-                    com.dwurdy.straja.domain.model.CareerGrade.PROFESSIONAL_MESTER;
-            case PROFESSIONAL_MESTER ->
-                    com.dwurdy.straja.domain.model.CareerGrade.OFFICER_LOCOTENENT;
-            default -> null;
-        };
+        var next = personnel.careerGrade.nextGrade();
         if (next == null) {
             gw.refuse("straja.trades.promote.max", "straja.remedy.status");
             return;

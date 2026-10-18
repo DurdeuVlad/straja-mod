@@ -238,9 +238,10 @@ public final class PersonnelService implements com.dwurdy.straja.application.por
 
     /**
      * Lowers the subject one rung on their career ladder. Demoting a
-     * LOCOTENENT returns them to their entry track's second rung (kept via
-     * careerOrigin); demoting an entry-grade member removes them from the
-     * corps entirely (TERMINATED — the V2 equivalent of demoted-to-civilian).
+     * LOCOTENENT returns them to their entry track's top enlisted rung
+     * (kept via careerOrigin); demoting an entry-grade member removes them
+     * from the corps entirely (TERMINATED — the V2 equivalent of
+     * demoted-to-civilian).
      */
     public synchronized PersonnelRecord demote(String actorUuid, String subjectUuid, String reason) {
         requireAuthorization(actorUuid, subjectUuid);
@@ -250,7 +251,7 @@ public final class PersonnelService implements com.dwurdy.straja.application.por
         if (record.careerGrade == null) throw new IllegalStateException("personnel has no grade");
         CareerGrade previous = record.careerGrade == CareerGrade.OFFICER_LOCOTENENT
                 ? (record.careerOrigin == CareerTrack.PROFESSIONAL
-                        ? CareerGrade.PROFESSIONAL_MESTER : CareerGrade.MILITARY_STRAJER)
+                        ? CareerGrade.PROFESSIONAL_MESTER : CareerGrade.MILITARY_SERGEANT)
                 : record.careerGrade.previousGrade();
         if (previous == null) {
             record.membershipStatus = PersonnelStatus.TERMINATED;

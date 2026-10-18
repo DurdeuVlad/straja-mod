@@ -196,7 +196,10 @@ class AdminServiceTest {
         var memberState = players.state(member.uuid());
         memberState.applicationState = "AUTHORIZED";
         ctx.players().write(member.uuid(), memberState);
-        v2Personnel.projectLegacy(member.uuid(), memberState, member.uuid().toString());
+        v2Personnel.authorize("bootstrap", member.uuid().toString(),
+                com.dwurdy.straja.domain.model.CareerGrade.MILITARY_SERGEANT,
+                com.dwurdy.straja.domain.model.EmploymentMode.PART_TIME,
+                "TEST", "hq", "auth:member");
         v2Promotions.submitPetition(member.uuid().toString(),
                 com.dwurdy.straja.domain.model.CareerGrade.OFFICER_LOCOTENENT, "merit");
 
@@ -333,7 +336,7 @@ class AdminServiceTest {
 
         admin.authorize(comisar, "worker1", "meserias");
 
-        assertEquals(com.dwurdy.straja.domain.model.CareerGrade.PROFESSIONAL_MESTER,
+        assertEquals(com.dwurdy.straja.domain.model.CareerGrade.PROFESSIONAL_MESERIAS,
                 captured.get());
         assertTrue(comisar.told("autorizat la gradul"));
     }

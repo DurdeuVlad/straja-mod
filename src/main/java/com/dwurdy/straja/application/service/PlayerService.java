@@ -166,8 +166,8 @@ public class PlayerService implements com.dwurdy.straja.application.port.in.Play
             if (!v2Record.active()) return PermissionLevel.PUBLIC;
             if (v2Record.careerGrade != null && v2Record.careerGrade.isOfficer())
                 return PermissionLevel.LIEUTENANT;
-            if (v2Record.careerGrade == com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STAGIAR
-                    || v2Record.careerGrade == com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STRAJER)
+            if (v2Record.careerGrade != null
+                    && v2Record.careerGrade.track() == com.dwurdy.straja.domain.model.CareerTrack.MILITARY)
                 return PermissionLevel.GUARD;
             return PermissionLevel.PUBLIC;
         }
