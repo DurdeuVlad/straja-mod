@@ -338,18 +338,34 @@ public final class PersonnelService implements com.dwurdy.straja.application.por
 
     public synchronized AppointmentRecord appoint(String actorUuid, String subjectUuid, AppointmentType type,
                                                   String stationId, String jurisdiction, Long expiresAt) {
-        return appoint(actorUuid, subjectUuid, type, stationId, jurisdiction, expiresAt, false);
+        return appoint(actorUuid, subjectUuid, type, stationId, jurisdiction, expiresAt, false, "");
     }
 
     /** Explicit composition-root path for the configured commissioner bootstrap. */
     public synchronized AppointmentRecord appointInternal(String subjectUuid, AppointmentType type,
                                                           String stationId, String jurisdiction, Long expiresAt) {
-        return appoint("bootstrap", subjectUuid, type, stationId, jurisdiction, expiresAt, true);
+        return appoint("bootstrap", subjectUuid, type, stationId, jurisdiction, expiresAt, true, "");
+    }
+
+    /**
+     * Officer-corps posting (announced structures): assigns an officer to a
+     * section or specialist desk — police section, garrison, prison/mine,
+     * industry, investigations, logistics, construction, smithing — with
+     * the free title the Comandament sets. Postings are organizational:
+     * they carry identity, station, jurisdiction and audit, never extra
+     * capabilities. Officer grade required; part-time tracks hold
+     * professions and shifts instead.
+     */
+    public synchronized AppointmentRecord post(String actorUuid, String subjectUuid, String stationId,
+                                               String jurisdiction, String title, Long expiresAt) {
+        if (title == null || title.isBlank()) throw new IllegalArgumentException("posting title required");
+        return appoint(actorUuid, subjectUuid, AppointmentType.POSTING,
+                stationId, jurisdiction, expiresAt, false, title);
     }
 
     private AppointmentRecord appoint(String actorUuid, String subjectUuid, AppointmentType type,
                                      String stationId, String jurisdiction, Long expiresAt,
-                                     boolean internal) {
+                                     boolean internal, String postTitle) {
         PersonnelStore store = repository.read();
         PersonnelRecord record = require(store, subjectUuid);
         if (authorization != null && !internal) {
@@ -363,6 +379,9 @@ public final class PersonnelService implements com.dwurdy.straja.application.por
         }
         if (type == AppointmentType.COMMISSIONER && record.employmentMode != EmploymentMode.FULL_TIME)
             throw new IllegalStateException("commissioner appointment requires full-time employment");
+        if (type == AppointmentType.POSTING
+                && (record.careerGrade == null || !record.careerGrade.isOfficer()))
+            throw new IllegalStateException("postings require an officer grade");
         if (!record.active()) throw new IllegalStateException("personnel is not active");
         long now = clock.nowMillis();
         AppointmentRecord appointment = new AppointmentRecord();
@@ -374,8 +393,37 @@ public final class PersonnelService implements com.dwurdy.straja.application.por
         appointment.appointedBy = actorUuid == null ? "" : actorUuid;
         appointment.startsAt = now;
         appointment.expiresAt = expiresAt;
+        appointment.postTitle = type == AppointmentType.POSTING
+                ? com.dwurdy.straja.domain.model.Text.bounded(postTitle, com.dwurdy.straja.domain.model.Text.REASON_LIMIT)
+                : "";
         record.appointments.add(appointment);
         record.updatedAt = now;
+        record.version++;
+        store.storeRevision++;
+        repository.write(store);
+        return appointment;
+    }
+
+    /** Revokes an active appointment/posting (reassignment, removal from a
+     *  section). Same AUTHORIZE_PERSONNEL gate as the grant; audited via the
+     *  record version and the caller's command context. */
+    public synchronized AppointmentRecord revokeAppointment(String actorUuid, String subjectUuid,
+                                                            String appointmentId) {
+        PersonnelStore store = repository.read();
+        PersonnelRecord record = require(store, subjectUuid);
+        if (authorization != null) {
+            AuthorizationContext context = AuthorizationContext.of(actorUuid, "AUTHORIZE_PERSONNEL");
+            context.subjectUuid = subjectUuid;
+            context.beneficiaryUuid = subjectUuid;
+            context.requiresIndependentApproval = true;
+            if (!authorization.allowed(context)) throw new IllegalStateException("appointment revocation denied");
+        }
+        AppointmentRecord appointment = record.appointments.stream()
+                .filter(a -> appointmentId != null && appointmentId.equals(a.appointmentId))
+                .findFirst().orElseThrow(() -> new IllegalArgumentException("appointment not found"));
+        if (appointment.revokedAt != null) throw new IllegalStateException("appointment already revoked");
+        appointment.revokedAt = clock.nowMillis();
+        record.updatedAt = appointment.revokedAt;
         record.version++;
         store.storeRevision++;
         repository.write(store);

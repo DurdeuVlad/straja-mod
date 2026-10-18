@@ -2104,6 +2104,30 @@ public final class StrajaCommands {
                                                     StringArgumentType.getString(c, "jurisdiction"), null);
                                             return 1;
                                         }))))));
+        node.then(Commands.literal("post").then(Commands.argument("player", EntityArgument.player())
+                .then(Commands.argument("station", StringArgumentType.word())
+                        .then(Commands.argument("jurisdiction", StringArgumentType.word())
+                                .then(Commands.argument("title", StringArgumentType.greedyString())
+                                        .executes(c -> {
+                                            var appointment = StrajaRuntime.get().v2Personnel().post(
+                                                    actor(c).uuid().toString(),
+                                                    target(c, "player").uuid().toString(),
+                                                    StringArgumentType.getString(c, "station"),
+                                                    StringArgumentType.getString(c, "jurisdiction"),
+                                                    StringArgumentType.getString(c, "title"), null);
+                                            c.getSource().sendSuccess(() -> Component.literal(
+                                                    "Postare " + appointment.appointmentId + " înregistrată."), false);
+                                            return 1;
+                                        }))))));
+        node.then(Commands.literal("revoke").then(Commands.argument("player", EntityArgument.player())
+                .then(Commands.argument("appointment", StringArgumentType.word())
+                        .executes(c -> {
+                            StrajaRuntime.get().v2Personnel().revokeAppointment(
+                                    actor(c).uuid().toString(),
+                                    target(c, "player").uuid().toString(),
+                                    StringArgumentType.getString(c, "appointment"));
+                            return 1;
+                        }))));
         node.then(Commands.literal("suspend").then(Commands.argument("player", EntityArgument.player())
                 .executes(c -> { StrajaRuntime.get().v2Personnel().suspend(actor(c).uuid().toString(), target(c, "player").uuid().toString(), "COMMAND"); return 1; })));
         node.then(Commands.literal("reinstate").then(Commands.argument("player", EntityArgument.player())
