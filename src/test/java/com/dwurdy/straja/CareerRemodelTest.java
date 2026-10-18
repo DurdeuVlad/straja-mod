@@ -496,4 +496,78 @@ class CareerRemodelTest {
         promotions.deliverOutcome(gateway);
         assertEquals(1, gateway.messages.size());
     }
+
+    // ------------------------------------------------------------ weekly minimum activity
+
+    @Test
+    void activityStampMarksPresenceAndThrottlesWrites() {
+        authorize("worker", CareerGrade.PROFESSIONAL_ZILIER, EmploymentMode.PART_TIME);
+        long now = clock.nowMillis();
+        personnel.noteActivity("worker", now);
+        assertEquals(now, personnel.find("worker").lastActiveAt);
+
+        long version = personnel.find("worker").version;
+        personnel.noteActivity("worker", now + 30_000);
+        assertEquals(now, personnel.find("worker").lastActiveAt,
+                "the throttle window skips sub-minute writes");
+        assertEquals(version, personnel.find("worker").version);
+
+        personnel.noteActivity("worker", now + 61_000);
+        assertEquals(now + 61_000, personnel.find("worker").lastActiveAt);
+    }
+
+    @Test
+    void weeklyMinimumFlagsSilenceButHonorsNotice() {
+        authorize("soldier", CareerGrade.MILITARY_STRAJER, EmploymentMode.PART_TIME);
+        var record = personnel.find("soldier");
+        long now = clock.nowMillis();
+        long window = 7L * 86_400_000L;
+
+        // A pre-observation record is UNOBSERVED, never flagged delinquent.
+        assertEquals(PersonnelService.ActivityState.UNOBSERVED,
+                personnel.activityState(record, now + 30L * 86_400_000L, window));
+
+        personnel.noteActivity("soldier", now);
+        assertEquals(PersonnelService.ActivityState.ACTIVE,
+                personnel.activityState(personnel.find("soldier"), now, window));
+        assertEquals(PersonnelService.ActivityState.ACTIVE,
+                personnel.activityState(personnel.find("soldier"), now + window - 1, window));
+        assertEquals(PersonnelService.ActivityState.INACTIVE,
+                personnel.activityState(personnel.find("soldier"), now + window + 1, window),
+                "eight silent days flag the weekly minimum");
+
+        // A declared absence covers the window even while silent.
+        personnel.declareAbsence("soldier", now + 10L * 86_400_000L, "concediu");
+        assertEquals(PersonnelService.ActivityState.NOTICED_ABSENT,
+                personnel.activityState(personnel.find("soldier"), now + window + 1, window));
+        // The notice expiring falls back to the stale stamp.
+        assertEquals(PersonnelService.ActivityState.INACTIVE,
+                personnel.activityState(personnel.find("soldier"),
+                        now + 11L * 86_400_000L, window));
+    }
+
+    @Test
+    void presenceClearsAnEarlyReturnFromNotice() {
+        authorize("guard", CareerGrade.MILITARY_STRAJER, EmploymentMode.PART_TIME);
+        long now = clock.nowMillis();
+        personnel.declareAbsence("guard", now + 10L * 86_400_000L, "drum");
+        personnel.noteActivity("guard", now + 86_400_000L);
+        var record = personnel.find("guard");
+        assertNull(record.absentUntil, "returning early closes the notice");
+        assertEquals(PersonnelService.ActivityState.ACTIVE,
+                personnel.activityState(record, now + 86_400_000L, 7L * 86_400_000L));
+    }
+
+    @Test
+    void absenceDeclarationValidatesMembershipAndHorizon() {
+        authorize("member", CareerGrade.MILITARY_STAGIAR, EmploymentMode.PART_TIME);
+        long now = clock.nowMillis();
+        assertThrows(IllegalArgumentException.class,
+                () -> personnel.declareAbsence("member", now - 1, "trecut"));
+        assertThrows(IllegalStateException.class,
+                () -> personnel.declareAbsence("civilian", now + 86_400_000L, "x"));
+        var record = personnel.declareAbsence("member", now + 5L * 86_400_000L, "exam");
+        assertEquals(now + 5L * 86_400_000L, record.absentUntil);
+        assertEquals("exam", record.absenceReason);
+    }
 }

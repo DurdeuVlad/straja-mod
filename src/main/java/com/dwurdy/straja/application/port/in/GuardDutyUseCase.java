@@ -18,6 +18,8 @@ public interface GuardDutyUseCase {
     void startDuty(PlayerGateway player);
     /** Trades work shift: hourly paid presence for the professional track. */
     void startWorkShift(PlayerGateway player);
+    /** Announced absence notice covering the weekly activity minimum. */
+    void declareAbsence(PlayerGateway player, int days, String reason);
     void checkpoint(PlayerGateway player, String checkpointId);
     void stopDuty(PlayerGateway player);
     void salary(PlayerGateway player);

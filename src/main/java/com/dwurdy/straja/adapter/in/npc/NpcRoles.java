@@ -311,6 +311,23 @@ public final class NpcRoles {
         player.tell("Fișă V2: " + record.serviceNumber + " | " + record.membershipStatus
                 + " | " + gradeName + " | " + record.employmentMode
                 + " | stație: " + record.homeStationId + " | versiune: " + record.version);
+        // Announced weekly minimum: the member sees their own standing and
+        // how to stay compliant — log in weekly or file /straja absence.
+        long inactivityWindow = (long) runtime.policies().weeklyInactivityDays * 86_400_000L;
+        var activity = runtime.v2Personnel().activityState(record, runtime.nowMillis(), inactivityWindow);
+        switch (activity) {
+            case NOTICED_ABSENT -> player.tell("Activitate: absență anunțată până la "
+                    + java.time.format.DateTimeFormatter.ISO_LOCAL_DATE.format(
+                            java.time.Instant.ofEpochMilli(record.absentUntil)
+                                    .atZone(java.time.ZoneId.systemDefault())));
+            case INACTIVE -> player.tell("Activitate: INACTIV — lipsă de prezență în ultimele "
+                    + runtime.policies().weeklyInactivityDays
+                    + " zile. Intră în tura de serviciu sau vorbește cu Comandamentul.");
+            case UNOBSERVED -> player.tell("Activitate: neînregistrată încă — prima ta prezență "
+                    + "începe contorul săptămânal.");
+            case ACTIVE -> player.tell("Activitate: în regulă (minimul săptămânal: o prezență "
+                    + "la " + runtime.policies().weeklyInactivityDays + " zile).");
+        }
     }
 
     private static void tellV2Promotion(com.dwurdy.straja.bootstrap.StrajaRuntime runtime,

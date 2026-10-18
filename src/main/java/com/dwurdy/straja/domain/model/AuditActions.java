@@ -180,6 +180,9 @@ public final class AuditActions {
     public static final String NATIVE_FACTION = "native_faction";
     public static final String NOTICE_DELIVERY = "notice_delivery";
     public static final String PERSONNEL_AUTHORIZE = "personnel_authorize";
+    /** Announced absence notice (the Comandament reads these as the
+     *  "anunțați Comandamentul" channel for the weekly minimum). */
+    public static final String PERSONNEL_ABSENCE = "personnel_absence";
     public static final String POLICY_RESET = "policy_reset";
     public static final String POLICY_SET = "policy_set";
     public static final String PRISON_ARREST = "prison_arrest";
