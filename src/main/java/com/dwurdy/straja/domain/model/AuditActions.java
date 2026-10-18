@@ -187,6 +187,7 @@ public final class AuditActions {
     public static final String PRISON_CELL_CREATE = "prison_cell_create";
     public static final String PRISON_ESCORT = "prison_escort";
     public static final String PRISON_FUGITIVE = "prison_fugitive";
+    public static final String PRISON_HEARING = "prison_hearing";
     public static final String PRISON_RECAPTURE = "prison_recapture";
     public static final String PRISON_RECOVER = "prison_recover";
     public static final String PRISON_RELEASE = "prison_release";

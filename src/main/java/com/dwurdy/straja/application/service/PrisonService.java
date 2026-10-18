@@ -1040,6 +1040,41 @@ public class PrisonService implements PrisonRoleplayUseCase {
     }
 
     /**
+     * FUN-11 parole release: a decided hearing frees the prisoner into parole
+     * — no officer authority needed at this step, the hearing artifact is the
+     * authority. The register lands on PAROLED (free, under conditions) rather
+     * than RELEASED so the marker stays visible until the window completes.
+     */
+    public boolean releaseForParole(String targetUuid, String hearingId) {
+        if (targetUuid == null || targetUuid.isBlank()) return false;
+        var data = store();
+        for (var sentence : data.sentences) {
+            if (sentence == null
+                    || (!"ACTIVE".equals(sentence.status)
+                            && !"WAITING_CELL".equals(sentence.status))
+                    || !targetUuid.equals(sentence.targetUuid)) continue;
+            var target = findFor(sentence);
+            // The hearing decision weighed the ledger — parole releases past
+            // the debt gate the way a commissioner's considered release does.
+            if (!releaseSentence(data, sentence, target, "PAROLED", null, null, true)) {
+                return false;
+            }
+            ctx.prison().write(data);
+            var reg = ctx.prisonerRegister().read();
+            var rec = reg.prisoner(targetUuid);
+            if (rec != null && rec.status == PrisonerStatus.RELEASED) {
+                rec.status = PrisonerStatus.PAROLED;
+                ctx.prisonerRegister().write(reg);
+            }
+            audit.record(AuditActions.PRISON_RELEASE, "parole", "",
+                    sentence.target, targetUuid, AuditResults.SUCCESS,
+                    "PAROLED hearing=" + (hearingId == null ? "" : hearingId));
+            return true;
+        }
+        return false;
+    }
+
+    /**
      * #231 system camp transfer: an unpaid bail window lapsing sends the
      * prisoner to the mines without an officer present. Online prisoners are
      * delivered at the intake point; offline ones get the register link and
@@ -1874,6 +1909,7 @@ public class PrisonService implements PrisonRoleplayUseCase {
         }
         rec.status = PrisonerStatus.FUGITIVE;
         rec.escapeCount++;
+        rec.lastEscapeAt = now();
         ctx.prisonerRegister().write(reg);
         if (bolos != null) {
             bolos.markFugitive(uuid, sentence.target, "evadare din custodie", sentence.id);

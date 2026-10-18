@@ -20,7 +20,10 @@ public enum DelegableAction {
     /** Complaint case reviews — judgment and rewards stay human. */
     COMPLAINT_REVIEW("Dosare de plângere", false, null),
     /** Fine appeals — voiding money on a timer stays human. */
-    FINE_APPEAL("Apeluri de amendă", false, null);
+    FINE_APPEAL("Apeluri de amendă", false, null),
+    /** FUN-11 parole hearings — standing orders only for CLEAN cases
+     *  (no victim complainants, still-eligible record); contested stays human. */
+    PAROLE_HEARING("Ședințe de eliberare", true, null);
 
     private final String displayName;
     private final boolean standingOrders;

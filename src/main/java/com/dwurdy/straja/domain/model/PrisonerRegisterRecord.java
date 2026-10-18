@@ -41,6 +41,8 @@ public class PrisonerRegisterRecord {
     public long bookedAt;
     /** Times the prisoner left custody without an official release. */
     public int escapeCount;
+    /** FUN-11: epoch ms of the last escape flag — parole clean-record window. */
+    public long lastEscapeAt;
     /** Epoch ms of the last official release (0 while in custody). */
     public long releasedAt;
     /** Game mode the player had at booking; restored on release/escape. */

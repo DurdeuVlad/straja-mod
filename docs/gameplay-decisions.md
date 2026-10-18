@@ -446,6 +446,39 @@ sweep). `/straja search` at the called cell resolves it — the FUN-9
 inspection (tunnels, jams, contraband) runs, contraband is confiscated
 with a seizure record, and detection penalties hit standing.
 
+## 15d. Parole & appeal hearings (FUN-11)
+
+**Eligibility is transparent.** `/straja parole` lists every gate — custody,
+`paroleMinStanding`, `paroleMinServedPercent` of active time, unpaid fines,
+the `paroleCleanHours` escape-free window, the DENIED refile cooldown, and
+a free docket slot — with a pass/fail mark each. `/straja parole file`
+(and `appeal`) writes a durable docket row; a prisoner's place in line
+never silently expires.
+
+**Hearings.** An officer opens a `FILED` case (`/straja parole open`) — the
+prisoner must be online to appear and must still be in custody (escorted,
+fugitive or released states block convening). Online victims (complaint
+complainants) get a bounded `paroleObjectionMinutes` window to
+`/straja parole object` — objections are recorded, not a veto. The
+prisoner may name an advocate who consents (`agree`/`decline`) and is
+recorded — advocacy carries no authority. `decide` lands `PAROLED`
+(release + conditions), `DENIED` (refile cooldown) or `CONDITIONAL`
+(settle `paroleBailAmount` labor credit inside `paroleConditionalHours`,
+else it lapses to a denial).
+
+**Delegation.** The docket is a FUN-1 `PAROLE_HEARING` queue: standing
+orders matching `CLEAN` (no victim complainants, eligibility still
+green) resolve routine approvals under the order's authority — the
+hearing record remains the artifact. Contested cases wait for humans.
+
+**Conditions.** A PAROLED register status marks the parolee until
+`paroleLengthHours` elapse. Check-ins (`/straja parole checkin`) are due
+every `paroleCheckInHours`; parole clocks freeze while the parolee is
+offline or the server is down, exactly as sentences pause. A missed
+check-in flags the parolee FUGITIVE so the normal arrest pipeline
+re-arrests them; a fresh arrest closes the parole as VIOLATED; a
+completed window flips the register to RELEASED.
+
 ## 16. Explicit non-goals / postponed decisions
 
 - Jailer/item-dependent custody expansion is postponed for now.

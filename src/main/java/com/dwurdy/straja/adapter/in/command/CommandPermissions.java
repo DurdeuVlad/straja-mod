@@ -89,6 +89,7 @@ final class CommandPermissions {
             Map.entry("jobpost", ADMIN),
             Map.entry("trade", 0),
             Map.entry("iou", 0),
+            Map.entry("parole", 0),
             Map.entry("status", 0),
             Map.entry("rules", 0),
             Map.entry("regulament", 0),

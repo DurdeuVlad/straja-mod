@@ -66,6 +66,11 @@ public final class DelegationService implements DelegationUseCase {
     private final Supplier<java.util.Set<String>> professions;
     private final Clock clock;
 
+    /** FUN-11: bound after construction to keep the ctor stable. */
+    private ParoleService paroles;
+
+    public void useParole(ParoleService service) { this.paroles = service; }
+
     private long lastSweepAt = -1;
 
     public DelegationService(StrajaContext ctx,
@@ -375,6 +380,8 @@ public final class DelegationService implements DelegationUseCase {
                 case REPORT_REVIEW -> "ACCEPTED".equals(outcome)
                         && reports.reviewDelegated(authorityUuid, authorityName, item.requestId);
                 case COMPLAINT_REVIEW, FINE_APPEAL -> false;
+                case PAROLE_HEARING -> "APPROVED".equals(outcome) && paroles != null
+                        && paroles.decideDelegated(authorityUuid, authorityName, item.requestId);
             };
         } catch (RuntimeException error) {
             ok = false;
@@ -475,6 +482,15 @@ public final class DelegationService implements DelegationUseCase {
                         }
                     }
                 }
+                case PAROLE_HEARING -> {
+                    if (paroles != null) {
+                        for (var h : paroles.pendingDocket()) {
+                            out.add(new PendingItem(action, h.id, h.prisonerUuid,
+                                    paroles.matchValue(h.prisonerUuid), h.prisonerName,
+                                    h.filedAt, h.version));
+                        }
+                    }
+                }
             }
             out.sort(java.util.Comparator.comparingLong(PendingItem::submittedAt));
             return out;
@@ -493,6 +509,7 @@ public final class DelegationService implements DelegationUseCase {
             case REPORT_REVIEW -> "report-review";
             case COMPLAINT_REVIEW -> "complaint-review";
             case FINE_APPEAL -> "fine-appeal-review";
+            case PAROLE_HEARING -> "parole-review";
         } + ":" + requestId;
     }
 
@@ -500,6 +517,7 @@ public final class DelegationService implements DelegationUseCase {
         return switch (action) {
             case JOIN_PETITION, PROMOTION_PETITION -> "APPROVED";
             case REPORT_REVIEW -> "ACCEPTED";
+            case PAROLE_HEARING -> "APPROVED";
             default -> null;
         };
     }
