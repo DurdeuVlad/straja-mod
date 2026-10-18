@@ -482,6 +482,7 @@
   "straja.duty.not_on_duty": "Nu ești în serviciu.",
   "straja.duty.patrol_at_secretary": "Tura de patrulare începe la secretară. Mergi la Secretara Străjii pentru a intra în serviciu.",
   "straja.duty.patrol_blocked": "Autorizația centrală nu permite patrulă în stația curentă.",
+  "straja.duty.work_blocked": "Turele de lucru sunt pentru ramura profesională. Cere Comisarului o încadrare pe meserii.",
   "straja.duty.payment_unconfirmed": "Plata anterioară nu a putut fi confirmată; blocată pentru verificarea Comisarului.",
   "straja.duty.points_short": "Mai sunt necesare %s puncte de serviciu.",
   "straja.duty.promote_comisar": "Promovările sunt decizia finală a Comisarului.",

@@ -35,7 +35,7 @@ public class GuardState {
     public String callsign = "";
     public java.util.Set<String> specializations = new java.util.LinkedHashSet<>(); // independent functions: Instructor, Recrutor, … (§2)
     public boolean duty = false;
-    public String mode = "OFF_DUTY";           // NORMAL | SPECIAL | FREE | OFF_DUTY
+    public String mode = "OFF_DUTY";           // NORMAL | SPECIAL | FREE | WORK | OFF_DUTY
     public String patrolState = "OFF";         // ACTIVE | WAITING | SUSPENDED | OFF
     public List<String> route = new ArrayList<>();
     public int patrolIndex = 0;

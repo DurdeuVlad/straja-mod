@@ -10,12 +10,14 @@ import com.dwurdy.straja.application.port.out.PlayerGateway;
  */
 public interface GuardDutyUseCase {
     record DutyView(boolean activeGuard, boolean canStart, String checkpointId, boolean canStop,
-                    boolean canClaimSalary, boolean canViewCoins, boolean canClaimFood,
+                    boolean canStartWork, boolean canClaimSalary, boolean canViewCoins, boolean canClaimFood,
                     boolean canClaimKit, boolean canBeginResignation,
                     boolean canConfirmResignation, boolean canCancelResignation, boolean canRejoin) {}
 
     DutyView dutyView(PlayerGateway player);
     void startDuty(PlayerGateway player);
+    /** Trades work shift: hourly paid presence for the professional track. */
+    void startWorkShift(PlayerGateway player);
     void checkpoint(PlayerGateway player, String checkpointId);
     void stopDuty(PlayerGateway player);
     void salary(PlayerGateway player);

@@ -244,6 +244,46 @@ public final class DutyEngine {
         return Result.pass(List.of(DomainEvent.of("duty_started_free")));
     }
 
+    /**
+     * Trades work shift (announced part-time pay): paid hourly presence for
+     * the professional track, no route and no deadlines. Unlike FREE duty it
+     * is not trusted — salary accrues through the same movement gate as a
+     * patrol. The capability check lives in GuardService (PROFESSIONAL_JOBS);
+     * the engine only enforces lifecycle guards.
+     */
+    public static Result startWorkDuty(GuardState state, long now) {
+        if (state.resignationPending) return Result.fail("resignation_pending");
+        if (state.resigned) return Result.fail("resigned");
+        if (state.fired) return Result.fail("fired");
+        if (state.duty) return Result.fail("already_on_duty");
+        if (state.suspended) return Result.fail("suspended");
+
+        state.duty = true;
+        state.mode = "WORK";
+        state.patrolState = "OFF";
+        state.route = new ArrayList<>();
+        state.patrolIndex = 0;
+        state.patrolRounds = 0;
+        state.requiredRounds = 0;
+        state.waitingUntil = null;
+        state.deadlineAt = null;
+        state.missionMinutes = new java.util.LinkedHashMap<>();
+        state.dutyStartedAt = now;
+        state.lastAccrualAt = now;
+        state.lastDutyActivityAt = now;
+        state.lastDutyActivityX = null;
+        state.lastDutyActivityY = null;
+        state.lastDutyActivityZ = null;
+        state.salaryActivityPaused = false;
+        state.dutyRemainderMs = 0;
+        state.dutyServiceMs = 0;
+        state.dutyBlocksCurrent = 0;
+        state.specialAuthorizedBy = null;
+        state.lastEndReason = null;
+        state.responseCreditUntil = null;
+        return Result.pass(List.of(DomainEvent.of("duty_started_work")));
+    }
+
     public static Result activateCheckpoint(GuardState state, String checkpointId, long now,
                                             int salaryPerHour, java.util.Map<String, Integer> missionMinutes,
                                             StrajaPolicies policies) {

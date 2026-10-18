@@ -101,11 +101,22 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
     private long now() { return ctx.clock().nowMillis(); }
 
     /** Hourly wage (§10): the Comisar rate comes from the personnel flag, not
-     * rank. §25 hazard pay multiplies every accrual path through this funnel. */
+     * rank. V2 members earn their career grade's announced rate — the ladder
+     * rungs the legacy level map cannot express (Sergent, Meseriaș, Maior,
+     * the whole professional track) still carry their own wage. Legacy
+     * players without a personnel record keep the level-keyed rate.
+     * §25 hazard pay multiplies every accrual path through this funnel. */
     private int salaryFor(PlayerGateway player, GuardState state) {
-        int wage = players.isCommissioner(player)
-                ? ctx.policies().salaryCommissionerPerHour
-                : ctx.policies().salaryPerHour(state.rank);
+        int wage;
+        if (players.isCommissioner(player)) {
+            wage = ctx.policies().salaryCommissionerPerHour;
+        } else {
+            var record = v2PersonnelService != null
+                    ? v2PersonnelService.find(player.uuid().toString()) : null;
+            wage = record != null && record.active() && record.careerGrade != null
+                    ? ctx.policies().salaryPerHour(record.careerGrade)
+                    : ctx.policies().salaryPerHour(state.rank);
+        }
         var emergency = ctx.emergency().read();
         if (emergency.active && emergency.payMultiplier > 1.0) {
             wage = (int) Math.round(wage * emergency.payMultiplier);
@@ -1411,7 +1422,10 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
                 && state.patrolIndex >= 0 && state.patrolIndex < state.route.size()) {
             checkpointId = state.route.get(state.patrolIndex);
         }
-        boolean canClaimSalary = activeGuard && (state.unpaidSalary > 0
+        boolean workEligible = players.hasCapability(player,
+                com.dwurdy.straja.domain.model.Capability.PROFESSIONAL_JOBS)
+                && !state.suspended && !state.fired && !state.resigned;
+        boolean canClaimSalary = (activeGuard || workEligible) && (state.unpaidSalary > 0
                 || "PENDING".equals(state.salaryPaymentStatus)
                 || "IN_PROGRESS".equals(state.salaryPaymentStatus)
                 || "REVIEW".equals(state.salaryPaymentStatus));
@@ -1419,7 +1433,8 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
                 activeGuard,
                 activeGuard && !state.duty && !state.resignationPending,
                 checkpointId,
-                activeGuard && state.duty,
+                (activeGuard || workEligible && "WORK".equals(state.mode)) && state.duty,
+                workEligible && !state.duty && !state.resignationPending,
                 canClaimSalary,
                 activeGuard,
                 activeGuard && state.duty
@@ -1594,13 +1609,42 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         return dx * dx + dy * dy + dz * dz <= 9; // 3-block radius, same as reference
     }
 
+    /**
+     * Trades work shift (announced part-time pay): an hourly paid presence
+     * for the professional track — no route, no checkpoints, but the same
+     * movement-gated accrual as a patrol, so an AFK tradesman stops earning
+     * exactly like an AFK soldier. Starts anywhere; the Comisar gate is the
+     * PROFESSIONAL_JOBS capability the personnel record carries.
+     */
+    public void startWorkShift(PlayerGateway player) {
+        GuardState state = players.state(player);
+        if (!players.hasCapability(player, com.dwurdy.straja.domain.model.Capability.PROFESSIONAL_JOBS)) {
+            player.refuse("straja.duty.work_blocked", "straja.remedy.ask_comisar");
+            return;
+        }
+        Result result = DutyEngine.startWorkDuty(state, now());
+        if (applyCoreResult(player, state, result)) {
+            captureDutyFaction(player, state);
+            players.save(player.uuid(), state);
+            audit.record(AuditActions.DUTY_START, player.name(), player.uuid().toString(),
+                    player.name(), player.uuid().toString(), AuditResults.SUCCESS, "work_shift");
+            player.tell("Tură de lucru începută. Ești plătit pe oră ca meșteșugar al Străjii; "
+                    + "termini cu /straja stop sau de la secretară.");
+        }
+    }
+
     public void stopDuty(PlayerGateway player) {
         GuardState state = players.state(player);
-        if (!players.hasCapability(player, com.dwurdy.straja.domain.model.Capability.ROUTINE_PATROL)) {
+        boolean workShift = state.duty && "WORK".equals(state.mode);
+        if (!workShift && !players.hasCapability(player, com.dwurdy.straja.domain.model.Capability.ROUTINE_PATROL)) {
             player.refuse("straja.duty.patrol_blocked", "straja.remedy.ask_comisar");
             return;
         }
-        if (!players.permissionLevel(player, state).atLeast(PermissionLevel.GUARD)) {
+        if (workShift && !players.hasCapability(player, com.dwurdy.straja.domain.model.Capability.PROFESSIONAL_JOBS)) {
+            player.refuse("straja.duty.work_blocked", "straja.remedy.ask_comisar");
+            return;
+        }
+        if (!workShift && !players.permissionLevel(player, state).atLeast(PermissionLevel.GUARD)) {
             player.refuse("straja.duty.stop_rank", "straja.remedy.duty");
             return;
         }
@@ -1608,7 +1652,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             player.refuse("straja.duty.not_on_duty", "straja.remedy.duty");
             return;
         }
-        if (!"FREE".equals(state.mode) && !DutyEngine.freeBeat(ctx.policies()) && !nearSecretary(player)) {
+        if (!"FREE".equals(state.mode) && !workShift && !DutyEngine.freeBeat(ctx.policies()) && !nearSecretary(player)) {
             player.refuse("straja.duty.end_at_secretary", "straja.remedy.secretary");
             return;
         }

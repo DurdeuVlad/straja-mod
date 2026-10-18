@@ -384,6 +384,7 @@ public final class NpcSecretarySurfaceService {
             add(actions, parameterized("duty-checkpoint", view.checkpointId()), "Activate checkpoint");
         }
         if (view.canStop()) add(actions, "duty-stop", "End duty");
+        if (view.canStartWork()) add(actions, "work-start", "Start work shift");
         if (view.canClaimSalary()) add(actions, "duty-salary", "Claim salary");
         if (view.canViewCoins()) add(actions, "duty-coins", "View coins");
         if (view.canClaimFood()) add(actions, "duty-food", "Claim duty food");

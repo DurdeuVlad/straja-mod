@@ -172,6 +172,7 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.IntValue STORAGE_AGGRO_RANGE;
 
     public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> SALARY_PER_HOUR;
+    public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> SALARY_PER_GRADE;
     public static final ModConfigSpec.IntValue SALARY_COMMISSIONER_PER_HOUR;
     public static final ModConfigSpec.IntValue SALARY_GRANULARITY_SECONDS;
     public static final ModConfigSpec.IntValue SALARY_MAX_PAID_MINUTES_PER_DAY;
@@ -521,11 +522,12 @@ public final class StrajaServerConfig {
         MISSION_MIN_MINUTES = B.defineInRange("minMinutes", 1, 1, 10080);
         MISSION_MAX_MINUTES = B.defineInRange("maxMinutes", 240, 1, 10080);
         MISSION_MAX_SCHEDULE_DAYS = B.defineInRange("maxScheduleDays", 7, 0, 365);
-        MISSION_MAX_REWARD = B.defineInRange("maxReward", 250, 0, 1000000);
+        MISSION_MAX_REWARD = B.defineInRange("maxReward", defaults.missionMaxReward, 0, 1000000);
         MISSION_MAX_XP_REWARD = B.defineInRange("maxXpReward", 12, 0, 100000);
         MISSION_MAX_COPIES_PER_DRAFT = B.defineInRange("maxCopiesPerDraft", 4, 1, 64);
-        MISSION_MAX_REWARD_POOL = B.defineInRange("maxRewardPool", 1000, 0, 1000000);
-        MISSION_MAX_REWARD_PER_ISSUER_PER_DAY = B.defineInRange("maxRewardPerIssuerPerDay", 1000, 0, 1000000);
+        MISSION_MAX_REWARD_POOL = B.defineInRange("maxRewardPool", defaults.missionMaxRewardPool, 0, 1000000);
+        MISSION_MAX_REWARD_PER_ISSUER_PER_DAY = B.defineInRange("maxRewardPerIssuerPerDay",
+                defaults.missionMaxRewardPerIssuerPerDay, 0, 1000000);
         MISSION_MAX_ACTIVE_PER_PLAYER = B.defineInRange("maxActivePerPlayer", 3, 1, 64);
         MISSION_DEFAULT_MIN_RANK = B.defineInRange("defaultMinimumRank", 1, 0, 4);
         MISSION_MAX_ASSIGNEES = B.defineInRange("maxAssignees", 4, 1, 64);
@@ -835,17 +837,29 @@ public final class StrajaServerConfig {
 
         B.push("salary");
         SALARY_PER_HOUR = B.comment(
-                        "Hourly wage in Bronze coins, per rank (§10):",
-                        "Stagiar 16, Străjer 24, Locotenent 36, Căpitan 64,",
-                        "Colonel 96 by default.",
+                        "Hourly wage in Bronze coins, per legacy rank level (§10):",
+                        "Stagiar 64 (1 Brass), Străjer 128 (2), Locotenent 512 (8),",
+                        "Căpitan 1024 (16), Colonel 2048 (32) by default — the",
+                        "announced rates at 64 Bronze = 1 Brass.",
                         "Accrues continuously in granularitySeconds chunks.",
                         "Entries: \"rank=coinsPerHour\".")
                 .defineListAllowEmpty(List.of("perHour"),
                         StrajaPolicies.formatIntMap(defaults.salaryPerHour),
-                        () -> "1=16", StrajaServerConfig::isIntMapEntry);
+                        () -> "1=64", StrajaServerConfig::isIntMapEntry);
+        SALARY_PER_GRADE = B.comment(
+                        "Hourly wage in Bronze per V2 career grade — the",
+                        "announced rates: part-time 1/2/4 Brass (64/128/256",
+                        "Bronze), officers 8/16/24/32 Brass (512–2048 Bronze).",
+                        "Unmapped grades fall back to the perHour map at their",
+                        "legacy projection.",
+                        "Entries: \"CAREER_GRADE=coinsPerHour\".")
+                .defineListAllowEmpty(List.of("perGrade"),
+                        StrajaPolicies.formatStringIntMap(defaults.salaryPerGrade),
+                        () -> "MILITARY_STAGIAR=64", StrajaServerConfig::isStringIntEntry);
         SALARY_COMMISSIONER_PER_HOUR = B.comment(
-                        "Comisar hourly wage in Bronze (default 128 = 2× Căpitan).")
-                .defineInRange("commissionerPerHour", 128, 0, 100000);
+                        "Comisar hourly wage in Bronze (default 2560 = 40 Brass,",
+                        "above the announced Colonel rate).")
+                .defineInRange("commissionerPerHour", 2560, 0, 100000);
         SALARY_GRANULARITY_SECONDS = B.comment(
                         "Accrual chunk size in seconds; sub-chunk duty time and",
                         "sub-coin fractions carry forward — nothing is truncated.")
@@ -1619,6 +1633,8 @@ public final class StrajaServerConfig {
 
         p.salaryPerHour = mapOrDefault(StrajaPolicies.parseIntMap(SALARY_PER_HOUR.get()),
                 defaults().salaryPerHour);
+        p.salaryPerGrade = mapOrDefault(StrajaPolicies.parseStringIntMap(SALARY_PER_GRADE.get()),
+                defaults().salaryPerGrade);
         p.salaryCommissionerPerHour = SALARY_COMMISSIONER_PER_HOUR.get();
         p.salaryGranularitySeconds = SALARY_GRANULARITY_SECONDS.get();
         p.salaryMaxPaidMinutesPerDay = SALARY_MAX_PAID_MINUTES_PER_DAY.get();

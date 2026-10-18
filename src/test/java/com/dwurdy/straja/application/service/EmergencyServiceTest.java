@@ -139,8 +139,8 @@ class EmergencyServiceTest {
         guards.stopDuty(comisar);
 
         var st = ctx.players().read(comisar.uuid());
-        // 600 paid seconds at 256/h (128 × 2.0) = 42.67 → 42 coins, fraction carried
-        assertEquals(42, st.unpaidSalary,
+        // 600 paid seconds at 5120/h (2560 × 2.0) = 853.33 → 853 coins, fraction carried
+        assertEquals(853, st.unpaidSalary,
                 "hazard pay must double the hourly accrual — tells: " + comisar.messages);
         assertTrue(comisar.told("primă de urgență"), "the accrual tell notes hazard pay");
     }
