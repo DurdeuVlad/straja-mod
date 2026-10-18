@@ -1216,6 +1216,73 @@ class GuardServiceTest {
     }
 
     @Test
+    void chatOnDutyCountsAsActivity() {
+        TestPlayer p = tradesman(com.dwurdy.straja.domain.model.CareerGrade.PROFESSIONAL_ZILIER,
+                "zilier_chat");
+        guards.startWorkShift(p);
+        guards.tickPlayerDuty(p); // stamp the marker
+        clock.advance(20 * 60_000L); // twenty still minutes — past the RP grace
+        guards.tickPlayerDuty(p);
+        assertTrue(players.state(p.uuid()).salaryActivityPaused);
+        guards.noteChat(p); // "…vorbește cu negustorul" — presence, not AFK
+        var state = players.state(p.uuid());
+        assertFalse(state.salaryActivityPaused, "speaking on duty closes the AFK gap");
+    }
+
+    @Test
+    void shortDisconnectPausesShiftLongOneAutoEnds() {
+        TestPlayer p = recruitToStagiar();
+        guards.recoverOnLogin(p); // stamps this runtime's boot id on the state
+        placeCheckpoints();
+        standAt(p, 1);
+        guards.startDuty(p);
+        // A couple of paid minutes first so the assertions have a wage to check.
+        p.x += 2.0;
+        clock.advance(2 * 60_000L);
+        guards.tickPlayerDuty(p);
+        long earnedOnline = players.state(p.uuid()).unpaidSalary;
+        assertTrue(earnedOnline > 0);
+
+        // A four-minute relog: the shift is exactly where they left it —
+        // and the break paid nothing.
+        guards.noteLogout(p);
+        clock.advance(4 * 60_000L);
+        guards.recoverOnLogin(p);
+        var resumed = players.state(p.uuid());
+        assertTrue(resumed.duty, "a short break resumes the shift");
+        assertNull(resumed.lastEndReason);
+        assertNull(resumed.lastLogoutAt, "the stamp is consumed");
+        guards.tickPlayerDuty(p);
+        assertEquals(earnedOnline, players.state(p.uuid()).unpaidSalary,
+                "the offline minutes never enter the wage clock");
+
+        // Seven minutes away: the resumed shift auto-ends on return.
+        guards.noteLogout(p);
+        clock.advance(7 * 60_000L);
+        guards.recoverOnLogin(p);
+        var ended = players.state(p.uuid());
+        assertFalse(ended.duty, "a long absence ends the shift on return");
+        assertEquals("offline_auto_end", ended.lastEndReason);
+        assertEquals(earnedOnline, ended.unpaidSalary,
+                "a disconnect is a pause — the absence pays nothing");
+        assertTrue(p.told("Tura s-a încheiat automat"));
+    }
+
+    @Test
+    void offlineAutoEndRespectsTheDisableKnob() {
+        ctx.policies().dutyAutoEndOfflineMinutes = 0;
+        TestPlayer p = recruitToStagiar();
+        guards.recoverOnLogin(p);
+        placeCheckpoints();
+        standAt(p, 1);
+        guards.startDuty(p);
+        guards.noteLogout(p);
+        clock.advance(60 * 60_000L);
+        guards.recoverOnLogin(p);
+        assertTrue(players.state(p.uuid()).duty, "disabled auto-end keeps the shift open");
+    }
+
+    @Test
     void workShiftRefusesCiviliansAndSwornEnlisted() {
         TestPlayer civilian = server.add("civil");
         guards.startWorkShift(civilian);

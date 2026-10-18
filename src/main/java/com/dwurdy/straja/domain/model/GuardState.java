@@ -47,6 +47,9 @@ public class GuardState {
     public Long dutyStartedAt = null;
     public Long lastAccrualAt = null;
     public Long lastDutyActivityAt = null;
+    /** Set by the logout hook; read+consumed by recoverOnLogin to decide
+     *  whether the shift resumes (short break) or auto-ends. */
+    public Long lastLogoutAt = null;
     public Double lastDutyActivityX = null;
     public Double lastDutyActivityY = null;
     public Double lastDutyActivityZ = null;

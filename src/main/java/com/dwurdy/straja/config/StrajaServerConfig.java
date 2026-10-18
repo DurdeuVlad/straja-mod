@@ -178,6 +178,7 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.IntValue SALARY_MAX_PAID_MINUTES_PER_DAY;
     public static final ModConfigSpec.IntValue SALARY_WINDOW_MINUTES;
     public static final ModConfigSpec.IntValue SALARY_ACTIVITY_GRACE_SECONDS;
+    public static final ModConfigSpec.IntValue DUTY_AUTO_END_OFFLINE_MINUTES;
     public static final ModConfigSpec.DoubleValue SALARY_ACTIVITY_MOVE_THRESHOLD;
     public static final ModConfigSpec.BooleanValue WEEKLY_STIPEND_ENABLED;
     public static final ModConfigSpec.IntValue WEEKLY_STIPEND_AMOUNT;
@@ -868,8 +869,17 @@ public final class StrajaServerConfig {
                 .defineInRange("granularitySeconds", 60, 1, 3600);
         SALARY_MAX_PAID_MINUTES_PER_DAY = B.defineInRange("maxPaidMinutesPerDay", 240, 0, 100000);
         SALARY_WINDOW_MINUTES = B.defineInRange("windowMinutes", 1440, 1, 100000);
-        SALARY_ACTIVITY_GRACE_SECONDS = B.defineInRange("activityGraceSeconds", 90, 5, 3600);
+        SALARY_ACTIVITY_GRACE_SECONDS = B.comment(
+                        "Anti-AFK window in seconds: the wage pauses after this",
+                        "long without movement. RP-friendly default — standing",
+                        "and talking is presence; chat also counts as activity.")
+                .defineInRange("activityGraceSeconds", 900, 5, 86400);
         SALARY_ACTIVITY_MOVE_THRESHOLD = B.defineInRange("activityMoveThreshold", 0.15, 0.0, 10.0);
+        DUTY_AUTO_END_OFFLINE_MINUTES = B.comment(
+                        "A disconnect pauses the shift (wage already stops via",
+                        "the activity gate); offline longer than this ends it",
+                        "on next login — earned wages stay claimable. 0 disables.")
+                .defineInRange("dutyAutoEndOfflineMinutes", 5, 0, 1440);
         B.pop();
 
         B.push("v2Settlements");
@@ -1648,6 +1658,7 @@ public final class StrajaServerConfig {
         p.salaryMaxPaidMinutesPerDay = SALARY_MAX_PAID_MINUTES_PER_DAY.get();
         p.salaryWindowMinutes = SALARY_WINDOW_MINUTES.get();
         p.salaryActivityGraceSeconds = SALARY_ACTIVITY_GRACE_SECONDS.get();
+        p.dutyAutoEndOfflineMinutes = DUTY_AUTO_END_OFFLINE_MINUTES.get();
         p.salaryActivityMoveThreshold = SALARY_ACTIVITY_MOVE_THRESHOLD.get();
         p.weeklyStipendEnabled = WEEKLY_STIPEND_ENABLED.get();
         p.weeklyStipendAmount = WEEKLY_STIPEND_AMOUNT.get();
