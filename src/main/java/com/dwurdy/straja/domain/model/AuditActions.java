@@ -183,9 +183,11 @@ public final class AuditActions {
     public static final String POLICY_RESET = "policy_reset";
     public static final String POLICY_SET = "policy_set";
     public static final String PRISON_ARREST = "prison_arrest";
+    public static final String PRISON_BREAK = "prison_break";
     public static final String PRISON_CELL_CREATE = "prison_cell_create";
     public static final String PRISON_ESCORT = "prison_escort";
     public static final String PRISON_FUGITIVE = "prison_fugitive";
+    public static final String PRISON_HEARING = "prison_hearing";
     public static final String PRISON_RECAPTURE = "prison_recapture";
     public static final String PRISON_RECOVER = "prison_recover";
     public static final String PRISON_RELEASE = "prison_release";
@@ -234,4 +236,8 @@ public final class AuditActions {
     public static final String WANTED_ESCORT = "wanted_escort";
     public static final String WHIP_KNOCKOUT = "whip_knockout";
     public static final String WHISTLE = "whistle";
+    public static final String DELEGATION_POLICY = "delegation_policy";
+    public static final String DELEGATION_ORDER = "delegation_order";
+    public static final String DELEGATION_RESOLVE = "delegation_resolve";
+    public static final String DELEGATION_REVOKE = "delegation_revoke";
 }

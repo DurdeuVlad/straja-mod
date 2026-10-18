@@ -89,6 +89,37 @@ public enum CareerGrade {
     }
 
     /**
+     * Previous grade on the same ladder, or null at an entry rung. Returns
+     * null for OFFICER_LOCOTENENT: its demotion target depends on the
+     * member's entry-track origin and is resolved by PersonnelService.
+     */
+    public CareerGrade previousGrade() {
+        return switch (this) {
+            case MILITARY_STRAJER -> MILITARY_STAGIAR;
+            case PROFESSIONAL_MESTER -> PROFESSIONAL_ZILIER;
+            case OFFICER_CAPITAN -> OFFICER_LOCOTENENT;
+            case OFFICER_COLONEL -> OFFICER_CAPITAN;
+            case MILITARY_STAGIAR, PROFESSIONAL_ZILIER, OFFICER_LOCOTENENT -> null;
+        };
+    }
+
+    /**
+     * The grade's rung on its career ladder, shared across tracks: both
+     * entry grades are step 1, both second grades are step 2, officers
+     * climb from 3. Promotion XP thresholds key off this so the two
+     * part-time tracks share one policy table.
+     */
+    public int careerStep() {
+        return switch (this) {
+            case MILITARY_STAGIAR, PROFESSIONAL_ZILIER -> 1;
+            case MILITARY_STRAJER, PROFESSIONAL_MESTER -> 2;
+            case OFFICER_LOCOTENENT -> 3;
+            case OFFICER_CAPITAN -> 4;
+            case OFFICER_COLONEL -> 5;
+        };
+    }
+
+    /**
      * Parses a user-typed grade token — enum names plus the friendly chat
      * aliases — after diacritic/case normalization. The single vocabulary for
      * grade names accepted from free text.

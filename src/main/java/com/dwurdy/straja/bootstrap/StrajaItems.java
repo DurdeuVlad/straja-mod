@@ -80,6 +80,17 @@ public final class StrajaItems {
     public static final DeferredItem<Item> KEYCHAIN = ITEMS.register("keychain",
             () -> new Item(new Item.Properties().stacksTo(1).rarity(Rarity.RARE)));
 
+    // FUN-9 contraband — smuggled tools and a stolen uniform. Both are
+    // physical, findable on inspection, and confiscated on detection.
+    public static final DeferredItem<Item> LOCKPICK = ITEMS.register("lockpick",
+            () -> new Item(new Item.Properties().stacksTo(8)));
+    public static final DeferredItem<Item> GUARD_UNIFORM = ITEMS.register("guard_uniform",
+            () -> new Item(new Item.Properties().stacksTo(1).rarity(Rarity.UNCOMMON)));
+    /** FUN-10: a favor made physical — the debtor signs it, the creditor holds
+     *  it, and anyone who steals it holds the leverage. */
+    public static final DeferredItem<Item> IOU_NOTE = ITEMS.register("iou_note",
+            () -> new Item(new Item.Properties().stacksTo(16)));
+
     public static final DeferredItem<Item> FINE_BOOK = ITEMS.register("fine_book",
             () -> new Item(new Item.Properties().stacksTo(1).rarity(Rarity.UNCOMMON)));
     public static final DeferredItem<Item> FINE_NOTICE = ITEMS.register("fine_notice",

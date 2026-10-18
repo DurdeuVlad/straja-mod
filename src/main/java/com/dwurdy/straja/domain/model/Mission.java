@@ -24,6 +24,10 @@ public class Mission {
     public String objective = "";
     public int minutes;
     public int reward;
+    /** Service-block (XP) grant per participant on completion. */
+    public int xpReward;
+    /** When true, any member meeting minimumRank may join without an invite. */
+    public boolean openRecruitment;
     /** NONE | PENDING | PAID | PARTIAL | PAYMENT_IN_PROGRESS | PAYMENT_FAILED | PAYMENT_REVIEW */
     public String rewardStatus = "NONE";
     public String rewardPayoutId = "";

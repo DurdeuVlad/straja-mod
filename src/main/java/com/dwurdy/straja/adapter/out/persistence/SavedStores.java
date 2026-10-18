@@ -152,6 +152,42 @@ public final class SavedStores {
         @Override public void write(IncidentStore store) { writeJson(store); }
     }
 
+    public static class Dispatch extends JsonBackedStore implements DispatchRepository {
+        public Dispatch(StoreAccess access) { super(access, "dispatch"); }
+        @Override public DispatchStore read() { return readJson(DispatchStore.class, DispatchStore::new); }
+        @Override public void write(DispatchStore store) { writeJson(store); }
+    }
+
+    public static class Manhunts extends JsonBackedStore implements ManhuntRepository {
+        public Manhunts(StoreAccess access) { super(access, "manhunts"); }
+        @Override public ManhuntStore read() { return readJson(ManhuntStore.class, ManhuntStore::new); }
+        @Override public void write(ManhuntStore store) { writeJson(store); }
+    }
+
+    public static class Transfers extends JsonBackedStore implements TransferRepository {
+        public Transfers(StoreAccess access) { super(access, "transfers"); }
+        @Override public TransferStore read() { return readJson(TransferStore.class, TransferStore::new); }
+        @Override public void write(TransferStore store) { writeJson(store); }
+    }
+
+    public static class Escapes extends JsonBackedStore implements EscapeRepository {
+        public Escapes(StoreAccess access) { super(access, "escapes"); }
+        @Override public EscapeStore read() { return readJson(EscapeStore.class, EscapeStore::new); }
+        @Override public void write(EscapeStore store) { writeJson(store); }
+    }
+
+    public static class Jobs extends JsonBackedStore implements JobRepository {
+        public Jobs(StoreAccess access) { super(access, "jobs"); }
+        @Override public JobStore read() { return readJson(JobStore.class, JobStore::new); }
+        @Override public void write(JobStore store) { writeJson(store); }
+    }
+
+    public static class Paroles extends JsonBackedStore implements ParoleRepository {
+        public Paroles(StoreAccess access) { super(access, "paroles"); }
+        @Override public ParoleStore read() { return readJson(ParoleStore.class, ParoleStore::new); }
+        @Override public void write(ParoleStore store) { writeJson(store); }
+    }
+
     public static class Bolos extends JsonBackedStore implements BoloRepository {
         public Bolos(StoreAccess access) { super(access, "bolos"); }
         @Override public BoloStore read() { return readJson(BoloStore.class, BoloStore::new); }
@@ -236,7 +272,11 @@ public final class SavedStores {
 
     public static class Promotions extends JsonBackedStore implements PromotionRepository {
         public Promotions(StoreAccess access) { super(access, "promotions"); }
-        @Override public PromotionStore read() { return readJsonVersioned(PromotionStore.class, PromotionStore::new, PromotionStore.CURRENT_SCHEMA_VERSION); }
+        @Override public PromotionStore read() {
+            PromotionStore store = readJsonVersioned(PromotionStore.class, PromotionStore::new, PromotionStore.CURRENT_SCHEMA_VERSION);
+            store.normalize();
+            return store;
+        }
         @Override public void write(PromotionStore store) { writeJson(store); }
     }
 
@@ -244,6 +284,12 @@ public final class SavedStores {
         public JoinRequests(StoreAccess access) { super(access, "join_requests"); }
         @Override public JoinRequestStore read() { return readJsonVersioned(JoinRequestStore.class, JoinRequestStore::new, JoinRequestStore.CURRENT_SCHEMA_VERSION); }
         @Override public void write(JoinRequestStore store) { writeJson(store); }
+    }
+
+    public static class Delegations extends JsonBackedStore implements DelegationRepository {
+        public Delegations(StoreAccess access) { super(access, "delegations"); }
+        @Override public DelegationStore read() { return readJsonVersioned(DelegationStore.class, DelegationStore::new, DelegationStore.CURRENT_SCHEMA_VERSION); }
+        @Override public void write(DelegationStore store) { writeJson(store); }
     }
 
     public static class Stations extends JsonBackedStore implements StationRepository {

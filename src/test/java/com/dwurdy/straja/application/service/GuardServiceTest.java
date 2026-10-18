@@ -22,6 +22,7 @@ class GuardServiceTest {
     private GuardService guards;
     private PlayerService players;
     private PersonnelService v2Personnel;
+    private com.dwurdy.straja.adapter.out.persistence.SavedStores.Personnel personnelRepo;
     private PromotionService v2Promotions;
 
     @BeforeEach
@@ -38,12 +39,13 @@ class GuardServiceTest {
         com.dwurdy.straja.adapter.out.persistence.StoreAccess v2Access =
                 name -> v2Raw.computeIfAbsent(name,
                         ignored -> new com.dwurdy.straja.support.MemoryStore());
-        var personnelRepo = new com.dwurdy.straja.adapter.out.persistence.SavedStores.Personnel(v2Access);
+        personnelRepo = new com.dwurdy.straja.adapter.out.persistence.SavedStores.Personnel(v2Access);
         v2Personnel = new PersonnelService(personnelRepo, clock, new Fakes.SeqIds());
         v2Promotions = new PromotionService(
                 new com.dwurdy.straja.adapter.out.persistence.SavedStores.Promotions(v2Access),
                 personnelRepo, new AuthorizationService(personnelRepo, clock), clock,
                 new Fakes.SeqIds());
+        v2Promotions.usePlayerService(players, policies);
         guards.useV2Promotions(v2Promotions);
         guards.useV2Personnel(v2Personnel);
         guards.useV2PersonnelProjection(p -> {
@@ -377,6 +379,7 @@ class GuardServiceTest {
 
     @Test
     void patrolTimeCapEndsDutyGracefully() {
+        ctx.policies().dutyRouteMode = "ROUTE"; // the cap is a route-mode bound
         placeCheckpoints();
         TestPlayer p = recruitToStagiar();
         standAt(p, 1);
@@ -397,6 +400,7 @@ class GuardServiceTest {
 
     @Test
     void patrolTimeCapDoesNotEndEarly() {
+        ctx.policies().dutyRouteMode = "ROUTE";
         placeCheckpoints();
         TestPlayer p = recruitToStagiar();
         standAt(p, 1);
@@ -537,9 +541,12 @@ class GuardServiceTest {
         guards.tickPlayerDuty(p);
         var state = players.state(p.uuid());
         assertTrue(state.salaryActivityPaused, "AFK guard must stop accruing");
-        // patrol deadline still evaluated against wall clock (default 30min) -> timed out
-        assertFalse(state.duty);
-        assertEquals("checkpoint_timeout", state.lastEndReason);
+        // FUN-5: the missed beat is a reminder, not a termination — the shift
+        // continues and the checkpoint stays active for a late arrival.
+        assertTrue(state.duty);
+        assertNull(state.lastEndReason);
+        assertNull(state.deadlineAt);
+        assertTrue(p.told("serviciul continuă"), "the missed beat is told, not silent");
     }
 
     @Test
@@ -733,7 +740,8 @@ class GuardServiceTest {
         assertEquals(Rank.STAGIAR.level(), players.state(p.uuid()).rank);
         assertTrue(c.told("refuzată"));
         // The member files the petition; the comisar's promote stamps it.
-        guards.requestPromotion(p);
+        setBlocks(p, 60);
+        guards.requestPetition(p, "motiv");
         guards.promote(c, p);
         assertEquals(Rank.GUARD.level(), players.state(p.uuid()).rank);
     }
@@ -747,6 +755,143 @@ class GuardServiceTest {
         assertTrue(state.fired);
         assertEquals(0, state.rank);
         assertFalse(state.invited);
+    }
+
+    // -------------------------------------------------- v2 discipline sync
+
+    private TestPlayer v2Member(com.dwurdy.straja.domain.model.CareerGrade grade) {
+        TestPlayer p = server.add("member-" + grade.name().toLowerCase());
+        v2Personnel.authorize("bootstrap", p.uuid().toString(), grade,
+                com.dwurdy.straja.domain.model.EmploymentMode.PART_TIME, "TEST", "hq",
+                "auth:" + p.uuid());
+        return p;
+    }
+
+    @Test
+    void suspendOnV2MemberPersistsThroughProjection() {
+        TestPlayer c = v2Comisar();
+        TestPlayer p = v2Member(com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STRAJER);
+        guards.suspend(c, p);
+        assertEquals(com.dwurdy.straja.domain.model.PersonnelStatus.SUSPENDED,
+                v2Personnel.find(p.uuid().toString()).membershipStatus);
+        // The projection must agree — a re-read can never resurrect authority.
+        assertTrue(players.state(p.uuid()).suspended);
+        assertFalse(guards.dutyView(p).activeGuard());
+    }
+
+    @Test
+    void fireOnV2MemberTerminatesRecord() {
+        TestPlayer c = v2Comisar();
+        TestPlayer p = v2Member(com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STRAJER);
+        guards.fire(c, p);
+        assertEquals(com.dwurdy.straja.domain.model.PersonnelStatus.TERMINATED,
+                v2Personnel.find(p.uuid().toString()).membershipStatus);
+        assertTrue(players.state(p.uuid()).fired);
+    }
+
+    @Test
+    void reinstateOnV2MemberReactivatesRecord() {
+        TestPlayer c = v2Comisar();
+        TestPlayer p = v2Member(com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STRAJER);
+        guards.suspend(c, p);
+        assertTrue(guards.reinstate(c, p));
+        assertEquals(com.dwurdy.straja.domain.model.PersonnelStatus.AUTHORIZED_ACTIVE,
+                v2Personnel.find(p.uuid().toString()).membershipStatus);
+        assertFalse(players.state(p.uuid()).suspended);
+    }
+
+    @Test
+    void demoteOnV2MemberDropsRecordGrade() {
+        TestPlayer c = v2Comisar();
+        TestPlayer p = v2Member(com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STRAJER);
+        guards.demote(c, p);
+        assertEquals(com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STAGIAR,
+                v2Personnel.find(p.uuid().toString()).careerGrade);
+        assertEquals(Rank.STAGIAR.level(), players.state(p.uuid()).rank);
+    }
+
+    @Test
+    void demoteEntryGradeV2MemberTerminatesRecord() {
+        TestPlayer c = v2Comisar();
+        TestPlayer p = v2Member(com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STAGIAR);
+        guards.demote(c, p);
+        assertEquals(com.dwurdy.straja.domain.model.PersonnelStatus.TERMINATED,
+                v2Personnel.find(p.uuid().toString()).membershipStatus);
+        assertTrue(players.state(p.uuid()).fired);
+    }
+
+    @Test
+    void suspendWithoutV2RecordKeepsLegacyPath() {
+        TestPlayer c = commissioner();
+        TestPlayer p = recruitToStagiar();
+        guards.suspend(c, p);
+        assertNull(v2Personnel.find(p.uuid().toString()));
+        assertTrue(players.state(p.uuid()).suspended);
+    }
+
+    @Test
+    void suspendOnTerminatedV2MemberRefuses() {
+        TestPlayer c = v2Comisar();
+        TestPlayer p = v2Member(com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STRAJER);
+        guards.fire(c, p);
+        guards.suspend(c, p);
+        // A terminated record must not be resurrected into a suspension.
+        assertEquals(com.dwurdy.straja.domain.model.PersonnelStatus.TERMINATED,
+                v2Personnel.find(p.uuid().toString()).membershipStatus);
+        assertTrue(players.state(p.uuid()).fired);
+        assertFalse(players.state(p.uuid()).suspended);
+        // And reinstate on a terminated record stays refused.
+        assertFalse(guards.reinstate(c, p));
+        assertEquals(com.dwurdy.straja.domain.model.PersonnelStatus.TERMINATED,
+                v2Personnel.find(p.uuid().toString()).membershipStatus);
+    }
+
+    @Test
+    void demoteLocotenentToProfessionalEndsDuty() {
+        TestPlayer c = v2Comisar();
+        TestPlayer p = v2Member(com.dwurdy.straja.domain.model.CareerGrade.PROFESSIONAL_ZILIER);
+        // Promotion path: grade written on the record, careerOrigin stays PROFESSIONAL.
+        var personnelStore = personnelRepo.read();
+        var record = personnelStore.records.get(p.uuid().toString());
+        record.careerGrade = com.dwurdy.straja.domain.model.CareerGrade.OFFICER_LOCOTENENT;
+        record.employmentMode = com.dwurdy.straja.domain.model.EmploymentMode.FULL_TIME;
+        personnelRepo.write(personnelStore);
+        assertEquals(Rank.LOCOTENENT.level(), players.state(p.uuid()).rank);
+        var state = players.state(p.uuid());
+        state.duty = true;
+        players.save(p.uuid(), state);
+        guards.demote(c, p);
+        assertEquals(com.dwurdy.straja.domain.model.CareerGrade.PROFESSIONAL_MESTER,
+                v2Personnel.find(p.uuid().toString()).careerGrade);
+        // MESTER projects to civilian rank — the member left the sworn corps:
+        // duty must be ended, not left running on a trades member.
+        assertFalse(players.state(p.uuid()).duty);
+    }
+
+    @Test
+    void tradesMemberReinstateWorks() {
+        TestPlayer c = v2Comisar();
+        TestPlayer p = v2Member(com.dwurdy.straja.domain.model.CareerGrade.PROFESSIONAL_ZILIER);
+        guards.suspend(c, p);
+        assertTrue(players.state(p.uuid()).suspended);
+        assertTrue(guards.reinstate(c, p));
+        assertEquals(com.dwurdy.straja.domain.model.PersonnelStatus.AUTHORIZED_ACTIVE,
+                v2Personnel.find(p.uuid().toString()).membershipStatus);
+    }
+
+    @Test
+    void deniedV2DisciplineLeavesStateUntouched() {
+        // Create the member record first, then wire authorization: the
+        // flag-commissioner has no V2 appointment, so the personnel write is
+        // denied and the legacy state must be spared.
+        TestPlayer c = commissioner();
+        TestPlayer p = v2Member(com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STRAJER);
+        v2Personnel.useAuthorization(
+                new AuthorizationService(personnelRepo, clock));
+        guards.suspend(c, p);
+        assertFalse(players.state(p.uuid()).suspended);
+        assertEquals(com.dwurdy.straja.domain.model.PersonnelStatus.AUTHORIZED_ACTIVE,
+                v2Personnel.find(p.uuid().toString()).membershipStatus);
     }
 
     @Test
@@ -1068,34 +1213,96 @@ class GuardServiceTest {
     }
 
     @Test
-    void trainerPetitionFilesWithoutServiceBlocks() {
-        // Petition model: blocks/modules are advisory for the reviewer, not
-        // gates on the request itself.
+    void militaryAdvancementNeedsServiceBlocksFirst() {
+        // The fun split: military ranks come from XP + a learnable exam —
+        // without the points the ask is refused with a how-to-earn remedy.
         TestPlayer p = recruitToStagiar();
         guards.requestPromotion(p);
         assertEquals(Rank.STAGIAR.level(), players.state(p.uuid()).rank);
-        var application = v2Promotions.findOpen(p.uuid().toString(),
-                com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STRAJER);
-        assertNotNull(application);
-        assertEquals(com.dwurdy.straja.domain.model.PromotionStatus.READY_FOR_APPROVAL,
-                application.status);
-        assertTrue(p.told("Cererea de avansare"));
+        assertNull(players.state(p.uuid()).examGrade);
+        assertNull(v2Promotions.findOpen(p.uuid().toString(),
+                com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STRAJER));
+        assertTrue(p.told("puncte de serviciu"));
     }
 
     @Test
-    void trainerPetitionIgnoresUnfinishedModules() {
+    void militaryAdvancementStartsExamNotPetition() {
         TestPlayer p = recruitToStagiar();
         setBlocks(p, 500);
         guards.requestPromotion(p);
-        assertNotNull(v2Promotions.findOpen(p.uuid().toString(),
+        assertEquals("MILITARY_STRAJER", players.state(p.uuid()).examGrade);
+        assertNull(v2Promotions.findOpen(p.uuid().toString(),
                 com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STRAJER));
+        assertTrue(p.told("Examen de avansare"));
+        assertTrue(p.told("Întrebarea 1/"));
+    }
+
+    @Test
+    void examPassPromotesInstantly() {
+        TestPlayer p = recruitToStagiar();
+        setBlocks(p, 60);
+        guards.requestPromotion(p);
+        var bank = ctx.policies().trainingQuiz.stream()
+                .filter(q -> q.minRank() <= Rank.GUARD.level()).toList();
+        for (var question : bank) {
+            assertEquals("MILITARY_STRAJER", players.state(p.uuid()).examGrade);
+            guards.quiz(p, question.answers().get(0));
+        }
+        assertNull(players.state(p.uuid()).examGrade);
+        var record = v2Personnel.find(p.uuid().toString());
+        assertEquals(com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STRAJER,
+                record.careerGrade);
+        assertEquals(Rank.GUARD.level(), players.state(p.uuid()).rank);
+        assertTrue(p.told("Examen promovat"));
+    }
+
+    @Test
+    void examFailTeachesAnswerAndAppliesRetakeCooldown() {
+        TestPlayer p = recruitToStagiar();
+        setBlocks(p, 60);
+        guards.requestPromotion(p);
+        var bank = ctx.policies().trainingQuiz.stream()
+                .filter(q -> q.minRank() <= Rank.GUARD.level()).toList();
+        guards.quiz(p, "definitiv greșit");
+        assertTrue(p.told(bank.get(0).answers().get(0)),
+                "a wrong exam answer teaches the correct one on the spot");
+        // Fail the rest — the attempt latches and the cooldown applies.
+        for (int i = 1; i < bank.size(); i++) guards.quiz(p, "definitiv greșit");
+        var state = players.state(p.uuid());
+        assertNull(state.examGrade);
+        assertNotNull(state.examCooldownAt);
+        assertTrue(p.told("Examen picat"));
+        // Cooldown elapsed → a fresh exam can start.
+        clock.advance(120L * 60 * 1000);
+        guards.requestPromotion(p);
+        assertEquals("MILITARY_STRAJER", players.state(p.uuid()).examGrade);
+    }
+
+    @Test
+    void specialistAskNeedsServiceBlocksToo() {
+        TestPlayer p = server.add("zilier");
+        v2Personnel.authorize("bootstrap", p.uuid().toString(),
+                com.dwurdy.straja.domain.model.CareerGrade.PROFESSIONAL_ZILIER,
+                com.dwurdy.straja.domain.model.EmploymentMode.PART_TIME,
+                "TEST", "hq", "auth:zilier");
+        setBlocks(p, 0);
+        guards.requestPromotion(p);
+        assertTrue(p.told("puncte de serviciu"));
+        assertNull(v2Promotions.findOpen(p.uuid().toString(),
+                com.dwurdy.straja.domain.model.CareerGrade.PROFESSIONAL_MESTER));
+        // With the XP banked, the ask files into the officer review queue.
+        setBlocks(p, 60);
+        guards.requestPromotion(p);
+        assertNotNull(v2Promotions.findOpen(p.uuid().toString(),
+                com.dwurdy.straja.domain.model.CareerGrade.PROFESSIONAL_MESTER));
     }
 
     @Test
     void petitionApprovalFlipsRankAfterComisarReview() {
         TestPlayer comisar = v2Comisar();
         TestPlayer p = recruitToStagiar();
-        guards.requestPromotion(p);
+        setBlocks(p, 60);
+        guards.requestPetition(p, "motiv");
         var application = v2Promotions.findOpen(p.uuid().toString(),
                 com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STRAJER);
         assertNotNull(application);
@@ -1111,7 +1318,8 @@ class GuardServiceTest {
     void petitionDeniedKeepsRankAndShowsReason() {
         TestPlayer comisar = v2Comisar();
         TestPlayer p = recruitToStagiar();
-        guards.requestPromotion(p);
+        setBlocks(p, 60);
+        guards.requestPetition(p, "motiv");
         var application = v2Promotions.findOpen(p.uuid().toString(),
                 com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STRAJER);
         v2Promotions.reject(comisar.uuid().toString(), application.applicationId, "mai ai nevoie");
@@ -1391,6 +1599,7 @@ class GuardServiceTest {
 
     @Test
     void normalDutyStartsAndStopsOnlyAtTheSecretary() {
+        ctx.policies().dutyRouteMode = "ROUTE"; // secretary-return is route discipline
         placeCheckpoints();
         placeSecretary(0, 0, 0);
         TestPlayer p = guardAtRank(Rank.STAGIAR.level());
@@ -1413,6 +1622,22 @@ class GuardServiceTest {
         p.x = 2; p.z = 2;
         guards.stopDuty(p);
         assertFalse(players.state(p.uuid()).duty);
+    }
+
+    @Test
+    void freeBeatDutyStopsAtWillAwayFromSecretary() {
+        // FREE_BEAT default: a shift is a presence period — it ends at will,
+        // not by walking back to a desk.
+        placeCheckpoints();
+        placeSecretary(0, 0, 0);
+        TestPlayer p = guardAtRank(Rank.STAGIAR.level());
+        p.x = 1; p.z = 1;
+        guards.startDuty(p);
+        assertTrue(players.state(p.uuid()).duty);
+        assertEquals("NORMAL", players.state(p.uuid()).mode);
+        p.x = 100; p.z = 100;
+        guards.stopDuty(p);
+        assertFalse(players.state(p.uuid()).duty, "free-beat presence ends anywhere");
     }
 
     @Test

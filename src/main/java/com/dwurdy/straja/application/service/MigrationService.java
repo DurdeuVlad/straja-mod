@@ -98,7 +98,7 @@ public final class MigrationService {
         migrateCommissionerHint(data, lines);
 
         audit.record(AuditActions.KUBEJS_MIGRATION, "migration", null, null, null,
-                errors == 0 ? AuditResults.SUCCESS : "PARTIAL", String.join(" | ", lines));
+                errors == 0 ? AuditResults.SUCCESS : AuditResults.PARTIAL, String.join(" | ", lines));
         return new Report(lines, errors);
     }
 

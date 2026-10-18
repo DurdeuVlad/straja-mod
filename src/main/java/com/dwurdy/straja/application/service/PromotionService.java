@@ -46,6 +46,45 @@ public final class PromotionService implements com.dwurdy.straja.application.por
         this.audit = audit == null ? AuditService.NONE : audit;
     }
 
+    private PlayerService players;
+    private com.dwurdy.straja.domain.model.StrajaPolicies policies;
+
+    /**
+     * Installed by the composition root once {@link PlayerService} exists —
+     * promotion XP gating reads service blocks off the player's guard state.
+     * Unwired services keep petitions ungated so headless/test contexts stay
+     * usable.
+     */
+    public void usePlayerService(PlayerService players,
+                                 com.dwurdy.straja.domain.model.StrajaPolicies policies) {
+        this.players = players;
+        this.policies = policies;
+    }
+
+    /**
+     * Service blocks required to ask for {@code target}, from the shared
+     * {@code promotionServiceBlocks} table keyed by career step — 0 when the
+     * step has no configured threshold.
+     */
+    public int requiredBlocks(com.dwurdy.straja.domain.model.CareerGrade target) {
+        if (policies == null || target == null) return 0;
+        Integer required = policies.promotionServiceBlocks.get(target.careerStep());
+        return required == null ? 0 : Math.max(0, required);
+    }
+
+    /** XP gates part-time asks only; officer-track petitions stay invitation-driven. */
+    public boolean petitionXpSatisfied(String subjectUuid,
+                                       com.dwurdy.straja.domain.model.CareerGrade target) {
+        if (target == null || target.fullTimeRequired() || players == null) return true;
+        int required = requiredBlocks(target);
+        if (required <= 0) return true;
+        try {
+            return players.state(java.util.UUID.fromString(subjectUuid)).serviceBlocks >= required;
+        } catch (IllegalArgumentException notAPlayer) {
+            return false;
+        }
+    }
+
     public synchronized PromotionApplication submit(String subjectUuid, CareerGrade targetGrade) {
         PersonnelRecord person = requirePerson(subjectUuid);
         if (!person.active()) throw new IllegalStateException("personnel is not active");
@@ -91,6 +130,8 @@ public final class PromotionService implements com.dwurdy.straja.application.por
      */
     public synchronized PromotionApplication submitPetition(String subjectUuid, CareerGrade targetGrade,
                                                              String reason) {
+        if (!petitionXpSatisfied(subjectUuid, targetGrade))
+            throw new IllegalStateException("DENIED_XP");
         PromotionApplication application = submit(subjectUuid, targetGrade);
         String normalized = Text.bounded(reason, Text.REASON_LIMIT);
         if (!isOpen(application.status)) return application;
@@ -262,7 +303,7 @@ public final class PromotionService implements com.dwurdy.straja.application.por
         PersonnelRecord person = people.records.get(application.subjectUuid);
         if (person == null || person.version != application.expectedPersonnelVersion)
             throw new IllegalStateException("STALE_STATE");
-        AuthorizationContext context = AuthorizationContext.of(actorUuid, "APPROVE_PROMOTION");
+        AuthorizationContext context = AuthorizationContext.of(actorUuid, approvalCapability(application));
         context.subjectUuid = application.subjectUuid;
         context.beneficiaryUuid = application.subjectUuid;
         context.requiresIndependentApproval = true;
@@ -295,6 +336,57 @@ public final class PromotionService implements com.dwurdy.straja.application.por
         PromotionApplication persisted = requireApplication(promotions.read(), applicationId);
         approvalListener.accept(persisted);
         return persisted;
+    }
+
+    /**
+     * Part-time asks are routine advancement — any officer may stamp them;
+     * full-time/officer-track decisions keep the Comisar's seal.
+     */
+    private static String approvalCapability(PromotionApplication application) {
+        return application.targetGrade != null && !application.targetGrade.fullTimeRequired()
+                ? "APPROVE_PROMOTION_PART_TIME" : "APPROVE_PROMOTION";
+    }
+
+    /**
+     * Institutional promotion: the member passed a fixed promotion exam, so
+     * the institution itself is the decider — the exam result is the
+     * authorization. Creates (or adopts) the open application and stamps it
+     * APPROVED through the same durable approval flow an officer decision
+     * uses, so reconcile/outbox/audit semantics stay identical.
+     */
+    public synchronized PromotionApplication examPassPromote(String subjectUuid, CareerGrade targetGrade) {
+        // The exam is the institution's authorization for military
+        // advancement only — officer postings keep human approval and the
+        // affiliation checks that ride on it.
+        if (targetGrade == null || targetGrade.isOfficer() || targetGrade.isProfessional()
+                || targetGrade.fullTimeRequired())
+            throw new IllegalArgumentException("exam applies to military advancement only");
+        if (!petitionXpSatisfied(subjectUuid, targetGrade))
+            throw new IllegalStateException("DENIED_XP");
+        PromotionApplication application = submit(subjectUuid, targetGrade);
+        PromotionStore store = promotions.read();
+        PromotionApplication persisted = requireApplication(store, application.applicationId);
+        if (!isOpen(persisted.status)) throw new IllegalStateException("application is closed");
+        persisted.status = PromotionStatus.APPROVED;
+        persisted.reviewedBy = "EXAM";
+        persisted.decisionAt = clock.nowMillis();
+        persisted.personnelSyncState = "PENDING";
+        persisted.personnelAppliedAt = null;
+        persisted.version++;
+        if (persisted.outboundIntents == null)
+            persisted.outboundIntents = new java.util.ArrayList<>();
+        persisted.outboundIntents.add(com.dwurdy.straja.domain.model.OutboxIntent.of(
+                "PROMOTION_COMPLETED", "promotion:" + persisted.applicationId + ":v" + persisted.version,
+                persisted.applicationId, persisted.subjectUuid, clock.nowMillis()));
+        store.storeRevision++;
+        promotions.write(store);
+        audit.record(AuditActions.PROMOTION_PETITION_REVIEW, "EXAM", "EXAM",
+                persisted.applicationId, persisted.subjectUuid, AuditResults.APPROVED,
+                "from=" + persisted.fromGrade + " to=" + persisted.targetGrade + " via=exam");
+        reconcileApproval(persisted, store);
+        PromotionApplication result = requireApplication(promotions.read(), persisted.applicationId);
+        approvalListener.accept(result);
+        return result;
     }
 
     /**
@@ -392,7 +484,7 @@ public final class PromotionService implements com.dwurdy.straja.application.por
         // personnel projection may already have applied an approval.
         if (!isOpen(application.status)) throw new IllegalStateException("application is closed");
         if (authorization != null) {
-            AuthorizationContext context = AuthorizationContext.of(actorUuid, "APPROVE_PROMOTION");
+            AuthorizationContext context = AuthorizationContext.of(actorUuid, approvalCapability(application));
             context.subjectUuid = application.subjectUuid;
             context.beneficiaryUuid = application.subjectUuid;
             context.requiresIndependentApproval = true;

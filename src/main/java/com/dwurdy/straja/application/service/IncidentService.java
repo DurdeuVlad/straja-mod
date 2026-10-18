@@ -23,6 +23,7 @@ public final class IncidentService {
     private final StrajaContext ctx;
     private final PlayerService players;
     private final AuditService audit;
+    private DispatchService dispatch; // FUN-6: every created incident raises a call
 
     public IncidentService(StrajaContext ctx, PlayerService players, AuditService audit) {
         this.ctx = ctx;
@@ -30,7 +31,24 @@ public final class IncidentService {
         this.audit = audit;
     }
 
+    /** FUN-6 wiring — set post-construction by the runtime. */
+    public void useDispatch(DispatchService dispatch) { this.dispatch = dispatch; }
+
     private long now() { return ctx.clock().nowMillis(); }
+
+    /** FUN-5: responding to an incident credits multiplied pay for the
+     *  configured window — presence earns the base rate, response earns more. */
+    private void grantResponseCredit(PlayerGateway guard) {
+        int minutes = ctx.policies().dutyResponseCreditMinutes;
+        if (minutes <= 0 || guard == null || guard.uuid() == null) return;
+        var state = players.state(guard);
+        if (state == null || !state.duty) return;
+        long until = now() + minutes * 60_000L;
+        if (state.responseCreditUntil == null || state.responseCreditUntil < until) {
+            state.responseCreditUntil = until;
+            players.save(guard.uuid(), state);
+        }
+    }
 
     private IncidentStore store() {
         IncidentStore store = ctx.incidents().read();
@@ -227,6 +245,21 @@ public final class IncidentService {
         data.incidents.add(incident);
         audit.record(AuditActions.INCIDENT_CREATE, incident.createdByName, incident.createdByUuid,
                 incident.id, "", AuditResults.SUCCESS, incident.source);
+        if (dispatch != null) {
+            // FUN-6: the offense event becomes a routed call. URGENT incidents
+            // push; routine work queues on the board.
+            try {
+                dispatch.raise(DispatchService.SOURCE_INCIDENT, incident.id,
+                        incident.title, incident.description, incident.dimension,
+                        incident.x, incident.y, incident.z, incident.placeLabel,
+                        incident.subjectUuid, incident.subjectName,
+                        incident.createdByUuid,
+                        incident.priority == IncidentPriority.URGENT ? "URGENT" : "ROUTINE",
+                        "ENLISTED");
+            } catch (RuntimeException e) {
+                // Dispatch is a notification layer — it must never drop the incident.
+            }
+        }
         return incident;
     }
 
@@ -302,6 +335,9 @@ public final class IncidentService {
         incident.status = IncidentStatus.ASSIGNED;
         ctx.incidents().write(data);
         audit.record(AuditActions.INCIDENT_ACCEPT, guard.name(), uuid(guard), incident.id, "", AuditResults.SUCCESS, "");
+        // Self-created incidents (own whistle, own report) are cleanup, not
+        // response work — accepting stays legal but earns no credit.
+        if (!incident.createdByUuid.equals(uuid(guard))) grantResponseCredit(guard);
         guard.tell("Ai preluat " + incident.id + ".");
         return true;
     }
@@ -326,6 +362,7 @@ public final class IncidentService {
         if (incident.status == IncidentStatus.OPEN) incident.status = IncidentStatus.ASSIGNED;
         ctx.incidents().write(data);
         audit.record(AuditActions.INCIDENT_JOIN, guard.name(), key, incident.id, "", AuditResults.SUCCESS, "");
+        grantResponseCredit(guard);
         guard.tell("Te-ai alăturat incidentului " + incident.id + ".");
         return true;
     }
@@ -386,6 +423,7 @@ public final class IncidentService {
         ctx.incidents().write(data);
         audit.record(AuditActions.INCIDENT_RESOLVE, guard.name(), key, incident.id, "", AuditResults.SUCCESS,
                 code.name());
+        if (dispatch != null) dispatch.closeForSource(DispatchService.SOURCE_INCIDENT, incident.id, code.name());
         guard.tell("Incidentul " + incident.id + " a fost încheiat.");
         return true;
     }
@@ -432,6 +470,8 @@ public final class IncidentService {
                 incident.resolution = IncidentResolution.OTHER;
                 changed = true;
                 audit.record(AuditActions.INCIDENT_EXPIRE, "system", "", incident.id, "", AuditResults.SUCCESS, "");
+                if (dispatch != null)
+                    dispatch.closeForSource(DispatchService.SOURCE_INCIDENT, incident.id, "expired");
             }
         }
         if (changed) ctx.incidents().write(data);

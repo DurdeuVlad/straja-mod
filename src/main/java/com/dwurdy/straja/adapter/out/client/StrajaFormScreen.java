@@ -107,6 +107,7 @@ public class StrajaFormScreen extends AbstractContainerScreen<StrajaFormMenu> {
                         multiLineHeight, Component.empty(),
                         Component.literal(field.label()));
                 box.setCharacterLimit(field.maxLength());
+                if (!field.prefill().isBlank()) box.setValue(field.prefill());
                 addRenderableWidget(box);
                 inputs.add(new Input(field, box::getValue, labelY));
                 y += LABEL_HEIGHT + multiLineHeight + fieldGap;
@@ -114,6 +115,7 @@ public class StrajaFormScreen extends AbstractContainerScreen<StrajaFormMenu> {
                 EditBox box = new EditBox(font, x, y + LABEL_HEIGHT, width, SINGLE_LINE_HEIGHT,
                         Component.literal(field.label()));
                 box.setMaxLength(field.maxLength());
+                if (!field.prefill().isBlank()) box.setValue(field.prefill());
                 addRenderableWidget(box);
                 inputs.add(new Input(field, box::getValue, labelY));
                 y += LABEL_HEIGHT + SINGLE_LINE_HEIGHT + fieldGap;

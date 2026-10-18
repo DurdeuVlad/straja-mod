@@ -27,6 +27,7 @@ public interface FormSessionUseCase {
         MISSION_DRAFT_WRITE("mission-draft-write"),
         MISSION_DRAFT_SCOPE("mission-draft-scope"),
         MISSION_BUDGET_ADJUST("mission-budget-adjust"),
+        MISSION_INVITE("mission-invite"),
         COMPLAINT_SUBMIT("complaint-submit"),
         COMPLAINT_REPORT("complaint-report"),
         COMPLAINT_WITHDRAW("complaint-withdraw"),
@@ -89,9 +90,16 @@ public interface FormSessionUseCase {
         }
     }
 
-    record Field(String id, String label, int maxLength, boolean multiline, boolean required) {
+    record Field(String id, String label, int maxLength, boolean multiline, boolean required,
+                 String prefill) {
+        public Field(String id, String label, int maxLength, boolean multiline, boolean required) {
+            this(id, label, maxLength, multiline, required, "");
+        }
         public Field(String id, String label, int maxLength, boolean multiline) {
-            this(id, label, maxLength, multiline, true);
+            this(id, label, maxLength, multiline, true, "");
+        }
+        public Field {
+            prefill = prefill == null ? "" : prefill;
         }
     }
 

@@ -12,7 +12,8 @@ import java.util.List;
 public interface MissionRoleplayUseCase {
     enum Action { GET_CARNET, DRAFT_WRITE, DRAFT_STATUS, DRAFT_SCOPE, DRAFT_SIGN, DRAFT_PACKAGE,
                   TEMPLATE_LIST, ISSUE_TEMPLATE, ADJUST_BUDGET,
-                  JOIN, ACCEPT, DECLINE, REPORT, FAIL, COMPLETE, CLAIM_REWARD, RECOVER_REWARD }
+                  JOIN, ACCEPT, DECLINE, REPORT, FAIL, COMPLETE, CLAIM_REWARD, RECOVER_REWARD,
+                  INVITE }
 
     record AvailableAction(Action action, String missionId) {}
 
@@ -20,8 +21,10 @@ public interface MissionRoleplayUseCase {
     void list(PlayerGateway player);
     void giveCarnet(PlayerGateway player);
     void draftStatus(PlayerGateway player);
-    void draftWrite(PlayerGateway player, int minutes, String start, int reward, String objective);
-    void draftScope(PlayerGateway player, String minimumRank, int maxAssignees);
+    /** xpReward &lt; 0 derives the default from mission duration (service-block pacing). */
+    void draftWrite(PlayerGateway player, int minutes, String start, int reward, int xpReward, String objective);
+    /** openRecruitment lets any member meeting minimumRank join without an invite; null preserves. */
+    void draftScope(PlayerGateway player, String minimumRank, int maxAssignees, Boolean openRecruitment);
     void draftSign(PlayerGateway player);
     void draftPackage(PlayerGateway player);
     boolean issueDraft(PlayerGateway issuer, PlayerGateway target);
@@ -43,6 +46,8 @@ public interface MissionRoleplayUseCase {
     void templateSet(PlayerGateway player, String id, String field, String value);
     void templateDuplicate(PlayerGateway player, String id);
     void templateSetEnabled(PlayerGateway player, String id, boolean enabled);
+    /** Assigns a live mission to a named online player; assignment proposes, never forces. */
+    boolean inviteByName(PlayerGateway issuer, String missionId, String targetName);
     boolean join(PlayerGateway player, String id);
     void accept(PlayerGateway player, String id);
     boolean decline(PlayerGateway player, String id);

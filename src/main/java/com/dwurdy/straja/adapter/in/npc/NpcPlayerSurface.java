@@ -12,6 +12,7 @@ final class NpcPlayerSurface {
     private static final Set<String> PARAMETERIZED_ACTIONS = Set.of(
             "mission-join", "mission-accept", "mission-decline", "mission-report", "mission-fail",
             "mission-complete", "mission-reward", "mission-reward-recover", "mission-template-issue",
+            "mission-invite", "v2-mission-claim",
             "custody-accept", "custody-refuse", "custody-release",
             "complaint-claim", "complaint-join", "complaint-leave", "complaint-report",
             "complaint-review", "complaint-confirm", "complaint-withdraw",
@@ -26,6 +27,7 @@ final class NpcPlayerSurface {
             "petition-read", "petition-review",
             "join-read", "join-review",
             "incident-accept", "incident-join", "incident-leave", "incident-resolve",
+            "dispatch-accept", "dispatch-decline",
             "bolo-cancel", "evidence-deposit", "evidence-return", "evidence-transfer",
             "evidence-destroy",
             "faq",
@@ -36,7 +38,8 @@ final class NpcPlayerSurface {
             "tool-survey-stamp",
             "armory-buy", "armory-reserve",
             "duty-checkpoint",
-            "trades-enroll");
+            "trades-enroll",
+            "delegation-mode", "delegation-window", "delegation-revoke");
 
     enum RoleRoute { RECEPTIONIST, SECRETARY, JAILER, ARCHIVIST, TRAINER, RECRUITER, ARMORER, INSPECTOR, UNKNOWN }
 
@@ -152,6 +155,7 @@ final class NpcPlayerSurface {
                             new ChatAction("Campanii active", "v2-campaign-status"),
                             new ChatAction("Muncă profesională", "v2-professional-work"),
                             new ChatAction("Incidente active", "incident-list"),
+                            new ChatAction("Dispecerat", "dispatch-board"),
                             new ChatAction("Roster Straja", "duty-roster"),
                             new ChatAction("BOLO-uri", "bolo-list"),
                             new ChatAction("Emite BOLO", "bolo-create"),
@@ -358,7 +362,13 @@ final class NpcPlayerSurface {
 
     static Optional<String> parameterizedActionId(String operation, String recordId) {
         String id = recordId == null ? "" : recordId.trim();
-        if (!PARAMETERIZED_ACTIONS.contains(operation) || !RECORD_ID.matcher(id).matches()) {
+        // FUN-1: standing-order issue ops carry the queue name in the
+        // operation ("delegation-order-<action>:<filter>") — dynamic but
+        // bounded, so it joins the parameterized space by prefix.
+        boolean known = PARAMETERIZED_ACTIONS.contains(operation)
+                || (operation != null && operation.startsWith("delegation-order-")
+                        && operation.length() <= 64);
+        if (!known || !RECORD_ID.matcher(id).matches()) {
             return Optional.empty();
         }
         return Optional.of(operation + ":" + id);
@@ -471,6 +481,8 @@ final class NpcPlayerSurface {
                         .ifPresent(a -> actions.add(new ChatAction("Ridică recompensa #" + id, a)));
                 case RECOVER_REWARD -> parameterizedActionId("mission-reward-recover", id)
                         .ifPresent(a -> actions.add(new ChatAction("Recuperează recompensa #" + id, a)));
+                case INVITE -> parameterizedActionId("mission-invite", id)
+                        .ifPresent(a -> actions.add(new ChatAction("Alocă jucător la #" + id, a)));
             }
         }
         return List.copyOf(actions);

@@ -927,9 +927,14 @@ public final class StrajaGameTests {
         try {
             var prisoner = mockPlayer(helper);
             var pg = gateway(prisoner);
-            prisoner.teleportTo(min.getX() + 2, min.getY() + 61, min.getZ() + 2);
 
             runtime.prison().arrest(pg, null, 1, commissioner, "gt-arrest");
+            // FUN-8: place the prisoner next to the intake AFTER arrest (which
+            // may relocate them into a shared-store cell) via the gateway —
+            // ServerPlayer.teleportTo goes through the mock's dead connection.
+            // At ~1.4 blocks the ride distance gate is deterministically closed
+            // even with qualified members online from concurrent tests.
+            pg.teleport(dim, min.getX() + 2, min.getY() + 61, min.getZ() + 2);
             helper.assertTrue(runtime.prison().transferToCamp(commissioner, pg, "gt_mine"),
                     "the camp transfer must succeed");
 

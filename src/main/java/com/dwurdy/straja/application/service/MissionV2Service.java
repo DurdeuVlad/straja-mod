@@ -9,6 +9,7 @@ import com.dwurdy.straja.domain.model.MissionEvidence;
 import com.dwurdy.straja.domain.model.MissionStatus;
 import com.dwurdy.straja.domain.model.MissionStore;
 import com.dwurdy.straja.domain.model.Settlement;
+import com.dwurdy.straja.domain.model.StrajaPolicies;
 
 /** Typed V2 mission lifecycle layered beside the V1 mission compatibility model. */
 public final class MissionV2Service {
@@ -18,6 +19,8 @@ public final class MissionV2Service {
     private final Clock clock;
     private final IdGenerator ids;
     private CampaignService campaigns;
+    private PlayerService players;
+    private StrajaPolicies policies = new StrajaPolicies();
     private java.util.function.Consumer<Mission> publicationListener = ignored -> {};
 
     public MissionV2Service(MissionRepository repository, AuthorizationService authorization,
@@ -28,6 +31,12 @@ public final class MissionV2Service {
 
     public void useCampaignService(CampaignService campaigns) {
         this.campaigns = campaigns;
+    }
+
+    /** Wires the XP (service-block) credit hook; unset in pure-headless contexts. */
+    public void usePlayerService(PlayerService players, StrajaPolicies policies) {
+        this.players = players;
+        if (policies != null) this.policies = policies;
     }
 
     public void onPublished(java.util.function.Consumer<Mission> listener) {
@@ -46,6 +55,7 @@ public final class MissionV2Service {
         mission.stationId = stationId == null || stationId.isBlank() ? "hq" : stationId;
         mission.jurisdiction = jurisdiction == null ? "" : jurisdiction; mission.missionType = missionType == null ? "" : missionType;
         mission.dueAt = deadline; mission.originalDeadline = deadline; mission.maxAssignees = maxAssignees;
+        mission.xpReward = derivedXp(deadline - clock.nowMillis());
         mission.auditCorrelationId = ids.token(); mission.v2Status = MissionStatus.AVAILABLE; mission.status = "ISSUED";
         mission.outboundIntents.add(com.dwurdy.straja.domain.model.OutboxIntent.of(
                 "IMPORTANT_MISSION_CREATED", "mission:" + mission.id,
@@ -84,6 +94,7 @@ public final class MissionV2Service {
         mission.missionType = "PROFESSIONAL_WORK"; mission.profession = profession == null ? "" : profession;
         mission.objective = objective == null ? "" : objective; mission.dueAt = deadline;
         mission.originalDeadline = deadline; mission.maxAssignees = maxAssignees;
+        mission.xpReward = derivedXp(deadline - clock.nowMillis());
         mission.auditCorrelationId = offerKey == null || offerKey.isBlank() ? ids.token() : offerKey;
         mission.requestFingerprint = requestFingerprint;
         mission.origin = "GENERATOR:" + mission.profession;
@@ -92,6 +103,10 @@ public final class MissionV2Service {
                 "IMPORTANT_MISSION_CREATED", "mission:" + mission.id,
                 mission.id, mission.beneficiaryUuid, clock.nowMillis()));
         store.missions.add(mission); repository.write(store); publicationListener.accept(mission); return mission;
+    }
+
+    public synchronized Mission find(String missionId) {
+        return repository.read().find(missionId);
     }
 
     public synchronized Mission claim(String actorUuid, String missionId) {
@@ -103,6 +118,9 @@ public final class MissionV2Service {
             throw new IllegalStateException("MISSION_ALREADY_CLAIMED");
         }
         if (status != MissionStatus.AVAILABLE) throw new IllegalStateException("MISSION_NOT_AVAILABLE");
+        if (mission.beneficiaryUuid != null && !mission.beneficiaryUuid.isBlank()
+                && !mission.beneficiaryUuid.equals(actorUuid))
+            throw new IllegalStateException("DENIED_BENEFICIARY");
         if (mission.dueAt <= clock.nowMillis()) { mission.v2Status = MissionStatus.EXPIRED; repository.write(store); throw new IllegalStateException("MISSION_EXPIRED"); }
         mission.actorUuid = actorUuid; mission.claimReceiptId = ids.newId("CLAIM"); mission.assignmentRevision++;
         recordAssignment(mission, actorUuid, actorUuid, mission.claimReceiptId, "CLAIMED");
@@ -179,18 +197,21 @@ public final class MissionV2Service {
         if (normalized(mission) != MissionStatus.VERIFIED) throw new IllegalStateException("INVALID_STATE");
         if (!actorUuid.equals(mission.actorUuid) && !canVerify(actorUuid, mission))
             throw new IllegalStateException("DENIED_AUTHORIZATION");
+        mission.v2Status = MissionStatus.COMPLETED; mission.status = "COMPLETED"; mission.completedAt = clock.nowMillis();
+        repository.write(store); // latch persisted before any external side effect
         if (campaigns != null && mission.quotaReservationId != null && !mission.quotaReservationId.isBlank()) {
             campaigns.fulfill(mission.quotaReservationId, 1, "MISSION_COMPLETE:" + mission.id);
         }
-        mission.v2Status = MissionStatus.COMPLETED; mission.status = "COMPLETED"; mission.completedAt = clock.nowMillis();
+        grantXp(mission);
         if (settlements != null && reward > 0) {
             Settlement.SettlementCategory category = mission.profession == null || mission.profession.isBlank()
                     ? Settlement.SettlementCategory.MISSION_REWARD : Settlement.SettlementCategory.JOB;
             Settlement settlement = settlements.create(mission.actorUuid, category,
                     reward, "MISSION:" + mission.id + ":" + mission.actorUuid, mission.id);
             mission.paymentSettlementIds.add(settlement.settlementId);
+            repository.write(store);
         }
-        repository.write(store); return mission;
+        return mission;
     }
 
     /** Binds a previously reserved campaign quota to its mission exactly once. */
@@ -227,6 +248,7 @@ public final class MissionV2Service {
             throw new IllegalStateException("INVALID_STATE");
         String prior = mission.actorUuid;
         mission.actorUuid = replacementUuid;
+        mission.beneficiaryUuid = replacementUuid; // reassignment retargets the offer binding
         mission.claimReceiptId = ids.newId("CLAIM");
         mission.assignmentRevision++;
         mission.acceptedAt = clock.nowMillis();
@@ -281,6 +303,29 @@ public final class MissionV2Service {
                     && effectiveDeadline(mission) < now) { mission.v2Status = MissionStatus.OVERDUE; changed++; }
         }
         if (changed > 0) repository.write(store); return changed;
+    }
+
+    /** XP follows duty-time pacing: one service block per serviceBlockMinutes of mission window. */
+    private int derivedXp(long durationMillis) {
+        int unit = Math.max(1, policies.serviceBlockMinutes);
+        return Math.min(policies.missionMaxXpReward,
+                (int) Math.ceil(Math.max(0, durationMillis) / 60000.0 / unit));
+    }
+
+    /** Credits XP to the claiming actor once; the COMPLETED latch keeps this single-fire. */
+    private void grantXp(Mission mission) {
+        if (players == null || mission.xpReward <= 0
+                || mission.actorUuid == null || mission.actorUuid.isBlank()) return;
+        java.util.UUID uuid;
+        try {
+            uuid = java.util.UUID.fromString(mission.actorUuid);
+        } catch (IllegalArgumentException e) {
+            return; // generator/synthetic actor ids carry no wallet of service blocks
+        }
+        var state = players.state(uuid);
+        if (state == null) return;
+        state.serviceBlocks += mission.xpReward;
+        players.save(uuid, state);
     }
 
     private boolean canVerify(String verifierUuid, Mission mission) {

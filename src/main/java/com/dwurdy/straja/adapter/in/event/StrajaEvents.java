@@ -66,7 +66,20 @@ public final class StrajaEvents {
         runtime.storage().tick();
         runtime.checkpoints().tick();
         runtime.bounties().tick();
+        // FUN-1: the delegation engine sweeps pending request queues at its own
+        // configured cadence (delegation.sweepSeconds); the call itself is cheap.
+        runtime.delegation().tick();
         if (runtime.serverGateway().tickCount() % 20 != 0) return;
+        // FUN-6: unanswered calls widen through the band ladder or expire.
+        runtime.dispatch().tick();
+        runtime.transfers().tick();
+        runtime.escapes().tick();
+        runtime.prisonJobs().tick();
+        runtime.parole().tick();
+        // FUN-7: hunts decay to warrants; hunters get fading hints.
+        runtime.manhunts().tick();
+        // FUN-4: unsigned reports past deadline auto-file from the ledger.
+        runtime.reportService().autoFileSweep();
         runtime.v2Mobilizations().expireDue();
         runtime.v2Campaigns().expireDue();
         runtime.v2Missions().expireDue();
@@ -595,6 +608,15 @@ public final class StrajaEvents {
         if (runtime == null || event.getLevel().isClientSide()
                 || !(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)) return;
         var gateway = new MinecraftPlayerGateway(player.getServer(), player.getUUID());
+        var pos = event.getPos();
+        String dimension = player.level().dimension().location().toString();
+        // FUN-9: a prisoner's swing on a tunnel block counts as dig work —
+        // jailed players are not "blocked" from interacting, only chained ones.
+        if (runtime.escapes().onDigSwing(gateway, dimension,
+                pos.getX(), pos.getY(), pos.getZ())) {
+            event.setCanceled(true);
+            return;
+        }
         if (runtime.custodyRoleplay().actionBlocked(gateway, "interact")) event.setCanceled(true);
     }
 
@@ -622,7 +644,15 @@ public final class StrajaEvents {
                 && (runtime.storage().onPickClick(gateway, dimension, pos.getX(), pos.getY(), pos.getZ())
                 || runtime.prisonRoleplay().onPickClick(gateway, dimension, pos.getX(), pos.getY(), pos.getZ())
                 || runtime.checkpoints().onPickClick(gateway, dimension, pos.getX(), pos.getY(), pos.getZ())
-                || runtime.desks().onPickClick(gateway, dimension, pos.getX(), pos.getY(), pos.getZ()))) {
+                || runtime.desks().onPickClick(gateway, dimension, pos.getX(), pos.getY(), pos.getZ())
+                // FUN-7: bolt cutters / crowbar on a cell door starts the
+                // tamper channel — consumed only when a door was found.
+                || runtime.prisonRoleplay().onCellTamper(gateway, dimension,
+                        pos.getX(), pos.getY(), pos.getZ())
+                // FUN-10: a declared work point is the job surface — the click
+                // reads the quota or settles the goods already in the bag.
+                || runtime.prisonJobs().onPostClick(gateway, dimension,
+                        pos.getX(), pos.getY(), pos.getZ()))) {
             event.setCanceled(true);
             return;
         }
@@ -814,6 +844,8 @@ public final class StrajaEvents {
         }
         String placedId = net.minecraft.core.registries.BuiltInRegistries.BLOCK
                 .getKey(event.getPlacedBlock().getBlock()).toString();
+        // FUN-9: placing a block over a dig site fills the tunnel.
+        runtime.escapes().onBlockPlaced(gateway, dimension, pos.getX(), pos.getY(), pos.getZ());
         runtime.storage().onBlockPlaced(gateway, dimension, pos.getX(), pos.getY(), pos.getZ(), placedId);
     }
 
@@ -961,6 +993,11 @@ public final class StrajaEvents {
                         new MinecraftPlayerGateway(attacker.getServer(), attacker.getUUID()), victimGateway);
             }
             runtime.custodyRoleplay().recoverAfterDeath(victimGateway);
+            // FUN-8: an escort's death breaks the chain anywhere; a prisoner's
+            // death voids the ride — custody recovery owns the body.
+            String victimUuid = victimGateway.uuid() == null ? "" : victimGateway.uuid().toString();
+            runtime.transfers().escortDied(victimUuid);
+            runtime.transfers().prisonerDied(victimUuid);
             // A flagged thief dying (hunt resolution) clears the debt flag.
             runtime.storage().onPlayerDeath(victimGateway);
         }

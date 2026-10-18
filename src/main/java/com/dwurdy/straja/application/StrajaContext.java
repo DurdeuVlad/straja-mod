@@ -37,6 +37,10 @@ public record StrajaContext(
         AdminToolRepository adminTools,
         IdentityCardRepository identityCards,
         IncidentRepository incidents,
+        DispatchRepository dispatch,
+        ManhuntRepository manhunts,
+        TransferRepository transfers,
+        EscapeRepository escapes,
         BoloRepository bolos,
         BountyRepository bounties,
         EvidenceRepository evidence,
@@ -50,4 +54,6 @@ public record StrajaContext(
         MerchantDeskRepository merchantDesks,
         WorldContainerGateway containers,
         NpcGuardGateway npcGuards,
-        DeepScanGateway deepScan) {}
+        DeepScanGateway deepScan,
+        JobRepository jobs,
+        ParoleRepository paroles) {}

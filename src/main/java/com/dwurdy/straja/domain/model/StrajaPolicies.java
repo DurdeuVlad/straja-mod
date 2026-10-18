@@ -88,6 +88,8 @@ public class StrajaPolicies {
     // §13: rewards above calculated × (1 + margin) require an explicit,
     // audited reason.
     public double missionRewardOverrideMargin = 0.25;
+    /** Caps the per-participant XP (service blocks) an officer can attach to a mission. */
+    public int missionMaxXpReward = 12;
 
     // operational incidents, whistle and dispatch
     public boolean incidentsEnabled = true;
@@ -296,15 +298,167 @@ public class StrajaPolicies {
     // patrol route; they earn the same hourly wage and the anti-AFK movement
     // gate is intentionally not applied to them (trusted ranks, §10).
     public int freeDutyMinRank = 3;
+    /** FUN-5: ROUTE keeps the legacy checkpoint-deadline shift; FREE_BEAT
+     *  keeps the route as guidance but a missed deadline never ends duty. */
+    public String dutyRouteMode = "FREE_BEAT";
+    /** FUN-5: wage multiplier while a response credit is active (accepting or
+     *  joining someone else's incident grants the credit). */
+    public double dutyResponseMultiplier = 2.0;
+    /** FUN-5: minutes of multiplied pay granted per response participation. */
+    public int dutyResponseCreditMinutes = 10;
+    /** FUN-6: calls at or above this severity push to members; below it they
+     *  queue on the dispatch board (ROUTINE | URGENT). */
+    public String dispatchPushMinSeverity = "URGENT";
+    /** FUN-6: minutes a call stays answerable at each band before widening. */
+    public int dispatchCallTtlMinutes = 5;
+    /** FUN-6: bound on how many on-duty members a call pushes to at once. */
+    public int dispatchMaxPushTargets = 3;
+    /** FUN-6: ENLISTED-band calls go to members at or below this rank level. */
+    public int dispatchEnlistedMaxRank = 2;
+    /** FUN-6: bound on retained terminal calls; oldest are pruned on tick. */
+    public int dispatchRetentionLimit = 100;
+
+    // FUN-7: breaks & manhunts — tamper channel, guard detection radius,
+    // hint cadence/decay, hunt length, recapture penalty.
+    /** Seconds of uninterrupted channel before bolt cutters open a cell. */
+    public int cellTamperSeconds = 20;
+    /** Seconds for the crowbar on a WEAK-tier lock (the fast cheap option). */
+    public int cellTamperQuickSeconds = 8;
+    /** Max distance the breaker may drift from the door mid-channel. */
+    public double cellTamperRange = 4.0;
+    /** Tamper fails when an on-duty guard stands within this radius. */
+    public double manhuntGuardDetectRadius = 16.0;
+    /** How long a broken lock stays broken before the door is usable again. */
+    public int cellBrokenMinutes = 30;
+    /** Minutes an active manhunt runs before cooling to standing warrants. */
+    public int manhuntMinutes = 15;
+    /** Seconds between hunter position hints. */
+    public int manhuntHintSeconds = 30;
+    /** Base hint fuzz radius in blocks — hints never pinpoint closer. */
+    public int manhuntHintBaseRadius = 24;
+    /** Blocks of extra fuzz per elapsed minute — hints degrade with age. */
+    public double manhuntHintGrowthPerMinute = 8.0;
+    /** Extra sentence days a recaptured manhunt runner serves. */
+    public int manhuntRecapturePenaltyDays = 1;
+    /** Bound on retained terminal hunts; oldest are pruned on tick. */
+    public int manhuntRetentionLimit = 50;
+
+    // FUN-8: transfer rides — escorted prisoner moves with risk zones.
+    /** When true, ordered transfers become escorted rides instead of teleports. */
+    public boolean transferRideEnabled = true;
+    /** Hop shorter than this stays instant (same-station moves). */
+    public double transferMinRideBlocks = 64.0;
+    /** An unclaimed ride waits this long before the prisoner returns to custody. */
+    public int transferEscortWaitMinutes = 10;
+    /** Escorts paid per ride beyond the lead — team-mission participant cap. */
+    public int transferMaxEscorts = 2;
+    /** Assumed escort walking speed for the pay formula's estimated hours. */
+    public double transferWalkBlocksPerHour = 15000.0;
+    /** Risk multiplier on the transport reward — rides can go wrong. */
+    public double transferRiskMultiplier = 2.0;
+    /** Bound on retained terminal rides; oldest are pruned on tick. */
+    public int transferRetentionLimit = 50;
+
+    // FUN-9: escape paths — dig, pick, bribe, blend. Every path has a
+    // preparation stage a patrol or inspection can interrupt.
+    /** Swings to dig one tunnel block; each swing re-arms a cooldown. */
+    public int escapeDigClicks = 12;
+    /** Minimum ms between counted swings — autoclicking gains nothing. */
+    public int escapeDigCooldownMs = 1_500;
+    /** Block ids a prisoner can dig through inside a cell. */
+    public List<String> escapeTunnelBlocks = new ArrayList<>(List.of(
+            "minecraft:dirt", "minecraft:coarse_dirt", "minecraft:rooted_dirt",
+            "minecraft:gravel", "minecraft:sand", "minecraft:clay",
+            "minecraft:mud", "minecraft:suspicious_gravel"));
+    /** Seconds the lockpick channel takes — faster than tools, riskier. */
+    public int cellPickSeconds = 6;
+    /** Percent chance a non-WEAK lock jams on a completed pick. */
+    public int cellPickJamPercent = 35;
+    /** Minutes a jammed lock stays jammed before the mechanism frees. */
+    public int cellJammedMinutes = 20;
+    /** Minutes a picked lock stays open — shorter than a broken lock. */
+    public int cellPickOpenMinutes = 8;
+    /** Default price a declared corruptible post charges to look away. */
+    public int bribePostPrice = 64;
+    /** Reach of a bribe offer to a player guard / a declared post. */
+    public double bribeRadius = 6.0;
+    /** Seconds a bribed post unlocks the payer's cell door for. */
+    public int bribeDoorOpenSeconds = 90;
+    /** Offer expires without an answer — the prisoner keeps the coins. */
+    public int bribeOfferMs = 60_000;
+    /** Seconds a blending prisoner walks free before the alarm fires. */
+    public int blendGraceSeconds = 45;
+    /** Contraband item ids confiscated on inspection or detection. */
+    public List<String> contrabandItems = new ArrayList<>(List.of(
+            "straja:lockpick", "straja:bolt_cutters", "straja:crowbar",
+            "straja:guard_uniform"));
+    /** Minutes added to the digger's sentence when a tunnel is found. */
+    public int tunnelFoundPenaltyMinutes = 30;
+    /** Guard inspection reach — the cell door must be this close. */
+    public double inspectionRadius = 6.0;
+    /** Bound on retained tunnel records; oldest discovered are pruned. */
+    public int escapeRetentionLimit = 100;
+
+    // FUN-10: prison economy — posted quota jobs, labor-credit market
+    // trades between prisoners, favor IOU notes, and inspection pressure.
+    /**
+     * Posted job definitions —
+     * {@code id|label|item:count+item:count|pay|standing|cooldownSeconds}.
+     */
+    public List<String> jobDefs = new ArrayList<>(List.of(
+            "kitchen|Bucătărie|minecraft:bread:4|6|1|600",
+            "laundry|Spălătorie|minecraft:white_wool:2|4|1|300",
+            "smithing|Fierărie|minecraft:iron_ingot:3|10|2|900",
+            "supply|Aprovizionare|minecraft:cobblestone:8|8|1|1200"));
+    /** A market trade offer expires unanswered after this many ms. */
+    public int tradeOfferMs = 60_000;
+    /** Standing hit recorded against a digger whose tunnel is found. */
+    public int standingTunnelPenalty = 3;
+    /** Standing hit when a jammed lock is traced back to a prisoner. */
+    public int standingJamPenalty = 1;
+    /** Routine inspection mini-calls raised on this cadence (minutes). */
+    public int inspectionCallIntervalMinutes = 20;
+    /** Bound on retained job runs and settled trade ledger rows. */
+    public int jobRetentionLimit = 200;
+
+    // FUN-11: parole & appeal hearings.
+    /** Minimum FUN-10 standing before a prisoner may file for a hearing. */
+    public int paroleMinStanding = 50;
+    /** Percent of the active sentence's active time already served. */
+    public int paroleMinServedPercent = 50;
+    /** Clean-record window — no escape flag inside this many hours. */
+    public int paroleCleanHours = 48;
+    /** Bounded victim-objection window once a hearing opens (minutes). */
+    public int paroleObjectionMinutes = 5;
+    /** Cooldown before a DENIED prisoner may refile (hours). */
+    public int paroleRefusalCooldownHours = 24;
+    /** Parole window length — the parolee stays marked until it ends (hours). */
+    public int paroleLengthHours = 72;
+    /** Check-in cadence — a missed deadline flags the parolee wanted (hours). */
+    public int paroleCheckInHours = 12;
+    /** Labor-account bail a CONDITIONAL outcome demands (0 = free release). */
+    public int paroleBailAmount = 100;
+    /** Conditional settlement window (hours) before the hearing lapses. */
+    public int paroleConditionalHours = 24;
+
     public int nativeFactionMaxLength = 40;
 
     // §11: activity reports — a reporting interval runs per member; overdue
     // reports optionally block duty start at the Secretary.
     public int reportIntervalDays = 7;
     public boolean reportBlockDutyWhenOverdue = false;
+    /** FUN-4: the institution files a ledger-drafted AUTO_FILED report for
+     *  members whose reporting deadline passed unsigned. */
+    public boolean reportsAutoFileOverdue = true;
     // §12: Comisar notifications for new audience requests are coalesced —
     // at most one tell per cooldown window regardless of request count.
     public int audienceNotifyCooldownSeconds = 60;
+
+    // Delegation: the engine sweeps pending request queues at this cadence;
+    // the default timeout-presumption window applies when a queue's policy
+    // does not set its own.
+    public int delegationSweepSeconds = 10;
+    public int delegationTimeoutHours = 48;
 
     // §4: bracketed rank prefix on chat / TAB / nameplate — per-surface flags;
     // the composition uses the configurable rank display names.

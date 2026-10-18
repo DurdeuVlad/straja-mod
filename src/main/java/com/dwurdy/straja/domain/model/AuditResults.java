@@ -26,4 +26,7 @@ public final class AuditResults {
     public static final String PARTIAL = "PARTIAL";
     public static final String POLICY = "POLICY";
     public static final String UPDATED = "UPDATED";
+    public static final String PERSIST_FAILED = "PERSIST_FAILED";
+    public static final String SUCCESS_PENDING_DELIVERY = "SUCCESS_PENDING_DELIVERY";
+    public static final String WANTED = "WANTED";
 }

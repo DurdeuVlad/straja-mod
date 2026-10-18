@@ -106,7 +106,7 @@ public class PolicyService implements PolicyConfigUseCase {
         boolean persisted = store.write(overrides);
         audit.record(AuditActions.POLICY_SET, actor.name(), actor.uuid().toString(),
                 actor.name(), actor.uuid().toString(),
-                persisted ? AuditResults.SUCCESS : "PERSIST_FAILED", key);
+                persisted ? AuditResults.SUCCESS : AuditResults.PERSIST_FAILED, key);
         actor.tell(key + " = " + PolicyRegistry.read(ctx.policies(), key)
                 + (persisted
                         ? " — aplicat imediat și salvat în " + store.describe() + "."
@@ -129,7 +129,7 @@ public class PolicyService implements PolicyConfigUseCase {
         PolicyRegistry.apply(ctx.policies(), key, baselineValue);
         audit.record(AuditActions.POLICY_RESET, actor.name(), actor.uuid().toString(),
                 actor.name(), actor.uuid().toString(),
-                persisted ? AuditResults.SUCCESS : "PERSIST_FAILED", key);
+                persisted ? AuditResults.SUCCESS : AuditResults.PERSIST_FAILED, key);
         actor.tell(key + " resetat la valoarea configurată: " + baselineValue
                 + (persisted ? "." : " (dar fișierul nu s-a putut actualiza)."));
     }

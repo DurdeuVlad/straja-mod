@@ -212,20 +212,65 @@ public final class PersonnelService implements com.dwurdy.straja.application.por
 
     public synchronized PersonnelRecord suspend(String actorUuid, String subjectUuid, String reason) {
         requireAuthorization(actorUuid, subjectUuid);
+        PersonnelStore store = repository.read();
+        PersonnelRecord record = require(store, subjectUuid);
+        if (!record.active()) throw new IllegalStateException("personnel is not active");
         return changeStatus(subjectUuid, PersonnelStatus.SUSPENDED, reason);
     }
 
     public synchronized PersonnelRecord reinstate(String actorUuid, String subjectUuid) {
         requireAuthorization(actorUuid, subjectUuid);
+        PersonnelStore store = repository.read();
+        PersonnelRecord record = require(store, subjectUuid);
+        if (record.membershipStatus != PersonnelStatus.SUSPENDED)
+            throw new IllegalStateException("personnel is not suspended");
         return changeStatus(subjectUuid, PersonnelStatus.AUTHORIZED_ACTIVE, "");
     }
 
     public synchronized PersonnelRecord terminate(String actorUuid, String subjectUuid, String reason) {
         requireAuthorization(actorUuid, subjectUuid);
+        PersonnelStore store = repository.read();
+        PersonnelRecord record = require(store, subjectUuid);
+        if (!record.active() && record.membershipStatus != PersonnelStatus.SUSPENDED)
+            throw new IllegalStateException("personnel is not active or suspended");
         return changeStatus(subjectUuid, PersonnelStatus.TERMINATED, reason);
     }
 
+    /**
+     * Lowers the subject one rung on their career ladder. Demoting a
+     * LOCOTENENT returns them to their entry track's second rung (kept via
+     * careerOrigin); demoting an entry-grade member removes them from the
+     * corps entirely (TERMINATED — the V2 equivalent of demoted-to-civilian).
+     */
+    public synchronized PersonnelRecord demote(String actorUuid, String subjectUuid, String reason) {
+        requireAuthorization(actorUuid, subjectUuid);
+        PersonnelStore store = repository.read();
+        PersonnelRecord record = require(store, subjectUuid);
+        if (!record.active()) throw new IllegalStateException("personnel is not active");
+        if (record.careerGrade == null) throw new IllegalStateException("personnel has no grade");
+        CareerGrade previous = record.careerGrade == CareerGrade.OFFICER_LOCOTENENT
+                ? (record.careerOrigin == CareerTrack.PROFESSIONAL
+                        ? CareerGrade.PROFESSIONAL_MESTER : CareerGrade.MILITARY_STRAJER)
+                : record.careerGrade.previousGrade();
+        if (previous == null) {
+            record.membershipStatus = PersonnelStatus.TERMINATED;
+        } else {
+            record.careerGrade = previous;
+        }
+        record.demotedAt = clock.nowMillis();
+        record.demotionReason = reason == null ? "" : reason;
+        record.updatedAt = clock.nowMillis();
+        record.version++;
+        store.storeRevision++;
+        repository.write(store);
+        return record;
+    }
+
     public synchronized PersonnelRecord resign(String subjectUuid, String reason) {
+        PersonnelStore store = repository.read();
+        PersonnelRecord record = require(store, subjectUuid);
+        if (!record.active() && record.membershipStatus != PersonnelStatus.SUSPENDED)
+            throw new IllegalStateException("personnel is not active or suspended");
         return changeStatus(subjectUuid, PersonnelStatus.RESIGNED, reason);
     }
 

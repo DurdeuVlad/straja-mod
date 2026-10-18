@@ -41,6 +41,51 @@ public final class PolicyRegistry {
         k("timers.patrolRounds", "patrolRounds", Kind.INT);
         k("timers.patrolMaxMinutes", "patrolMaxMinutes", Kind.INT);
         k("timers.patrolMaxCheckpoints", "patrolMaxCheckpoints", Kind.INT);
+        k("duty.routeMode", "dutyRouteMode", Kind.STRING);
+        k("duty.responseMultiplier", "dutyResponseMultiplier", Kind.DOUBLE);
+        k("duty.responseCreditMinutes", "dutyResponseCreditMinutes", Kind.INT);
+        k("dispatch.pushMinSeverity", "dispatchPushMinSeverity", Kind.STRING);
+        k("dispatch.callTtlMinutes", "dispatchCallTtlMinutes", Kind.INT);
+        k("dispatch.maxPushTargets", "dispatchMaxPushTargets", Kind.INT);
+        k("dispatch.retentionLimit", "dispatchRetentionLimit", Kind.INT);
+        k("cell.tamperSeconds", "cellTamperSeconds", Kind.INT);
+        k("cell.tamperQuickSeconds", "cellTamperQuickSeconds", Kind.INT);
+        k("cell.tamperRange", "cellTamperRange", Kind.DOUBLE);
+        k("cell.brokenMinutes", "cellBrokenMinutes", Kind.INT);
+        k("manhunt.guardDetectRadius", "manhuntGuardDetectRadius", Kind.DOUBLE);
+        k("manhunt.minutes", "manhuntMinutes", Kind.INT);
+        k("manhunt.hintSeconds", "manhuntHintSeconds", Kind.INT);
+        k("manhunt.hintBaseRadius", "manhuntHintBaseRadius", Kind.INT);
+        k("manhunt.hintGrowthPerMinute", "manhuntHintGrowthPerMinute", Kind.DOUBLE);
+        k("manhunt.recapturePenaltyDays", "manhuntRecapturePenaltyDays", Kind.INT);
+        k("manhunt.retentionLimit", "manhuntRetentionLimit", Kind.INT);
+        k("dispatch.enlistedMaxRank", "dispatchEnlistedMaxRank", Kind.INT);
+        k("transfer.rideEnabled", "transferRideEnabled", Kind.BOOL);
+        k("transfer.minRideBlocks", "transferMinRideBlocks", Kind.DOUBLE);
+        k("transfer.escortWaitMinutes", "transferEscortWaitMinutes", Kind.INT);
+        k("transfer.maxEscorts", "transferMaxEscorts", Kind.INT);
+        k("transfer.walkBlocksPerHour", "transferWalkBlocksPerHour", Kind.DOUBLE);
+        k("transfer.riskMultiplier", "transferRiskMultiplier", Kind.DOUBLE);
+        k("transfer.retentionLimit", "transferRetentionLimit", Kind.INT);
+        k("escape.digClicks", "escapeDigClicks", Kind.INT);
+        k("escape.digCooldownMs", "escapeDigCooldownMs", Kind.INT);
+        k("escape.cellPickSeconds", "cellPickSeconds", Kind.INT);
+        k("escape.cellPickJamPercent", "cellPickJamPercent", Kind.INT);
+        k("escape.cellJammedMinutes", "cellJammedMinutes", Kind.INT);
+        k("escape.cellPickOpenMinutes", "cellPickOpenMinutes", Kind.INT);
+        k("escape.bribePostPrice", "bribePostPrice", Kind.INT);
+        k("escape.bribeRadius", "bribeRadius", Kind.DOUBLE);
+        k("escape.bribeDoorOpenSeconds", "bribeDoorOpenSeconds", Kind.INT);
+        k("escape.bribeOfferMs", "bribeOfferMs", Kind.INT);
+        k("escape.blendGraceSeconds", "blendGraceSeconds", Kind.INT);
+        k("escape.tunnelFoundPenaltyMinutes", "tunnelFoundPenaltyMinutes", Kind.INT);
+        k("escape.inspectionRadius", "inspectionRadius", Kind.DOUBLE);
+        k("escape.retentionLimit", "escapeRetentionLimit", Kind.INT);
+        k("jobs.tradeOfferMs", "tradeOfferMs", Kind.INT);
+        k("jobs.standingTunnelPenalty", "standingTunnelPenalty", Kind.INT);
+        k("jobs.standingJamPenalty", "standingJamPenalty", Kind.INT);
+        k("jobs.inspectionCallIntervalMinutes", "inspectionCallIntervalMinutes", Kind.INT);
+        k("jobs.retentionLimit", "jobRetentionLimit", Kind.INT);
         k("timers.foodCooldownMinutes", "foodCooldownMinutes", Kind.INT);
         k("timers.quizCooldownMinutes", "quizCooldownMinutes", Kind.INT);
         k("timers.resignationCooldownDays", "resignationCooldownDays", Kind.INT);
@@ -53,6 +98,7 @@ public final class PolicyRegistry {
         k("mission.maxCopiesPerDraft", "missionMaxCopiesPerDraft", Kind.INT);
         k("mission.maxRewardPool", "missionMaxRewardPool", Kind.INT);
         k("mission.maxRewardPerIssuerPerDay", "missionMaxRewardPerIssuerPerDay", Kind.INT);
+        k("mission.maxXpReward", "missionMaxXpReward", Kind.INT);
         k("mission.maxActivePerPlayer", "missionMaxActivePerPlayer", Kind.INT);
         k("mission.defaultMinimumRank", "missionDefaultMinimumRank", Kind.INT);
         k("mission.rewardOverrideMargin", "missionRewardOverrideMargin", Kind.DOUBLE);
@@ -196,7 +242,11 @@ public final class PolicyRegistry {
         // §11 activity reports
         k("reports.intervalDays", "reportIntervalDays", Kind.INT);
         k("reports.blockDutyWhenOverdue", "reportBlockDutyWhenOverdue", Kind.BOOL);
+        k("reports.autoFileOverdue", "reportsAutoFileOverdue", Kind.BOOL);
         k("audiences.notifyCooldownSeconds", "audienceNotifyCooldownSeconds", Kind.INT);
+        // delegation engine
+        k("delegation.sweepSeconds", "delegationSweepSeconds", Kind.INT);
+        k("delegation.timeoutHours", "delegationTimeoutHours", Kind.INT);
         // §4 rank prefix surfaces
         k("rank.prefix.chat", "rankPrefixChat", Kind.BOOL);
         k("rank.prefix.tab", "rankPrefixTab", Kind.BOOL);
@@ -315,6 +365,9 @@ public final class PolicyRegistry {
                 policies.downedCooldownSeconds = seconds;
                 policies.downedDurationSeconds = seconds;
                 return Result.pass();
+            }
+            if ("mission.maxXpReward".equals(path) && parsed instanceof Integer v && v < 0) {
+                parsed = 0; // a negative cap would silently disable all mission XP
             }
             // Collections mutate in place so adapters that captured the
             // reference at bootstrap (e.g. the coin provider) see the change.

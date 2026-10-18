@@ -51,6 +51,7 @@ public final class StrajaRuntime {
     private final com.dwurdy.straja.application.service.ComplaintService complaints;
     private final com.dwurdy.straja.application.service.ReportService reports;
     private final com.dwurdy.straja.application.service.AudienceService audiences;
+    private final com.dwurdy.straja.application.service.DelegationService delegation;
     private final com.dwurdy.straja.application.service.EmergencyService emergency;
     private com.dwurdy.straja.application.service.AdminService admin;
     private com.dwurdy.straja.application.service.AdminToolService adminTools;
@@ -68,6 +69,12 @@ public final class StrajaRuntime {
     private volatile com.dwurdy.straja.adapter.in.form.FormSubmissionRouter npcFormRouter;
     private final com.dwurdy.straja.application.service.PolicyService policyService;
     private final com.dwurdy.straja.application.service.IncidentService incidents;
+    private final com.dwurdy.straja.application.service.DispatchService dispatch;
+    private final com.dwurdy.straja.application.service.ManhuntService manhunts;
+    private final com.dwurdy.straja.application.service.TransferService transfers;
+    private final com.dwurdy.straja.application.service.EscapeService escapes;
+    private com.dwurdy.straja.application.service.PrisonJobService prisonJobs;
+    private com.dwurdy.straja.application.service.ParoleService parole;
     private final com.dwurdy.straja.application.service.BoloService bolos;
     private final com.dwurdy.straja.application.service.BountyService bounties;
     private final com.dwurdy.straja.application.service.ProtocolService protocol;
@@ -183,6 +190,10 @@ public final class StrajaRuntime {
                 new SavedStores.AdminTools(stores),
                 new SavedStores.IdentityCards(stores),
                 new SavedStores.Incidents(stores),
+                new SavedStores.Dispatch(stores),
+                new SavedStores.Manhunts(stores),
+                new SavedStores.Transfers(stores),
+                new SavedStores.Escapes(stores),
                 new SavedStores.Bolos(stores),
                 new SavedStores.Bounties(stores),
                 new SavedStores.Evidence(stores),
@@ -196,7 +207,9 @@ public final class StrajaRuntime {
                 new SavedStores.MerchantDesks(stores),
                 new com.dwurdy.straja.adapter.out.minecraft.MinecraftContainerGateway(server),
                 com.dwurdy.straja.adapter.out.npc.customnpcs.CustomNpcsGuardGateway.create(server),
-                new com.dwurdy.straja.adapter.out.minecraft.MinecraftDeepScanGateway(server));
+                new com.dwurdy.straja.adapter.out.minecraft.MinecraftDeepScanGateway(server),
+                new SavedStores.Jobs(stores),
+                new SavedStores.Paroles(stores));
 
         this.v2PersonnelRepository = new SavedStores.Personnel(stores);
         this.v2PromotionRepository = new SavedStores.Promotions(stores);
@@ -288,6 +301,8 @@ public final class StrajaRuntime {
         this.v2Stations.ensureDefault(this.ctx.setup().read());
 
         this.players = new PlayerService(ctx);
+        this.v2Missions.usePlayerService(players, policies);
+        this.v2Promotions.usePlayerService(players, policies);
         this.players.useV2Authority(v2Personnel, v2Authorization);
         this.audit = new AuditService(ctx);
         this.v2ComplaintEscalation.useAuditService(this.audit);
@@ -343,6 +358,10 @@ public final class StrajaRuntime {
         this.complaints.useV2Escalation(v2ComplaintEscalation);
         this.reports = new com.dwurdy.straja.application.service.ReportService(ctx, players, audit);
         this.audiences = new com.dwurdy.straja.application.service.AudienceService(ctx, players, audit);
+        this.delegation = new com.dwurdy.straja.application.service.DelegationService(
+                ctx, players, audit, new SavedStores.Delegations(stores),
+                v2JoinRequests, v2Promotions, audiences, reports,
+                () -> v2Generators.professions(), ctx.clock());
         this.emergency = new com.dwurdy.straja.application.service.EmergencyService(ctx, players, audit);
         this.rooms = new com.dwurdy.straja.application.service.RoomService(ctx, players, audit, ctx.world());
         this.archive = new com.dwurdy.straja.application.service.ArchiveService(ctx, players, audit);
@@ -375,10 +394,55 @@ public final class StrajaRuntime {
         OptionalModCompatibility.applyFailSafe(compatibility, policies);
         this.incidents = new com.dwurdy.straja.application.service.IncidentService(ctx, players, audit);
         this.bolos = new com.dwurdy.straja.application.service.BoloService(ctx, players, audit);
+        // FUN-6: offense events become dispatch calls routed to on-duty members.
+        this.dispatch = new com.dwurdy.straja.application.service.DispatchService(ctx, players, audit);
+        this.dispatch.useIncidents(this.incidents);
+        this.incidents.useDispatch(this.dispatch);
+        this.bolos.useDispatch(this.dispatch);
+        // FUN-7: manhunts ride the same pipeline — hints + decay + warrants.
+        this.manhunts = new com.dwurdy.straja.application.service.ManhuntService(
+                ctx, players, audit);
+        this.manhunts.useDispatch(this.dispatch);
+        this.manhunts.useBolos(this.bolos);
+        this.prison.useManhunts(this.manhunts);
+        // FUN-8: ordered camp transfers become escorted rides — dispatch
+        // routes the call, custody holds the chain, manhunts take a break.
+        this.transfers = new com.dwurdy.straja.application.service.TransferService(
+                ctx, players, audit);
+        this.transfers.useDispatch(this.dispatch);
+        this.transfers.useCustody(this.custody);
+        this.transfers.usePrison(this.prison);
+        this.transfers.useManhunts(this.manhunts);
+        this.dispatch.useTransfers(this.transfers);
+        this.prison.useTransfers(this.transfers);
+        this.custody.useTransferBreakGate(this.transfers::distanceBreakAllowed);
+        // FUN-9: escape paths — dig progress, pick jams, bribe posts and the
+        // blend cover all feed the same bounds→fugitive→manhunt funnel.
+        this.escapes = new com.dwurdy.straja.application.service.EscapeService(
+                ctx, players, audit);
+        this.escapes.usePrison(this.prison);
+        this.escapes.useCustody(this.custody);
+        this.escapes.useDispatch(this.dispatch);
+        this.escapes.useManhunts(this.manhunts);
+        this.escapes.useRolls(RollSource.system());
+        this.prison.useEscapes(this.escapes);
+        // FUN-10: camp jobs, the labor-credit market, IOU favors, standing,
+        // and inspection calls — the small economy behind the wire.
+        this.prisonJobs = new com.dwurdy.straja.application.service.PrisonJobService(
+                ctx, players, audit);
+        this.prisonJobs.useDispatch(this.dispatch);
+        this.escapes.useJobs(this.prisonJobs);
+        // FUN-11: the parole docket — FUN-10 standing feeds eligibility,
+        // FUN-1 delegation sweeps CLEAN hearings, violations re-flag wanted.
+        this.parole = new com.dwurdy.straja.application.service.ParoleService(
+                ctx, players, audit);
+        this.parole.usePrison(this.prison);
+        this.delegation.useParole(this.parole);
         this.evidence = new com.dwurdy.straja.application.service.EvidenceService(ctx, players, audit);
         this.arrestRecords = new com.dwurdy.straja.application.service.ArrestRecordService(ctx, players, audit);
         this.reputation = new com.dwurdy.straja.application.service.ReputationService(
                 ctx, players, audit, incidents, bolos);
+        this.reputation.useDispatch(this.dispatch);
         // LAW-007: the authoritative wanted surface — guards, checkpoints and
         // the storage watch all read wanted/escort state through one service.
         this.wanted = new com.dwurdy.straja.application.service.WantedService(
@@ -388,6 +452,8 @@ public final class StrajaRuntime {
             // LAW-007: cuffs landing calls the hunt off immediately — no
             // waiting for the next periodic aggro scan.
             wanted.onCuffed(officer, target);
+            // FUN-8: an escort cuffing their prisoner takes the ride's chain.
+            transfers.onCuffed(officer, target);
         });
         this.storage = new com.dwurdy.straja.application.service.StorageService(
                 ctx, players, audit, bolos, prison);
@@ -404,6 +470,7 @@ public final class StrajaRuntime {
         this.bounties = new com.dwurdy.straja.application.service.BountyService(
                 ctx, players, audit);
         this.bounties.usePrison(this.prison);
+        this.bounties.useDispatch(this.dispatch);
         // DEBT-2: bail lands on the debt ledger; in-custody issue levies.
         this.bounties.useDebt(this.debt);
         // #242: guided tester protocol — scripted state beats + fake suspect.
@@ -432,6 +499,22 @@ public final class StrajaRuntime {
             if (target != null) {
                 reputation.recordCustodyEscape(actor, target,
                         target.uuid() + ":cut:" + ctx.clock().nowMillis());
+                // FUN-6: a custody breach is an urgent call. Sentenced escapes
+                // also carry a fugitive BOLO; an unsentenced escape still
+                // pages the board through this route.
+                try {
+                    this.dispatch.raise(com.dwurdy.straja.application.service.DispatchService.SOURCE_OFFENSE,
+                            target.uuid() + ":escape:" + ctx.clock().nowMillis(),
+                            "Evadare din custodie: " + target.name(),
+                            "Subiectul a ieșit din custodie fără autorizare.",
+                            target.dimension(), target.x(), target.y(), target.z(), "",
+                            String.valueOf(target.uuid()), target.name(),
+                            actor != null && actor.uuid() != null
+                                    ? actor.uuid().toString() : String.valueOf(target.uuid()),
+                            "URGENT", "ENLISTED");
+                } catch (RuntimeException e) {
+                    // Dispatch failure must not swallow the escape record.
+                }
             }
         });
         this.expansion = new com.dwurdy.straja.application.service.RpExpansionService(
@@ -573,6 +656,8 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.port.in.MissionRoleplayUseCase missionRoleplay() { return missions; }
     public com.dwurdy.straja.application.port.in.ComplaintRoleplayUseCase complaintRoleplay() { return complaints; }
     public com.dwurdy.straja.application.port.in.ReportUseCase reportRoleplay() { return reports; }
+    /** FUN-4 sweep access for the auto-file path (headless; not the player surface). */
+    public com.dwurdy.straja.application.service.ReportService reportService() { return reports; }
     public com.dwurdy.straja.application.port.in.AudienceUseCase audienceRoleplay() { return audiences; }
     public com.dwurdy.straja.application.port.in.EmergencyUseCase emergencyRoleplay() { return emergency; }
     public com.dwurdy.straja.application.port.in.AdminRoleplayUseCase adminRoleplay() { return admin; }
@@ -592,6 +677,12 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.port.in.RoleplayExpansionUseCase expansionRoleplay() { return expansion; }
     public com.dwurdy.straja.application.service.RpExpansionService expansion() { return expansion; }
     public com.dwurdy.straja.application.service.IncidentService incidents() { return incidents; }
+    public com.dwurdy.straja.application.service.DispatchService dispatch() { return dispatch; }
+    public com.dwurdy.straja.application.service.ManhuntService manhunts() { return manhunts; }
+    public com.dwurdy.straja.application.service.TransferService transfers() { return transfers; }
+    public com.dwurdy.straja.application.service.EscapeService escapes() { return escapes; }
+    public com.dwurdy.straja.application.service.PrisonJobService prisonJobs() { return prisonJobs; }
+    public com.dwurdy.straja.application.service.ParoleService parole() { return parole; }
     public com.dwurdy.straja.application.service.BoloService bolos() { return bolos; }
 
     public com.dwurdy.straja.application.service.BountyService bounties() { return bounties; }
@@ -610,6 +701,7 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.service.AuthorizationService v2Authorization() { return v2Authorization; }
     public com.dwurdy.straja.application.service.PromotionService v2Promotions() { return v2Promotions; }
     public com.dwurdy.straja.application.service.JoinRequestService v2JoinRequests() { return v2JoinRequests; }
+    public com.dwurdy.straja.application.service.DelegationService delegation() { return delegation; }
     public com.dwurdy.straja.application.service.StationService v2Stations() { return v2Stations; }
 
     /**

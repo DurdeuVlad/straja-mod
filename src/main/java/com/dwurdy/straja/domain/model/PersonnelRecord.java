@@ -25,6 +25,8 @@ public class PersonnelRecord {
     public String suspensionReason = "";
     public Long resignationAt;
     public String resignationReason = "";
+    public Long demotedAt;
+    public String demotionReason = "";
     public long version;
     public long createdAt;
     public long updatedAt;

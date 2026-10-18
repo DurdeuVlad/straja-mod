@@ -38,8 +38,18 @@ Rules:
 - Enlisted and trades members are field personnel: they patrol, respond to
   incidents and may use physical force/arrest mechanics as allowed by the
   rest of the mod.
-- Every promotion above the join step is a petition the Comisar reads and
-  approves or denies — service blocks and training modules stay advisory.
+- Part-time advancement runs on service blocks (the member's XP): the shared
+  `promotionServiceBlocks` table keys off the target's career step.
+- **Military steps** are a fixed, learnable exam at the Instructor: wrong
+  answers teach the right one on the spot, a failed attempt is retaken after
+  the cooldown, and a pass promotes immediately — the exam is the
+  authorization, nobody waits on a reviewer.
+- **Trades steps** are asks: once the member has the service blocks they file
+  a one-line petition and **any officer** may stamp it — the Comisar need not
+  be online for routine advancement.
+- **Officer-track (full-time) petitions** still carry the Comisar's seal.
+  Members may also file a part-time petition instead of taking the exam —
+  officer discretion stays available for exceptions.
 - All officer grades share the same broad non-Comisar authority; specialties
   (Instructor, Investigator, patrol lead, administrative roles) are
   role-play flavor carried on `professions`, not separate grades.
@@ -364,6 +374,110 @@ range, with a neutral cap for sentence completion and fine payment. Lawful
 guard lethal force requires an active authoritative task, recent hostile damage
 and a target that is not restrained, downed or already in custody. Everything
 else is recorded as a civic event and remains reviewable by the Comisar.
+
+## 15b. Escape paths: dig, pick, bribe, blend (FUN-9)
+
+Custody has a decision space, not just a timer. Four escape path families
+exist inside cells, each a preparation the patrol can interrupt — nothing
+teleports a prisoner out.
+
+- **Dig** — swings on declared tunnel blocks (`escape.tunnelBlocks`, empty
+  list disables) inside the cell's padded bounds accumulate durable progress
+  in the escape store; a finished block turns to air. A patrolling guard
+  inside the detect radius interrupts the work.
+- **Pick** — `straja:lockpick` on a cell door starts a short channel
+  (`cellPickSeconds`). WEAK locks open; STANDARD/REINFORCED roll a jam
+  (`cellPickJamPercent`) that locks the door to all tools for
+  `cellJammedMinutes` and pings dispatch. A picked door opens for
+  `cellPickOpenMinutes`, shorter than a broken one.
+- **Bribe** — `/straja bribe` near a declared corruptible post
+  (`/straja post add|remove|list`) pays its price and opens the payer's cell
+  for `bribeDoorOpenSeconds`. With no post in reach, the offer goes to the
+  nearest on-duty player guard, who answers `accept`/`decline` inside
+  `bribeOfferMs` — accepting pays the guard and opens the door; declining
+  reports the attempt. A second guard witnessing the exchange raises a call.
+  Coins only move when a real cell door exists to unlock.
+- **Blend** — carrying `straja:guard_uniform` when the bounds check fires
+  buys `blendGraceSeconds` of cover; a real guard inside the detect radius
+  blows it (uniform confiscated, warrant + manhunt). Grace expiry or
+  detection both land on the existing fugitive/manhunt funnel. Slipping back
+  inside the cell before the grace ends dissolves the cover cleanly. Camp
+  custody gets no window — a camp breach is an immediate warrant.
+
+**Detection surface.** `/straja search` lets an on-duty member inspect the
+nearest cell: tunnel progress (finding one adds `tunnelFoundPenaltyMinutes`
+to the digger's sentence), jammed locks, and the occupant's contraband
+(`contrabandItems` — confiscated on the spot). Members placing a block over
+a dig site fill the tunnel for good; a prisoner covering their own hole only
+hides the block — the record stays findable. All detections reach the FUN-6
+board at ROUTINE/ENLISTED.
+
+## 15c. Prison economy & jobs (FUN-10)
+
+**Work beyond mining.** Job posts (`/straja jobpost add|remove|list`,
+Comisar+) declare a station of one of the configured job types
+(`straja.prisonJobs` — `id=req,count=quota=cooldown=pay=standing` syntax).
+Kitchen, laundry and smithing ship as defaults alongside mining: different
+inputs, quotas, cooldown pacing, pay and standing weight. Prisoners click a
+post to see their remaining quota; once goods are in hand the next click
+extracts them and settles exactly once per run (idempotent run tokens),
+crediting `laborAccount` and `standing`. Non-prisoners touching a post see a
+hint, not a job. The post claims the click — a station block is work
+furniture, not a chest.
+
+**Standing.** Every register record carries a durable `standing` score —
+job settles add `pay * standingWeight`, detected tunnels/jams subtract
+configured penalties, and a positive settle can never push a record
+negative. It shows in `/straja status` and is the durable stat FUN-11
+parole reads.
+
+**Small-society trade.** `/straja trade <prisoner> [price]` offers the held
+stack; the buyer answers `/straja trade accept|decline` inside
+`tradeOfferSeconds`. Trades are atomic: the buyer's inventory is checked
+before anything moves, stacks transfer with full SNBT/custom data, and
+labor credit only moves both ways once. Price `0` or the `favor` mode
+issues a physical `straja:iou_note` instead — a stealable paper favor, not
+spendable money. `/straja iou <prisoner> <note>` hands one directly.
+
+**Inspection pressure.** Every `inspectionCallIntervalMinutes` the board
+posts one ROUTINE cell-search call (open inspection calls are not
+duplicated; a closed-without-search call frees the slot for the next
+sweep). `/straja search` at the called cell resolves it — the FUN-9
+inspection (tunnels, jams, contraband) runs, contraband is confiscated
+with a seizure record, and detection penalties hit standing.
+
+## 15d. Parole & appeal hearings (FUN-11)
+
+**Eligibility is transparent.** `/straja parole` lists every gate — custody,
+`paroleMinStanding`, `paroleMinServedPercent` of active time, unpaid fines,
+the `paroleCleanHours` escape-free window, the DENIED refile cooldown, and
+a free docket slot — with a pass/fail mark each. `/straja parole file`
+(and `appeal`) writes a durable docket row; a prisoner's place in line
+never silently expires.
+
+**Hearings.** An officer opens a `FILED` case (`/straja parole open`) — the
+prisoner must be online to appear and must still be in custody (escorted,
+fugitive or released states block convening). Online victims (complaint
+complainants) get a bounded `paroleObjectionMinutes` window to
+`/straja parole object` — objections are recorded, not a veto. The
+prisoner may name an advocate who consents (`agree`/`decline`) and is
+recorded — advocacy carries no authority. `decide` lands `PAROLED`
+(release + conditions), `DENIED` (refile cooldown) or `CONDITIONAL`
+(settle `paroleBailAmount` labor credit inside `paroleConditionalHours`,
+else it lapses to a denial).
+
+**Delegation.** The docket is a FUN-1 `PAROLE_HEARING` queue: standing
+orders matching `CLEAN` (no victim complainants, eligibility still
+green) resolve routine approvals under the order's authority — the
+hearing record remains the artifact. Contested cases wait for humans.
+
+**Conditions.** A PAROLED register status marks the parolee until
+`paroleLengthHours` elapse. Check-ins (`/straja parole checkin`) are due
+every `paroleCheckInHours`; parole clocks freeze while the parolee is
+offline or the server is down, exactly as sentences pause. A missed
+check-in flags the parolee FUGITIVE so the normal arrest pipeline
+re-arrests them; a fresh arrest closes the parole as VIOLATED; a
+completed window flips the register to RELEASED.
 
 ## 16. Explicit non-goals / postponed decisions
 

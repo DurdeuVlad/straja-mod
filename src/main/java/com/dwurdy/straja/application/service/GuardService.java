@@ -138,11 +138,17 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
                         + " monede în sold (" + event.data().get("paidMinutes")
                         + " min plătite, " + event.data().get("hourlyWage") + "/h"
                         + (ctx.emergency().read().active ? ", primă de urgență inclusă" : "")
+                        + (Boolean.TRUE.equals(event.data().get("responseActive"))
+                                ? ", ×" + event.data().get("responseMultiplier") + " răspuns" : "")
                         + ").");
                 case "checkpoint_activated" -> player.tell("Checkpoint atins. Următorul devine disponibil peste "
                         + ctx.policies().checkpointUnlockMinutes + " minute.");
-                case "checkpoint_available" -> player.tell("Checkpoint disponibil: " + event.data().get("checkpoint")
+                case "checkpoint_available" -> player.tell(DutyEngine.freeBeat(ctx.policies())
+                        ? "Checkpoint disponibil: " + event.data().get("checkpoint") + "."
+                        : "Checkpoint disponibil: " + event.data().get("checkpoint")
                         + ". Ai " + event.data().get("missionMinutes") + " minute.");
+                case "checkpoint_missed" -> player.tell("Ai ratat vizita la "
+                        + event.data().get("checkpoint") + " — serviciul continuă. Checkpoint-ul rămâne activ.");
                 case "patrol_round_complete" -> player.tell("Rundă de patrulare completă (runda "
                         + event.data().get("round") + "). Checkpoint-ul "
                         + event.data().get("checkpoint") + " devine disponibil peste "
@@ -152,7 +158,9 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
                 case "duty_ended" -> player.tell("Serviciul s-a încheiat: " + event.data().get("reason")
                         + ". Soldul acumulat a fost păstrat.");
                 case "special_started" -> player.tell("Special Duty activ. Cronometrele checkpoint-urilor sunt suspendate.");
-                case "patrol_resumed" -> player.tell("Patrula a fost reluată. Ai " + event.data().get("missionMinutes")
+                case "patrol_resumed" -> player.tell(DutyEngine.freeBeat(ctx.policies())
+                        ? "Patrula a fost reluată. Următorul beat: " + event.data().get("checkpoint") + "."
+                        : "Patrula a fost reluată. Ai " + event.data().get("missionMinutes")
                         + " minute pentru " + event.data().get("checkpoint") + ".");
                 default -> {}
             }
@@ -496,6 +504,10 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             refuseCore(player, "suspended");
             return;
         }
+        if (state.examGrade != null) {
+            answerExam(player, state, currentExamQuestionId(player, state), answer);
+            return;
+        }
         if (state.rank >= Rank.STAGIAR.level() || state.quizPassed) {
             trainingQuiz(player, state, answer);
             return;
@@ -512,6 +524,22 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         applyInitialAnswer(player, state, item, answer);
     }
 
+    /** Chat-path exam answers carry no form token — derive it from live state. */
+    private String currentExamQuestionId(PlayerGateway player, GuardState state) {
+        var target = examTarget(state);
+        if (target == null) {
+            players.save(player.uuid(), state);
+            return "";
+        }
+        var bank = examBank(target);
+        if (bank.isEmpty() || state.examIndex >= bank.size()) {
+            state.examGrade = null;
+            players.save(player.uuid(), state);
+            return "";
+        }
+        return bank.get(state.examIndex).id();
+    }
+
     @Override
     public Optional<QuizPrompt> currentQuizPrompt(PlayerGateway player) {
         GuardState state = players.state(player);
@@ -526,6 +554,9 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         if (state.suspended) {
             refuseCore(player, "suspended");
             return Optional.empty();
+        }
+        if (state.examGrade != null) {
+            return currentExamPrompt(player, state);
         }
         if (state.rank >= Rank.STAGIAR.level() || state.quizPassed) {
             return currentTrainingPrompt(player, state);
@@ -558,6 +589,9 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         if (state.suspended) {
             refuseCore(player, "suspended");
             return false;
+        }
+        if (state.examGrade != null) {
+            return answerExam(player, state, expectedQuestionId, answer);
         }
         if (state.rank >= Rank.STAGIAR.level() || state.quizPassed) {
             return answerTraining(player, state, expectedQuestionId, answer);
@@ -775,10 +809,16 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         Integer required = null;
         boolean canPromote = false;
         if (promotableState(state)) {
-            // Petition model: the next rank is always petitionable; service
-            // blocks and module counts stay advisory for the reviewer.
             nextRank = state.rank + 1;
-            required = ctx.policies().promotionServiceBlocks.get(nextRank);
+            // The V2 target's career step keys the shared thresholds table —
+            // part-time tracks ask with XP, officer asks stay advisory.
+            var target = petitionTarget(player).orElse(null);
+            if (target != null && v2PromotionService != null) {
+                int blocks = v2PromotionService.requiredBlocks(target);
+                required = blocks > 0 ? blocks : null;
+            } else {
+                required = ctx.policies().promotionServiceBlocks.get(nextRank);
+            }
             canPromote = true;
         }
         return new TrainingView(state.rank, state.serviceBlocks, nextRank, required, canPromote,
@@ -815,16 +855,201 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         if (view.nextRank() == null) {
             player.refuse("straja.duty.no_promotion", "straja.remedy.instructor");
         } else {
+            var target = petitionTarget(player).orElse(null);
+            boolean examPath = target != null && !target.isProfessional() && !target.isOfficer();
             player.tell("Următorul rang: " + ctx.policies().rankName(view.nextRank())
-                    + " — depune cererea de avansare la Secretară (blocuri de serviciu: "
-                    + state.serviceBlocks + (view.requiredBlocks() != null
-                            ? "/" + view.requiredBlocks() : "") + ").");
+                    + (examPath ? " — susține examenul la Instructor"
+                                : " — depune cererea de avansare la Secretară")
+                    + " (blocuri de serviciu: " + state.serviceBlocks
+                    + (view.requiredBlocks() != null ? "/" + view.requiredBlocks() : "") + ").");
         }
     }
 
     @Override
     public void requestPromotion(PlayerGateway player) {
-        requestPetition(player, "");
+        v2PersonnelProjection.accept(player);
+        var target = petitionTarget(player).orElse(null);
+        // Specialist and officer asks stay petitions — a human officer stamps
+        // them. Military advancement is a fixed learnable exam at the
+        // instructor: the institution decides a pass itself, nobody waits.
+        if (target == null || v2PromotionService == null
+                || target.isProfessional() || target.isOfficer()) {
+            requestPetition(player, "");
+            return;
+        }
+        GuardState state = players.state(player);
+        int required = v2PromotionService.requiredBlocks(target);
+        if (required > 0 && state.serviceBlocks < required) {
+            player.refuse("straja.duty.promotion_xp", "straja.remedy.earn_blocks",
+                    state.serviceBlocks + "/" + required);
+            return;
+        }
+        startExam(player, state, target);
+    }
+
+    // ------------------------------------------------------------ trainer: promotion exam
+
+    /**
+     * Military advancement exam: fixed bank per target grade (the rank's
+     * training modules), immediate right-answer feedback, retake after the
+     * cooldown. Passing promotes on the spot — the exam is the
+     * authorization, so no petition waits on anyone.
+     */
+    private void startExam(PlayerGateway player, GuardState state,
+                           com.dwurdy.straja.domain.model.CareerGrade target) {
+        var bank = examBank(target);
+        if (bank.isEmpty()) {
+            player.refuse("straja.duty.no_exam", "straja.remedy.ask_comisar");
+            return;
+        }
+        if (state.examCooldownAt != null && state.examCooldownAt > now()) {
+            player.refuse("straja.duty.cooldown", "straja.remedy.wait",
+                    prettyTime(state.examCooldownAt));
+            return;
+        }
+        state.examGrade = target.name();
+        state.examIndex = 0;
+        state.examCorrect = 0;
+        state.examCooldownAt = null;
+        players.save(player.uuid(), state);
+        player.tell("Examen de avansare " + ctx.policies().rankName(target) + " — "
+                + bank.size() + " întrebări; promovezi cu cel puțin "
+                + examPassThreshold(bank.size()) + " răspunsuri corecte.");
+        player.tell("Întrebarea 1/" + bank.size() + ": " + bank.get(0).question());
+    }
+
+    private List<StrajaPolicies.QuizQuestion> examBank(
+            com.dwurdy.straja.domain.model.CareerGrade target) {
+        int level = target.legacyRankLevel();
+        return ctx.policies().trainingQuiz.stream()
+                .filter(q -> q.minRank() <= level)
+                .toList();
+    }
+
+    private int examPassThreshold(int bankSize) {
+        return Math.max(1, Math.min(ctx.policies().quizPassThreshold, bankSize));
+    }
+
+    private com.dwurdy.straja.domain.model.CareerGrade examTarget(GuardState state) {
+        var target = com.dwurdy.straja.domain.model.CareerGrade.of(state.examGrade);
+        if (target == null || target.isOfficer() || target.isProfessional()) {
+            // Stale or nonsensical marker — clear it rather than wedge the
+            // member out of training prompts; callers persist on their path.
+            state.examGrade = null;
+            state.examIndex = 0;
+            state.examCorrect = 0;
+            return null;
+        }
+        return target;
+    }
+
+    private Optional<QuizPrompt> currentExamPrompt(PlayerGateway player, GuardState state) {
+        var target = examTarget(state);
+        if (target == null) return currentTrainingPrompt(player, state);
+        if (state.examCooldownAt != null && state.examCooldownAt > now()) {
+            player.refuse("straja.duty.cooldown", "straja.remedy.wait",
+                    prettyTime(state.examCooldownAt));
+            return Optional.empty();
+        }
+        var bank = examBank(target);
+        if (bank.isEmpty() || state.examIndex >= bank.size()) {
+            state.examGrade = null;
+            players.save(player.uuid(), state);
+            return currentTrainingPrompt(player, state);
+        }
+        players.save(player.uuid(), state);
+        var item = bank.get(state.examIndex);
+        return Optional.of(new QuizPrompt(item.id(), "Examen de avansare "
+                + ctx.policies().rankName(target), item.question(), QUIZ_PROMPT_MAX_LENGTH));
+    }
+
+    private boolean answerExam(PlayerGateway player, GuardState state,
+                               String expectedQuestionId, String answer) {
+        var target = examTarget(state);
+        if (target == null) return answerTraining(player, state, expectedQuestionId, answer);
+        if (state.examCooldownAt != null && state.examCooldownAt > now()) {
+            player.refuse("straja.duty.cooldown", "straja.remedy.wait",
+                    prettyTime(state.examCooldownAt));
+            return false;
+        }
+        var bank = examBank(target);
+        if (bank.isEmpty() || state.examIndex >= bank.size()) {
+            state.examGrade = null;
+            players.save(player.uuid(), state);
+            return answerTraining(player, state, expectedQuestionId, answer);
+        }
+        var item = bank.get(state.examIndex);
+        if (expectedQuestionId == null || expectedQuestionId.isBlank()
+                || !expectedQuestionId.equals(item.id())) {
+            player.refuse(STALE_FORM_KEY, "straja.remedy.instructor");
+            return false;
+        }
+        if (answer == null || answer.isBlank()) {
+            players.save(player.uuid(), state);
+            player.tell("Examen " + item.id() + ": " + item.question());
+            return true;
+        }
+        int total = bank.size();
+        if (item.accepts(answer)) {
+            state.examCorrect += 1;
+            player.tell("Răspuns corect (" + state.examCorrect + "/" + total + ").");
+        } else {
+            player.tell("Răspuns greșit — răspunsul corect era: " + item.answers().get(0)
+                    + " (" + state.examCorrect + "/" + total + ").");
+        }
+        state.examIndex += 1;
+        int need = examPassThreshold(total);
+        boolean finished = state.examIndex >= total;
+        boolean hopeless = state.examCorrect + (total - state.examIndex) < need;
+        if (finished && state.examCorrect >= need) {
+            finishExam(player, state, target);
+            return true;
+        }
+        if (finished || hopeless) {
+            int score = state.examCorrect;
+            state.examCooldownAt = now() + ctx.policies().quizCooldownMinutes * DutyEngine.MINUTE_MS;
+            state.examGrade = null;
+            state.examIndex = 0;
+            state.examCorrect = 0;
+            players.save(player.uuid(), state);
+            player.tell("Examen picat: " + score + "/" + total + " corecte, ai nevoie de " + need
+                    + ". Poți reîncepe peste " + ctx.policies().quizCooldownMinutes + " minute.");
+            audit.record(AuditActions.TRAINING_QUIZ, player.name(), player.uuid().toString(),
+                    player.name(), player.uuid().toString(), AuditResults.REFUSED,
+                    "exam=" + target + " score=" + score + "/" + total);
+            return true;
+        }
+        players.save(player.uuid(), state);
+        player.tell("Întrebarea " + (state.examIndex + 1) + "/" + total + ": "
+                + bank.get(state.examIndex).question());
+        return true;
+    }
+
+    private void finishExam(PlayerGateway player, GuardState state,
+                            com.dwurdy.straja.domain.model.CareerGrade target) {
+        int score = state.examCorrect;
+        state.examGrade = null;
+        state.examIndex = 0;
+        state.examCorrect = 0;
+        state.examCooldownAt = null;
+        players.save(player.uuid(), state);
+        try {
+            v2PromotionService.examPassPromote(player.uuid().toString(), target);
+        } catch (RuntimeException error) {
+            player.refuse("straja.duty.promotion_fail", "straja.remedy.ask_comisar",
+                    error.getMessage());
+            return;
+        }
+        // The V2 record now carries the grade — project it onto legacy rank
+        // before granting the rank-up package (bonus + kit + audit).
+        v2PersonnelProjection.accept(player);
+        GuardState refreshed = players.state(player);
+        grantRankUp(player, refreshed, refreshed.rank);
+        audit.record(AuditActions.TRAINING_QUIZ, player.name(), player.uuid().toString(),
+                player.name(), player.uuid().toString(), AuditResults.SUCCESS,
+                "exam_pass=" + target + " score=" + score);
+        player.tell("Examen promovat: " + score + " răspunsuri corecte. Ai devenit "
+                + ctx.policies().rankName(target) + ".");
     }
 
     /**
@@ -866,6 +1091,14 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             player.refuse("straja.duty.promotion_state", "straja.remedy.ask_comisar");
             return;
         }
+        int required = v2PromotionService.requiredBlocks(target);
+        GuardState state = players.state(player);
+        if (required > 0
+                && !v2PromotionService.petitionXpSatisfied(player.uuid().toString(), target)) {
+            player.refuse("straja.duty.promotion_xp", "straja.remedy.earn_blocks",
+                    state.serviceBlocks + "/" + required);
+            return;
+        }
         try {
             var application = v2PromotionService.submitPetition(
                     player.uuid().toString(), target, reason);
@@ -874,6 +1107,13 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
                     "target=" + target + " app=" + application.applicationId);
             player.tell("Cererea de avansare " + application.applicationId + " ("
                     + ctx.policies().rankName(target) + ") a ajuns la Comisar pentru decizie.");
+        } catch (IllegalStateException error) {
+            if ("DENIED_XP".equals(error.getMessage())) {
+                player.refuse("straja.duty.promotion_xp", "straja.remedy.earn_blocks",
+                        state.serviceBlocks + "/" + required);
+                return;
+            }
+            player.refuse("straja.duty.promotion_fail", "straja.remedy.ask_comisar", error.getMessage());
         } catch (RuntimeException error) {
             player.refuse("straja.duty.promotion_fail", "straja.remedy.ask_comisar", error.getMessage());
         }
@@ -938,11 +1178,18 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             return;
         }
         GuardState state = players.state(target);
-        if (state.rank <= Rank.CIVIL.level()) {
+        boolean hasRecord = v2RecordFor(target) != null;
+        if (!hasRecord && state.rank <= Rank.CIVIL.level()) {
             actor.refuse("straja.duty.target_civilian", "straja.remedy.fix_retry");
             return;
         }
-        int nextRank = state.rank - 1;
+        var delegated = delegatePersonnelOp(actor, target, "demote");
+        if (delegated == PersonnelDelegate.REFUSED) return;
+        // A demoted record re-projects immediately — derive the new rank from
+        // the fresh projection so a cross-track drop (e.g. Lt → Meșter, which
+        // projects to civilian) still ends duty and releases the corps.
+        if (delegated == PersonnelDelegate.APPLIED) state = players.state(target);
+        int nextRank = delegated == PersonnelDelegate.APPLIED ? state.rank : state.rank - 1;
         if (nextRank < Rank.STAGIAR.level() && state.duty) {
             DutyEngine.endDuty(state, "demoted_to_civil", now(), salaryFor(target, state), ctx.policies());
             restoreDutyFaction(target, state);
@@ -964,12 +1211,61 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         actor.tell(target.name() + " a fost retrogradat.");
     }
 
+    private enum PersonnelDelegate { NO_RECORD, APPLIED, REFUSED }
+
+    /**
+     * Mirrors a discipline op into the V2 personnel record when one exists —
+     * the record is the projection source of truth, so a legacy-only write
+     * would be silently reverted on the next state read. APPLIED means the
+     * record was updated (caller should re-read state if it needs the new
+     * projection); REFUSED means the V2 write was denied and the actor was
+     * told — the caller must stop.
+     */
+    private PersonnelDelegate delegatePersonnelOp(PlayerGateway actor, PlayerGateway target, String op) {
+        if (v2PersonnelService == null || target == null) return PersonnelDelegate.NO_RECORD;
+        try {
+            if (v2PersonnelService.find(target.uuid().toString()) == null)
+                return PersonnelDelegate.NO_RECORD;
+            switch (op) {
+                case "suspend" -> v2PersonnelService.suspend(
+                        actor.uuid().toString(), target.uuid().toString(), "comisar discipline");
+                case "fire" -> v2PersonnelService.terminate(
+                        actor.uuid().toString(), target.uuid().toString(), "comisar discipline");
+                case "reinstate" -> v2PersonnelService.reinstate(
+                        actor.uuid().toString(), target.uuid().toString());
+                case "demote" -> v2PersonnelService.demote(
+                        actor.uuid().toString(), target.uuid().toString(), "comisar discipline");
+                default -> { }
+            }
+            return PersonnelDelegate.APPLIED;
+        } catch (RuntimeException error) {
+            String action = switch (op) {
+                case "suspend" -> AuditActions.SUSPEND;
+                case "fire" -> AuditActions.FIRE;
+                case "reinstate" -> AuditActions.REINSTATE;
+                default -> AuditActions.DEMOTE;
+            };
+            audit.record(action, actor.name(), actor.uuid().toString(),
+                    target.name(), target.uuid().toString(),
+                    AuditResults.REFUSED, error.getMessage());
+            actor.refuse("straja.duty.discipline_refused", "straja.remedy.ask_comisar",
+                    error.getMessage());
+            return PersonnelDelegate.REFUSED;
+        }
+    }
+
+    private com.dwurdy.straja.domain.model.PersonnelRecord v2RecordFor(PlayerGateway target) {
+        if (v2PersonnelService == null || target == null) return null;
+        return v2PersonnelService.find(target.uuid().toString());
+    }
+
     public void suspend(PlayerGateway actor, PlayerGateway target) {
         if (!players.isCommissioner(actor)) {
             actor.refuse("straja.duty.suspend_comisar", "straja.remedy.ask_comisar");
             return;
         }
         GuardState state = players.state(target);
+        if (delegatePersonnelOp(actor, target, "suspend") == PersonnelDelegate.REFUSED) return;
         state.suspended = true;
         state.resignationPending = false;
         state.resignationDeadlineAt = null;
@@ -1041,12 +1337,19 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             return false;
         }
         GuardState state = players.state(target);
-        if (!state.suspended || state.fired || state.resigned || state.rank < Rank.STAGIAR.level()) {
+        // A V2 record carries its own suspension truth — a trades member
+        // (projected rank CIVIL) must still be reinstatable.
+        boolean gateFails = v2RecordFor(target) != null
+                ? !state.suspended
+                : (!state.suspended || state.fired || state.resigned
+                        || state.rank < Rank.STAGIAR.level());
+        if (gateFails) {
             actor.refuse("straja.duty.rejoin_state", "straja.remedy.ask_comisar");
             audit.record(AuditActions.REINSTATE, actor.name(), actor.uuid().toString(),
                     target.name(), target.uuid().toString(), AuditResults.REFUSED, "target_not_suspended");
             return false;
         }
+        if (delegatePersonnelOp(actor, target, "reinstate") == PersonnelDelegate.REFUSED) return false;
         state.suspended = false;
         players.save(target.uuid(), state);
         roomAutoAssign.onPromotedToGuard(target);
@@ -1063,6 +1366,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             return;
         }
         GuardState state = players.state(target);
+        if (delegatePersonnelOp(actor, target, "fire") == PersonnelDelegate.REFUSED) return;
         if (state.duty) {
             DutyEngine.endDuty(state, "fired", now(), salaryFor(target, state), ctx.policies());
             restoreDutyFaction(target, state);
@@ -1079,6 +1383,10 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         state.resignationPending = false;
         state.resignationDeadlineAt = null;
         state.resignationRank = null;
+        state.examGrade = null;
+        state.examIndex = 0;
+        state.examCorrect = 0;
+        state.examCooldownAt = null;
         players.save(target.uuid(), state);
         fireStatusChange(target, "îndepărtat din Strajă");
         audit.record(AuditActions.FIRE, actor.name(), actor.uuid().toString(),
@@ -1141,7 +1449,11 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         if (ctx.policies().reportBlockDutyWhenOverdue && !players.isCommissioner(player)) {
             var reports = ctx.reports().read();
             String uuid = player.uuid().toString();
-            if (com.dwurdy.straja.domain.model.ActivityReports.ensureAnchor(reports, uuid, now())) {
+            boolean stamped = com.dwurdy.straja.domain.model.ActivityReports
+                    .ensureAnchor(reports, uuid, now());
+            stamped |= com.dwurdy.straja.domain.model.ActivityReports
+                    .ensureBlockSnapshot(reports, uuid, state.serviceBlocks);
+            if (stamped) {
                 ctx.reports().write(reports);
             }
             if (com.dwurdy.straja.domain.model.ActivityReports.isOverdue(
@@ -1189,7 +1501,9 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             players.save(player.uuid(), state);
             audit.record(AuditActions.DUTY_START, player.name(), player.uuid().toString(),
                     player.name(), player.uuid().toString(), AuditResults.SUCCESS, "started");
-            player.tell("Serviciu început. Primul checkpoint: " + state.route.get(0) + ". Ai "
+            player.tell(DutyEngine.freeBeat(ctx.policies())
+                    ? "Serviciu început. Primul beat: " + state.route.get(0) + "."
+                    : "Serviciu început. Primul checkpoint: " + state.route.get(0) + ". Ai "
                     + state.missionMinutes.get(state.route.get(0)) + " minute.");
         }
     }
@@ -1215,8 +1529,61 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         if (applyCoreResult(player, state, result)) {
             audit.record(AuditActions.DUTY_CHECKPOINT, player.name(), player.uuid().toString(),
                     player.name(), player.uuid().toString(), AuditResults.SUCCESS, id);
+            tellBeatContext(player, point);
         }
     }
+
+    /**
+     * FUN-5: a checkpoint is a beat — registering presence also surfaces the
+     * local picture: open incidents near the point, active BOLOs, and BOLO
+     * subjects currently online nearby. Read-only; nothing here is a chore.
+     */
+    private void tellBeatContext(PlayerGateway player, SetupData.Checkpoint point) {
+        final double radiusSq = 48.0 * 48.0;
+        long now = now();
+        java.util.List<String> nearby = new java.util.ArrayList<>();
+        int openElsewhere = 0;
+        for (var incident : ctx.incidents().read().incidents) {
+            if (incident == null || (incident.status != com.dwurdy.straja.domain.model.IncidentStatus.OPEN
+                    && incident.status != com.dwurdy.straja.domain.model.IncidentStatus.ASSIGNED)) continue;
+            if (incident.expiresAt > 0 && incident.expiresAt <= now) continue;
+            boolean near = point.dimension.equals(incident.dimension)
+                    && sq(player.x() - incident.x, player.y() - incident.y, player.z() - incident.z) <= radiusSq;
+            if (near) nearby.add(incident.id + " " + incident.title);
+            else openElsewhere++;
+        }
+        var bolos = ctx.bolos().read();
+        java.util.List<String> wantedNearby = new java.util.ArrayList<>();
+        int activeBolos = 0;
+        if (bolos != null) {
+            for (var bolo : bolos.ensureRecords()) {
+                if (bolo == null || bolo.status != com.dwurdy.straja.domain.model.BoloStatus.ACTIVE
+                        || (bolo.expiresAt > 0 && bolo.expiresAt <= now)) continue;
+                activeBolos++;
+                for (PlayerGateway online : ctx.server().onlinePlayers()) {
+                    if (online.uuid() == null || !online.uuid().toString().equalsIgnoreCase(bolo.subjectUuid)) continue;
+                    if (point.dimension.equals(online.dimension())
+                            && sq(player.x() - online.x(), player.y() - online.y(), player.z() - online.z()) <= radiusSq) {
+                        wantedNearby.add(bolo.subjectName + " (" + bolo.id + ")");
+                    }
+                    break;
+                }
+            }
+        }
+        if (nearby.isEmpty() && openElsewhere == 0 && activeBolos == 0) {
+            player.tell("Sectorul este liniștit — nimic activ.");
+            return;
+        }
+        if (!nearby.isEmpty())
+            player.tell("În zonă: " + String.join("; ", nearby.subList(0, Math.min(3, nearby.size()))));
+        if (openElsewhere > 0)
+            player.tell("Alte " + openElsewhere + " incidente active în alte sectoare.");
+        if (activeBolos > 0)
+            player.tell(activeBolos + " BOLO active.");
+        for (String who : wantedNearby) player.tell("[BOLO] " + who + " a fost semnalat în apropiere.");
+    }
+
+    private static double sq(double dx, double dy, double dz) { return dx * dx + dy * dy + dz * dz; }
 
     private boolean atCheckpoint(PlayerGateway player, SetupData.Checkpoint point) {
         if (!point.isPlaced() || !player.dimension().equals(point.dimension)) return false;
@@ -1238,7 +1605,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             player.refuse("straja.duty.not_on_duty", "straja.remedy.duty");
             return;
         }
-        if (!"FREE".equals(state.mode) && !nearSecretary(player)) {
+        if (!"FREE".equals(state.mode) && !DutyEngine.freeBeat(ctx.policies()) && !nearSecretary(player)) {
             player.refuse("straja.duty.end_at_secretary", "straja.remedy.secretary");
             return;
         }
@@ -1278,6 +1645,7 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         state.lastDutyActivityY = null;
         state.lastDutyActivityZ = null;
         state.salaryActivityPaused = false;
+        state.responseCreditUntil = null;
         state.lastEndReason = "server_restart";
         restoreDutyFaction(player, state);
         players.save(player.uuid(), state);
@@ -2005,7 +2373,11 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         player.tell("Avansarea se depune la Secretară ca petiție cu motiv scris — Comisarul citește și aprobă sau respinge.");
         player.tell("Ofițerii (Locotenent, Căpitan, Colonel) sunt cu normă întreagă și împart aceleași drepturi: "
                 + "misiuni, documente, plângeri, recompense. Comisarul numește și aprobă cererile.");
-        player.tell("Patrulă: " + ctx.setup().read().checkpoints.size() + " checkpoint-uri; "
+        player.tell(DutyEngine.freeBeat(ctx.policies())
+                ? "Patrulă: " + ctx.setup().read().checkpoints.size() + " beat-uri de prezență; "
+                + "tura rămâne deschisă cât ești în serviciu — prezența plătește baza, răspunsurile plătesc "
+                + ctx.policies().dutyResponseMultiplier + "×."
+                : "Patrulă: " + ctx.setup().read().checkpoints.size() + " checkpoint-uri; "
                 + ctx.policies().checkpointUnlockMinutes + " minute pauză între puncte; tura durează maximum "
                 + ctx.policies().patrolMaxMinutes + " minute reale.");
         player.tell("Salariu: plată orară, acumulată continuu. Monede: 1 / 64 / 4096 / 262144 Bronz.");

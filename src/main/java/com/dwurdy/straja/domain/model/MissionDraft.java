@@ -10,10 +10,14 @@ public class MissionDraft {
     public String objective = "";
     public int minutes;
     public int reward;
+    /** Service-block (XP) grant per participant on completion. */
+    public int xpReward;
     public int maxCopies = 1;
     public int rewardPool;
     public int minimumRank = 1;
     public int maxAssignees = 1;
+    /** When true, any member meeting the minimum rank may join without an invite. */
+    public boolean openRecruitment;
     public int rewardCommitted;
     public int remainingRewardPool;
     public long startAt;

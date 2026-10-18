@@ -258,6 +258,50 @@ class V2FoundationTest {
     }
 
     @Test
+    void publishedMissionsCarryDurationDerivedXpReward() {
+        var missions = new MissionV2Service(new SavedStores.Missions(access), null, null, clock, ids);
+        var halfHour = missions.publish("creator", "worker", "hq", "district",
+                "patrol", clock.nowMillis() + 30 * 60_000L, 1);
+        assertEquals(3, halfHour.xpReward, "30 minutes ≈ 3 ten-minute service blocks");
+        var generated = missions.publishGenerated("generator", "worker", "hq", "district",
+                "Inspect the gate", "GUARD", clock.nowMillis() + 2L * 24 * 60 * 60 * 1000, 1, "offer-xp");
+        assertEquals(new com.dwurdy.straja.domain.model.StrajaPolicies().missionMaxXpReward,
+                generated.xpReward, "long windows cap at the configured maximum");
+    }
+
+    @Test
+    void generatedOfferClaimIsBoundToItsBeneficiary() {
+        var missions = new MissionV2Service(new SavedStores.Missions(access), null, null, clock, ids);
+        var offer = missions.publishGenerated("generator", "worker-a", "hq", "",
+                "Inspect the gate", "GUARD", clock.nowMillis() + 60_000, 1, "offer-bound");
+        assertThrows(IllegalStateException.class, () -> missions.claim("worker-b", offer.id),
+                "another member cannot take someone else's offer");
+        assertEquals("worker-a", missions.claim("worker-a", offer.id).actorUuid);
+    }
+
+    @Test
+    void reassignedOfferFollowsTheNewActorAndRejectsTheOldBeneficiary() {
+        var people = new SavedStores.Personnel(access);
+        var personnel = new PersonnelService(people, clock, ids);
+        personnel.authorize("system", "inspector", CareerGrade.OFFICER_CAPITAN, EmploymentMode.FULL_TIME,
+                "TEST", "hq", "auth:inspector");
+        personnel.authorize("system", "worker-a", CareerGrade.PROFESSIONAL_ZILIER, EmploymentMode.PART_TIME,
+                "TEST", "hq", "auth:wa");
+        personnel.authorize("system", "worker-b", CareerGrade.PROFESSIONAL_ZILIER, EmploymentMode.PART_TIME,
+                "TEST", "hq", "auth:wb");
+        var missions = new MissionV2Service(new SavedStores.Missions(access),
+                new AuthorizationService(people, clock), null, clock, ids);
+        var offer = missions.publishGenerated("generator", "worker-a", "hq", "",
+                "Inspect the gate", "GUARD", clock.nowMillis() + 60_000, 1, "offer-reassign");
+        missions.claim("worker-a", offer.id);
+        missions.reassign("inspector", offer.id, "worker-b", "coverage");
+        // the reassigned actor's claim re-click hits the idempotent return,
+        // not the beneficiary denial — the binding followed the assignment
+        assertEquals("worker-b", missions.claim("worker-b", offer.id).actorUuid);
+        assertThrows(IllegalStateException.class, () -> missions.claim("worker-a", offer.id));
+    }
+
+    @Test
     void generatedMissionOfferKeyRejectsChangedPayloadOnReplay() {
         var missions = new MissionV2Service(new SavedStores.Missions(access), null, null, clock, ids);
         var first = missions.publishGenerated("generator", "worker", "hq", "district",

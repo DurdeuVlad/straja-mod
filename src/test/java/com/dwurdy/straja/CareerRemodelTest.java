@@ -342,6 +342,48 @@ class CareerRemodelTest {
     }
 
     @Test
+    void anyOfficerStampsPartTimePetition() {
+        authorize("zilier", CareerGrade.PROFESSIONAL_ZILIER, EmploymentMode.PART_TIME);
+        authorize("lt", CareerGrade.OFFICER_LOCOTENENT, EmploymentMode.FULL_TIME);
+        var application = promotions.submitPetition("zilier", CareerGrade.PROFESSIONAL_MESTER, "motiv");
+        var decided = promotions.approve("lt", application.applicationId, application.version);
+        assertEquals(PromotionStatus.APPROVED, decided.status);
+        assertEquals(CareerGrade.PROFESSIONAL_MESTER, personnel.find("zilier").careerGrade);
+    }
+
+    @Test
+    void officerCannotStampOfficerTrackPetition() {
+        authorize("mester", CareerGrade.PROFESSIONAL_MESTER, EmploymentMode.PART_TIME);
+        authorize("lt", CareerGrade.OFFICER_LOCOTENENT, EmploymentMode.FULL_TIME);
+        var application = promotions.submitPetition("mester", CareerGrade.OFFICER_LOCOTENENT, "motiv");
+        // Full-time asks still carry the Comisar's seal — officer grade alone
+        // does not reach them.
+        assertThrows(IllegalStateException.class,
+                () -> promotions.approve("lt", application.applicationId, application.version));
+    }
+
+    @Test
+    void plainMemberCannotStampPartTimePetition() {
+        authorize("zilier", CareerGrade.PROFESSIONAL_ZILIER, EmploymentMode.PART_TIME);
+        authorize("strajer", CareerGrade.MILITARY_STRAJER, EmploymentMode.PART_TIME);
+        var application = promotions.submitPetition("zilier", CareerGrade.PROFESSIONAL_MESTER, "motiv");
+        assertThrows(IllegalStateException.class,
+                () -> promotions.approve("strajer", application.applicationId, application.version));
+    }
+
+    @Test
+    void examPassPromotesThroughTheSameDurableFlow() {
+        authorize("stagiar", CareerGrade.MILITARY_STAGIAR, EmploymentMode.PART_TIME);
+        var decided = promotions.examPassPromote("stagiar", CareerGrade.MILITARY_STRAJER);
+        assertEquals(PromotionStatus.APPROVED, decided.status);
+        assertEquals("EXAM", decided.reviewedBy);
+        assertEquals("COMPLETE", decided.personnelSyncState);
+        var record = personnel.find("stagiar");
+        assertEquals(CareerGrade.MILITARY_STRAJER, record.careerGrade);
+        assertEquals(CareerTrack.MILITARY, record.careerTrack);
+    }
+
+    @Test
     void identicalPetitionResubmissionWithoutRecordChangeStaysIdempotent() {
         authorize("mil", CareerGrade.MILITARY_STRAJER, EmploymentMode.PART_TIME);
         var first = promotions.submitPetition("mil", CareerGrade.OFFICER_LOCOTENENT, "motiv");

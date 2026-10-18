@@ -96,6 +96,179 @@ public final class StrajaCommands {
         // §7: player-facing — free-duty ranks stop at will; patrol guards are
         // directed back to the Secretary inside the use case.
         root.then(Commands.literal("stop").executes(c -> player(c, StrajaRuntime.get().guards()::stopDuty)));
+        // FUN-6: the dispatch board — member-facing, no rank gate beyond on-duty.
+        var dispatch = Commands.literal("dispatch");
+        dispatch.executes(c -> player(c, StrajaCommands::dispatchBoard));
+        dispatch.then(Commands.literal("accept").then(Commands.argument("call", StringArgumentType.string())
+                .executes(c -> player(c, p -> StrajaRuntime.get().dispatch()
+                        .accept(p, StringArgumentType.getString(c, "call"))))));
+        dispatch.then(Commands.literal("decline").then(Commands.argument("call", StringArgumentType.string())
+                .executes(c -> player(c, p -> StrajaRuntime.get().dispatch()
+                        .decline(p, StringArgumentType.getString(c, "call"))))));
+        root.then(dispatch);
+        // FUN-7: an officer calls off a hunt (the Comisar's pardon shares it);
+        // the service re-checks authority on every call.
+        var manhunt = Commands.literal("manhunt");
+        manhunt.executes(c -> player(c, p -> StrajaRuntime.get().manhunts().status(p)));
+        manhunt.then(Commands.literal("off").then(Commands.argument("id", StringArgumentType.string())
+                .executes(c -> player(c, p -> StrajaRuntime.get().manhunts()
+                        .callOff(p, StringArgumentType.getString(c, "id"), "command")))));
+        root.then(manhunt);
+        // FUN-8: transfer rides — member join/status surfaces.
+        var transfer = Commands.literal("transfer");
+        transfer.executes(c -> player(c, p -> StrajaRuntime.get().transfers().status(p)));
+        transfer.then(Commands.literal("list")
+                .executes(c -> player(c, StrajaRuntime.get().transfers()::listFor)));
+        transfer.then(Commands.literal("join").then(Commands.argument("id", StringArgumentType.string())
+                .executes(c -> player(c, p -> StrajaRuntime.get().transfers()
+                        .join(p, StringArgumentType.getString(c, "id"))))));
+        transfer.then(Commands.literal("pickup").then(Commands.argument("id", StringArgumentType.string())
+                .executes(c -> player(c, p -> StrajaRuntime.get().transfers()
+                        .pickup(p, StringArgumentType.getString(c, "id"))))));
+        transfer.then(Commands.literal("cancel").then(Commands.argument("id", StringArgumentType.string())
+                .executes(c -> player(c, p -> StrajaRuntime.get().transfers()
+                        .cancel(p, StringArgumentType.getString(c, "id"))))));
+        root.then(transfer);
+        // FUN-8 admin: declared risk zones where a chain can part.
+        var zone = adminOnly(Commands.literal("zone"));
+        zone.then(Commands.literal("list")
+                .executes(c -> player(c, StrajaRuntime.get().transfers()::zoneList)));
+        zone.then(Commands.literal("add").then(Commands.argument("id", StringArgumentType.word())
+                .then(Commands.argument("radius", IntegerArgumentType.integer(4, 512))
+                        .executes(c -> player(c, p -> StrajaRuntime.get().transfers()
+                                .zoneAdd(p, StringArgumentType.getString(c, "id"),
+                                        IntegerArgumentType.getInteger(c, "radius"), "")))
+                        .then(Commands.argument("name", StringArgumentType.greedyString())
+                                .executes(c -> player(c, p -> StrajaRuntime.get().transfers()
+                                        .zoneAdd(p, StringArgumentType.getString(c, "id"),
+                                                IntegerArgumentType.getInteger(c, "radius"),
+                                                StringArgumentType.getString(c, "name"))))))));
+        zone.then(Commands.literal("remove").then(Commands.argument("id", StringArgumentType.word())
+                .executes(c -> player(c, p -> StrajaRuntime.get().transfers()
+                        .zoneRemove(p, StringArgumentType.getString(c, "id"))))));
+        root.then(zone);
+
+        // FUN-9: escape surfaces — the prisoner bribes, the guard searches
+        // the cell, and answers pending bribe offers.
+        var bribe = Commands.literal("bribe");
+        bribe.executes(c -> player(c, p -> StrajaRuntime.get().escapes().bribe(p)));
+        bribe.then(Commands.literal("accept")
+                .executes(c -> player(c, p -> StrajaRuntime.get().escapes().bribeAnswer(p, true))));
+        bribe.then(Commands.literal("decline")
+                .executes(c -> player(c, p -> StrajaRuntime.get().escapes().bribeAnswer(p, false))));
+        root.then(bribe);
+        root.then(Commands.literal("search")
+                .executes(c -> player(c, StrajaRuntime.get().escapes()::inspect)));
+        // FUN-9 admin: declared corruptible posts a prisoner can pay.
+        var post = adminOnly(Commands.literal("post"));
+        post.then(Commands.literal("list")
+                .executes(c -> player(c, StrajaRuntime.get().escapes()::postList)));
+        post.then(Commands.literal("add").then(Commands.argument("id", StringArgumentType.word())
+                .then(Commands.argument("price", IntegerArgumentType.integer(1))
+                        .executes(c -> player(c, p -> StrajaRuntime.get().escapes()
+                                .postAdd(p, StringArgumentType.getString(c, "id"),
+                                        IntegerArgumentType.getInteger(c, "price"),
+                                        6.0, "")))
+                        .then(Commands.argument("radius", IntegerArgumentType.integer(2, 64))
+                                .executes(c -> player(c, p -> StrajaRuntime.get().escapes()
+                                        .postAdd(p, StringArgumentType.getString(c, "id"),
+                                                IntegerArgumentType.getInteger(c, "price"),
+                                                IntegerArgumentType.getInteger(c, "radius"), "")))))));
+        post.then(Commands.literal("remove").then(Commands.argument("id", StringArgumentType.word())
+                .executes(c -> player(c, p -> StrajaRuntime.get().escapes()
+                        .postRemove(p, StringArgumentType.getString(c, "id"))))));
+        root.then(post);
+
+        // FUN-10: prison economy — job board, labor-credit market trades,
+        // and signed favor notes between prisoners.
+        root.then(Commands.literal("job")
+                .executes(c -> player(c, StrajaRuntime.get().prisonJobs()::jobStatus)));
+        var jobpost = adminOnly(Commands.literal("jobpost"));
+        jobpost.then(Commands.literal("list")
+                .executes(c -> player(c, StrajaRuntime.get().prisonJobs()::postList)));
+        jobpost.then(Commands.literal("add").then(Commands.argument("id", StringArgumentType.word())
+                .then(Commands.argument("jobId", StringArgumentType.word())
+                        .executes(c -> player(c, p -> StrajaRuntime.get().prisonJobs()
+                                .postAdd(p, StringArgumentType.getString(c, "id"),
+                                        StringArgumentType.getString(c, "jobId"), 4.0, "")))
+                        .then(Commands.argument("radius", IntegerArgumentType.integer(2, 32))
+                                .executes(c -> player(c, p -> StrajaRuntime.get().prisonJobs()
+                                        .postAdd(p, StringArgumentType.getString(c, "id"),
+                                                StringArgumentType.getString(c, "jobId"),
+                                                IntegerArgumentType.getInteger(c, "radius"), "")))))));
+        jobpost.then(Commands.literal("remove").then(Commands.argument("id", StringArgumentType.word())
+                .executes(c -> player(c, p -> StrajaRuntime.get().prisonJobs()
+                        .postRemove(p, StringArgumentType.getString(c, "id"))))));
+        root.then(jobpost);
+        var trade = Commands.literal("trade");
+        trade.then(Commands.argument("player", StringArgumentType.word())
+                .then(Commands.argument("price", IntegerArgumentType.integer(0))
+                        .executes(c -> player(c, p -> StrajaRuntime.get().prisonJobs()
+                                .tradeOffer(p, StringArgumentType.getString(c, "player"),
+                                        IntegerArgumentType.getInteger(c, "price"))))));
+        trade.then(Commands.literal("accept")
+                .executes(c -> player(c, p -> StrajaRuntime.get().prisonJobs()
+                        .tradeAnswer(p, true))));
+        trade.then(Commands.literal("decline")
+                .executes(c -> player(c, p -> StrajaRuntime.get().prisonJobs()
+                        .tradeAnswer(p, false))));
+        root.then(trade);
+        var iou = Commands.literal("iou");
+        iou.then(Commands.argument("player", StringArgumentType.word())
+                .then(Commands.argument("text", StringArgumentType.greedyString())
+                        .executes(c -> player(c, p -> StrajaRuntime.get().prisonJobs()
+                                .iou(p, StringArgumentType.getString(c, "player"),
+                                        StringArgumentType.getString(c, "text"))))));
+        root.then(iou);
+
+        // FUN-11: parole & appeal — the social route out. Prisoners file onto
+        // the docket and track eligibility; officers open hearings, victims
+        // object inside a bounded window, advocates consent to speak, and the
+        // decision lands PAROLED / DENIED / CONDITIONAL.
+        var parole = Commands.literal("parole");
+        parole.executes(c -> player(c, StrajaRuntime.get().parole()::status));
+        parole.then(Commands.literal("file")
+                .executes(c -> player(c, p -> StrajaRuntime.get().parole()
+                        .file(p, "PAROLE", "")))
+                .then(Commands.argument("reason", StringArgumentType.greedyString())
+                        .executes(c -> player(c, p -> StrajaRuntime.get().parole()
+                                .file(p, "PAROLE",
+                                        StringArgumentType.getString(c, "reason"))))));
+        parole.then(Commands.literal("appeal")
+                .executes(c -> player(c, p -> StrajaRuntime.get().parole()
+                        .file(p, "APPEAL", "")))
+                .then(Commands.argument("reason", StringArgumentType.greedyString())
+                        .executes(c -> player(c, p -> StrajaRuntime.get().parole()
+                                .file(p, "APPEAL",
+                                        StringArgumentType.getString(c, "reason"))))));
+        parole.then(Commands.literal("checkin")
+                .executes(c -> player(c, StrajaRuntime.get().parole()::checkIn)));
+        parole.then(Commands.literal("settle")
+                .executes(c -> player(c, p -> StrajaRuntime.get().parole().settle(p))));
+        parole.then(Commands.literal("docket")
+                .executes(c -> player(c, StrajaRuntime.get().parole()::docket)));
+        parole.then(Commands.literal("open").then(Commands.argument("id", StringArgumentType.word())
+                .executes(c -> player(c, p -> StrajaRuntime.get().parole()
+                        .open(p, StringArgumentType.getString(c, "id"))))));
+        parole.then(Commands.literal("decide")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("outcome", StringArgumentType.word())
+                                .executes(c -> player(c, p -> StrajaRuntime.get().parole()
+                                        .decide(p, StringArgumentType.getString(c, "id"),
+                                                StringArgumentType.getString(c, "outcome")))))));
+        parole.then(Commands.literal("object").then(Commands.argument("id", StringArgumentType.word())
+                .executes(c -> player(c, p -> StrajaRuntime.get().parole()
+                        .object(p, StringArgumentType.getString(c, "id"))))));
+        parole.then(Commands.literal("advocate").then(Commands.argument("player", StringArgumentType.word())
+                .executes(c -> player(c, p -> StrajaRuntime.get().parole()
+                        .advocate(p, StringArgumentType.getString(c, "player"))))));
+        parole.then(Commands.literal("agree")
+                .executes(c -> player(c, p -> StrajaRuntime.get().parole()
+                        .advocateAnswer(p, true))));
+        parole.then(Commands.literal("decline")
+                .executes(c -> player(c, p -> StrajaRuntime.get().parole()
+                        .advocateAnswer(p, false))));
+        root.then(parole);
 
         var special = adminOnly(Commands.literal("special"));
         special.then(Commands.literal("start").then(Commands.argument("player", EntityArgument.player())
@@ -515,13 +688,20 @@ public final class StrajaCommands {
                                                         .draftWrite(p, IntegerArgumentType.getInteger(c, "minutes"),
                                                                 StringArgumentType.getString(c, "start"),
                                                                 IntegerArgumentType.getInteger(c, "reward"),
+                                                                -1,
                                                                 StringArgumentType.getString(c, "objective")))))))));
         draft.then(Commands.literal("scope")
                 .then(Commands.argument("rank", StringArgumentType.word())
                         .then(Commands.argument("max", IntegerArgumentType.integer(1))
                                 .executes(c -> player(c, p -> StrajaRuntime.get().missions()
                                         .draftScope(p, StringArgumentType.getString(c, "rank"),
-                                                IntegerArgumentType.getInteger(c, "max")))))));
+                                                IntegerArgumentType.getInteger(c, "max"), (Boolean) null)))
+                                .then(Commands.argument("open", StringArgumentType.word())
+                                        .executes(c -> player(c, p -> StrajaRuntime.get().missions()
+                                                .draftScope(p, StringArgumentType.getString(c, "rank"),
+                                                        IntegerArgumentType.getInteger(c, "max"),
+                                                        "da".equalsIgnoreCase(StringArgumentType.getString(c, "open"))
+                                                                || "true".equalsIgnoreCase(StringArgumentType.getString(c, "open")))))))));
         draft.then(Commands.literal("sign").executes(c -> player(c, StrajaRuntime.get().missions()::draftSign)));
         draft.then(Commands.literal("package").executes(c -> player(c, StrajaRuntime.get().missions()::draftPackage)));
         draft.then(Commands.literal("from")
@@ -794,6 +974,13 @@ public final class StrajaCommands {
                                                                                                 IntegerArgumentType.getInteger(c, "maxX"),
                                                                                                 IntegerArgumentType.getInteger(c, "maxY"),
                                                                                                 IntegerArgumentType.getInteger(c, "maxZ")))))))))))));
+        // FUN-7: lock tiers — WEAK locks fall to the crowbar, STANDARD needs cutters.
+        node.then(Commands.literal("locktier")
+                .then(Commands.argument("cell", StringArgumentType.word())
+                        .then(Commands.argument("tier", StringArgumentType.word())
+                                .executes(c -> player(c, p -> StrajaRuntime.get().prison()
+                                        .setCellLockTier(p, StringArgumentType.getString(c, "cell"),
+                                                StringArgumentType.getString(c, "tier")))))));
         // M4: locker-pool administration — arm a pick, then click chests.
         node.then(Commands.literal("pick")
                 .then(Commands.literal("locker")
@@ -1416,6 +1603,26 @@ public final class StrajaCommands {
         } catch (com.mojang.brigadier.exceptions.CommandSyntaxException e) {
             return 0;
         }
+    }
+
+    private static void dispatchBoard(PlayerGateway player) {
+        if (StrajaRuntime.get().playerQueries().rankPrefixFor(player) == null) {
+            player.refuse("straja.incident.work_rank", "straja.remedy.recruiter");
+            return;
+        }
+        var calls = StrajaRuntime.get().dispatch().board();
+        if (calls.isEmpty()) {
+            player.tell("Tabloul de dispecerat este gol — liniște pe teren.");
+            return;
+        }
+        player.tell("Dispecerat — " + calls.size() + " apeluri:");
+        for (var call : calls) {
+            String state = "ACCEPTED".equals(call.status)
+                    ? "preluat de " + call.acceptedByName : "deschis (" + call.band + ")";
+            player.tell("  " + call.id + " [" + call.severity + "] " + call.title + " — " + state
+                    + (call.subjectName.isBlank() ? "" : " — " + call.subjectName));
+        }
+        player.tell("Răspunde: /straja dispatch accept <id>");
     }
 
     private static int player(CommandContext<CommandSourceStack> ctx, java.util.function.Consumer<PlayerGateway> op) {
@@ -2504,6 +2711,15 @@ public final class StrajaCommands {
                 new PlayerHelpEntry("/straja regulament", "straja.help.player.cmd.regulament"),
                 new PlayerHelpEntry("/straja license", "straja.help.player.cmd.license"),
                 new PlayerHelpEntry("/straja inspect", "straja.help.player.cmd.inspect"),
+                new PlayerHelpEntry("/straja dispatch", "straja.help.player.cmd.dispatch"),
+                new PlayerHelpEntry("/straja manhunt", "straja.help.player.cmd.manhunt"),
+                new PlayerHelpEntry("/straja transfer", "straja.help.player.cmd.transfer"),
+                new PlayerHelpEntry("/straja bribe", "straja.help.player.cmd.bribe"),
+                new PlayerHelpEntry("/straja search", "straja.help.player.cmd.search"),
+                new PlayerHelpEntry("/straja job", "straja.help.player.cmd.job"),
+                new PlayerHelpEntry("/straja trade", "straja.help.player.cmd.trade"),
+                new PlayerHelpEntry("/straja iou", "straja.help.player.cmd.iou"),
+                new PlayerHelpEntry("/straja parole", "straja.help.player.cmd.parole"),
                 new PlayerHelpEntry("/straja stop", "straja.help.player.cmd.stop"));
 
         /** Commands advertised by the player orientation — all must stay permission-0. */

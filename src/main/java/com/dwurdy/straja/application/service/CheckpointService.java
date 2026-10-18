@@ -1146,7 +1146,7 @@ public final class CheckpointService {
         boolean flagged = bolos.flagSystem(target.uuid().toString(), target.name(),
                 "marcat agresiv la punctul de control") != null;
         audit.record(AuditActions.CHECKPOINT_AGGRESSIVE, "checkpoint", "", target.name(),
-                target.uuid().toString(), flagged ? "WANTED" : AuditResults.REFUSED, "legacy aggressive");
+                target.uuid().toString(), flagged ? AuditResults.WANTED : AuditResults.REFUSED, "legacy aggressive");
         return flagged;
     }
 

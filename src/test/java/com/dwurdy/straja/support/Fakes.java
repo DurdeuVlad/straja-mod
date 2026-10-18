@@ -565,6 +565,13 @@ public final class Fakes {
         public final List<String> closedDoors = new ArrayList<>();
         /** Sounds played via playSoundAt — "dim,x,y,z|id". */
         public final List<String> sounds = new ArrayList<>();
+        /** Blocks consumed by FUN-9 tunnel digs — the hole stays in `blocks`. */
+        public final List<String> removedBlocks = new ArrayList<>();
+
+        @Override public void removeBlock(String dimension, int x, int y, int z) {
+            removedBlocks.add(key(dimension, x, y, z));
+            blocks.put(key(dimension, x, y, z), new BlockInfo("minecraft:air", true, false, false));
+        }
 
         @Override public void closeDoor(String dimension, int x, int y, int z) {
             closedDoors.add(key(dimension, x, y, z));
@@ -637,6 +644,10 @@ public final class Fakes {
                 new SavedStores.AdminTools(access),
                 new SavedStores.IdentityCards(access),
                 new SavedStores.Incidents(access),
+                new SavedStores.Dispatch(access),
+                new SavedStores.Manhunts(access),
+                new SavedStores.Transfers(access),
+                new SavedStores.Escapes(access),
                 new SavedStores.Bolos(access),
                 new SavedStores.Bounties(access),
                 new SavedStores.Evidence(access),
@@ -650,7 +661,9 @@ public final class Fakes {
                 new SavedStores.MerchantDesks(access),
                 new TestContainers(),
                 new TestNpcGuards(),
-                new TestDeepScan());
+                new TestDeepScan(),
+                new SavedStores.Jobs(access),
+                new SavedStores.Paroles(access));
     }
 
     /** Returns the inventory snapshot staged for the scanned player. */

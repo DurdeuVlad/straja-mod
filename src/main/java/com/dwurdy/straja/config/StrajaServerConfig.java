@@ -3,6 +3,7 @@ package com.dwurdy.straja.config;
 import com.dwurdy.straja.domain.model.StrajaPolicies;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.neoforge.common.ModConfigSpec;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -40,6 +41,7 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.IntValue MISSION_MAX_MINUTES;
     public static final ModConfigSpec.IntValue MISSION_MAX_SCHEDULE_DAYS;
     public static final ModConfigSpec.IntValue MISSION_MAX_REWARD;
+    public static final ModConfigSpec.IntValue MISSION_MAX_XP_REWARD;
     public static final ModConfigSpec.IntValue MISSION_MAX_COPIES_PER_DRAFT;
     public static final ModConfigSpec.IntValue MISSION_MAX_REWARD_POOL;
     public static final ModConfigSpec.IntValue MISSION_MAX_REWARD_PER_ISSUER_PER_DAY;
@@ -188,10 +190,19 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.ConfigValue<String> COMISAR_TITLE;
     public static final ModConfigSpec.IntValue REPORT_INTERVAL_DAYS;
     public static final ModConfigSpec.BooleanValue REPORT_BLOCK_DUTY_WHEN_OVERDUE;
+    public static final ModConfigSpec.BooleanValue REPORT_AUTO_FILE_OVERDUE;
     public static final ModConfigSpec.IntValue AUDIENCE_NOTIFY_COOLDOWN;
     public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> PROMOTION_SERVICE_BLOCKS;
 
     public static final ModConfigSpec.IntValue FREE_DUTY_MIN_RANK;
+    public static final ModConfigSpec.ConfigValue<String> DUTY_ROUTE_MODE;
+    public static final ModConfigSpec.DoubleValue DUTY_RESPONSE_MULTIPLIER;
+    public static final ModConfigSpec.IntValue DUTY_RESPONSE_CREDIT_MINUTES;
+    public static final ModConfigSpec.ConfigValue<String> DISPATCH_PUSH_MIN_SEVERITY;
+    public static final ModConfigSpec.IntValue DISPATCH_CALL_TTL_MINUTES;
+    public static final ModConfigSpec.IntValue DISPATCH_MAX_PUSH_TARGETS;
+    public static final ModConfigSpec.IntValue DISPATCH_ENLISTED_MAX_RANK;
+    public static final ModConfigSpec.IntValue DISPATCH_RETENTION_LIMIT;
     public static final ModConfigSpec.IntValue SECRETARY_RADIUS_BLOCKS;
     public static final ModConfigSpec.BooleanValue CAPTURE_DUTY_FACTION;
     public static final ModConfigSpec.ConfigValue<String> STRAJA_TEAM_NAME;
@@ -307,6 +318,53 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.IntValue PRISON_MAX_SENTENCE_DAYS;
     public static final ModConfigSpec.IntValue PRISON_ARREST_RADIUS;
     public static final ModConfigSpec.IntValue PRISON_RETENTION_LIMIT;
+    public static final ModConfigSpec.IntValue CELL_TAMPER_SECONDS;
+    public static final ModConfigSpec.IntValue CELL_TAMPER_QUICK_SECONDS;
+    public static final ModConfigSpec.DoubleValue CELL_TAMPER_RANGE;
+    public static final ModConfigSpec.IntValue CELL_BROKEN_MINUTES;
+    public static final ModConfigSpec.DoubleValue MANHUNT_GUARD_DETECT_RADIUS;
+    public static final ModConfigSpec.IntValue MANHUNT_MINUTES;
+    public static final ModConfigSpec.IntValue MANHUNT_HINT_SECONDS;
+    public static final ModConfigSpec.IntValue MANHUNT_HINT_BASE_RADIUS;
+    public static final ModConfigSpec.DoubleValue MANHUNT_HINT_GROWTH_PER_MINUTE;
+    public static final ModConfigSpec.IntValue MANHUNT_RECAPTURE_PENALTY_DAYS;
+    public static final ModConfigSpec.BooleanValue TRANSFER_RIDE_ENABLED;
+    public static final ModConfigSpec.DoubleValue TRANSFER_MIN_RIDE_BLOCKS;
+    public static final ModConfigSpec.IntValue TRANSFER_ESCORT_WAIT_MINUTES;
+    public static final ModConfigSpec.IntValue TRANSFER_MAX_ESCORTS;
+    public static final ModConfigSpec.DoubleValue TRANSFER_WALK_BLOCKS_PER_HOUR;
+    public static final ModConfigSpec.DoubleValue TRANSFER_RISK_MULTIPLIER;
+    public static final ModConfigSpec.IntValue ESCAPE_DIG_CLICKS;
+    public static final ModConfigSpec.IntValue ESCAPE_DIG_COOLDOWN_MS;
+    public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> ESCAPE_TUNNEL_BLOCKS;
+    public static final ModConfigSpec.IntValue CELL_PICK_SECONDS;
+    public static final ModConfigSpec.IntValue CELL_PICK_JAM_PERCENT;
+    public static final ModConfigSpec.IntValue CELL_JAMMED_MINUTES;
+    public static final ModConfigSpec.IntValue CELL_PICK_OPEN_MINUTES;
+    public static final ModConfigSpec.IntValue BRIBE_POST_PRICE;
+    public static final ModConfigSpec.DoubleValue BRIBE_RADIUS;
+    public static final ModConfigSpec.IntValue BRIBE_DOOR_OPEN_SECONDS;
+    public static final ModConfigSpec.IntValue BRIBE_OFFER_MS;
+    public static final ModConfigSpec.IntValue BLEND_GRACE_SECONDS;
+    public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> CONTRABAND_ITEMS;
+    public static final ModConfigSpec.IntValue TUNNEL_FOUND_PENALTY_MINUTES;
+    public static final ModConfigSpec.DoubleValue INSPECTION_RADIUS;
+    public static final ModConfigSpec.IntValue ESCAPE_RETENTION_LIMIT;
+    public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> JOB_DEFS;
+    public static final ModConfigSpec.IntValue TRADE_OFFER_MS;
+    public static final ModConfigSpec.IntValue STANDING_TUNNEL_PENALTY;
+    public static final ModConfigSpec.IntValue STANDING_JAM_PENALTY;
+    public static final ModConfigSpec.IntValue INSPECTION_CALL_INTERVAL_MINUTES;
+    public static final ModConfigSpec.IntValue JOB_RETENTION_LIMIT;
+    public static final ModConfigSpec.IntValue PAROLE_MIN_STANDING;
+    public static final ModConfigSpec.IntValue PAROLE_MIN_SERVED_PERCENT;
+    public static final ModConfigSpec.IntValue PAROLE_CLEAN_HOURS;
+    public static final ModConfigSpec.IntValue PAROLE_OBJECTION_MINUTES;
+    public static final ModConfigSpec.IntValue PAROLE_REFUSAL_COOLDOWN_HOURS;
+    public static final ModConfigSpec.IntValue PAROLE_LENGTH_HOURS;
+    public static final ModConfigSpec.IntValue PAROLE_CHECK_IN_HOURS;
+    public static final ModConfigSpec.IntValue PAROLE_BAIL_AMOUNT;
+    public static final ModConfigSpec.IntValue PAROLE_CONDITIONAL_HOURS;
     public static final ModConfigSpec.DoubleValue ESCORT_TETHER_RADIUS;
     public static final ModConfigSpec.DoubleValue ESCORT_GATE_BYPASS_RADIUS;
     public static final ModConfigSpec.DoubleValue ESCORT_TELEPORT_DISTANCE;
@@ -464,6 +522,7 @@ public final class StrajaServerConfig {
         MISSION_MAX_MINUTES = B.defineInRange("maxMinutes", 240, 1, 10080);
         MISSION_MAX_SCHEDULE_DAYS = B.defineInRange("maxScheduleDays", 7, 0, 365);
         MISSION_MAX_REWARD = B.defineInRange("maxReward", 250, 0, 1000000);
+        MISSION_MAX_XP_REWARD = B.defineInRange("maxXpReward", 12, 0, 100000);
         MISSION_MAX_COPIES_PER_DRAFT = B.defineInRange("maxCopiesPerDraft", 4, 1, 64);
         MISSION_MAX_REWARD_POOL = B.defineInRange("maxRewardPool", 1000, 0, 1000000);
         MISSION_MAX_REWARD_PER_ISSUER_PER_DAY = B.defineInRange("maxRewardPerIssuerPerDay", 1000, 0, 1000000);
@@ -842,6 +901,10 @@ public final class StrajaServerConfig {
                         "Refuse duty start at the Secretary while the member's",
                         "activity report is overdue.")
                 .define("blockDutyWhenOverdue", defaults.reportBlockDutyWhenOverdue);
+        REPORT_AUTO_FILE_OVERDUE = B.comment(
+                        "File a ledger-drafted AUTO_FILED report when a member's",
+                        "reporting deadline passes unsigned (FUN-4).")
+                .define("autoFileOverdue", defaults.reportsAutoFileOverdue);
         B.pop();
 
         B.push("audiences");
@@ -878,6 +941,44 @@ public final class StrajaServerConfig {
         STRAJA_TEAM_NAME = B.comment(
                         "Scoreboard team applied to on-duty guards.")
                 .define("strajaTeamName", defaults.strajaTeamName);
+        DUTY_ROUTE_MODE = B.comment(
+                        "ROUTE keeps the legacy checkpoint-deadline shift: missing",
+                        "a checkpoint window ends duty. FREE_BEAT (default) keeps the",
+                        "route as guidance only — a missed beat is a reminder, never",
+                        "a termination. Presence plus response work earns the wage.")
+                .define("routeMode", defaults.dutyRouteMode);
+        DUTY_RESPONSE_MULTIPLIER = B.comment(
+                        "Wage multiplier while a response credit is active.",
+                        "Accepting or joining another member's incident grants",
+                        "responseCreditMinutes minutes of multiplied pay.")
+                .defineInRange("responseMultiplier", defaults.dutyResponseMultiplier, 1.0, 10.0);
+        DUTY_RESPONSE_CREDIT_MINUTES = B.defineInRange("responseCreditMinutes",
+                defaults.dutyResponseCreditMinutes, 1, 240);
+        B.pop();
+
+        B.push("dispatch");
+        DISPATCH_PUSH_MIN_SEVERITY = B.comment(
+                        "Calls at or above this severity push to on-duty members:",
+                        "URGENT (default) or ROUTINE. Below the threshold calls",
+                        "queue on the dispatch board instead of pushing.")
+                .define("pushMinSeverity", defaults.dispatchPushMinSeverity);
+        DISPATCH_CALL_TTL_MINUTES = B.comment(
+                        "Minutes a call stays answerable at each rank band before",
+                        "it widens; an ALL-band expiry retires the call unanswered.")
+                .defineInRange("callTtlMinutes", defaults.dispatchCallTtlMinutes, 1, 1440);
+        DISPATCH_MAX_PUSH_TARGETS = B.comment(
+                        "Bound on how many on-duty members a call pushes to",
+                        "at once — nearest first.")
+                .defineInRange("maxPushTargets", defaults.dispatchMaxPushTargets, 1, 64);
+        DISPATCH_ENLISTED_MAX_RANK = B.comment(
+                        "ENLISTED-band calls push to members at or below this",
+                        "rank level (1=Stagiar, 2=Străjer).")
+                .defineInRange("enlistedMaxRank", defaults.dispatchEnlistedMaxRank, 1,
+                        com.dwurdy.straja.domain.model.Rank.COLONEL.level());
+        DISPATCH_RETENTION_LIMIT = B.comment(
+                        "How many closed/expired calls are retained before the",
+                        "oldest terminal records are pruned on tick.")
+                .defineInRange("retentionLimit", defaults.dispatchRetentionLimit, 10, 10000);
         B.pop();
 
         B.push("emergency");
@@ -1114,6 +1215,196 @@ public final class StrajaServerConfig {
         ESCORT_GATE_BYPASS_RADIUS = B.defineInRange("escortGateBypassRadius", 3.0, 1.0, 32.0);
         ESCORT_TELEPORT_DISTANCE = B.defineInRange("escortTeleportDistance", 14.0, 4.0, 128.0);
         LOCKER_CHESTS_PER_PRISONER = B.defineInRange("lockerChestsPerPrisoner", 2, 1, 8);
+        CELL_TAMPER_SECONDS = B.comment(
+                        "Seconds of uninterrupted channel before bolt cutters",
+                        "open a cell lock.")
+                .defineInRange("cellTamperSeconds", defaults.cellTamperSeconds, 1, 600);
+        CELL_TAMPER_QUICK_SECONDS = B.comment(
+                        "Seconds for the crowbar on a WEAK-tier cell lock.")
+                .defineInRange("cellTamperQuickSeconds", defaults.cellTamperQuickSeconds, 1, 600);
+        CELL_TAMPER_RANGE = B.comment(
+                        "Max distance the breaker may drift from the door",
+                        "mid-channel before the attempt fails.")
+                .defineInRange("cellTamperRange", defaults.cellTamperRange, 1.0, 64.0);
+        CELL_BROKEN_MINUTES = B.comment(
+                        "Minutes a sprung lock stays broken — until then the",
+                        "door does not hold anyone.")
+                .defineInRange("cellBrokenMinutes", defaults.cellBrokenMinutes, 1, 1440);
+        B.pop();
+
+        B.push("manhunt");
+        MANHUNT_GUARD_DETECT_RADIUS = B.comment(
+                        "Tamper fails when an on-duty guard stands within this",
+                        "radius of the cell door — presence is the counterplay.")
+                .defineInRange("guardDetectRadius", defaults.manhuntGuardDetectRadius, 1.0, 128.0);
+        MANHUNT_MINUTES = B.comment(
+                        "Minutes an active hunt runs before cooling into",
+                        "standing arrest warrants.")
+                .defineInRange("minutes", defaults.manhuntMinutes, 1, 1440);
+        MANHUNT_HINT_SECONDS = B.comment(
+                        "Seconds between hunter position hints.")
+                .defineInRange("hintSeconds", defaults.manhuntHintSeconds, 5, 3600);
+        MANHUNT_HINT_BASE_RADIUS = B.comment(
+                        "Base fuzz radius for hints in blocks — hints never",
+                        "pinpoint closer than this.")
+                .defineInRange("hintBaseRadius", defaults.manhuntHintBaseRadius, 0, 4096);
+        MANHUNT_HINT_GROWTH_PER_MINUTE = B.comment(
+                        "Extra hint fuzz per elapsed minute — hints degrade",
+                        "with age.")
+                .defineInRange("hintGrowthPerMinute", defaults.manhuntHintGrowthPerMinute, 0.0, 512.0);
+        MANHUNT_RECAPTURE_PENALTY_DAYS = B.comment(
+                        "Extra sentence days a recaptured manhunt runner serves.")
+                .defineInRange("recapturePenaltyDays", defaults.manhuntRecapturePenaltyDays, 0, 365);
+        B.pop();
+
+        B.push("transfer");
+        TRANSFER_RIDE_ENABLED = B.comment(
+                        "Ordered camp transfers become escorted rides: a real",
+                        "escort walks the chained prisoner through declared",
+                        "risk zones. False restores instant teleport transfer.")
+                .define("rideEnabled", defaults.transferRideEnabled);
+        TRANSFER_MIN_RIDE_BLOCKS = B.comment(
+                        "Origin-to-destination hops shorter than this stay",
+                        "instant — same-station moves are not rides.")
+                .defineInRange("minRideBlocks", defaults.transferMinRideBlocks, 0.0, 100000.0);
+        TRANSFER_ESCORT_WAIT_MINUTES = B.comment(
+                        "Minutes an unclaimed ride waits for an escort before",
+                        "the prisoner returns to custody.")
+                .defineInRange("escortWaitMinutes", defaults.transferEscortWaitMinutes, 1, 240);
+        TRANSFER_MAX_ESCORTS = B.comment(
+                        "Escorts paid per ride — the lead plus co-escorts",
+                        "who join before delivery.")
+                .defineInRange("maxEscorts", defaults.transferMaxEscorts, 1, 16);
+        TRANSFER_WALK_BLOCKS_PER_HOUR = B.comment(
+                        "Assumed escort speed feeding the transport reward's",
+                        "estimated-hours term of the mission budget formula.")
+                .defineInRange("walkBlocksPerHour", defaults.transferWalkBlocksPerHour, 100.0, 1000000.0);
+        TRANSFER_RISK_MULTIPLIER = B.comment(
+                        "Risk multiplier on the escort transport reward —",
+                        "rides through risk zones can go wrong.")
+                .defineInRange("riskMultiplier", defaults.transferRiskMultiplier, 0.1, 100.0);
+        B.pop();
+
+        B.push("escape");
+        ESCAPE_DIG_CLICKS = B.comment(
+                        "Swings needed to dig one tunnel block inside a cell.")
+                .defineInRange("digClicks", defaults.escapeDigClicks, 1, 1000);
+        ESCAPE_DIG_COOLDOWN_MS = B.comment(
+                        "Minimum milliseconds between counted dig swings.")
+                .defineInRange("digCooldownMs", defaults.escapeDigCooldownMs, 0, 600000);
+        ESCAPE_TUNNEL_BLOCKS = B.comment(
+                        "Block ids a prisoner can dig through inside a cell.")
+                .defineListAllowEmpty(List.of("tunnelBlocks"),
+                        new ArrayList<>(defaults.escapeTunnelBlocks),
+                        () -> "minecraft:dirt", StrajaServerConfig::isNonBlankString);
+        CELL_PICK_SECONDS = B.comment(
+                        "Seconds the lockpick channel takes — faster than",
+                        "the heavy tools, but strong locks can jam on it.")
+                .defineInRange("cellPickSeconds", defaults.cellPickSeconds, 1, 600);
+        CELL_PICK_JAM_PERCENT = B.comment(
+                        "Percent chance a STANDARD lock jams on a completed pick.")
+                .defineInRange("cellPickJamPercent", defaults.cellPickJamPercent, 0, 100);
+        CELL_JAMMED_MINUTES = B.comment(
+                        "Minutes a jammed lock refuses all tamper attempts.")
+                .defineInRange("cellJammedMinutes", defaults.cellJammedMinutes, 1, 10080);
+        CELL_PICK_OPEN_MINUTES = B.comment(
+                        "Minutes a picked lock stays open — shorter than a",
+                        "broken lock, the quiet option costs endurance.")
+                .defineInRange("cellPickOpenMinutes", defaults.cellPickOpenMinutes, 1, 720);
+        BRIBE_POST_PRICE = B.comment(
+                        "Default bronze price a corruptible post charges to",
+                        "look away; posts can set their own.")
+                .defineInRange("bribePostPrice", defaults.bribePostPrice, 1, 100000);
+        BRIBE_RADIUS = B.comment(
+                        "Reach of a bribe offer to a player guard or a",
+                        "declared corruptible post.")
+                .defineInRange("bribeRadius", defaults.bribeRadius, 1.0, 64.0);
+        BRIBE_DOOR_OPEN_SECONDS = B.comment(
+                        "Seconds a bribed post or guard leaves the cell open.")
+                .defineInRange("bribeDoorOpenSeconds", defaults.bribeDoorOpenSeconds, 5, 3600);
+        BRIBE_OFFER_MS = B.comment(
+                        "Milliseconds a player-guard bribe offer stays pending.")
+                .defineInRange("bribeOfferMs", defaults.bribeOfferMs, 5000, 600000);
+        BLEND_GRACE_SECONDS = B.comment(
+                        "Seconds a uniformed walk-out stays unflagged before",
+                        "the alarm fires — real guards in radius blow it.")
+                .defineInRange("blendGraceSeconds", defaults.blendGraceSeconds, 5, 3600);
+        CONTRABAND_ITEMS = B.comment(
+                        "Item ids confiscated by cell inspection and on",
+                        "detection — lockpicks, heavy tools, the uniform.")
+                .defineListAllowEmpty(List.of("contrabandItems"),
+                        new ArrayList<>(defaults.contrabandItems),
+                        () -> "straja:lockpick", StrajaServerConfig::isNonBlankString);
+        TUNNEL_FOUND_PENALTY_MINUTES = B.comment(
+                        "Minutes added to the digger's sentence when an",
+                        "inspection or a fill finds their tunnel.")
+                .defineInRange("tunnelFoundPenaltyMinutes", defaults.tunnelFoundPenaltyMinutes, 0, 10080);
+        INSPECTION_RADIUS = B.comment(
+                        "Guard inspection reach — the cell door must be this",
+                        "close for /straja inspect to search it.")
+                .defineInRange("inspectionRadius", defaults.inspectionRadius, 1.0, 32.0);
+        ESCAPE_RETENTION_LIMIT = B.comment(
+                        "Bound on retained tunnel records; oldest discovered",
+                        "are pruned on the escape tick.")
+                .defineInRange("retentionLimit", defaults.escapeRetentionLimit, 10, 100000);
+        B.pop();
+
+        B.push("jobs");
+        JOB_DEFS = B.comment(
+                        "Posted camp job quotas, one per line:",
+                        "id|label|item:count+item:count|pay|standing|cooldownSeconds")
+                .defineListAllowEmpty(List.of("defs"),
+                        new ArrayList<>(defaults.jobDefs),
+                        () -> "kitchen|Bucătărie|minecraft:bread:4|6|1|600",
+                        StrajaServerConfig::isNonBlankString);
+        TRADE_OFFER_MS = B.comment(
+                        "Milliseconds a prisoner market offer waits for an",
+                        "answer before it lapses.")
+                .defineInRange("tradeOfferMs", defaults.tradeOfferMs, 5000, 600000);
+        STANDING_TUNNEL_PENALTY = B.comment(
+                        "Standing lost when a digger's tunnel is discovered.")
+                .defineInRange("standingTunnelPenalty", defaults.standingTunnelPenalty, 0, 1000);
+        STANDING_JAM_PENALTY = B.comment(
+                        "Standing lost when a traced lock jam names the actor.")
+                .defineInRange("standingJamPenalty", defaults.standingJamPenalty, 0, 1000);
+        INSPECTION_CALL_INTERVAL_MINUTES = B.comment(
+                        "Minutes between routine cell-inspection dispatch",
+                        "calls; 0 disables the quota pressure.")
+                .defineInRange("inspectionCallIntervalMinutes",
+                        defaults.inspectionCallIntervalMinutes, 0, 10080);
+        JOB_RETENTION_LIMIT = B.comment(
+                        "Bound on retained job runs and settled trades.")
+                .defineInRange("retentionLimit", defaults.jobRetentionLimit, 10, 100000);
+        B.pop();
+
+        B.push("parole");
+        PAROLE_MIN_STANDING = B.comment(
+                        "FUN-10 standing needed before a prisoner may file.")
+                .defineInRange("minStanding", defaults.paroleMinStanding, 0, 100000);
+        PAROLE_MIN_SERVED_PERCENT = B.comment(
+                        "Percent of active sentence time already served.")
+                .defineInRange("minServedPercent", defaults.paroleMinServedPercent, 0, 100);
+        PAROLE_CLEAN_HOURS = B.comment(
+                        "Hours with no escape flag before parole is eligible.")
+                .defineInRange("cleanHours", defaults.paroleCleanHours, 0, 100000);
+        PAROLE_OBJECTION_MINUTES = B.comment(
+                        "Minutes online victims get to object at a hearing.")
+                .defineInRange("objectionMinutes", defaults.paroleObjectionMinutes, 0, 1440);
+        PAROLE_REFUSAL_COOLDOWN_HOURS = B.comment(
+                        "Hours a DENIED prisoner waits before refiling.")
+                .defineInRange("refusalCooldownHours", defaults.paroleRefusalCooldownHours, 0, 100000);
+        PAROLE_LENGTH_HOURS = B.comment(
+                        "Hours a parolee stays under conditions.")
+                .defineInRange("lengthHours", defaults.paroleLengthHours, 1, 100000);
+        PAROLE_CHECK_IN_HOURS = B.comment(
+                        "Hours between required parolee check-ins.")
+                .defineInRange("checkInHours", defaults.paroleCheckInHours, 1, 100000);
+        PAROLE_BAIL_AMOUNT = B.comment(
+                        "Labor-account bail a CONDITIONAL outcome demands.")
+                .defineInRange("bailAmount", defaults.paroleBailAmount, 0, 1000000);
+        PAROLE_CONDITIONAL_HOURS = B.comment(
+                        "Hours a CONDITIONAL decision waits for settlement.")
+                .defineInRange("conditionalHours", defaults.paroleConditionalHours, 1, 100000);
         B.pop();
 
         B.push("audit");
@@ -1192,6 +1483,7 @@ public final class StrajaServerConfig {
         p.missionMaxMinutes = MISSION_MAX_MINUTES.get();
         p.missionMaxScheduleDays = MISSION_MAX_SCHEDULE_DAYS.get();
         p.missionMaxReward = MISSION_MAX_REWARD.get();
+        p.missionMaxXpReward = MISSION_MAX_XP_REWARD.get();
         p.missionMaxCopiesPerDraft = MISSION_MAX_COPIES_PER_DRAFT.get();
         p.missionMaxRewardPool = MISSION_MAX_REWARD_POOL.get();
         p.missionMaxRewardPerIssuerPerDay = MISSION_MAX_REWARD_PER_ISSUER_PER_DAY.get();
@@ -1347,10 +1639,21 @@ public final class StrajaServerConfig {
         p.comisarTitle = COMISAR_TITLE.get();
         p.reportIntervalDays = REPORT_INTERVAL_DAYS.get();
         p.reportBlockDutyWhenOverdue = REPORT_BLOCK_DUTY_WHEN_OVERDUE.get();
+        p.reportsAutoFileOverdue = REPORT_AUTO_FILE_OVERDUE.get();
         p.audienceNotifyCooldownSeconds = AUDIENCE_NOTIFY_COOLDOWN.get();
         p.promotionServiceBlocks = mapOrDefault(StrajaPolicies.parseIntMap(PROMOTION_SERVICE_BLOCKS.get()),
                 defaults().promotionServiceBlocks);
         p.freeDutyMinRank = FREE_DUTY_MIN_RANK.get();
+        p.dutyRouteMode = "ROUTE".equalsIgnoreCase(String.valueOf(DUTY_ROUTE_MODE.get()))
+                ? "ROUTE" : "FREE_BEAT";
+        p.dutyResponseMultiplier = DUTY_RESPONSE_MULTIPLIER.get();
+        p.dutyResponseCreditMinutes = DUTY_RESPONSE_CREDIT_MINUTES.get();
+        p.dispatchPushMinSeverity = "ROUTINE".equalsIgnoreCase(String.valueOf(DISPATCH_PUSH_MIN_SEVERITY.get()))
+                ? "ROUTINE" : "URGENT";
+        p.dispatchCallTtlMinutes = DISPATCH_CALL_TTL_MINUTES.get();
+        p.dispatchMaxPushTargets = DISPATCH_MAX_PUSH_TARGETS.get();
+        p.dispatchEnlistedMaxRank = DISPATCH_ENLISTED_MAX_RANK.get();
+        p.dispatchRetentionLimit = DISPATCH_RETENTION_LIMIT.get();
         p.secretaryRadiusBlocks = SECRETARY_RADIUS_BLOCKS.get();
         p.captureDutyFaction = CAPTURE_DUTY_FACTION.get();
         p.strajaTeamName = STRAJA_TEAM_NAME.get();
@@ -1465,6 +1768,53 @@ public final class StrajaServerConfig {
         p.prisonMaxSentenceDays = PRISON_MAX_SENTENCE_DAYS.get();
         p.prisonArrestRadius = PRISON_ARREST_RADIUS.get();
         p.prisonRetentionLimit = PRISON_RETENTION_LIMIT.get();
+        p.cellTamperSeconds = CELL_TAMPER_SECONDS.get();
+        p.cellTamperQuickSeconds = CELL_TAMPER_QUICK_SECONDS.get();
+        p.cellTamperRange = CELL_TAMPER_RANGE.get();
+        p.cellBrokenMinutes = CELL_BROKEN_MINUTES.get();
+        p.manhuntGuardDetectRadius = MANHUNT_GUARD_DETECT_RADIUS.get();
+        p.manhuntMinutes = MANHUNT_MINUTES.get();
+        p.manhuntHintSeconds = MANHUNT_HINT_SECONDS.get();
+        p.manhuntHintBaseRadius = MANHUNT_HINT_BASE_RADIUS.get();
+        p.manhuntHintGrowthPerMinute = MANHUNT_HINT_GROWTH_PER_MINUTE.get();
+        p.manhuntRecapturePenaltyDays = MANHUNT_RECAPTURE_PENALTY_DAYS.get();
+        p.escapeDigClicks = ESCAPE_DIG_CLICKS.get();
+        p.escapeDigCooldownMs = ESCAPE_DIG_COOLDOWN_MS.get();
+        p.escapeTunnelBlocks = new ArrayList<>(ESCAPE_TUNNEL_BLOCKS.get());
+        p.cellPickSeconds = CELL_PICK_SECONDS.get();
+        p.cellPickJamPercent = CELL_PICK_JAM_PERCENT.get();
+        p.cellJammedMinutes = CELL_JAMMED_MINUTES.get();
+        p.cellPickOpenMinutes = CELL_PICK_OPEN_MINUTES.get();
+        p.bribePostPrice = BRIBE_POST_PRICE.get();
+        p.bribeRadius = BRIBE_RADIUS.get();
+        p.bribeDoorOpenSeconds = BRIBE_DOOR_OPEN_SECONDS.get();
+        p.bribeOfferMs = BRIBE_OFFER_MS.get();
+        p.blendGraceSeconds = BLEND_GRACE_SECONDS.get();
+        p.contrabandItems = new ArrayList<>(CONTRABAND_ITEMS.get());
+        p.tunnelFoundPenaltyMinutes = TUNNEL_FOUND_PENALTY_MINUTES.get();
+        p.inspectionRadius = INSPECTION_RADIUS.get();
+        p.escapeRetentionLimit = ESCAPE_RETENTION_LIMIT.get();
+        p.jobDefs = new ArrayList<>(JOB_DEFS.get());
+        p.tradeOfferMs = TRADE_OFFER_MS.get();
+        p.standingTunnelPenalty = STANDING_TUNNEL_PENALTY.get();
+        p.standingJamPenalty = STANDING_JAM_PENALTY.get();
+        p.inspectionCallIntervalMinutes = INSPECTION_CALL_INTERVAL_MINUTES.get();
+        p.jobRetentionLimit = JOB_RETENTION_LIMIT.get();
+        p.paroleMinStanding = PAROLE_MIN_STANDING.get();
+        p.paroleMinServedPercent = PAROLE_MIN_SERVED_PERCENT.get();
+        p.paroleCleanHours = PAROLE_CLEAN_HOURS.get();
+        p.paroleObjectionMinutes = PAROLE_OBJECTION_MINUTES.get();
+        p.paroleRefusalCooldownHours = PAROLE_REFUSAL_COOLDOWN_HOURS.get();
+        p.paroleLengthHours = PAROLE_LENGTH_HOURS.get();
+        p.paroleCheckInHours = PAROLE_CHECK_IN_HOURS.get();
+        p.paroleBailAmount = PAROLE_BAIL_AMOUNT.get();
+        p.paroleConditionalHours = PAROLE_CONDITIONAL_HOURS.get();
+        p.transferRideEnabled = TRANSFER_RIDE_ENABLED.get();
+        p.transferMinRideBlocks = TRANSFER_MIN_RIDE_BLOCKS.get();
+        p.transferEscortWaitMinutes = TRANSFER_ESCORT_WAIT_MINUTES.get();
+        p.transferMaxEscorts = TRANSFER_MAX_ESCORTS.get();
+        p.transferWalkBlocksPerHour = TRANSFER_WALK_BLOCKS_PER_HOUR.get();
+        p.transferRiskMultiplier = TRANSFER_RISK_MULTIPLIER.get();
         p.escortTetherRadius = ESCORT_TETHER_RADIUS.get();
         p.escortGateBypassRadius = ESCORT_GATE_BYPASS_RADIUS.get();
         p.escortTeleportDistance = ESCORT_TELEPORT_DISTANCE.get();

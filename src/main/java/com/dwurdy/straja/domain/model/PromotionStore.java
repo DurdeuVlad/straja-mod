@@ -16,4 +16,26 @@ public class PromotionStore {
         return applications;
     }
 
+    /**
+     * Gson skips field initializers — applications serialized before the
+     * petition-model fields existed read them back as null. Called on every
+     * store read so older saves cannot NPE later code.
+     */
+    public void normalize() {
+        ensureApplications();
+        for (PromotionApplication application : applications.values()) {
+            if (application == null) continue;
+            if (application.applicationId == null) application.applicationId = "";
+            if (application.subjectUuid == null) application.subjectUuid = "";
+            if (application.petitionReason == null) application.petitionReason = "";
+            if (application.decisionReason == null) application.decisionReason = "";
+            if (application.reviewedBy == null) application.reviewedBy = "";
+            if (application.personnelSyncState == null) application.personnelSyncState = "PENDING";
+            if (application.evidenceIds == null) application.evidenceIds = new java.util.ArrayList<>();
+            if (application.examAttemptIds == null) application.examAttemptIds = new java.util.ArrayList<>();
+            if (application.outboundIntents == null)
+                application.outboundIntents = new java.util.ArrayList<>();
+        }
+    }
+
 }

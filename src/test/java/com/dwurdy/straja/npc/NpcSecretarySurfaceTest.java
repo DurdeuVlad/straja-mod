@@ -44,6 +44,8 @@ class NpcSecretarySurfaceTest {
                                 new MissionRoleplayUseCase.AvailableAction(
                                         MissionRoleplayUseCase.Action.DRAFT_WRITE, ""),
                                 new MissionRoleplayUseCase.AvailableAction(
+                                        MissionRoleplayUseCase.Action.DRAFT_SCOPE, ""),
+                                new MissionRoleplayUseCase.AvailableAction(
                                         MissionRoleplayUseCase.Action.REPORT, "M-1"),
                                 new MissionRoleplayUseCase.AvailableAction(
                                         MissionRoleplayUseCase.Action.REPORT, "bad:key")),
@@ -71,10 +73,12 @@ class NpcSecretarySurfaceTest {
                         new FineRoleplayUseCase.Limits(80, 240, 200, 160, 180),
                         "Locotenent",
                         List.of(new NpcSecretarySurfaceService.PetitionEntry(
-                                "PROM-9", "Applicant Nine", "Locotenent"))));
+                                "PROM-9", "Applicant Nine", "Locotenent")),
+                        com.dwurdy.straja.application.port.in.DelegationUseCase.SurfaceView.empty()));
 
         assertTrue(action(surface, "mission-draft-write").enabled());
-        assertEquals(4, action(surface, "mission-draft-write").inputs().size());
+        assertEquals(5, action(surface, "mission-draft-write").inputs().size());
+        assertEquals(3, action(surface, "mission-draft-scope").inputs().size());
         assertTrue(action(surface, "mission-report:M-1").enabled());
         assertTrue(action(surface, "complaint-list").enabled());
         assertTrue(action(surface, "fine-draft-write").enabled());
@@ -96,6 +100,47 @@ class NpcSecretarySurfaceTest {
                 .allMatch(input -> input.maxLength() <= 512));
         assertEquals(surface.actions().size(), surface.dialogue().getFirst().choices().size());
         assertEquals(NpcSurfaceSnapshot.QuestState.ACTIVE, surface.quests().getFirst().state());
+    }
+
+    @Test
+    void delegationConsoleRendersDigestRowsAndPolicyControls() throws Exception {
+        NpcContentProfile profile = new com.dwurdy.straja.adapter.out.npc.content.NpcContentProfileJsonLoader()
+                .load(new InputStreamReader(
+                        getClass().getClassLoader().getResourceAsStream(
+                                "data/straja/npc/straja.secretary.workflows.json"),
+                        StandardCharsets.UTF_8));
+        NpcBinding binding = new NpcBinding(
+                "straja.test.secretary", NpcProviderId.CUSTOM_NPCS,
+                UUID.randomUUID().toString(), "", "secretary", "hq", profile.contentId(), 1);
+
+        var delegation = new com.dwurdy.straja.application.port.in.DelegationUseCase.SurfaceView(
+                List.of(new com.dwurdy.straja.application.port.in.DelegationUseCase.DigestEntry(
+                        com.dwurdy.straja.domain.model.DelegableAction.JOIN_PETITION,
+                        "JOIN-1", "Newbie", "FIERAR", "join-review:JOIN-1", 1L)),
+                List.of(new com.dwurdy.straja.application.port.in.DelegationUseCase.PolicyView(
+                        com.dwurdy.straja.domain.model.DelegableAction.JOIN_PETITION,
+                        com.dwurdy.straja.domain.model.DelegationMode.STANDING_ORDER, 0L,
+                        List.of(new com.dwurdy.straja.application.port.in.DelegationUseCase.OrderView(
+                                "SO-JOIN_PETITION-1", "dwurdy", "FIERAR", true)))),
+                List.of(new com.dwurdy.straja.application.port.in.DelegationUseCase.OrderOption(
+                        "JOIN_PETITION", "FIERAR", "meseria fierar")));
+
+        NpcSurfaceSnapshot surface = new NpcSecretarySurfaceService().resolve(
+                profile.bind(binding),
+                new NpcSecretarySurfaceService.Inputs(
+                        List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+                        List.of(), List.of(), null,
+                        new ComplaintRoleplayUseCase.Limits(120, 240, 180),
+                        new FineRoleplayUseCase.Limits(80, 240, 200, 160, 180),
+                        null, List.of(), delegation));
+
+        assertTrue(action(surface, "delegation-ledger").enabled());
+        assertTrue(action(surface, "join-review:JOIN-1").enabled(),
+                "digest rows deep-link into the queue's own review form");
+        assertTrue(action(surface, "delegation-mode:JOIN_PETITION").enabled());
+        assertTrue(action(surface, "delegation-order-join_petition:FIERAR").enabled(),
+                "order ops carry the lowercase queue name (content-id charset)");
+        assertTrue(action(surface, "delegation-revoke:SO-JOIN_PETITION-1").enabled());
     }
 
     private static NpcSurfaceAction action(NpcSurfaceSnapshot surface, String id) {
