@@ -1622,6 +1622,10 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
             player.refuse("straja.duty.work_blocked", "straja.remedy.ask_comisar");
             return;
         }
+        if (state.resignationPending) { refuseCore(player, "resignation_pending"); return; }
+        if (state.resigned) { refuseCore(player, "resigned"); return; }
+        if (state.fired) { refuseCore(player, "fired"); return; }
+        if (state.suspended) { refuseCore(player, "suspended"); return; }
         Result result = DutyEngine.startWorkDuty(state, now());
         if (applyCoreResult(player, state, result)) {
             captureDutyFaction(player, state);

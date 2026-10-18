@@ -1228,6 +1228,26 @@ class GuardServiceTest {
     }
 
     @Test
+    void workShiftHonorsMemberStateSuspensions() {
+        TestPlayer p = tradesman(com.dwurdy.straja.domain.model.CareerGrade.PROFESSIONAL_ZILIER,
+                "zilier_state");
+        // V2 lifecycle flags are projected from the personnel record —
+        // suspend the member the authoritative way.
+        v2Personnel.suspend("commissioner", p.uuid().toString(), "TEST");
+        guards.startWorkShift(p);
+        assertFalse(players.state(p.uuid()).duty,
+                "a suspended tradesman cannot start a paid work shift");
+
+        v2Personnel.reinstate("commissioner", p.uuid().toString());
+        var state = players.state(p.uuid());
+        state.resignationPending = true;
+        players.save(p.uuid(), state);
+        guards.startWorkShift(p);
+        assertFalse(players.state(p.uuid()).duty,
+                "a resigning member cannot start a paid work shift");
+    }
+
+    @Test
     void dutyViewOffersWorkShiftToTrades() {
         TestPlayer p = tradesman(com.dwurdy.straja.domain.model.CareerGrade.PROFESSIONAL_ZILIER,
                 "zilier_view");
