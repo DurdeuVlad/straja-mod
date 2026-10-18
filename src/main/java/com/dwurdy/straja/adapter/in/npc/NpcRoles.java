@@ -328,6 +328,15 @@ public final class NpcRoles {
             case ACTIVE -> player.tell("Activitate: în regulă (minimul săptămânal: o prezență "
                     + "la " + runtime.policies().weeklyInactivityDays + " zile).");
         }
+        // Announced officer-corps postings: section leadership and
+        // specialist desks assigned by Comandament.
+        long nowPost = runtime.nowMillis();
+        record.appointments.stream()
+                .filter(a -> a.type == com.dwurdy.straja.domain.model.AppointmentType.POSTING
+                        && a.activeAt(nowPost))
+                .forEach(a -> player.tell("Postare: " + a.postTitle
+                        + (a.stationId.isBlank() ? "" : " @ " + a.stationId)
+                        + (a.jurisdiction.isBlank() ? "" : " (" + a.jurisdiction + ")")));
     }
 
     private static void tellV2Promotion(com.dwurdy.straja.bootstrap.StrajaRuntime runtime,

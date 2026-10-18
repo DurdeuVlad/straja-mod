@@ -570,4 +570,38 @@ class CareerRemodelTest {
         assertEquals(now + 5L * 86_400_000L, record.absentUntil);
         assertEquals("exam", record.absenceReason);
     }
+
+    @Test
+    void postingsAssignSectionsAndDesksToOfficersOnly() {
+        authorize("colonel", CareerGrade.OFFICER_COLONEL, EmploymentMode.FULL_TIME);
+        authorize("lt", CareerGrade.OFFICER_LOCOTENENT, EmploymentMode.FULL_TIME);
+        authorize("maistru", CareerGrade.PROFESSIONAL_MESTER, EmploymentMode.PART_TIME);
+
+        var post = personnel.post("colonel", "lt", "fortaleta-palida",
+                "garnizoana", "Șef garnizoană", null);
+        assertEquals(com.dwurdy.straja.domain.model.AppointmentType.POSTING, post.type);
+        assertEquals("Șef garnizoană", post.postTitle);
+        assertEquals("fortaleta-palida", post.stationId);
+        assertTrue(post.activeAt(clock.nowMillis()));
+
+        // Postings are an officer-corps structure — part-time tracks and the
+        // generic appoint path cannot mint them.
+        assertThrows(IllegalStateException.class,
+                () -> personnel.post("colonel", "maistru", "basex", "politie", "Șef secție", null));
+        assertThrows(IllegalStateException.class,
+                () -> personnel.appoint("colonel", "maistru",
+                        com.dwurdy.straja.domain.model.AppointmentType.POSTING,
+                        "basex", "politie", null));
+        assertThrows(IllegalArgumentException.class,
+                () -> personnel.post("colonel", "lt", "basex", "politie", " ", null));
+
+        // Reassignment/removal revokes cleanly and once.
+        var revoked = personnel.revokeAppointment("colonel", "lt", post.appointmentId);
+        assertNotNull(revoked.revokedAt);
+        assertFalse(revoked.activeAt(clock.nowMillis()));
+        assertThrows(IllegalStateException.class,
+                () -> personnel.revokeAppointment("colonel", "lt", post.appointmentId));
+        assertThrows(IllegalArgumentException.class,
+                () -> personnel.revokeAppointment("colonel", "lt", "APT-missing"));
+    }
 }

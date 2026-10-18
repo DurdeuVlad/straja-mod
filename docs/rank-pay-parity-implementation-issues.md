@@ -1,7 +1,10 @@
 # Rank & Pay Parity — Implementation Issues
 
-Status: `ready-for-handoff` (decided from the owner's public recruitment
-announcement, 2026-10-18; branch + PR per issue, delivery to `main`)
+Status: `executed` — all four issues merged to `main` through PRs
+(#275 ladder parity, #276 pay parity, #277 weekly activity + absence,
+#278 officer postings), each gated on green CI including headless
+GameTests and an adversarial self-review pass. Base promotion:
+`feat/rank-overhaul` → `main` via #274.
 
 This queue closes the gaps between the mod's career/pay model and the
 publicly announced job distribution. The announcement is the spec; the work
