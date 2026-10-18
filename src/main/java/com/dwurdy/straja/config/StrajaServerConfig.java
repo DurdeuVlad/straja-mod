@@ -182,6 +182,8 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.BooleanValue WEEKLY_STIPEND_ENABLED;
     public static final ModConfigSpec.IntValue WEEKLY_STIPEND_AMOUNT;
     public static final ModConfigSpec.IntValue WEEKLY_STIPEND_REQUIRED_SERVICE_BLOCKS;
+    public static final ModConfigSpec.IntValue WEEKLY_INACTIVITY_DAYS;
+    public static final ModConfigSpec.IntValue ABSENCE_MAX_NOTICE_DAYS;
     public static final ModConfigSpec.IntValue MOBILIZATION_PAY;
     public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> RANK_NAMES;
     public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> RANK_MESERIAS_NAMES;
@@ -874,6 +876,12 @@ public final class StrajaServerConfig {
         WEEKLY_STIPEND_ENABLED = B.define("weeklyStipendEnabled", true);
         WEEKLY_STIPEND_AMOUNT = B.defineInRange("weeklyStipendAmount", 0, 0, 1000000);
         WEEKLY_STIPEND_REQUIRED_SERVICE_BLOCKS = B.defineInRange("weeklyStipendRequiredServiceBlocks", 0, 0, 1000000);
+        WEEKLY_INACTIVITY_DAYS = B.comment(
+                        "Announced weekly minimum: days of silence before a",
+                        "member's dossier flags INACTIVE (0 disables).",
+                        "A declared absence notice covers the window.")
+                .defineInRange("weeklyInactivityDays", 7, 0, 365);
+        ABSENCE_MAX_NOTICE_DAYS = B.defineInRange("absenceMaxNoticeDays", 30, 1, 365);
         MOBILIZATION_PAY = B.defineInRange("mobilizationPay", 0, 0, 1000000);
         B.pop();
 
@@ -1644,6 +1652,8 @@ public final class StrajaServerConfig {
         p.weeklyStipendEnabled = WEEKLY_STIPEND_ENABLED.get();
         p.weeklyStipendAmount = WEEKLY_STIPEND_AMOUNT.get();
         p.weeklyStipendRequiredServiceBlocks = WEEKLY_STIPEND_REQUIRED_SERVICE_BLOCKS.get();
+        p.weeklyInactivityDays = WEEKLY_INACTIVITY_DAYS.get();
+        p.absenceMaxNoticeDays = ABSENCE_MAX_NOTICE_DAYS.get();
         p.mobilizationPay = MOBILIZATION_PAY.get();
         p.rankNames = mapOrDefault(StrajaPolicies.parseIntStringMap(RANK_NAMES.get()),
                 defaults().rankNames);

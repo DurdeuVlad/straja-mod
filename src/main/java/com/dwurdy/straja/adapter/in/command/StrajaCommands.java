@@ -96,6 +96,16 @@ public final class StrajaCommands {
         // §7: player-facing — free-duty ranks stop at will; patrol guards are
         // directed back to the Secretary inside the use case.
         root.then(Commands.literal("stop").executes(c -> player(c, StrajaRuntime.get().guards()::stopDuty)));
+        // Announced absence notice ("anunțați Comandamentul") — covers the
+        // weekly activity minimum for the declared window.
+        root.then(Commands.literal("absence")
+                .then(Commands.argument("days", IntegerArgumentType.integer(1))
+                        .executes(c -> player(c, p -> StrajaRuntime.get().guards()
+                                .declareAbsence(p, IntegerArgumentType.getInteger(c, "days"), "")))
+                        .then(Commands.argument("reason", StringArgumentType.greedyString())
+                                .executes(c -> player(c, p -> StrajaRuntime.get().guards()
+                                        .declareAbsence(p, IntegerArgumentType.getInteger(c, "days"),
+                                                StringArgumentType.getString(c, "reason")))))));
         // FUN-6: the dispatch board — member-facing, no rank gate beyond on-duty.
         var dispatch = Commands.literal("dispatch");
         dispatch.executes(c -> player(c, StrajaCommands::dispatchBoard));

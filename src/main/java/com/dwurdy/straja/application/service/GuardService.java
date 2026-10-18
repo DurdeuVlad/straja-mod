@@ -1680,6 +1680,10 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         closeDutyAfterRestart(player, state, bootId.get());
         state.runtimeBootId = bootId.get();
         players.save(player.uuid(), state);
+        // Announced weekly minimum: a login is the activity stamp.
+        if (v2PersonnelService != null) {
+            v2PersonnelService.noteActivity(player.uuid().toString(), now());
+        }
     }
 
     /** Ends a stale active duty left over from before a server restart. */
@@ -2480,6 +2484,35 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         player.tell("Cererea a fost trimisă la Comisaru'.");
     }
 
+    /**
+     * Announced absence ("Dacă urmează să lipsiți, anunțați Comandamentul"):
+     * the member files a notice covering the weekly activity minimum for
+     * the declared window. Audited — the Comandament reads the ledger.
+     */
+    public void declareAbsence(PlayerGateway player, int days, String reason) {
+        if (v2PersonnelService == null) {
+            player.refuse("straja.duty.no_v2", "straja.remedy.ask_comisar");
+            return;
+        }
+        if (days <= 0 || days > ctx.policies().absenceMaxNoticeDays) {
+            player.refuse("straja.absence.days_invalid", "straja.remedy.fix_retry",
+                    ctx.policies().absenceMaxNoticeDays);
+            return;
+        }
+        try {
+            long until = now() + days * 86_400_000L;
+            var record = v2PersonnelService.declareAbsence(player.uuid().toString(), until, reason);
+            audit.record(AuditActions.PERSONNEL_ABSENCE, player.name(), player.uuid().toString(),
+                    player.name(), player.uuid().toString(), AuditResults.SUCCESS,
+                    "until=" + until + (reason == null || reason.isBlank() ? "" : " reason=" + reason));
+            player.tell("Absență înregistrată pentru " + days + " zile"
+                    + (record.absenceReason.isBlank() ? "." : " — motiv: " + record.absenceReason)
+                    + " Comandamentul a fost anunțat.");
+        } catch (IllegalStateException | IllegalArgumentException e) {
+            player.refuse("straja.absence.not_member", "straja.remedy.reception");
+        }
+    }
+
     // ------------------------------------------------------------ activity tracking
 
     /** Anti-AFK: called once per server tick for each online player. */
@@ -2504,6 +2537,10 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         }
         players.save(player.uuid(), state);
         notifyEvents(player, result.events());
+        // On-duty presence is activity too — the weekly minimum counts it.
+        if (v2PersonnelService != null) {
+            v2PersonnelService.noteActivity(player.uuid().toString(), current);
+        }
         return result;
     }
 

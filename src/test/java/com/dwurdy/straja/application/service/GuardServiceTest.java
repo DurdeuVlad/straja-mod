@@ -1260,6 +1260,33 @@ class GuardServiceTest {
         assertTrue(onShift.canStop(), "a trades member can always end their own work shift");
     }
 
+    // ------------------------------------------------------------ absence notices
+
+    @Test
+    void absenceNoticeIsRecordedAuditedAndBounded() {
+        TestPlayer p = tradesman(com.dwurdy.straja.domain.model.CareerGrade.PROFESSIONAL_MESERIAS,
+                "plecat");
+        guards.declareAbsence(p, 5, "concediu");
+        var record = v2Personnel.find(p.uuid().toString());
+        assertEquals(clock.nowMillis() + 5L * 86_400_000L, record.absentUntil);
+        assertEquals("concediu", record.absenceReason);
+        assertTrue(p.told("Absență înregistrată"));
+
+        guards.declareAbsence(p, 0, "");
+        guards.declareAbsence(p, ctx.policies().absenceMaxNoticeDays + 1, "");
+        assertEquals(5L * 86_400_000L, record.absentUntil - clock.nowMillis(),
+                "out-of-range notices never overwrite a valid one");
+    }
+
+    @Test
+    void absenceNoticeRefusesCivilians() {
+        TestPlayer p = server.add("outsider");
+        guards.declareAbsence(p, 3, "");
+        assertNull(v2Personnel.find(p.uuid().toString()),
+                "a civilian never gains a personnel record through the notice");
+        assertTrue(p.told("membrii activi"), "the refusal names the member-only rule");
+    }
+
     @Test
     void freeDutyIsNotCappedByThePatrolTimer() {
         TestPlayer senior = guardAtRank(Rank.LOCOTENENT.level());

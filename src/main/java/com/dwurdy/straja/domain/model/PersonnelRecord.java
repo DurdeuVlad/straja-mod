@@ -27,6 +27,14 @@ public class PersonnelRecord {
     public String resignationReason = "";
     public Long demotedAt;
     public String demotionReason = "";
+    /** Last real activity stamp (login or duty tick) — the announced
+     *  weekly-minimum signal. Null on pre-remodel records means "not yet
+     *  observed", never "inactive". */
+    public Long lastActiveAt;
+    /** Announced absence: the member told the Comandament they will be
+     *  away until this timestamp; counts toward the weekly minimum. */
+    public Long absentUntil;
+    public String absenceReason = "";
     public long version;
     public long createdAt;
     public long updatedAt;

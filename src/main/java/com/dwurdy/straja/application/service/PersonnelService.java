@@ -86,6 +86,67 @@ public final class PersonnelService implements com.dwurdy.straja.application.por
         return store.records == null ? java.util.List.of() : java.util.List.copyOf(store.records.values());
     }
 
+    /**
+     * Announced minimum-activity signal: a login or an on-duty tick stamps
+     * {@code lastActiveAt} on the member's record. Throttled to one write
+     * per minute — the weekly contract never needs finer resolution and a
+     * per-tick write would churn the store for nothing.
+     */
+    public synchronized void noteActivity(String playerUuid, long now) {
+        if (playerUuid == null) return;
+        PersonnelStore store = repository.read();
+        PersonnelRecord record = store.records == null ? null : store.records.get(playerUuid);
+        if (record == null || !record.active()) return;
+        if (record.lastActiveAt != null && now - record.lastActiveAt < 60_000L) return;
+        record.lastActiveAt = now;
+        // Real presence supersedes a still-open absence notice — the member
+        // came back early; the file should say so, not keep them "away".
+        if (record.absentUntil != null && now < record.absentUntil) {
+            record.absentUntil = null;
+            record.absenceReason = "";
+            record.version++;
+        }
+        store.storeRevision++;
+        repository.write(store);
+    }
+
+    /**
+     * Announced absence (the announcement's "anunțați Comandamentul"): the
+     * member records that they will be away until {@code untilMs}; the
+     * notice covers the weekly minimum for that window. Declaring again
+     * replaces the notice — the Comandament sees one current absence.
+     */
+    public synchronized PersonnelRecord declareAbsence(String playerUuid, long untilMs, String reason) {
+        if (untilMs <= clock.nowMillis()) throw new IllegalArgumentException("absence must end in the future");
+        PersonnelStore store = repository.read();
+        PersonnelRecord record = store.records == null ? null : store.records.get(playerUuid);
+        if (record == null || !record.active()) throw new IllegalStateException("personnel is not active");
+        record.absentUntil = untilMs;
+        record.absenceReason = com.dwurdy.straja.domain.model.Text.bounded(
+                reason, com.dwurdy.straja.domain.model.Text.REASON_LIMIT);
+        record.updatedAt = clock.nowMillis();
+        record.version++;
+        store.storeRevision++;
+        repository.write(store);
+        return record;
+    }
+
+    /** Weekly-minimum evaluation: what the member's record says right now. */
+    public enum ActivityState { ACTIVE, NOTICED_ABSENT, INACTIVE, UNOBSERVED }
+
+    /**
+     * {@code INACTIVE} only after the whole window passes silently — a
+     * member who never logged activity (pre-remodel record) is UNOBSERVED,
+     * not delinquent; a notice inside its window is NOTICED_ABSENT.
+     */
+    public ActivityState activityState(PersonnelRecord record, long now, long windowMs) {
+        if (record == null || !record.active()) return ActivityState.UNOBSERVED;
+        if (record.absentUntil != null && now < record.absentUntil) return ActivityState.NOTICED_ABSENT;
+        if (record.lastActiveAt == null) return ActivityState.UNOBSERVED;
+        if (windowMs > 0 && now - record.lastActiveAt > windowMs) return ActivityState.INACTIVE;
+        return ActivityState.ACTIVE;
+    }
+
     public synchronized PersonnelRecord authorize(String actorUuid, String subjectUuid, CareerGrade grade,
                                                   EmploymentMode employment, String source, String stationId,
                                                   String idempotencyKey) {

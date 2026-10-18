@@ -287,6 +287,14 @@ public class StrajaPolicies {
     public boolean weeklyStipendEnabled = true;
     public long weeklyStipendAmount = 0;
     public long weeklyStipendRequiredServiceBlocks = 0;
+
+    // Announced minimum activity ("cel puțin o dată pe săptămână"): a member
+    // silent for this many days flags INACTIVE on their dossier; a declared
+    // absence notice covers the window. 0 disables the flag.
+    public int weeklyInactivityDays = 7;
+    /** Furthest ahead an absence notice may run — longer leaves need a
+     *  Comandament decision, not a self-service stamp. */
+    public int absenceMaxNoticeDays = 30;
     public long mobilizationPay = 0;
 
     // rank display names (§2 ladder: Stagiar → Străjer enlisted, then the
