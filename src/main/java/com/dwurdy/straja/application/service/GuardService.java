@@ -1679,11 +1679,63 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         GuardState state = players.state(player.uuid());
         closeDutyAfterRestart(player, state, bootId.get());
         state.runtimeBootId = bootId.get();
+        // Shift pause/resume: a disconnect freezes the shift AND the wage
+        // clock — it restarts at rejoin, so time away pays nothing on
+        // either outcome below.
+        Long loggedOut = state.lastLogoutAt;
+        state.lastLogoutAt = null;
+        if (state.duty && loggedOut != null) {
+            state.lastAccrualAt = now();
+            state.lastDutyActivityAt = now();
+            state.lastDutyActivityX = player.x();
+            state.lastDutyActivityY = player.y();
+            state.lastDutyActivityZ = player.z();
+            state.salaryActivityPaused = false;
+        }
         players.save(player.uuid(), state);
+        long autoEndMs = Math.max(0, ctx.policies().dutyAutoEndOfflineMinutes) * 60_000L;
+        if (state.duty && loggedOut != null && autoEndMs > 0 && now() - loggedOut > autoEndMs) {
+            // endDuty accrues once more at the given timestamp. Offline time
+            // is a pause, not grace — clamp to the logout moment so the gap
+            // pays nothing (paused ticks already advanced lastAccrualAt to
+            // the last paid-through point; this settles only the unticked
+            // online tail).
+            var result = DutyEngine.endDuty(state, "offline_auto_end",
+                    Math.min(now(), loggedOut),
+                    salaryFor(player, state), ctx.policies());
+            restoreDutyFaction(player, state);
+            players.save(player.uuid(), state);
+            notifyEvents(player, result.events());
+            audit.record(AuditActions.DUTY_STOP, player.name(), player.uuid().toString(),
+                    player.name(), player.uuid().toString(), AuditResults.SUCCESS, "offline_auto_end");
+            player.tell("Tura s-a încheiat automat: ai lipsit mai mult de "
+                    + ctx.policies().dutyAutoEndOfflineMinutes + " minute. "
+                    + "Salariul acumulat rămâne de încasat.");
+        }
         // Announced weekly minimum: a login is the activity stamp.
         if (v2PersonnelService != null) {
             v2PersonnelService.noteActivity(player.uuid().toString(), now());
         }
+    }
+
+    /** Logout stamp consumed by {@link #recoverOnLogin}. */
+    @Override
+    public void noteLogout(PlayerGateway player) {
+        if (player == null || player.uuid() == null) return;
+        GuardState state = players.state(player.uuid());
+        if (!state.duty) return;
+        state.lastLogoutAt = now();
+        players.save(player.uuid(), state);
+    }
+
+    /** Chat is presence on an RP server: speaking on duty closes the AFK gap. */
+    @Override
+    public void noteChat(PlayerGateway player) {
+        if (player == null || player.uuid() == null) return;
+        GuardState state = players.state(player.uuid());
+        if (!state.duty || "FREE".equals(state.mode)) return;
+        markDutyActivity(player, state, now());
+        players.save(player.uuid(), state);
     }
 
     /** Ends a stale active duty left over from before a server restart. */

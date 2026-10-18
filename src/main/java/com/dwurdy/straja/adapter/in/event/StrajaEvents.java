@@ -283,11 +283,24 @@ public final class StrajaEvents {
         var gateway = new MinecraftPlayerGateway(event.getEntity().getServer(), player.getUUID());
         runtime.checkpoints().clearPlayer(gateway.uuid());
         runtime.custodyRoleplay().recoverOnLogout(gateway);
+        // Shift pause: stamp the disconnect so next login can resume a
+        // short break or auto-end a long one.
+        runtime.guardDuty().noteLogout(gateway);
         // Pending admin-tool state (routes, corners, templates) never survives logout.
         runtime.adminTools().clearState(gateway);
         toolClickHandledAt.remove(player.getUUID());
         NpcPresentationRuntime.forgetCustomNpcAdminAttack(player.getUUID());
         CustodyVisualSync.sync(runtime.custodyRoleplay().visualStates());
+    }
+
+    @SubscribeEvent
+    public void onChat(net.neoforged.neoforge.event.ServerChatEvent event) {
+        StrajaRuntime runtime = StrajaRuntime.get();
+        if (runtime == null) return;
+        // A talking member is not AFK — on an RP server the patrol *is* the
+        // talking. Chat closes the salary activity gap like movement does.
+        runtime.guardDuty().noteChat(
+                new MinecraftPlayerGateway(event.getPlayer().getServer(), event.getPlayer().getUUID()));
     }
 
     @SubscribeEvent

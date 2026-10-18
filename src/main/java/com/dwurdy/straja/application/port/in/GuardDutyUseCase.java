@@ -35,6 +35,10 @@ public interface GuardDutyUseCase {
      * stamps the current boot id so relogins inside one runtime keep the duty.
      */
     void recoverOnLogin(PlayerGateway player);
+    /** Logout stamp for the offline shift-pause/auto-end evaluation on next login. */
+    void noteLogout(PlayerGateway player);
+    /** Chat is presence on an RP server: speaking on duty counts as activity. */
+    void noteChat(PlayerGateway player);
     /** Per-tick duty maintenance for one player (patrol cap, salary accrual). */
     com.dwurdy.straja.domain.model.DutyEngine.TickResult tickPlayerDuty(PlayerGateway player);
     void showRules(PlayerGateway player);

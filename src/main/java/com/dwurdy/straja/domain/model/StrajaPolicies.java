@@ -279,8 +279,13 @@ public class StrajaPolicies {
     public int serviceBlockMinutes = 10;
     public int salaryMaxPaidMinutesPerDay = 240;
     public int salaryWindowMinutes = 24 * 60;
-    public int salaryActivityGraceSeconds = 90;
+    public int salaryActivityGraceSeconds = 900;
     public double salaryActivityMoveThreshold = 0.15;
+    /** RP-friendly presence: a member who disconnects mid-shift keeps it
+     *  open (wage already paused by the activity gate); if they stay
+     *  offline longer than this, the shift auto-ends on their next login —
+     *  earned wages stay claimable. 0 disables auto-end. */
+    public int dutyAutoEndOfflineMinutes = 5;
 
     // V2 settlement policy. A zero amount disables the corresponding payout
     // while still allowing the authoritative entitlement to be audited.
