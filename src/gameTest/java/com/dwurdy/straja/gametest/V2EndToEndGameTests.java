@@ -92,16 +92,20 @@ public final class V2EndToEndGameTests {
                 operation("specialist-recruit"));
         if (record.careerGrade == CareerGrade.PROFESSIONAL_ZILIER) {
             runtime.v2Personnel().assignProfession(actor, specialist, "MINING");
-            var application = runtime.v2Promotions().submit(specialist,
-                    CareerGrade.PROFESSIONAL_MESTER);
-            runtime.v2Promotions().recordCommissionerEvidence(application.applicationId, actor, "EXAM",
-                    "PASS", 100d, "e2e:specialist-exam");
-            var ready = runtime.v2Promotions().markReady(application.applicationId);
-            runtime.v2Promotions().approve(actor, application.applicationId, ready.version);
+            // The announced trades ladder has three rungs: Zilier climbs
+            // through Meseriaș before reaching Maistru.
+            for (CareerGrade step : new CareerGrade[]{
+                    CareerGrade.PROFESSIONAL_MESERIAS, CareerGrade.PROFESSIONAL_MESTER}) {
+                var application = runtime.v2Promotions().submit(specialist, step);
+                runtime.v2Promotions().recordCommissionerEvidence(application.applicationId, actor,
+                        "EXAM", "PASS", 100d, "e2e:specialist-exam-" + step.name());
+                var ready = runtime.v2Promotions().markReady(application.applicationId);
+                runtime.v2Promotions().approve(actor, application.applicationId, ready.version);
+            }
         }
         helper.assertTrue(runtime.v2Personnel().find(specialist).careerGrade
                         == CareerGrade.PROFESSIONAL_MESTER,
-                "specialist recruitment must finish at the professional Mester grade");
+                "specialist recruitment must finish at the professional Maistru grade");
         helper.succeed();
     }
 

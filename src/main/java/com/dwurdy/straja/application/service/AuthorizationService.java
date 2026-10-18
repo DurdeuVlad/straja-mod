@@ -122,7 +122,8 @@ public final class AuthorizationService {
             case ROUTINE_PATROL -> !grade.isProfessional();
             case ISSUE_FINES -> !grade.isProfessional();
             case USE_CUFFS, USE_BATON, EXECUTE_ARRESTS, ASSIST_COMPLAINTS ->
-                    grade == CareerGrade.MILITARY_STRAJER || grade.isOfficer()
+                    grade == CareerGrade.MILITARY_STRAJER
+                            || grade == CareerGrade.MILITARY_SERGEANT || grade.isOfficer()
                             || scopedSpecialist(actor, context, now);
             case INVESTIGATE_COMPLAINTS, MOBILIZE_PLAYERS ->
                     grade.isOfficer() || (requested == Capability.INVESTIGATE_COMPLAINTS
