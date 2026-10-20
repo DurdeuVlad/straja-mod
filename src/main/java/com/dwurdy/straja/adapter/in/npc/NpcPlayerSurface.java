@@ -5,8 +5,11 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
 
-/** Minecraft-free role plan shared by NPC routing and its player guidance. */
-final class NpcPlayerSurface {
+/**
+ * Minecraft-free role plan shared by NPC routing and its player guidance.
+ * Public since the desk-menu adapter reads the same surface model.
+ */
+public final class NpcPlayerSurface {
     static final String NPC_ACTION_COMMAND = "/straja npc-action ";
     private static final Pattern RECORD_ID = Pattern.compile("[A-Za-z0-9_-]{1,80}");
     private static final Set<String> PARAMETERIZED_ACTIONS = Set.of(
@@ -41,9 +44,9 @@ final class NpcPlayerSurface {
             "trades-enroll",
             "delegation-mode", "delegation-window", "delegation-revoke");
 
-    enum RoleRoute { RECEPTIONIST, SECRETARY, JAILER, ARCHIVIST, TRAINER, RECRUITER, ARMORER, INSPECTOR, UNKNOWN }
+    public enum RoleRoute { RECEPTIONIST, SECRETARY, JAILER, ARCHIVIST, TRAINER, RECRUITER, ARMORER, INSPECTOR, UNKNOWN }
 
-    record ChatAction(String label, String actionId, String labelKey) {
+    public record ChatAction(String label, String actionId, String labelKey) {
         ChatAction(String label, String actionId) {
             this(label, actionId, null);
         }
@@ -58,7 +61,7 @@ final class NpcPlayerSurface {
         }
     }
 
-    record RoleSurface(RoleRoute route, String title, String guidance, List<ChatAction> actions) {
+    public record RoleSurface(RoleRoute route, String title, String guidance, List<ChatAction> actions) {
         String visibleText() {
             return title + " " + guidance + " "
                     + String.join(" ", actions.stream().map(ChatAction::label).toList());
@@ -70,9 +73,9 @@ final class NpcPlayerSurface {
      * than {@link #PRIMARY_CAP} actions, including the «Mai multe…» link),
      * {@code overflow()} holds the remaining reachable actions in order.
      */
-    record OrderedSurface(RoleSurface surface, List<ChatAction> overflow) {
+    public record OrderedSurface(RoleSurface surface, List<ChatAction> overflow) {
         /** Every reachable content action in display order, navigation links excluded. */
-        List<ChatAction> contentActions() {
+        public List<ChatAction> contentActions() {
             var all = new java.util.ArrayList<ChatAction>();
             surface.actions().stream()
                     .filter(action -> !action.actionId().startsWith("more:"))
@@ -89,13 +92,13 @@ final class NpcPlayerSurface {
     /** Ordering phases derived from the player's Straja state. */
     enum SurfacePhase { CIVIL, APPLICANT, MEMBER }
 
-    record ActionRef(String operation, String recordId) {}
+    public record ActionRef(String operation, String recordId) {}
 
     record InteractionPlan(RoleSurface surface, boolean executesRoleAction) {}
 
     private NpcPlayerSurface() {}
 
-    static RoleRoute routeFor(String roleId) {
+    public static RoleRoute routeFor(String roleId) {
         return switch (roleId == null ? "" : roleId) {
             case NpcRoles.RECEPTIONIST -> RoleRoute.RECEPTIONIST;
             case NpcRoles.SECRETARY -> RoleRoute.SECRETARY;
@@ -911,7 +914,7 @@ final class NpcPlayerSurface {
         return List.copyOf(actions);
     }
 
-    static Optional<ActionRef> parseActionId(String actionId) {
+    public static Optional<ActionRef> parseActionId(String actionId) {
         if (actionId == null) return Optional.empty();
         int separator = actionId.indexOf(':');
         if (separator <= 0 || separator == actionId.length() - 1

@@ -23,6 +23,7 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.ConfigValue<String> ENVIRONMENT;
     public static final ModConfigSpec.ConfigValue<String> NPC_PROVIDER_MODE;
     public static final ModConfigSpec.BooleanValue NPC_DEBUG_TEXT_ENABLED;
+    public static final ModConfigSpec.BooleanValue NPC_MENUS_ENABLED;
     public static final ModConfigSpec.ConfigValue<String> DISCORD_WEBHOOK_URL;
 
     public static final ModConfigSpec.IntValue CHECKPOINT_UNLOCK_MINUTES;
@@ -423,6 +424,13 @@ public final class StrajaServerConfig {
         NPC_DEBUG_TEXT_ENABLED = B.comment(
                         "Explicitly permits the debug-text provider; it never becomes a normal player surface.")
                 .define("debugTextEnabled", defaults.npcDebugTextEnabled);
+        B.pop();
+
+        B.push("npcMenus");
+        NPC_MENUS_ENABLED = B.comment(
+                        "Renders native-NPC interactions as vanilla chest-menu desks; when off",
+                        "(or when the player is virtual/headless) the clickable chat surface stays the fallback.")
+                .define("enabled", true);
         B.pop();
 
         B.push("outbound");

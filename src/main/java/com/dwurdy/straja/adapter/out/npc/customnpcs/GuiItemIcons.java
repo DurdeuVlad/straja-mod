@@ -15,12 +15,12 @@ import net.minecraft.world.item.Items;
  * touches the provider. This class is only resolved when a GUI header icon is
  * actually rendered on a live server.</p>
  */
-final class GuiItemIcons {
+public final class GuiItemIcons {
     private GuiItemIcons() {
     }
 
     /** Returns a vanilla item stack for the icon id, or null when unmapped. */
-    static Object mcItemStack(String itemId) {
+    public static Object mcItemStack(String itemId) {
         Item item = BuiltInRegistries.ITEM.get(ResourceLocation.parse(itemId));
         if (item == null || item == Items.AIR) {
             return null;

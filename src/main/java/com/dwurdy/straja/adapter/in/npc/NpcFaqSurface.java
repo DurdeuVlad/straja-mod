@@ -14,12 +14,12 @@ import java.util.Optional;
  * The tree is deliberately read-only: it explains the current path and never
  * grants authority. Mutating actions remain on the normal role surfaces.
  */
-final class NpcFaqSurface {
+public final class NpcFaqSurface {
     private NpcFaqSurface() {}
 
-    record Context(boolean commissioner, int rank, String rankName, String applicationState,
-                   boolean invited, boolean duty, boolean suspended, boolean resigned,
-                   boolean fired, Map<String, String> stationMessages) {
+    public record Context(boolean commissioner, int rank, String rankName, String applicationState,
+                          boolean invited, boolean duty, boolean suspended, boolean resigned,
+                          boolean fired, Map<String, String> stationMessages) {
         static Context from(GuardState state, boolean commissioner, String rankName) {
             return from(state, commissioner, rankName, Map.of(
                     "{station}", "sediul Străjii", "{fallbackStation}", "stația de rezervă",
@@ -75,13 +75,13 @@ final class NpcFaqSurface {
         }
     }
 
-    record Target(String kind, String topic, String question, NpcPlayerSurface.RoleRoute origin) {}
+    public record Target(String kind, String topic, String question, NpcPlayerSurface.RoleRoute origin) {}
 
     static NpcPlayerSurface.ChatAction entry(NpcPlayerSurface.RoleRoute origin) {
         return action("Am o întrebare", "root_" + roleKey(origin));
     }
 
-    static Optional<Target> parseTarget(String id) {
+    public static Optional<Target> parseTarget(String id) {
         if (id == null || id.isBlank()) return Optional.empty();
         String[] parts = id.split("_");
         if (parts.length < 2) return Optional.empty();
@@ -107,7 +107,7 @@ final class NpcFaqSurface {
         return Optional.of(new Target(kind, topic, question, origin));
     }
 
-    static NpcPlayerSurface.RoleSurface root(NpcPlayerSurface.RoleRoute origin, Context context) {
+    public static NpcPlayerSurface.RoleSurface root(NpcPlayerSurface.RoleRoute origin, Context context) {
         List<NpcPlayerSurface.ChatAction> actions = new ArrayList<>();
         addMenu(actions, "Despre Strajă", "about", origin);
         addMenu(actions, "Înscriere și examen", "entry", origin);
@@ -127,8 +127,8 @@ final class NpcFaqSurface {
                         + context.status() + ".", List.copyOf(actions));
     }
 
-    static NpcPlayerSurface.RoleSurface menu(NpcPlayerSurface.RoleRoute origin,
-                                             Context context, String topic) {
+    public static NpcPlayerSurface.RoleSurface menu(NpcPlayerSurface.RoleRoute origin,
+                                                    Context context, String topic) {
         if (!topicAvailable(topic, context)) return root(origin, context);
         List<NpcPlayerSurface.ChatAction> actions = new ArrayList<>();
         switch (topic == null ? "" : topic) {
@@ -207,7 +207,7 @@ final class NpcFaqSurface {
     }
 
     /** Checks the complete FAQ target, including the question allowlist. */
-    static boolean targetAvailable(Target target, Context context) {
+    public static boolean targetAvailable(Target target, Context context) {
         if (target == null || context == null || target.origin() == NpcPlayerSurface.RoleRoute.UNKNOWN) {
             return false;
         }
@@ -221,8 +221,8 @@ final class NpcFaqSurface {
                 .anyMatch(action -> expected.equals(action.actionId()));
     }
 
-    static String answer(NpcPlayerSurface.RoleRoute origin, String topic, String question,
-                         Context context) {
+    public static String answer(NpcPlayerSurface.RoleRoute origin, String topic, String question,
+                                Context context) {
         String key = (topic == null ? "" : topic) + ":" + (question == null ? "" : question);
         return switch (key) {
             case "about:what" ->
@@ -383,7 +383,7 @@ final class NpcFaqSurface {
         };
     }
 
-    static String roleKey(NpcPlayerSurface.RoleRoute origin) {
+    public static String roleKey(NpcPlayerSurface.RoleRoute origin) {
         return switch (origin == null ? NpcPlayerSurface.RoleRoute.UNKNOWN : origin) {
             case RECEPTIONIST -> "receptionist";
             case TRAINER, RECRUITER -> "trainer";

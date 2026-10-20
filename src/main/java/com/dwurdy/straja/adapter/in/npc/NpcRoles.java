@@ -58,16 +58,14 @@ public final class NpcRoles {
     }
 
     public static void interact(String roleId, Player player, ServerLevel level) {
-        var runtime = com.dwurdy.straja.bootstrap.StrajaRuntime.get();
-        NpcPlayerSurface.RoleSurface surface;
-        if (runtime == null) {
-            surface = NpcPlayerSurface.interactionPlan(roleId).surface();
-        } else {
-            var gw = gateway(player, level);
-            surface = NpcPlayerSurface.orderedFor(roleId,
-                    stateAwareActions(roleId, runtime, gw), faqContext(runtime, gw)).surface();
+        var ordered = orderedSurfaceFor(roleId, player, level);
+        // The chest-menu desk is the primary surface; the chat guidance stays
+        // the fallback for virtual/headless players and when menus are off.
+        if (com.dwurdy.straja.adapter.in.menu.DeskMenuService.tryOpen(
+                player, roleId, ordered)) {
+            return;
         }
-        sendGuidance(player, surface);
+        sendGuidance(player, ordered.surface());
     }
 
     /** The NPC interaction itself is deliberately guidance-only; buttons dispatch separately. */
@@ -92,7 +90,12 @@ public final class NpcRoles {
                 .map(NpcPlayerSurface.ChatAction::actionId).toList();
     }
 
-    private static NpcPlayerSurface.OrderedSurface orderedSurfaceFor(
+    /**
+     * Desk-menu seam: the ordered surface for this player and role, recomputed
+     * fresh on every call so stale dynamic actions disappear — the same
+     * freshness {@code isStillValidForPlayer} re-checks on dispatch.
+     */
+    public static NpcPlayerSurface.OrderedSurface orderedSurfaceFor(
             String roleId, Player player, ServerLevel level) {
         var runtime = com.dwurdy.straja.bootstrap.StrajaRuntime.get();
         if (runtime == null) {
@@ -102,6 +105,18 @@ public final class NpcRoles {
         var gw = gateway(player, level);
         return NpcPlayerSurface.orderedFor(roleId,
                 stateAwareActions(roleId, runtime, gw), faqContext(runtime, gw));
+    }
+
+    /**
+     * Desk-menu seam: the shared FAQ context built exactly as {@link #interact}
+     * builds it — surface ordering and FAQ gating classify players identically.
+     */
+    public static NpcFaqSurface.Context faqContextFor(Player player, ServerLevel level) {
+        var runtime = com.dwurdy.straja.bootstrap.StrajaRuntime.get();
+        if (runtime == null || player == null || level == null) {
+            return NpcFaqSurface.Context.from(null, false, null);
+        }
+        return faqContext(runtime, gateway(player, level));
     }
 
     private static Component guidanceComponent(NpcPlayerSurface.RoleSurface surface, Player player) {
