@@ -593,7 +593,7 @@ class NpcInteractionSurfaceTest {
                 custodyAction(CustodyRoleplayUseCase.Action.REMOVE_HEAD_SACK, ""),
                 custodyAction(CustodyRoleplayUseCase.Action.WAKE_DOWNED, ""),
                 custodyAction(CustodyRoleplayUseCase.Action.GIVE_CUFFS, ""));
-        var actions = NpcPlayerSurface.custodyActions(available);
+        var actions = NpcPlayerSurface.custodyActions(available, id -> id);
         assertEquals(java.util.List.of(
                         "custody-accept:C7", "custody-refuse:C7",
                         "custody-release:" + targetUuid,
@@ -602,12 +602,34 @@ class NpcInteractionSurfaceTest {
     }
 
     @Test
+    void custodyReleaseLabelNamesTheTargetWhenResolvable() {
+        String targetUuid = UUID.randomUUID().toString();
+        var actions = NpcPlayerSurface.custodyActions(java.util.List.of(
+                        custodyAction(CustodyRoleplayUseCase.Action.RELEASE_TARGET, targetUuid)),
+                id -> "Vlad");
+        assertEquals("Eliberează pe Vlad", actions.get(0).label(),
+                "a menu row must name the person being released, not a bare uuid");
+
+        var unresolved = NpcPlayerSurface.custodyActions(java.util.List.of(
+                        custodyAction(CustodyRoleplayUseCase.Action.RELEASE_TARGET, targetUuid)),
+                id -> id);
+        assertEquals("Eliberează " + targetUuid, unresolved.get(0).label(),
+                "unresolvable ids keep the raw identifier");
+
+        var nullResolver = NpcPlayerSurface.custodyActions(java.util.List.of(
+                        custodyAction(CustodyRoleplayUseCase.Action.RELEASE_TARGET, targetUuid)),
+                null);
+        assertEquals("Eliberează " + targetUuid, nullResolver.get(0).label(),
+                "a missing resolver degrades to the raw identifier");
+    }
+
+    @Test
     void custodyActionsRejectMalformedIdsAndContainNoTypedCommands() {
         var actions = NpcPlayerSurface.custodyActions(java.util.List.of(
                 custodyAction(CustodyRoleplayUseCase.Action.ACCEPT_REQUEST, "bad id"),
                 custodyAction(CustodyRoleplayUseCase.Action.RELEASE_TARGET, "bad id"),
                 custodyAction(CustodyRoleplayUseCase.Action.RELEASE_TARGET, ""),
-                custodyAction(CustodyRoleplayUseCase.Action.REFUSE_REQUEST, "C-9")));
+                custodyAction(CustodyRoleplayUseCase.Action.REFUSE_REQUEST, "C-9")), id -> id);
         assertEquals(java.util.List.of("custody-refuse:C-9"),
                 actions.stream().map(NpcPlayerSurface.ChatAction::actionId).toList());
         for (var action : actions) {
@@ -617,10 +639,10 @@ class NpcInteractionSurfaceTest {
                             || action.actionId().startsWith("special"),
                     () -> action.actionId() + " must not be an admin action");
         }
-        assertTrue(NpcPlayerSurface.custodyActions(null).isEmpty());
+        assertTrue(NpcPlayerSurface.custodyActions(null, id -> id).isEmpty());
         assertTrue(NpcPlayerSurface.custodyActions(java.util.Arrays.asList(
                         new CustodyRoleplayUseCase.AvailableAction(null, "C1"),
-                        null)).isEmpty());
+                        null), id -> id).isEmpty());
     }
 
     private static com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase.AvailableAction

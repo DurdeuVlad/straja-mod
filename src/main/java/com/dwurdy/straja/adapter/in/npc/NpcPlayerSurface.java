@@ -649,9 +649,15 @@ public final class NpcPlayerSurface {
         return List.copyOf(actions);
     }
 
-    /** Maps the trusted custody projection to clickable actions; pure and state-free. */
+    /**
+     * Maps the trusted custody projection to clickable actions; pure and
+     * state-free. {@code subjectName} resolves a release target's raw record
+     * id (a stored uuid) to a display name so the row reads «Eliberează pe
+     * Vlad» instead of a bare identifier; unresolvable ids pass through.
+     */
     static List<ChatAction> custodyActions(
-            List<com.dwurdy.straja.application.port.in.CustodyRoleplayUseCase.AvailableAction> available) {
+            List<com.dwurdy.straja.application.port.in.CustodyRoleplayUseCase.AvailableAction> available,
+            java.util.function.Function<String, String> subjectName) {
         if (available == null || available.isEmpty()) return List.of();
         var actions = new java.util.ArrayList<ChatAction>();
         var releaseTargets = new java.util.HashSet<String>();
@@ -665,8 +671,12 @@ public final class NpcPlayerSurface {
                         .ifPresent(a -> actions.add(new ChatAction("Refuză cererea " + id, a)));
                 case RELEASE_TARGET -> {
                     if (releaseTargets.add(id)) {
+                        String name = subjectName == null ? id : subjectName.apply(id);
+                        String label = name == null || name.isBlank() || name.equals(id)
+                                ? "Eliberează " + id
+                                : "Eliberează pe " + name;
                         parameterizedActionId("custody-release", id)
-                                .ifPresent(a -> actions.add(new ChatAction("Eliberează " + id, a)));
+                                .ifPresent(a -> actions.add(new ChatAction(label, a)));
                     }
                 }
                 case REMOVE_HEAD_SACK -> actions.add(

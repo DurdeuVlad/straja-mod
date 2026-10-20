@@ -1940,7 +1940,8 @@ public final class NpcRoles {
                 }
             }
             case JAILER -> actions.addAll(NpcPlayerSurface.custodyActions(
-                    runtime.custodyRoleplay().availableActions(gateway)));
+                    runtime.custodyRoleplay().availableActions(gateway),
+                    runtime.playerQueries()::displayName));
             case ARCHIVIST -> {
                 actions.addAll(NpcPlayerSurface.archiveActions(
                         runtime.archiveRoleplay().availableActions(gateway)));

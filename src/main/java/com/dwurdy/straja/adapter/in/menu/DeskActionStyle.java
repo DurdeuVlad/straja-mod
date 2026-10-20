@@ -26,7 +26,7 @@ public final class DeskActionStyle {
             Map.entry("v2-campaign-status", "straja:order_book"),
             Map.entry("v2-professional-work", "straja:carbon_paper"),
             Map.entry("application-submit", "straja:official_document"),
-            Map.entry("recruit", "straja:seal_stamp"),
+            Map.entry("recruit", "minecraft:writable_book"),
             Map.entry("quiz-answer", "minecraft:writable_book"),
             Map.entry("training-progress", "straja:training_manual"),
             Map.entry("training-promote", "straja:seal_stamp"),
@@ -70,9 +70,9 @@ public final class DeskActionStyle {
             Map.entry("mission-budget-adjust", "straja:carbon_paper"),
             Map.entry("cuffs-status", "straja:cuffs"),
             Map.entry("prison-status", "straja:prison_marker"),
-            Map.entry("downed-status", "minecraft:paper"),
+            Map.entry("downed-status", "minecraft:clock"),
             Map.entry("custody-remove-head-sack", "straja:head_sack"),
-            Map.entry("custody-wake-downed", "minecraft:paper"),
+            Map.entry("custody-wake-downed", "minecraft:totem_of_undying"),
             Map.entry("cuffs-item", "straja:cuffs"),
             Map.entry("fine-list", "straja:fine_book"),
             Map.entry("fine-task-list", "straja:fine_notice"),
@@ -107,7 +107,7 @@ public final class DeskActionStyle {
             Map.entry("admin-emergency-end", "straja:alarm_whistle"),
             Map.entry("tool-cell-confirm", "straja:npc_wand"),
             Map.entry("tool-survey-all", "straja:survey_rod"),
-            Map.entry("inspect-documents", "straja:seal_stamp"),
+            Map.entry("inspect-documents", "minecraft:spyglass"),
             Map.entry("armory-status", "straja:baton"));
 
     /** Parameterized (op:recordId) prefixes → icon, longest-prefix wins by order. */
@@ -117,6 +117,9 @@ public final class DeskActionStyle {
             Map.entry("fine-", "straja:fine_book"),
             Map.entry("complaint-confirm:", "minecraft:lime_dye"),
             Map.entry("complaint-", "straja:archive_folder"),
+            Map.entry("custody-accept:", "minecraft:lime_dye"),
+            Map.entry("custody-refuse:", "minecraft:barrier"),
+            Map.entry("custody-release:", "straja:cuff_key"),
             Map.entry("custody-", "straja:cuffs"),
             Map.entry("mission-", "straja:mission_carnet"),
             Map.entry("v2-mission-claim:", "straja:mission_carnet"),
@@ -167,7 +170,7 @@ public final class DeskActionStyle {
     private static final Set<String> CHAT_ACTIONS = Set.of(
             "rules", "guard-status", "v2-personnel-status", "v2-promotion-status",
             "v2-document-status", "v2-equipment-status", "v2-campaign-status",
-            "v2-professional-work", "trades-list", "trades-promote",
+            "v2-professional-work", "trades-list", "trades-promote", "recruit",
             "training-progress", "training-promote", "incident-list",
             "dispatch-board", "duty-roster", "bolo-list", "reputation-self",
             "arrest-record", "arrest-record-admin", "evidence-list",
@@ -196,7 +199,8 @@ public final class DeskActionStyle {
     private static final Set<String> CONFIRM_ACTIONS = Set.of("room-release");
     private static final Set<String> CONFIRM_PREFIXES = Set.of(
             "fine-pay:", "fine-refuse:", "complaint-confirm:",
-            "custody-release:", "armory-buy:", "armory-reserve:",
+            "custody-accept:", "custody-refuse:", "custody-release:",
+            "armory-buy:", "armory-reserve:",
             "admin-promote:", "admin-demote:", "admin-suspend:",
             "admin-fire:", "admin-reinstate:", "fine-task-arrest:",
             "bolo-cancel:", "evidence-return:");
@@ -263,6 +267,12 @@ public final class DeskActionStyle {
         }
         if ("room-release".equals(actionId)) {
             return List.of("Camera se eliberează imediat;", "cererea nu poate fi anulată.");
+        }
+        if (actionId.startsWith("custody-accept:")) {
+            return List.of("Accepți cererea — vei fi", "încătușat imediat.");
+        }
+        if (actionId.startsWith("custody-refuse:")) {
+            return List.of("Refuzi cererea; la o predare", "refuzul te doboară.");
         }
         if (actionId.startsWith("custody-release:")) {
             return List.of("Persoana este eliberată imediat", "din custodie.");

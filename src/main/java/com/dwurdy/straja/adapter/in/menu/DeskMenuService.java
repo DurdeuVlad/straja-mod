@@ -5,6 +5,7 @@ import com.dwurdy.straja.adapter.in.npc.NpcPlayerSurface;
 import com.dwurdy.straja.bootstrap.StrajaRuntime;
 import com.dwurdy.straja.config.StrajaServerConfig;
 import com.dwurdy.straja.domain.model.Text;
+import java.util.Set;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
 
@@ -16,12 +17,25 @@ import net.minecraft.world.entity.player.Player;
  * session lives and dies with its container.
  */
 public final class DeskMenuService {
+    /**
+     * Routes with a shipped desk (Issues 1–2). Every other role keeps the
+     * chat surface until its desk issue lands — enabling one is a set entry.
+     * RECRUITER is listed for completeness: {@code routeFor} already folds
+     * the recruiter alias into {@code TRAINER}.
+     */
+    static final Set<NpcPlayerSurface.RoleRoute> ENABLED_ROUTES = Set.of(
+            NpcPlayerSurface.RoleRoute.RECEPTIONIST,
+            NpcPlayerSurface.RoleRoute.TRAINER,
+            NpcPlayerSurface.RoleRoute.RECRUITER,
+            NpcPlayerSurface.RoleRoute.JAILER,
+            NpcPlayerSurface.RoleRoute.INSPECTOR);
+
     private DeskMenuService() {}
 
     /**
-     * Opens the desk chest-menu for the Receptionist pilot. The flag is
-     * TOML-only for v1 — {@code StrajaPolicies} stays untouched (domain), so
-     * the straja-policies.yaml override layer does not cover it.
+     * Opens the desk chest-menu for an enabled role. The flag is TOML-only
+     * for v1 — {@code StrajaPolicies} stays untouched (domain), so the
+     * straja-policies.yaml override layer does not cover it.
      */
     public static boolean tryOpen(Player player, String roleId,
                                   NpcPlayerSurface.OrderedSurface ordered) {
@@ -30,10 +44,9 @@ public final class DeskMenuService {
                 return false;
             }
             if (!enabled() || StrajaRuntime.get() == null) return false;
-            // Issue-1 pilot scope: only the Receptionist desk; other roles
-            // keep the chat surface until their desk issues land.
-            if (NpcPlayerSurface.routeFor(roleId)
-                    != NpcPlayerSurface.RoleRoute.RECEPTIONIST) {
+            // Roles outside ENABLED_ROUTES keep the chat surface until their
+            // desk issues land (Secretary, Archivist, Armorer).
+            if (!ENABLED_ROUTES.contains(NpcPlayerSurface.routeFor(roleId))) {
                 return false;
             }
             return new DeskMenuSession(serverPlayer, roleId).open(ordered);

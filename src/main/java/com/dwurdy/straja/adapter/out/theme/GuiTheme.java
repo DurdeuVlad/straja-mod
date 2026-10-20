@@ -83,14 +83,18 @@ public final class GuiTheme {
             "straja.instructor.", "role_instructor",
             "straja.armorer.", "role_armorer",
             "straja.jailer.", "role_jailer",
-            "straja.archivist.", "role_archivist");
-    private static final Map<String, String> NPC_ROLE_ICONS = Map.of(
-            "straja:receptionist", "role_receptionist",
-            "straja:secretary", "role_secretary",
-            "straja:trainer", "role_instructor",
-            "straja:armorer", "role_armorer",
-            "straja:jailer", "role_jailer",
-            "straja:archivist", "role_archivist");
+            "straja.archivist.", "role_archivist",
+            "straja.inspector.", "role_inspector");
+    private static final Map<String, String> NPC_ROLE_ICONS = Map.ofEntries(
+            Map.entry("straja:receptionist", "role_receptionist"),
+            Map.entry("straja:secretary", "role_secretary"),
+            Map.entry("straja:trainer", "role_instructor"),
+            // The recruiter alias renders the Instructor desk.
+            Map.entry("straja:recruiter", "role_instructor"),
+            Map.entry("straja:armorer", "role_armorer"),
+            Map.entry("straja:jailer", "role_jailer"),
+            Map.entry("straja:archivist", "role_archivist"),
+            Map.entry("straja:inspector", "role_inspector"));
 
     /** Keys that ship a generated PNG; anything else uses the item fallback. */
     private static final Set<String> TEXTURED_ICONS = Set.of(
@@ -106,6 +110,7 @@ public final class GuiTheme {
             Map.entry("role_armorer", "straja:baton"),
             Map.entry("role_jailer", "straja:cuffs"),
             Map.entry("role_archivist", "straja:archive_folder"),
+            Map.entry("role_inspector", "straja:seal_stamp"),
             Map.entry("admin_selector", "straja:npc_wand"),
             Map.entry("act_assign", "straja:archive_stamp"),
             Map.entry("act_unassign", "straja:bolt_cutters"),

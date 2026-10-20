@@ -1,5 +1,6 @@
 package com.dwurdy.straja.adapter.in.menu;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -85,5 +86,25 @@ class NpcDeskMenuSurfaceTest {
         String config = Files.readString(SRC.resolve("config/StrajaServerConfig.java"));
         assertTrue(config.contains("NPC_MENUS_ENABLED"));
         assertTrue(config.contains("npcMenus"));
+    }
+
+    /**
+     * Issue-2 desk rollout: Receptionist, Instructor (TRAINER plus its
+     * RECRUITER alias), Jailer and Inspector open the chest menu; every other
+     * route — SECRETARY, ARMORER, ARCHIVIST — still falls back to chat until
+     * its own issue lands.
+     */
+    @Test
+    void enabledRoutesCoverExactlyTheShippedDesks() {
+        assertEquals(java.util.Set.of(
+                        com.dwurdy.straja.adapter.in.npc.NpcPlayerSurface.RoleRoute.RECEPTIONIST,
+                        com.dwurdy.straja.adapter.in.npc.NpcPlayerSurface.RoleRoute.TRAINER,
+                        com.dwurdy.straja.adapter.in.npc.NpcPlayerSurface.RoleRoute.RECRUITER,
+                        com.dwurdy.straja.adapter.in.npc.NpcPlayerSurface.RoleRoute.JAILER,
+                        com.dwurdy.straja.adapter.in.npc.NpcPlayerSurface.RoleRoute.INSPECTOR),
+                DeskMenuService.ENABLED_ROUTES);
+        // The recruiter role id folds into the Instructor desk through routing.
+        assertTrue(DeskMenuService.ENABLED_ROUTES.contains(
+                com.dwurdy.straja.adapter.in.npc.NpcPlayerSurface.routeFor("recruiter")));
     }
 }

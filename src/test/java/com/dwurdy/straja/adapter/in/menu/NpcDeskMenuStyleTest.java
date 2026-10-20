@@ -63,19 +63,101 @@ class NpcDeskMenuStyleTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"fine-pay:F-1", "fine-refuse:F-2",
-            "complaint-confirm:C-1", "room-release"})
+            "complaint-confirm:C-1", "room-release",
+            "custody-accept:C7", "custody-refuse:C7", "custody-release:uuid-1"})
     void immediateMutationsRequireTheConfirmPage(String actionId) {
         assertTrue(DeskActionStyle.needsConfirm(actionId));
         assertTrue(DeskActionStyle.lore(actionId).contains("Cere confirmare."));
         assertFalse(DeskActionStyle.consequence(actionId).isEmpty());
     }
 
+    /**
+     * Custody accept/refuse are immediate authority actions — accept cuffs the
+     * clicker on the spot and refusing a surrender downs them — so both gate
+     * behind the DA/NU page and spell out the consequence.
+     */
+    @Test
+    void custodyDecisionsExplainTheConsequence() {
+        assertTrue(DeskActionStyle.consequence("custody-accept:C7").stream()
+                .anyMatch(line -> line.contains("încătușat")));
+        assertTrue(DeskActionStyle.consequence("custody-refuse:S2").stream()
+                .anyMatch(line -> line.contains("doboară")));
+        assertTrue(DeskActionStyle.consequence("custody-release:uuid-1").stream()
+                .anyMatch(line -> line.contains("eliberată")));
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"complaint-withdraw:C-1", "fine-appeal:F-1",
-            "join-review:JR-1", "rules", "application-submit", "guard-status"})
+            "join-review:JR-1", "rules", "application-submit", "guard-status",
+            "custody-wake-downed", "custody-remove-head-sack", "cuffs-item",
+            "arrest-handoff", "quiz-answer", "inspect-documents"})
     void formAndReadOnlyActionsSkipTheConfirmPage(String actionId) {
         assertFalse(DeskActionStyle.needsConfirm(actionId),
                 actionId + " must not be confirm-gated");
+    }
+
+    /** Issue-2 desks: no Trainer/Jailer/Inspector button renders bare paper. */
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "recruit", "quiz-answer", "training-progress", "training-manual",
+            "training-promote", "v2-promotion-status",
+            "cuffs-status", "prison-status", "arrest-record", "downed-status",
+            "arrest-handoff", "cuffs-item", "custody-remove-head-sack",
+            "custody-wake-downed", "custody-accept:C7", "custody-refuse:C7",
+            "custody-release:uuid-1", "inspect-documents"})
+    void issueTwoDesksNeverShowGenericPaper(String actionId) {
+        var icon = DeskActionStyle.icon("Eticheta", actionId);
+        assertFalse(icon.itemId().isBlank());
+        assertTrue(!"minecraft:paper".equals(icon.itemId()),
+                actionId + " deserves a themed icon: " + icon.itemId());
+    }
+
+    @Test
+    void custodyRowsUseDistinctVerdictIcons() {
+        assertEquals("minecraft:lime_dye", DeskActionStyle.itemFor("custody-accept:C7"));
+        assertEquals("minecraft:barrier", DeskActionStyle.itemFor("custody-refuse:C7"));
+        assertEquals("straja:cuff_key", DeskActionStyle.itemFor("custody-release:uuid-1"));
+        assertEquals("straja:head_sack",
+                DeskActionStyle.itemFor("custody-remove-head-sack"));
+    }
+
+    @Test
+    void trainerAndInspectorIconsMatchTheDesk() {
+        assertEquals("minecraft:writable_book", DeskActionStyle.itemFor("recruit"));
+        assertEquals("straja:training_manual",
+                DeskActionStyle.itemFor("training-progress"));
+        assertEquals("minecraft:clock", DeskActionStyle.itemFor("downed-status"));
+        assertEquals("minecraft:totem_of_undying",
+                DeskActionStyle.itemFor("custody-wake-downed"));
+        assertEquals("minecraft:spyglass",
+                DeskActionStyle.itemFor("inspect-documents"));
+    }
+
+    @Test
+    void instructorExamAndJailerStatusesAnnounceChatOutput() {
+        for (String id : new String[]{"recruit", "training-progress",
+                "v2-promotion-status", "cuffs-status", "prison-status",
+                "arrest-record", "downed-status", "inspect-documents"}) {
+            assertTrue(DeskActionStyle.lore(id).stream()
+                            .anyMatch(line -> line.contains("chat")),
+                    id + " must say the result goes to chat");
+        }
+        assertTrue(DeskActionStyle.lore("quiz-answer").contains("Deschide formularul."));
+        assertTrue(DeskActionStyle.lore("arrest-handoff").contains("Deschide formularul."));
+        assertTrue(DeskActionStyle.lore("cuffs-item").contains("Primești obiectul."));
+        assertTrue(DeskActionStyle.lore("training-manual").contains("Primești obiectul."));
+    }
+
+    @Test
+    void issueTwoRoleHeadersUseTheGuiThemeFallbackChain() {
+        assertEquals("straja:fine_book",
+                DeskActionStyle.header("trainer", "Instructor", "x").itemId());
+        assertEquals("straja:fine_book",
+                DeskActionStyle.header("recruiter", "Instructor", "x").itemId());
+        assertEquals("straja:cuffs",
+                DeskActionStyle.header("jailer", "Temniță", "x").itemId());
+        assertEquals("straja:seal_stamp",
+                DeskActionStyle.header("inspector", "Inspector de artefacte", "x").itemId());
     }
 
     @Test
