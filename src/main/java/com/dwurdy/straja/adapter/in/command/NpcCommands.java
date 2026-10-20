@@ -117,6 +117,14 @@ final class NpcCommands {
                                         .executes(ctx -> bindCustom(ctx,
                                                 StringArgumentType.getString(ctx, "station")))))));
 
+        npc.then(Commands.literal("bind-desk")
+                .then(Commands.argument("host", StringArgumentType.word())
+                        .then(Commands.argument("role", StringArgumentType.word())
+                                .executes(ctx -> bindDesk(ctx, "hq"))
+                                .then(Commands.argument("station", StringArgumentType.word())
+                                        .executes(ctx -> bindDesk(ctx,
+                                                StringArgumentType.getString(ctx, "station")))))));
+
         npc.then(Commands.literal("set-name")
                 .then(Commands.argument("npc", StringArgumentType.word())
                         .then(Commands.argument("name", StringArgumentType.greedyString())
@@ -174,6 +182,7 @@ final class NpcCommands {
                     "NPC provider mode=" + state.activeProvider().value()
                             + " debug-text-enabled=" + state.debugTextEnabled()
                             + " customnpcs-available=" + providers.available(NpcProviderId.CUSTOM_NPCS)
+                            + " desk-menu-available=" + providers.available(NpcProviderId.DESK_MENU)
                             + " debug-text-available=" + providers.available(NpcProviderId.DEBUG_TEXT)));
             for (var entry : state.lifecycle().bindings().values()) {
                 var inspection = state.lifecycle().inspect(entry.bindingId());
@@ -276,6 +285,29 @@ final class NpcCommands {
         }
         ctx.getSource().sendSystemMessage(Component.literal(
                 "CustomNPCs NPC bound to the Straja " + role + " admission surface."));
+        return 1;
+    }
+
+    /**
+     * Binds any loaded non-player entity (villagers included) to the
+     * desk-menu provider — the canonical equivalent of bind-custom for
+     * hosts that have no provider GUI of their own.
+     */
+    private static int bindDesk(CommandContext<CommandSourceStack> ctx, String station) {
+        String host = StringArgumentType.getString(ctx, "host");
+        String role = StringArgumentType.getString(ctx, "role");
+        CommandSourceStack source = ctx.getSource();
+        String playerUuid = source.getEntity() instanceof net.minecraft.server.level.ServerPlayer player
+                ? player.getUUID().toString() : "";
+        String actorId = NpcProvisioningActorIdentity.fromSource(source.getTextName(), playerUuid);
+        var result = NpcPresentationRuntime.bindDeskNpc(host, role, station, actorId);
+        if (result.status() != com.dwurdy.straja.domain.model.NpcProviderResult.Status.ACCEPTED) {
+            ctx.getSource().sendFailure(refusal("straja.npc.binding_failed",
+                    "straja.remedy.retry", result.code() + " — " + result.message()));
+            return 0;
+        }
+        ctx.getSource().sendSystemMessage(Component.literal(
+                "NPC bound to the Straja " + role + " desk-menu surface."));
         return 1;
     }
 

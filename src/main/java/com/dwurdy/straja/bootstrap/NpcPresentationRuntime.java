@@ -1,10 +1,12 @@
 package com.dwurdy.straja.bootstrap;
 
 import com.dwurdy.straja.StrajaMod;
+import com.dwurdy.straja.adapter.in.menu.DeskMenuService;
 import com.dwurdy.straja.adapter.out.persistence.NbtNpcBindingRepository;
 import com.dwurdy.straja.adapter.out.persistence.NbtStore;
 import com.dwurdy.straja.adapter.out.persistence.StrajaDataProvider;
 import com.dwurdy.straja.adapter.out.persistence.StoreAccess;
+import com.dwurdy.straja.adapter.out.npc.chestmenu.ChestMenuNpcSurfaceProvider;
 import com.dwurdy.straja.adapter.out.npc.content.NpcContentProfileJsonLoader;
 import com.dwurdy.straja.adapter.out.npc.customnpcs.CustomNpcsNpcSurfaceProvider;
 import com.dwurdy.straja.adapter.out.npc.debug.DebugTextNpcSurfaceProvider;
@@ -34,6 +36,7 @@ import com.dwurdy.straja.domain.model.NpcProviderId;
 import com.dwurdy.straja.domain.model.NpcProviderResult;
 import com.dwurdy.straja.domain.model.NpcSurfaceSnapshot;
 import com.dwurdy.straja.domain.model.GuardState;
+import com.dwurdy.straja.config.StrajaServerConfig;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
@@ -46,6 +49,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.player.Player;
 
 /**
  * Server lifecycle composition root for provider-neutral NPC presentation.
@@ -63,6 +67,11 @@ public final class NpcPresentationRuntime {
     private static final NpcSecretarySurfaceService SECRETARY_SURFACE = new NpcSecretarySurfaceService();
 
     private NpcPresentationRuntime() {}
+
+    /** Roles a canonical bind may target — recruiter folds into trainer. */
+    private static final Set<String> BINDABLE_ROLES = Set.of(
+            "receptionist", "trainer", "secretary", "jailer",
+            "armorer", "archivist", "inspector");
 
     public static synchronized void start(MinecraftServer server) {
         if (STATE.get() != null) return;
@@ -90,6 +99,13 @@ public final class NpcPresentationRuntime {
                 player -> player.hasPermissions(2)
                         && player.getMainHandItem().is(StrajaItems.NPC_WAND.get()));
         providers.register(customNpcs);
+        ChestMenuNpcSurfaceProvider deskMenu = new ChestMenuNpcSurfaceProvider(
+                actions,
+                actions,
+                NpcPresentationRuntime::resolveSurface,
+                message -> StrajaMod.LOGGER.info("{}", message),
+                NpcPresentationRuntime::deskProviderEnabled);
+        providers.register(deskMenu);
         if (debugTextEnabled) {
             providers.register(new DebugTextNpcSurfaceProvider(
                     message -> StrajaMod.LOGGER.info("{}", message)));
@@ -111,14 +127,16 @@ public final class NpcPresentationRuntime {
                 providers,
                 actions,
                 customNpcs,
+                deskMenu,
                 lifecycle,
                 provisioning,
                 migration,
                 configuredProvider,
                 debugTextEnabled));
         StrajaMod.LOGGER.info(
-                "NPC presentation runtime started; mode={} CustomNPCs available={} debug-text enabled={}",
-                configuredProvider.value(), customNpcs.available(), debugTextEnabled);
+                "NPC presentation runtime started; mode={} CustomNPCs available={} desk-menu enabled={} debug-text enabled={}",
+                configuredProvider.value(), customNpcs.available(),
+                deskMenu.available(), debugTextEnabled);
     }
 
     public static synchronized void stop() {
@@ -171,28 +189,11 @@ public final class NpcPresentationRuntime {
                     "CustomNPCs is not the configured active NPC provider");
         }
         String role = "recruiter".equals(roleId) ? "trainer" : roleId;
-        if (!"receptionist".equals(role) && !"trainer".equals(role)
-                && !"secretary".equals(role)
-                && !"jailer".equals(role)
-                && !"armorer".equals(role)
-                && !"archivist".equals(role)
-                && !"inspector".equals(role)) {
+        if (!BINDABLE_ROLES.contains(role)) {
             return NpcProviderResult.rejected(
-                    "unsupported-role", "supported CustomNPC roles are receptionist, trainer, secretary, jailer, armorer, archivist, and inspector");
+                    "unsupported-role", "supported roles are receptionist, trainer, secretary, jailer, armorer, archivist, and inspector");
         }
-        NpcContentId profile = "receptionist".equals(role)
-                ? NpcContentId.of("straja.reception.admission")
-                : "secretary".equals(role)
-                        ? NpcContentId.of("straja.secretary.workflows")
-                        : "jailer".equals(role)
-                        ? NpcContentId.of("straja.jailer.custody")
-                        : "armorer".equals(role)
-                        ? NpcContentId.of("straja.armorer.orders")
-                        : "archivist".equals(role)
-                        ? NpcContentId.of("straja.archivist.archive")
-                        : "inspector".equals(role)
-                        ? NpcContentId.of("straja.inspector.documents")
-                        : NpcContentId.of("straja.instructor.admission");
+        NpcContentId profile = profileForRole(role);
         String normalizedUuid;
         try {
             normalizedUuid = UUID.fromString(hostEntityUuid).toString();
@@ -214,6 +215,91 @@ public final class NpcPresentationRuntime {
         } catch (IllegalStateException exception) {
             return NpcProviderResult.unavailable("NPC presentation runtime is not started");
         }
+    }
+
+    /**
+     * Explicit setup seam for a host entity the desk-menu provider should own —
+     * any loaded non-player entity works (villagers included). It is a
+     * per-NPC opt-in: the configured provider mode does not have to be
+     * {@code desk-menu}, and CustomNPCs-owned bindings are never claimed.
+     */
+    public static NpcProviderResult bindDeskNpc(
+            String hostEntityUuid, String roleId, String stationId, String actorId) {
+        RuntimeState active = STATE.get();
+        if (active == null || active.deskProvider() == null || !active.deskProvider().available()) {
+            return NpcProviderResult.unavailable(
+                    "The desk-menu NPC provider is unavailable (check npcMenus.enabled and npcMenus.deskProviderEnabled)");
+        }
+        String role = "recruiter".equals(roleId) ? "trainer" : roleId;
+        if (!BINDABLE_ROLES.contains(role)) {
+            return NpcProviderResult.rejected(
+                    "unsupported-role", "supported roles are receptionist, trainer, secretary, jailer, armorer, archivist, and inspector");
+        }
+        NpcContentId profile = profileForRole(role);
+        String normalizedUuid;
+        try {
+            normalizedUuid = UUID.fromString(hostEntityUuid).toString();
+        } catch (IllegalArgumentException exception) {
+            return NpcProviderResult.rejected("invalid-host-identity", "hostEntityUuid must be a UUID");
+        }
+        if (findEntity(active.server(), normalizedUuid) == null) {
+            return NpcProviderResult.unavailable(
+                    "host entity is not loaded in any server level; stand near it and retry");
+        }
+        try {
+            com.dwurdy.straja.application.port.in.NpcProvisioningUseCase.ProvisioningResult result = require().provisioning().assign(
+                    NpcProviderId.DESK_MENU,
+                    normalizedUuid,
+                    actorId,
+                    profile.value(),
+                    stationId);
+            return toProviderResult(result);
+        } catch (IllegalStateException exception) {
+            return NpcProviderResult.unavailable("NPC presentation runtime is not started");
+        }
+    }
+
+    /** The canonical profile bound for a role — shared by every provider bind path. */
+    private static NpcContentId profileForRole(String role) {
+        return "receptionist".equals(role)
+                ? NpcContentId.of("straja.reception.admission")
+                : "secretary".equals(role)
+                        ? NpcContentId.of("straja.secretary.workflows")
+                        : "jailer".equals(role)
+                        ? NpcContentId.of("straja.jailer.custody")
+                        : "armorer".equals(role)
+                        ? NpcContentId.of("straja.armorer.orders")
+                        : "archivist".equals(role)
+                        ? NpcContentId.of("straja.archivist.archive")
+                        : "inspector".equals(role)
+                        ? NpcContentId.of("straja.inspector.documents")
+                        : NpcContentId.of("straja.instructor.admission");
+    }
+
+    /**
+     * True while the desk-menu provider is enabled and owns a binding for
+     * this host entity — those bindings have no provider event bus of their
+     * own, so the vanilla interact packet is their only entry point.
+     */
+    public static boolean deskProviderOwns(String hostEntityUuid) {
+        RuntimeState state = STATE.get();
+        return state != null && state.deskProvider() != null
+                && state.deskProvider().available()
+                && state.deskProvider().ownsHost(hostEntityUuid);
+    }
+
+    /**
+     * The NeoForge interact path for a desk-provider-bound host — opens the
+     * chest-menu surface directly; fails closed on a stale binding.
+     */
+    public static boolean openBoundDeskSurface(Player player, String hostEntityUuid) {
+        RuntimeState state = STATE.get();
+        if (state == null) return false;
+        ChestMenuNpcSurfaceProvider provider = state.deskProvider();
+        if (provider == null || !provider.available()) return false;
+        NpcBinding binding = provider.bindingForHost(hostEntityUuid);
+        return binding != null && provider.readyFor(binding)
+                && DeskMenuService.openBoundSurface(player, binding, provider);
     }
 
     /** Whether a provider-owned or unresolved canonical Straja binding claims this host. */
@@ -674,6 +760,7 @@ public final class NpcPresentationRuntime {
             NpcSurfaceProviderRegistry providers,
             NpcSurfaceActionTokenIssuer actions,
             CustomNpcsNpcSurfaceProvider customNpcs,
+            ChestMenuNpcSurfaceProvider deskProvider,
             NpcBindingLifecycleService lifecycle,
             NpcProvisioningService provisioning,
             NpcProviderMigrationService migration,
@@ -688,6 +775,21 @@ public final class NpcPresentationRuntime {
         } catch (IllegalArgumentException error) {
             StrajaMod.LOGGER.error("Invalid NPC provider mode '{}'; falling back to customnpcs", configured);
             return NpcProviderId.CUSTOM_NPCS;
+        }
+    }
+
+    /**
+     * The desk-menu provider rides the desk-menu flag: no extra TOML-only
+     * policy is minted, so the same switch that gates native desks also
+     * gates bound-NPC desks — {@code npcMenus.deskProviderEnabled} narrows
+     * it further for ops who want native desks but no bound NPCs.
+     */
+    private static boolean deskProviderEnabled() {
+        try {
+            return StrajaServerConfig.NPC_MENUS_ENABLED.get()
+                    && StrajaServerConfig.NPC_DESK_PROVIDER_ENABLED.get();
+        } catch (RuntimeException configNotLoaded) {
+            return false;
         }
     }
 

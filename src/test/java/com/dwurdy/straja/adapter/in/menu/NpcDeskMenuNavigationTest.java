@@ -5,7 +5,11 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 import com.dwurdy.straja.adapter.in.npc.NpcFaqSurface;
 import com.dwurdy.straja.adapter.in.npc.NpcPlayerSurface;
+import com.dwurdy.straja.domain.model.NpcBinding;
+import com.dwurdy.straja.domain.model.NpcContentId;
+import com.dwurdy.straja.domain.model.NpcProviderId;
 import java.util.List;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -127,5 +131,52 @@ class NpcDeskMenuNavigationTest {
         assertEquals(new DeskPageSource.SectionPage(DeskSections.BOARD, 0), nav.current());
         assertEquals(new DeskPageSource.SectionPage(DeskSections.RECORDS, 1), nav.back(),
                 "the trail keeps each drawer's own page");
+    }
+
+    /**
+     * Issue-5: admin-tool menus anchor on their own flat list — «Înapoi»
+     * and home must never escape into a role grid the session does not own.
+     */
+    @Test
+    void toolListSessionsAnchorOnTheirOwnRoot() {
+        var items = List.of(new DeskButton(
+                new DeskIcon("straja:npc_wand", "Rol: receptionist", List.of()),
+                "tool-npc-assign:uuid-1-receptionist"));
+        var root = new DeskPageSource.ListPage("NPC uuid-1", items, 0);
+        var nav = new DeskNavigation(root);
+        assertEquals(root, nav.current());
+        assertEquals(0, nav.depth());
+        nav.open(new DeskPageSource.ConfirmPage("tool-npc-remove-confirm:uuid-1",
+                "Elimină NPC", List.of("Eliminarea este permanentă.")));
+        assertEquals(root, nav.back(),
+                "NU on the removal gate returns to the tool list, not a role grid");
+        nav.goToPage(1);
+        assertEquals(new DeskPageSource.ListPage("NPC uuid-1", items, 1), nav.current(),
+                "tool lists page in place like the role grid");
+        assertEquals(root, nav.home(),
+                "home lands back on the tool list root");
+    }
+
+    /**
+     * Issue-5: a desk-provider-bound surface anchors on its binding — the
+     * trail never fabricates a role page for an NPC the player only knows
+     * through the canonical binding.
+     */
+    @Test
+    void boundSurfaceSessionsAnchorOnTheirBinding() {
+        var binding = new NpcBinding("straja.bound.desk", NpcProviderId.DESK_MENU,
+                UUID.randomUUID().toString(), "", "receptionist", "hq",
+                NpcContentId.of("straja.reception.admission"), 1);
+        var root = new DeskPageSource.SurfacePage(binding, 0);
+        var nav = new DeskNavigation(root);
+        assertEquals(root, nav.current());
+        nav.goToPage(1);
+        assertEquals(new DeskPageSource.SurfacePage(binding, 1), nav.current(),
+                "snapshot pages re-page like the role grid");
+        nav.open(new DeskPageSource.ConfirmPage("desk:x", "x", List.of()));
+        assertEquals(new DeskPageSource.SurfacePage(binding, 1), nav.back(),
+                "NU returns to the surface page the click came from");
+        assertEquals(root, nav.home(),
+                "home lands on the bound surface, not a role grid");
     }
 }

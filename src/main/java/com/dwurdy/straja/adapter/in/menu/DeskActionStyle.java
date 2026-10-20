@@ -155,6 +155,9 @@ public final class DeskActionStyle {
             Map.entry("evidence-destroy:", "minecraft:barrier"),
             Map.entry("evidence-", "straja:evidence_bag"),
             Map.entry("admin-", "straja:seal_stamp"),
+            Map.entry("tool-npc-remove-confirm:", "minecraft:barrier"),
+            Map.entry("tool-npc-remove:", "minecraft:barrier"),
+            Map.entry("tool-survey-stamp:", "straja:survey_rod"),
             Map.entry("tool-", "straja:npc_wand"),
             Map.entry("armory-buy:", "minecraft:gold_ingot"),
             Map.entry("armory-reserve:", "straja:iou_note"),
@@ -197,12 +200,14 @@ public final class DeskActionStyle {
             "audience-status", "audience-review-list", "admin-personnel",
             "admin-roster", "admin-policies", "admin-emergency-status",
             "armory-status", "mission-list", "mission-draft-status",
-            "mission-template-list", "inspect-documents");
+            "mission-template-list", "inspect-documents",
+            "tool-cell-confirm", "tool-survey-all");
 
     /** Parameterized ops whose result is a chat dump. */
     private static final Set<String> CHAT_PREFIXES = Set.of(
             "admin-dossier:", "petition-read:", "join-read:",
-            "archive-folder-read:", "archive-sheet-read:");
+            "archive-folder-read:", "archive-sheet-read:",
+            "tool-npc-assign:", "tool-npc-record:", "tool-survey-stamp:");
 
     /** Ids that hand the player a physical item. */
     private static final Set<String> GIVE_ACTIONS = Set.of(
@@ -220,7 +225,8 @@ public final class DeskActionStyle {
             "admin-promote:", "admin-demote:", "admin-suspend:",
             "admin-fire:", "admin-reinstate:", "fine-task-arrest:",
             "bolo-cancel:", "evidence-return:", "evidence-deposit:",
-            "archive-sheet-submit:", "archive-sheet-revoke:");
+            "archive-sheet-submit:", "archive-sheet-revoke:",
+            "tool-npc-remove-confirm:");
 
     /** The icon stack for one surface action; label passes through as the name. */
     public static DeskIcon icon(String label, String actionId) {
@@ -320,6 +326,9 @@ public final class DeskActionStyle {
         }
         if (actionId.startsWith("archive-sheet-revoke:")) {
             return List.of("Actul semnat este revocat;", "nu mai poate fi folosit.");
+        }
+        if (actionId.startsWith("tool-npc-remove-confirm:")) {
+            return List.of("NPC-ul este eliminat sau legătura", "detașată — nu se poate anula.");
         }
         return List.of("Acțiunea se execută imediat", "și nu se poate anula.");
     }

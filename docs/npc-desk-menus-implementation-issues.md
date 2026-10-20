@@ -335,6 +335,38 @@ on:** Issues 1–4. **Verification:** provider contract tests (mirror
 DebugText provider tests if present); live bound-NPC smoke when CustomNPCs
 installed; RCON headless path for natives.
 
+## Execution receipts
+
+| Issue | Commit | Outcome |
+|---|---|---|
+| NPCDM-1 | `58fb548` | Chest-menu framework shipped: pure view model (`DeskIcon`/`DeskButton`/`DeskPage`/`DeskLayout`/`DeskNavigation`/`DeskActionStyle`), `DeskMenu`+`DeskMenuSession`+`DeskMenuService`, Receptionist desk live; direct `performAction` dispatch — no chat tokens inside an open menu. |
+| NPCDM-2 | `eeb0dcd` | Instructor, Jailer and Inspector role desks on the same framework, paged at 45 with the shared confirm gates. |
+| NPCDM-3 | `d2e7500` | Archivist and Armorer desks shipped; fine/armory mutations ride the in-GUI DA/NU page. |
+| NPCDM-4 | `37aa8ea` | Secretary desk + Comisar admin surface: section drawers (`DeskSections`), duty-start/stop verbs pinned, member-scoped clicks revalidated. |
+| NPCDM-5 | (this commit) | Bound-NPC parity pinned (`StrajaEvents` → `NpcRoles.interact` for every registry-bound host); admin-tool menus GUI-first via `openToolMenu`/`openList` with the chat fallback intact; `tool-npc-remove` rides the in-GUI DA/NU page; `ChestMenuNpcSurfaceProvider` (`desk-menu`) registered — binds via `bind-desk`/`provider migrate desk-menu`, submits clicks through `NpcSurfaceActionService` (5-min-capable token path); docs updated. |
+
+### Known limitations at close
+
+- **Title is fixed at open.** The container title is set once when the menu
+  opens; later page turns update only the grid contents (the baked-in page
+  suffix is deliberately stripped for the same reason).
+- **Flat grids vs drill-down.** Most desks render the action list as a flat
+  paged grid; only the Secretary/Comisar desk classifies rows into section
+  drawers. Deep hierarchies remain a future QOL pass.
+- **Live smoke pending.** `compileJava` + `test` are green (1841 tests);
+  the provider contract is covered headlessly. A live client run — bound
+  villager through `bind-desk`, wand menus, CustomNPCs present/absent
+  precedence — is still outstanding.
+- **Chat-bound actions documented.** `sendToolPrompt` stays chat for every
+  non-`tool-*` id (trades enrollment, dispatch accept/decline, V2 mission
+  offers, prison-cell confirm): those flows are role-surface decisions with
+  richer surrounding text, not admin-tool menus. Surface actions carrying
+  input fields also leave the grid and open the native form screen — a
+  chest menu cannot collect text.
+- **Dialogue stays provider-native.** A `desk-menu` binding renders only
+  `NpcSurfaceSnapshot.actions()`; dialogue/quest rows are never rendered —
+  CustomNPCs keeps `GuiCustom` for those.
+
 ## Handoff notes
 
 - Sequencing: 1 → (2 ∥ 3 disjoint, but run sequentially per pr-flow) → 4 → 5.

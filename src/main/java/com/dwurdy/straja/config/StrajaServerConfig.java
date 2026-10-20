@@ -24,6 +24,7 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.ConfigValue<String> NPC_PROVIDER_MODE;
     public static final ModConfigSpec.BooleanValue NPC_DEBUG_TEXT_ENABLED;
     public static final ModConfigSpec.BooleanValue NPC_MENUS_ENABLED;
+    public static final ModConfigSpec.BooleanValue NPC_DESK_PROVIDER_ENABLED;
     public static final ModConfigSpec.ConfigValue<String> DISCORD_WEBHOOK_URL;
 
     public static final ModConfigSpec.IntValue CHECKPOINT_UNLOCK_MINUTES;
@@ -418,7 +419,8 @@ public final class StrajaServerConfig {
 
         B.push("npc");
         NPC_PROVIDER_MODE = B.comment(
-                        "customnpcs is the player-facing provider. debug-text is a diagnostic mirror only.")
+                        "customnpcs is the player-facing provider. desk-menu serves canonically bound",
+                        "hosts as chest-menu desks. debug-text is a diagnostic mirror only.")
                 .define("providerMode", defaults.npcProviderMode,
                         StrajaServerConfig::isNpcProviderMode);
         NPC_DEBUG_TEXT_ENABLED = B.comment(
@@ -431,6 +433,11 @@ public final class StrajaServerConfig {
                         "Renders native-NPC interactions as vanilla chest-menu desks; when off",
                         "(or when the player is virtual/headless) the clickable chat surface stays the fallback.")
                 .define("enabled", true);
+        NPC_DESK_PROVIDER_ENABLED = B.comment(
+                        "Registers the desk-menu surface provider so a canonically bound NPC",
+                        "(/straja npc bind-desk or 'provider migrate desk-menu') renders the same",
+                        "chest-menu desk; CustomNPCs-owned bindings are never claimed.")
+                .define("deskProviderEnabled", true);
         B.pop();
 
         B.push("outbound");
@@ -1922,6 +1929,7 @@ public final class StrajaServerConfig {
     private static boolean isNpcProviderMode(Object o) {
         return o instanceof String s
                 && ("customnpcs".equalsIgnoreCase(s.trim())
+                        || "desk-menu".equalsIgnoreCase(s.trim())
                         || "debug-text".equalsIgnoreCase(s.trim()));
     }
 

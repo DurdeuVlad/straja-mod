@@ -18,7 +18,7 @@ public class StrajaPolicies {
     public boolean allowNameFallback = true;
     public String commissionerTitle = "Comisaru'";
     public String environment = "local";
-    /** Active NPC presentation provider: customnpcs or debug-text. */
+    /** Active NPC presentation provider: customnpcs, desk-menu, or debug-text. */
     public String npcProviderMode = "customnpcs";
     /** Explicit second gate for the diagnostic text provider. */
     public boolean npcDebugTextEnabled = false;

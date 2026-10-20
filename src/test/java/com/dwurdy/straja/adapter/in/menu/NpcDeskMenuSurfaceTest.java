@@ -116,4 +116,74 @@ class NpcDeskMenuSurfaceTest {
                 com.dwurdy.straja.adapter.in.npc.NpcPlayerSurface.RoleRoute.UNKNOWN),
                 "an unconfigured NPC keeps the chat fallback");
     }
+
+    /**
+     * Issue-5: admin-tool surfaces open the desk first and keep the tokened
+     * chat fallback — the same primary/fallback split the role desks use.
+     */
+    @Test
+    void toolMenusOpenTheDeskBeforeFallingBackToChat() throws IOException {
+        String roles = Files.readString(SRC.resolve("adapter/in/npc/NpcRoles.java"));
+        assertTrue(roles.contains("DeskMenuService.openToolMenu(player, menu)"),
+                "sendToolMenu must offer the desk list first");
+        assertTrue(roles.contains("tryOpenToolPrompt"),
+                "sendToolPrompt must offer the one-row desk list first");
+        assertTrue(roles.contains("actionId.startsWith(\"tool-\")"),
+                "only tool-* prompts may leave the chat surface — trades, "
+                        + "dispatch and V2 offers keep their chat buttons");
+        assertTrue(roles.contains("toolButton(player"),
+                "the chat fallback still mints tool tokens when the desk declines");
+    }
+
+    /**
+     * Issue-5: the wand's remove row must ride the in-GUI DA/NU page — the
+     * chat path keeps its own two-step confirm, so the desk rewrites the row
+     * to the confirm op and DeskActionStyle gates it.
+     */
+    @Test
+    void toolRemovalRidesTheInGuiConfirmPage() throws IOException {
+        String service = Files.readString(MENU.resolve("DeskMenuService.java"));
+        assertTrue(service.contains("tool-npc-remove-confirm:"),
+                "the desk rewrites tool-npc-remove to its confirm op");
+        String style = Files.readString(MENU.resolve("DeskActionStyle.java"));
+        assertTrue(style.contains("\"tool-npc-remove-confirm:\""),
+                "the confirm op must be DA/NU-gated in the desk");
+    }
+
+    /**
+     * Issue-5: a desk-provider-bound surface click mints and submits a
+     * provider token through the bridge — never performAction, never a
+     * 15-second chat token.
+     */
+    @Test
+    void boundSurfaceClicksSubmitProviderTokens() throws IOException {
+        String session = Files.readString(MENU.resolve("DeskMenuSession.java"));
+        assertTrue(session.contains("SURFACE_PREFIX"),
+                "surface rows must carry the desk:surface: nav prefix");
+        assertTrue(session.contains("surfaceBridge.submit"),
+                "surface clicks must submit through the provider bridge");
+        assertFalse(session.contains("issueToolActionToken")
+                        || session.contains("issueActionToken"),
+                "the desk must not mint chat tokens for bound surfaces");
+        String service = Files.readString(MENU.resolve("DeskMenuService.java"));
+        assertTrue(service.contains("openBoundSurface"),
+                "the bound-surface entry point lives on the menu service");
+    }
+
+    /**
+     * Issue-5 pins the parity contract: a registry-bound foreign entity
+     * (villager or other mod NPC) enters the same NpcRoles.interact route a
+     * native StrajaNpcEntity does, and a desk-provider-bound host claims
+     * the interact packet before the generic binding check swallows it.
+     */
+    @Test
+    void foreignAndBoundNpcsReachTheSameDeskRoute() throws IOException {
+        String events = Files.readString(SRC.resolve("adapter/in/event/StrajaEvents.java"));
+        assertTrue(events.contains("NpcRoles.interact(registration.role()"),
+                "registry-bound foreign NPCs must route through NpcRoles.interact");
+        assertTrue(events.contains("deskProviderOwns"),
+                "desk-provider bindings must claim the interact packet");
+        assertTrue(events.contains("openBoundDeskSurface"),
+                "the desk provider opens the chest menu for its bound hosts");
+    }
 }

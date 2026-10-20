@@ -483,13 +483,29 @@ public final class StrajaEvents {
             return;
         }
         // A registry-bound NPC routes its role surface here regardless of
-        // entity type — bound foreign NPCs (e.g. pre-existing CustomNPCs)
-        // never run StrajaNpcEntity.mobInteract. Consuming the packet makes
+        // entity type — bound foreign NPCs (villagers, pre-existing
+        // CustomNPCs, any other mod's entity) never run
+        // StrajaNpcEntity.mobInteract, yet still land on the same desk
+        // menu through NpcRoles.interact below. Consuming the packet makes
         // the Straja role own the click: the host entity's own interaction
         // is suppressed. Unregistered targets fall through untouched, so a
         // foreign NPC keeps its native dialog and an unregistered
         // StrajaNpcEntity still reaches mobInteract.
         if (!(event.getTarget() instanceof net.minecraft.server.level.ServerPlayer target)) {
+            String boundHostId = event.getTarget().getStringUUID();
+            // desk-menu-bound hosts have no provider event bus of their own —
+            // the vanilla right-click opens the chest surface here, ahead of
+            // the generic binding check that would otherwise swallow the
+            // packet for a provider's own listener.
+            if (NpcPresentationRuntime.deskProviderOwns(boundHostId)) {
+                event.setCanceled(true);
+                if (event.getHand() == net.minecraft.world.InteractionHand.MAIN_HAND) {
+                    // Same trailing-packet guard as the tool claim above.
+                    toolClickHandledAt.put(player.getUUID(), player.level().getGameTime());
+                    NpcPresentationRuntime.openBoundDeskSurface(player, boundHostId);
+                }
+                return;
+            }
             // Canonical provider bindings own their interaction ahead of
             // legacy role records. Unassigning preserves any older legacy
             // record, which resumes without destructive migration.

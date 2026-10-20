@@ -865,12 +865,17 @@ public final class NpcRoles {
     }
 
     /**
-     * Renders an admin-tool menu as one chat line of clickable buttons, each
-     * bound to a fresh short-lived one-use token for this player.
+     * Renders an admin-tool menu as a desk chest-menu when menus are enabled —
+     * each row dispatches {@code performAction} directly inside the open
+     * container and {@code tool-npc-remove} passes through the in-GUI DA/NU
+     * page. The clickable chat line stays the fallback for headless players
+     * and {@code npcMenus.enabled=false}, each button still bound to a fresh
+     * short-lived one-use token.
      */
     public static void sendToolMenu(ServerPlayer player,
                                     com.dwurdy.straja.application.port.in.AdminToolsUseCase.Menu menu) {
         if (player == null || menu == null) return;
+        if (com.dwurdy.straja.adapter.in.menu.DeskMenuService.openToolMenu(player, menu)) return;
         MutableComponent message = Component.literal(menu.title());
         for (var action : menu.actions()) {
             message.append(Component.literal(" "))
@@ -882,6 +887,7 @@ public final class NpcRoles {
     /** A single clickable row sent on its own line (e.g. the cell confirm). */
     public static void sendToolPrompt(ServerPlayer player, String text, String label, String actionId) {
         if (player == null) return;
+        if (tryOpenToolPrompt(player, text, label, actionId)) return;
         player.sendSystemMessage(Component.literal(text).append(Component.literal(" "))
                 .append(toolButton(player, Component.literal(label), actionId)));
     }
@@ -889,8 +895,24 @@ public final class NpcRoles {
     /** Component variant — translatable text/labels resolve per client locale. */
     public static void sendToolPrompt(ServerPlayer player, Component text, Component label, String actionId) {
         if (player == null) return;
+        if (tryOpenToolPrompt(player, text == null ? "" : text.getString(),
+                label == null ? "Acțiune" : label.getString(), actionId)) return;
         player.sendSystemMessage(text.copy().append(Component.literal(" "))
                 .append(toolButton(player, label, actionId)));
+    }
+
+    /**
+     * Only {@code tool-*} prompts become a one-row desk list (cell confirm,
+     * future tool prompts). Everything else — trades enrollment, dispatch
+     * accept/decline, V2 mission offers — keeps its chat buttons: those
+     * flows are role-surface actions, not admin-tool menus.
+     */
+    private static boolean tryOpenToolPrompt(ServerPlayer player, String text,
+                                             String label, String actionId) {
+        if (actionId == null || !actionId.startsWith("tool-")) return false;
+        return com.dwurdy.straja.adapter.in.menu.DeskMenuService.openList(player, text,
+                java.util.List.of(new com.dwurdy.straja.adapter.in.menu.DeskMenuService.ListItem(
+                        label, actionId)));
     }
 
     private static MutableComponent toolButton(ServerPlayer player, Component label, String actionId) {

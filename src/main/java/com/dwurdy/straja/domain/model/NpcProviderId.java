@@ -10,6 +10,8 @@ public record NpcProviderId(String value) {
 
     public static final NpcProviderId CUSTOM_NPCS = new NpcProviderId("customnpcs");
     public static final NpcProviderId DEBUG_TEXT = new NpcProviderId("debug-text");
+    /** Vanilla chest-menu desk provider for canonically bound NPC hosts. */
+    public static final NpcProviderId DESK_MENU = new NpcProviderId("desk-menu");
 
     public NpcProviderId {
         Objects.requireNonNull(value, "value");

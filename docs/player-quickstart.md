@@ -7,8 +7,11 @@ fără să întrebi pe nimeni.
 ## Ce este Straja
 
 Straja este forța de ordine a serverului — recrutează membri, patrulează și
-rezolvă incidente. Interacționezi cu ea prin **NPC-uri Straja** (meniuri
-clickabile în chat), **obiecte fizice** și **formulare native**.
+rezolvă incidente. Interacționezi cu ea prin **NPC-uri Straja** (birouri tip
+chest-menu — dai click dreapta și se deschide o grilă cu acțiuni), **obiecte
+fizice** și **formulare native**. Meniurile clickabile din chat rămân
+rezerva — dacă biroul nu se poate deschide (sau serverul a oprit
+`npcMenus.enabled`), primești aceleași acțiuni ca rânduri clickabile.
 
 ## Comenzile tale (mereu disponibile, fără drepturi speciale)
 
@@ -27,8 +30,9 @@ clickabile în chat), **obiecte fizice** și **formulare native**.
 
 ## Primul pas: cererea de admitere
 
-1. **Mergi la Recepție** (Recepționista). Fiecare NPC Straja afișează un meniu
-   în chat; acțiunea pe care o cauți e prima din listă.
+1. **Mergi la Recepție** (Recepționista). Click dreapta pe NPC deschide
+   biroul — grila de acțiuni; acțiunea pe care o cauți e prima din listă.
+   (Dacă biroul nu se deschide, același meniu apare în chat.)
 2. Apasă **«Depune cererea»** — completezi formularul și-l trimiți.
 3. Cererea ta intră la Comisar. După acceptare (sau dacă ești invitat
    direct), **prezintă-te la Instructor pentru examen** — 6 întrebări despre

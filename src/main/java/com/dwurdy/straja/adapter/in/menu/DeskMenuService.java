@@ -2,9 +2,14 @@ package com.dwurdy.straja.adapter.in.menu;
 
 import com.dwurdy.straja.StrajaMod;
 import com.dwurdy.straja.adapter.in.npc.NpcPlayerSurface;
+import com.dwurdy.straja.application.port.in.AdminToolsUseCase;
+import com.dwurdy.straja.application.port.out.DeskSurfaceBridge;
 import com.dwurdy.straja.bootstrap.StrajaRuntime;
 import com.dwurdy.straja.config.StrajaServerConfig;
+import com.dwurdy.straja.domain.model.NpcBinding;
 import com.dwurdy.straja.domain.model.Text;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
@@ -59,6 +64,102 @@ public final class DeskMenuService {
                     + "Desk menu failed to open; chat surface used instead", openFailed);
             return false;
         }
+    }
+
+    /**
+     * One (label, actionId) row of a flat desk list — the shape admin-tool
+     * menus and single prompts arrive in.
+     */
+    public record ListItem(String label, String actionId) {}
+
+    /**
+     * Renders an arbitrary flat action list as a desk page: every row
+     * dispatches {@code NpcRoles.performAction} directly — no chat tokens
+     * are minted — and a {@code tool-npc-remove:<uuid>} row is rewritten to
+     * its confirm op so the destructive click passes through the in-GUI
+     * DA/NU page (the chat fallback keeps its own two-step confirm).
+     */
+    public static boolean openList(Player player, String title, List<ListItem> items) {
+        try {
+            if (!(player instanceof ServerPlayer serverPlayer)
+                    || items == null || items.isEmpty()) {
+                return false;
+            }
+            if (!enabled() || StrajaRuntime.get() == null) return false;
+            var buttons = new ArrayList<DeskButton>();
+            for (var item : items) {
+                if (item == null || item.actionId() == null || item.actionId().isBlank()) {
+                    continue;
+                }
+                String actionId = toolActionFor(item.actionId());
+                buttons.add(new DeskButton(
+                        DeskActionStyle.icon(item.label(), actionId), actionId));
+            }
+            if (buttons.isEmpty()) return false;
+            return DeskMenuSession.forList(serverPlayer, cleanTitle(title), buttons).open();
+        } catch (Throwable openFailed) {
+            StrajaMod.LOGGER.warn(Text.STRAJA_PREFIX
+                    + "Desk list failed to open; chat surface used instead", openFailed);
+            return false;
+        }
+    }
+
+    /**
+     * Admin-tool menus (npc wand role picker, survey stamp targets) render
+     * as a desk list; the chat fallback stays byte-identical to today.
+     */
+    public static boolean openToolMenu(Player player, AdminToolsUseCase.Menu menu) {
+        if (menu == null) return false;
+        var items = new ArrayList<ListItem>();
+        for (var action : menu.actions()) {
+            if (action != null) items.add(new ListItem(action.label(), action.actionId()));
+        }
+        return openList(player, menu.title(), items);
+    }
+
+    /**
+     * Opens the published surface of a desk-provider-bound NPC as a chest
+     * grid — the session resolves the snapshot through {@code bridge} on
+     * every render and submits clicks through the provider token path.
+     */
+    public static boolean openBoundSurface(Player player, NpcBinding binding,
+                                           DeskSurfaceBridge bridge) {
+        try {
+            if (!(player instanceof ServerPlayer serverPlayer)
+                    || binding == null || bridge == null) {
+                return false;
+            }
+            if (!enabled() || StrajaRuntime.get() == null) return false;
+            return DeskMenuSession.forSurface(serverPlayer, binding, bridge).open();
+        } catch (Throwable openFailed) {
+            StrajaMod.LOGGER.warn(Text.STRAJA_PREFIX
+                    + "Bound desk surface failed to open", openFailed);
+            return false;
+        }
+    }
+
+    /**
+     * The chat surface turns {@code tool-npc-remove:<uuid>} into a second
+     * clickable confirm line; the desk renders that gate in-page, so the
+     * grid row targets the confirm op directly and DA/NU does the rest.
+     */
+    private static String toolActionFor(String actionId) {
+        return actionId.startsWith("tool-npc-remove:")
+                && !actionId.startsWith("tool-npc-remove-confirm:")
+                ? "tool-npc-remove-confirm:" + actionId.substring("tool-npc-remove:".length())
+                : actionId;
+    }
+
+    /** Chest titles drop the chat prefix and any trailing colon. */
+    private static String cleanTitle(String title) {
+        String cleaned = title == null ? "" : title.strip();
+        if (cleaned.startsWith(Text.STRAJA_PREFIX)) {
+            cleaned = cleaned.substring(Text.STRAJA_PREFIX.length()).strip();
+        }
+        if (cleaned.endsWith(":")) {
+            cleaned = cleaned.substring(0, cleaned.length() - 1).strip();
+        }
+        return cleaned.isBlank() ? "Straja" : cleaned;
     }
 
     private static boolean enabled() {

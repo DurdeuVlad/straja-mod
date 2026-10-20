@@ -312,6 +312,58 @@ class NpcDeskMenuStyleTest {
         assertTrue(unknown.lore().contains("Alege o acțiune."));
     }
 
+    /**
+     * Issue-5 desks: the admin-tool rows — wand assign/rename/skin/remove/
+     * record, survey stamps, cell confirm — never render bare paper, the
+     * removal gate carries its consequence, and text outputs announce the
+     * chat dump.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "tool-cell-confirm", "tool-survey-all",
+            "tool-npc-assign:uuid-1-receptionist", "tool-npc-rename:uuid-1",
+            "tool-npc-skin:uuid-1", "tool-npc-remove-confirm:uuid-1",
+            "tool-npc-record:uuid-1", "tool-survey-stamp:hq"})
+    void issueFiveToolRowsNeverShowGenericPaper(String actionId) {
+        var icon = DeskActionStyle.icon("Eticheta", actionId);
+        assertFalse(icon.itemId().isBlank());
+        assertTrue(!"minecraft:paper".equals(icon.itemId()),
+                actionId + " deserves a themed icon: " + icon.itemId());
+    }
+
+    @Test
+    void toolRemovalIsConfirmGatedAndSpellsTheConsequence() {
+        assertTrue(DeskActionStyle.needsConfirm("tool-npc-remove-confirm:uuid-1"));
+        assertTrue(DeskActionStyle.lore("tool-npc-remove-confirm:uuid-1")
+                .contains("Cere confirmare."));
+        assertTrue(DeskActionStyle.consequence("tool-npc-remove-confirm:uuid-1").stream()
+                .anyMatch(line -> line.contains("anula")));
+        assertEquals("minecraft:barrier",
+                DeskActionStyle.itemFor("tool-npc-remove-confirm:uuid-1"));
+        assertEquals("minecraft:barrier",
+                DeskActionStyle.itemFor("tool-npc-remove:uuid-1"));
+        assertEquals("straja:survey_rod",
+                DeskActionStyle.itemFor("tool-survey-stamp:hq"));
+        assertEquals("straja:npc_wand",
+                DeskActionStyle.itemFor("tool-npc-assign:uuid-1-jailer"));
+        assertEquals("straja:survey_rod", DeskActionStyle.itemFor("tool-survey-all"));
+    }
+
+    @Test
+    void toolChatOutputsAnnounceTheChatResult() {
+        for (String id : new String[]{"tool-cell-confirm", "tool-survey-all",
+                "tool-npc-assign:uuid-1-jailer", "tool-npc-record:uuid-1",
+                "tool-survey-stamp:hq"}) {
+            assertTrue(DeskActionStyle.lore(id).stream()
+                            .anyMatch(line -> line.contains("chat")),
+                    id + " must say the result goes to chat");
+        }
+        assertTrue(DeskActionStyle.lore("tool-npc-rename:uuid-1")
+                .contains("Deschide formularul."));
+        assertTrue(DeskActionStyle.lore("tool-npc-skin:uuid-1")
+                .contains("Deschide formularul."));
+    }
+
     @Test
     void faqButtonsAnnounceTheirKind() {
         assertTrue(DeskActionStyle.lore("faq:menu_entry_receptionist")

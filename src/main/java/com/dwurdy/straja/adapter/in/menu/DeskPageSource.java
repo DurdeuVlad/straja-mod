@@ -1,6 +1,7 @@
 package com.dwurdy.straja.adapter.in.menu;
 
 import com.dwurdy.straja.adapter.in.npc.NpcFaqSurface;
+import com.dwurdy.straja.domain.model.NpcBinding;
 import java.util.List;
 
 /**
@@ -15,6 +16,12 @@ public sealed interface DeskPageSource {
     String INFO = "desk:info";
     String YES = "desk:yes";
     String NO = "desk:no";
+    /**
+     * Nav prefix for provider-bound surface rows: the raw snapshot action id
+     * follows it, and a click dispatches through the desk's provider token
+     * bridge ({@code DeskSurfaceBridge}) instead of {@code performAction}.
+     */
+    String SURFACE_PREFIX = "desk:surface:";
 
     /** One page of the NPC's role surface grid (paged at 45 items). */
     record RolePage(int page) implements DeskPageSource {}
@@ -38,4 +45,23 @@ public sealed interface DeskPageSource {
             detail = detail == null ? List.of() : List.copyOf(detail);
         }
     }
+
+    /**
+     * A flat non-role action grid — admin-tool menus (npc wand, survey rod,
+     * cell confirm) rendered as a desk. Rows carry their own action ids and
+     * dispatch through {@code performAction} exactly like a role grid.
+     */
+    record ListPage(String title, List<DeskButton> items, int page) implements DeskPageSource {
+        public ListPage {
+            items = items == null ? List.of() : List.copyOf(items);
+        }
+    }
+
+    /**
+     * One page of a provider-bound NPC surface rendered by the desk-menu
+     * provider: the session re-resolves the published snapshot on every
+     * render and wraps each enabled action in a {@link #SURFACE_PREFIX} nav
+     * id, so clicks mint/submit provider action tokens — never chat tokens.
+     */
+    record SurfacePage(NpcBinding binding, int page) implements DeskPageSource {}
 }

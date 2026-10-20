@@ -4,6 +4,9 @@ import com.dwurdy.straja.adapter.in.StrajaText;
 import com.dwurdy.straja.adapter.in.npc.NpcFaqSurface;
 import com.dwurdy.straja.adapter.in.npc.NpcPlayerSurface;
 import com.dwurdy.straja.adapter.in.npc.NpcRoles;
+import com.dwurdy.straja.application.port.out.DeskSurfaceBridge;
+import com.dwurdy.straja.domain.model.NpcActionResult;
+import com.dwurdy.straja.domain.model.NpcBinding;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.network.chat.Component;
@@ -25,15 +28,40 @@ final class DeskMenuSession {
 
     private final ServerPlayer player;
     private final String roleId;
-    private final DeskNavigation nav = new DeskNavigation();
+    private final DeskNavigation nav;
+    private final DeskSurfaceBridge surfaceBridge;
     private DeskMenu menu;
     private DeskPage page;
     private boolean alive = true;
     private long clickGraceUntilNanos;
 
     DeskMenuSession(ServerPlayer player, String roleId) {
+        this(player, roleId, new DeskNavigation(), null);
+    }
+
+    private DeskMenuSession(ServerPlayer player, String roleId,
+                            DeskNavigation nav, DeskSurfaceBridge surfaceBridge) {
         this.player = player;
         this.roleId = roleId;
+        this.nav = nav;
+        this.surfaceBridge = surfaceBridge;
+    }
+
+    /** Admin-tool grid: a flat list root dispatching straight to performAction. */
+    static DeskMenuSession forList(ServerPlayer player, String title, List<DeskButton> items) {
+        return new DeskMenuSession(player, null,
+                new DeskNavigation(new DeskPageSource.ListPage(title, items, 0)), null);
+    }
+
+    /**
+     * Provider-bound surface session: the nav root resolves the published
+     * snapshot through {@code surfaceBridge} and clicks mint provider action
+     * tokens — the same contract as the CustomNPCs GuiCustom path.
+     */
+    static DeskMenuSession forSurface(ServerPlayer player, NpcBinding binding,
+                                      DeskSurfaceBridge surfaceBridge) {
+        return new DeskMenuSession(player, null,
+                new DeskNavigation(new DeskPageSource.SurfacePage(binding, 0)), surfaceBridge);
     }
 
     /**
@@ -42,7 +70,16 @@ final class DeskMenuSession {
      * session when the menu is replaced (e.g. a form opens) or removed.
      */
     boolean open(NpcPlayerSurface.OrderedSurface ordered) {
-        page = rolePage(ordered, 0);
+        return openContainer(rolePage(ordered, 0));
+    }
+
+    /** Opens the menu on the session's own root page (tool lists, bound surfaces). */
+    boolean open() {
+        return openContainer(renderPage(nav.current()));
+    }
+
+    private boolean openContainer(DeskPage first) {
+        page = first;
         // The container title is fixed at open — keep the plain surface title:
         // a baked "— 1/2" suffix would stay misleading on every later page.
         String title = page.title();
@@ -115,6 +152,8 @@ final class DeskMenuSession {
             // onto the trail and never reach performAction (the desk: guard
             // below would refuse the id anyway).
             render(nav.open(new DeskPageSource.SectionPage(section, 0)));
+        } else if (actionId.startsWith(DeskPageSource.SURFACE_PREFIX)) {
+            dispatchSurface(actionId.substring(DeskPageSource.SURFACE_PREFIX.length()));
         } else if (actionId.startsWith("desk:")) {
             return; // unknown internal nav id — never dispatch
         } else if (actionId.startsWith("main:")) {
@@ -163,6 +202,42 @@ final class DeskMenuSession {
             com.dwurdy.straja.StrajaMod.LOGGER.warn(
                     com.dwurdy.straja.domain.model.Text.STRAJA_PREFIX
                             + "Desk action failed", actionFailed);
+        }
+        if (isAlive()) render(nav.current());
+    }
+
+    /**
+     * A bound-surface click: re-resolves the published snapshot so a retracted
+     * or disabled action fails closed, then routes the raw action id through
+     * the provider bridge — the token is minted and consumed by
+     * {@code NpcSurfaceActionService}, never by the chat-token service.
+     * Actions carrying input fields ride the native form screen via
+     * {@code performAction}: a chest grid cannot collect fields.
+     */
+    private void dispatchSurface(String actionId) {
+        if (!(nav.current() instanceof DeskPageSource.SurfacePage surface)
+                || surfaceBridge == null) {
+            render(nav.current());
+            return;
+        }
+        var resolved = surfaceBridge.resolve(player.getUUID(), surface.binding());
+        var action = resolved == null ? null : resolved.actions().stream()
+                .filter(candidate -> actionId.equals(candidate.actionId().value()))
+                .findFirst().orElse(null);
+        if (action == null || !action.enabled()) {
+            player.sendSystemMessage(StrajaText.refusal(
+                    "straja.npc.action_stale", "straja.remedy.retry"));
+            render(nav.current());
+            return;
+        }
+        if (!action.inputs().isEmpty()) {
+            dispatch(actionId);
+            return;
+        }
+        NpcActionResult result = surfaceBridge.submit(
+                player.getUUID(), surface.binding(), actionId);
+        if (result != null && result.status() != NpcActionResult.Status.ACCEPTED) {
+            player.sendSystemMessage(Component.literal("⚠ " + result.message()));
         }
         if (isAlive()) render(nav.current());
     }
@@ -216,6 +291,8 @@ final class DeskMenuSession {
                         new DeskIcon(DeskActionStyle.itemFor(confirm.actionId()),
                                 confirm.label(), confirm.detail()),
                         true);
+                case DeskPageSource.ListPage list -> listPage(list);
+                case DeskPageSource.SurfacePage surface -> surfacePage(surface);
             };
         } catch (RuntimeException renderFailed) {
             com.dwurdy.straja.StrajaMod.LOGGER.warn(
@@ -350,6 +427,52 @@ final class DeskMenuSession {
         return new DeskIcon(header.itemId(), header.name(), lore);
     }
 
+    /**
+     * A flat admin-tool grid — the same click → performAction dispatch a
+     * role desk uses; only the header (wand icon + wrapped menu title)
+     * differs.
+     */
+    private DeskPage listPage(DeskPageSource.ListPage list) {
+        return DeskLayout.grid(list.title(), toolHeader(list.title()),
+                list.items(), list.page(), nav.depth() > 0);
+    }
+
+    private DeskIcon toolHeader(String title) {
+        var lore = new ArrayList<>(DeskLayout.wrapLore(title, DeskLayout.LORE_WRAP));
+        lore.add("Alege o acțiune — se execută direct.");
+        return new DeskIcon("straja:npc_wand", "Instrumente", List.copyOf(lore));
+    }
+
+    /**
+     * The bound-NPC grid: only enabled snapshot actions render, each wrapped
+     * in the {@code desk:surface:} nav prefix so clicks route through the
+     * provider token bridge instead of {@code performAction}. A retracted
+     * surface renders a closed info grid — fail closed, never a dead menu.
+     */
+    private DeskPage surfacePage(DeskPageSource.SurfacePage surface) {
+        var resolved = surfaceBridge == null ? null
+                : surfaceBridge.resolve(player.getUUID(), surface.binding());
+        if (resolved == null) {
+            return DeskLayout.grid("Suprafață retrasă",
+                    new DeskIcon(DeskIcon.FALLBACK_ITEM, "Suprafață retrasă",
+                            List.of("Legătura a fost retrasă sau s-a",
+                                    "schimbat. Închide meniul.")),
+                    List.of(), 0, nav.depth() > 0);
+        }
+        var content = new ArrayList<DeskButton>();
+        for (var action : resolved.actions()) {
+            if (!action.enabled()) continue;
+            content.add(new DeskButton(
+                    DeskActionStyle.icon(action.label(), action.actionId().value()),
+                    DeskPageSource.SURFACE_PREFIX + action.actionId().value()));
+        }
+        String title = resolved.title() == null || resolved.title().isBlank()
+                ? "Straja" : resolved.title();
+        return DeskLayout.grid(title,
+                DeskActionStyle.header(surface.binding().roleId(), title, "Alege o acțiune."),
+                content, surface.page(), nav.depth() > 0);
+    }
+
     private DeskPage faqPage(NpcFaqSurface.Target target) {
         var context = NpcRoles.faqContextFor(player, player.serverLevel());
         if (context == null || !NpcFaqSurface.targetAvailable(target, context)) {
@@ -396,6 +519,8 @@ final class DeskMenuSession {
     private int pageIndex() {
         if (nav.current() instanceof DeskPageSource.RolePage role) return role.page();
         if (nav.current() instanceof DeskPageSource.SectionPage section) return section.page();
+        if (nav.current() instanceof DeskPageSource.ListPage list) return list.page();
+        if (nav.current() instanceof DeskPageSource.SurfacePage surface) return surface.page();
         return 0;
     }
 

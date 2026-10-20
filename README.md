@@ -137,12 +137,24 @@ also copies a book held in the player's main hand on right-click, preserving
 - **Archivist** — folder read/issue, sheet authoring/edit/submit/sign,
   numbered copies via carbon paper, official envelopes, document issue.
 
-NPC actions are rendered as clickable chat. Each click uses a short-lived,
-one-use token bound to the clicking player; it is not a typed gameplay command
-and cannot be reused by another player. Text-bearing decisions (quiz answers,
-mission reports and failure reasons, complaint submissions and withdrawal
-reasons, investigation reports, appeals, archive sheet edits, activity
-reports and their review decisions) open a native
+NPC actions are rendered primarily as vanilla chest-menu desks: right-clicking
+a Straja NPC opens a paged inventory-style grid where each row is an action —
+destructive choices pass through an in-menu DA/NU confirm and nothing ever
+moves in or out of the grid. The clickable chat surface stays as the fallback
+for virtual/headless players, for anything the desk cannot express, and when
+`npcMenus.enabled=false` in the server config turns the feature off; on that
+path each click uses a short-lived, one-use token bound to the clicking
+player — `/straja npc-action <token>` remains an internal boundary that is
+never typed by hand and cannot be reused by another player. Bound foreign
+NPCs (villagers, other mods' entities) take the same desk through the
+canonical provider binding: a CustomNPCs host keeps its native `GuiCustom`
+surface, while `/straja npc bind-desk` or `provider migrate desk-menu` gives
+a host with no GUI of its own the same chest-menu desk — every click there
+mints and consumes a provider action token, so a stale or forged click
+cannot fire a second effect. Text-bearing decisions (quiz answers, mission
+reports and failure reasons, complaint submissions and withdrawal reasons,
+investigation reports, appeals, archive sheet edits, activity reports and
+their review decisions) open a native
 form screen — a server-authoritative session that is owner-bound, allowlisted,
 expiring, and one-use; the payload carries only an opaque session ID and
 bounded field values.
