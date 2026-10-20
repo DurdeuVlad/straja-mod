@@ -5,6 +5,7 @@ import com.dwurdy.straja.adapter.in.npc.NpcFaqSurface;
 import com.dwurdy.straja.adapter.in.npc.NpcPlayerSurface;
 import com.dwurdy.straja.adapter.in.npc.NpcRoles;
 import java.util.ArrayList;
+import java.util.List;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.SimpleContainer;
@@ -108,7 +109,13 @@ final class DeskMenuSession {
 
     private void routeAction(DeskButton clicked) {
         String actionId = clicked.actionId();
-        if (actionId.startsWith("desk:")) {
+        String section = DeskSections.sectionOfNav(actionId);
+        if (section != null) {
+            // Section drawers are in-menu navigation: they push a SectionPage
+            // onto the trail and never reach performAction (the desk: guard
+            // below would refuse the id anyway).
+            render(nav.open(new DeskPageSource.SectionPage(section, 0)));
+        } else if (actionId.startsWith("desk:")) {
             return; // unknown internal nav id — never dispatch
         } else if (actionId.startsWith("main:")) {
             render(nav.home());
@@ -200,6 +207,9 @@ final class DeskMenuSession {
                 case DeskPageSource.RolePage role -> rolePage(
                         NpcRoles.orderedSurfaceFor(roleId, player, player.serverLevel()),
                         role.page());
+                case DeskPageSource.SectionPage section -> sectionPage(
+                        NpcRoles.orderedSurfaceFor(roleId, player, player.serverLevel()),
+                        section.section(), section.page());
                 case DeskPageSource.FaqPage faq -> faqPage(faq.target());
                 case DeskPageSource.ConfirmPage confirm -> DeskLayout.confirm(
                         "Confirmă: " + confirm.label(),
@@ -218,8 +228,16 @@ final class DeskMenuSession {
         }
     }
 
-    /** The role grid — every content action ordered, paged at 45. */
+    /**
+     * The role grid — every content action ordered, paged at 45. Only the
+     * Secretary desk (Issue 4) swaps the flat grid for section drawers: its
+     * surface is too dense to scan — every other role keeps this path
+     * unchanged.
+     */
     private DeskPage rolePage(NpcPlayerSurface.OrderedSurface ordered, int pageIndex) {
+        if (NpcPlayerSurface.routeFor(roleId) == NpcPlayerSurface.RoleRoute.SECRETARY) {
+            return secretaryRootPage(ordered, pageIndex);
+        }
         var surface = ordered == null ? null : ordered.surface();
         var content = new ArrayList<DeskButton>();
         if (ordered != null) {
@@ -235,6 +253,101 @@ final class DeskMenuSession {
                         surface == null ? "Straja" : surface.title(),
                         surface == null ? "" : surface.guidance()),
                 content, pageIndex, nav.depth() > 0);
+    }
+
+    /**
+     * The Secretary desk top: one drawer button per non-empty section, then
+     * the always-essentials — the {@code general} items in emitted order
+     * (guard-status, the carnet, V2 statuses, the FAQ entry) and the
+     * duty-start/duty-stop verbs pinned at the end whenever the surface
+     * emits them, so the most-used click never hides inside a drawer.
+     */
+    private DeskPage secretaryRootPage(NpcPlayerSurface.OrderedSurface ordered, int pageIndex) {
+        var surface = ordered == null ? null : ordered.surface();
+        String title = surface == null ? "Straja" : surface.title();
+        var content = new ArrayList<DeskButton>();
+        var allIds = new ArrayList<String>();
+        var general = new ArrayList<NpcPlayerSurface.ChatAction>();
+        NpcPlayerSurface.ChatAction dutyStart = null;
+        NpcPlayerSurface.ChatAction dutyStop = null;
+        if (ordered != null) {
+            for (var action : ordered.contentActions()) {
+                allIds.add(action.actionId());
+                if (DeskSections.GENERAL.equals(DeskSections.sectionFor(action.actionId()))) {
+                    general.add(action);
+                } else if ("duty-start".equals(action.actionId())) {
+                    dutyStart = action;
+                } else if ("duty-stop".equals(action.actionId())) {
+                    dutyStop = action;
+                }
+            }
+        }
+        content.addAll(DeskSections.drawerButtons(allIds));
+        for (var action : general) {
+            content.add(new DeskButton(
+                    DeskActionStyle.icon(action.label(), action.actionId()),
+                    action.actionId()));
+        }
+        if (dutyStart != null) {
+            content.add(new DeskButton(
+                    DeskActionStyle.icon(dutyStart.label(), dutyStart.actionId()),
+                    dutyStart.actionId()));
+        }
+        if (dutyStop != null) {
+            content.add(new DeskButton(
+                    DeskActionStyle.icon(dutyStop.label(), dutyStop.actionId()),
+                    dutyStop.actionId()));
+        }
+        return DeskLayout.grid(title, secretaryHeader(ordered, title, allIds),
+                content, pageIndex, nav.depth() > 0);
+    }
+
+    /**
+     * One section drawer page: only the actions {@link DeskSections}
+     * classifies under {@code section}, paged at 45 — the Comisar drawer
+     * pages the personnel roster the same way. The duty drawer additionally
+     * carries the live duty line in its header lore.
+     */
+    private DeskPage sectionPage(NpcPlayerSurface.OrderedSurface ordered,
+                                 String section, int pageIndex) {
+        var surface = ordered == null ? null : ordered.surface();
+        String baseTitle = surface == null ? "Straja" : surface.title();
+        var content = new ArrayList<DeskButton>();
+        var ids = new ArrayList<String>();
+        if (ordered != null) {
+            for (var action : ordered.contentActions()) {
+                if (section.equals(DeskSections.sectionFor(action.actionId()))) {
+                    ids.add(action.actionId());
+                    content.add(new DeskButton(
+                            DeskActionStyle.icon(action.label(), action.actionId()),
+                            action.actionId()));
+                }
+            }
+        }
+        var header = DeskSections.header(section, content.size());
+        if (DeskSections.DUTY.equals(section)) {
+            String hint = DeskSections.dutyHint(ids);
+            if (!hint.isBlank()) {
+                var lore = new ArrayList<>(header.lore());
+                lore.add(hint);
+                header = new DeskIcon(header.itemId(), header.name(), lore);
+            }
+        }
+        return DeskLayout.grid(baseTitle + " — " + DeskSections.title(section),
+                header, content, pageIndex, nav.depth() > 0);
+    }
+
+    /** The Secretary header plus the one-line live duty state (Issue 4). */
+    private DeskIcon secretaryHeader(NpcPlayerSurface.OrderedSurface ordered,
+                                     String title, List<String> actionIds) {
+        String guidance = ordered != null && ordered.surface() != null
+                ? ordered.surface().guidance() : "";
+        var header = DeskActionStyle.header(roleId, title, guidance);
+        String hint = DeskSections.dutyHint(actionIds);
+        if (hint.isBlank()) return header;
+        var lore = new ArrayList<>(header.lore());
+        lore.add(hint);
+        return new DeskIcon(header.itemId(), header.name(), lore);
     }
 
     private DeskPage faqPage(NpcFaqSurface.Target target) {
@@ -281,7 +394,9 @@ final class DeskMenuSession {
     }
 
     private int pageIndex() {
-        return nav.current() instanceof DeskPageSource.RolePage role ? role.page() : 0;
+        if (nav.current() instanceof DeskPageSource.RolePage role) return role.page();
+        if (nav.current() instanceof DeskPageSource.SectionPage section) return section.page();
+        return 0;
     }
 
     private static void paint(SimpleContainer grid, DeskPage deskPage) {

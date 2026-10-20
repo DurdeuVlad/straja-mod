@@ -143,6 +143,10 @@ public final class DeskActionStyle {
             Map.entry("report-review:", "straja:seal_stamp"),
             Map.entry("petition-read:", "straja:archive_folder"),
             Map.entry("petition-review:", "straja:seal_stamp"),
+            // FUN-11 parole docket rows ride the delegation digest; the
+            // native action vocabulary has no parole op yet, so the row is
+            // display-only — themed like every other decision stamp.
+            Map.entry("parole-review:", "straja:seal_stamp"),
             Map.entry("audience-review:", "straja:seal_stamp"),
             Map.entry("incident-", "straja:alarm_whistle"),
             Map.entry("dispatch-", "straja:alarm_whistle"),

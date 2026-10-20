@@ -146,6 +146,44 @@ class NpcDeskMenuStyleTest {
                 actionId + " deserves a themed icon: " + icon.itemId());
     }
 
+    /** Issue-4 desk: no Secretary/Comisar button renders bare paper. */
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "mission-list", "mission-carnet", "mission-draft-write",
+            "mission-draft-status", "mission-template-issue:T-1",
+            "mission-join:M-1", "mission-report:M-1", "mission-fail:M-1",
+            "v2-mission-claim:V2-7", "v2-personnel-status", "v2-campaign-status",
+            "v2-professional-work", "guard-status",
+            "duty-start", "duty-stop", "work-start", "duty-salary", "duty-coins",
+            "duty-food", "duty-kit", "duty-checkpoint:CP-2",
+            "resignation-start", "resignation-confirm", "resignation-cancel",
+            "rejoin", "complaint-list", "complaint-claim:C-1",
+            "complaint-review:C-1", "fine-draft-write", "fine-draft-status",
+            "fine-task-list", "fine-task-accept:FT-1", "fine-task-arrest:FT-1",
+            "fine-warrant", "report-submit",
+            "report-review-list", "report-review:R-1", "audience-request",
+            "audience-review-list", "audience-review:A-1",
+            "petition-request", "petition-read:P-1", "petition-review:P-1",
+            "join-read:JR-1", "join-review:JR-1", "parole-review:PH-1",
+            "incident-list", "incident-accept:I-1", "incident-resolve:I-1",
+            "dispatch-board", "bolo-list", "bolo-create", "bolo-cancel:B-1",
+            "admin-personnel", "admin-roster", "admin-authorize",
+            "admin-policies", "admin-policy-set", "admin-emergency-status",
+            "admin-emergency-start", "admin-emergency-end",
+            "admin-dossier:uuid-1", "admin-promote:uuid-1",
+            "admin-suspend:uuid-1", "admin-fire:uuid-1",
+            "admin-reinstate:uuid-1", "delegation-ledger",
+            "delegation-mode:JOIN_PETITION", "delegation-window:AUDIENCE_REQUEST",
+            "delegation-revoke:SO-1", "delegation-order-join_petition:ANY",
+            "reputation-view", "reputation-correction", "arrest-record-admin",
+            "evidence-list"})
+    void issueFourDesksNeverShowGenericPaper(String actionId) {
+        var icon = DeskActionStyle.icon("Eticheta", actionId);
+        assertFalse(icon.itemId().isBlank());
+        assertTrue(!"minecraft:paper".equals(icon.itemId()),
+                actionId + " deserves a themed icon: " + icon.itemId());
+    }
+
     @Test
     void archivistAndArmorerIconsMatchTheActionSemantics() {
         assertEquals("straja:archive_folder",

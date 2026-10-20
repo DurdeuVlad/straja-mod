@@ -42,10 +42,15 @@ final class DeskNavigation {
         return current;
     }
 
-    /** Re-pages the current role grid in place; other sources have no paging. */
+    /**
+     * Re-pages the current role grid or section drawer in place; other
+     * sources have no paging.
+     */
     DeskPageSource goToPage(int page) {
         if (current instanceof DeskPageSource.RolePage) {
             current = new DeskPageSource.RolePage(Math.max(0, page));
+        } else if (current instanceof DeskPageSource.SectionPage section) {
+            current = new DeskPageSource.SectionPage(section.section(), Math.max(0, page));
         }
         return current;
     }

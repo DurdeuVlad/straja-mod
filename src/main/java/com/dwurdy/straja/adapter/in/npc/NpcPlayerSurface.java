@@ -991,6 +991,90 @@ public final class NpcPlayerSurface {
         return List.copyOf(actions);
     }
 
+    /**
+     * FUN-1 parity: renders the delegation console on the native surface the
+     * same way {@code NpcSecretarySurfaceService.addDelegation} projects it
+     * for bound NPCs. The service itself gates the view — viewers without
+     * delegation authority get an empty {@code SurfaceView}, so this emits
+     * nothing for them. Digest rows reuse each queue's native review action
+     * (the digest batches the queues; it never invents a parallel form).
+     */
+    static List<ChatAction> delegationActions(
+            com.dwurdy.straja.application.port.in.DelegationUseCase.SurfaceView view) {
+        if (view == null || (view.digest().isEmpty() && view.policies().isEmpty())) {
+            return List.of();
+        }
+        var actions = new java.util.ArrayList<ChatAction>();
+        actions.add(new ChatAction(
+                "Instituția decide — " + view.digest().size()
+                        + " în așteptare · jurnal decizii",
+                "delegation-ledger"));
+        if (view.digest() != null) {
+            for (var entry : view.digest()) {
+                if (entry == null || entry.reviewActionId() == null) continue;
+                String queue = entry.action() == null ? "?" : entry.action().displayName();
+                actions.add(new ChatAction(
+                        "◈ " + queue + " " + entry.requestId()
+                                + " — " + bounded(entry.subjectName(), 30),
+                        entry.reviewActionId()));
+            }
+        }
+        if (view.policies() == null) return List.copyOf(actions);
+        for (var policy : view.policies()) {
+            if (policy == null || policy.action() == null) continue;
+            var queue = policy.action();
+            parameterizedActionId("delegation-mode", queue.name())
+                    .ifPresent(id -> actions.add(new ChatAction(
+                            "⚙ " + queue.displayName() + ": "
+                                    + delegationModeLabel(policy), id)));
+            if (policy.mode() == com.dwurdy.straja.domain.model.DelegationMode.STANDING_ORDER) {
+                int options = 0;
+                if (view.orderOptions() != null) {
+                    for (var option : view.orderOptions()) {
+                        if (option == null || !queue.name().equals(option.action())) continue;
+                        if (++options > 6) break;
+                        parameterizedActionId("delegation-order-"
+                                        + queue.name().toLowerCase(java.util.Locale.ROOT),
+                                        option.filter())
+                                .ifPresent(id -> actions.add(new ChatAction(
+                                        "+ ordin: " + bounded(option.label(), 60), id)));
+                    }
+                }
+                if (policy.orders() != null) {
+                    for (var order : policy.orders()) {
+                        if (order == null || !order.active()) continue;
+                        parameterizedActionId("delegation-revoke", order.orderId())
+                                .ifPresent(id -> actions.add(new ChatAction(
+                                        "− retrage ordin " + order.orderId()
+                                                + " (" + order.filter() + ")", id)));
+                    }
+                }
+            }
+            if (policy.mode() == com.dwurdy.straja.domain.model.DelegationMode.TIMEOUT) {
+                parameterizedActionId("delegation-window", queue.name())
+                        .ifPresent(id -> actions.add(new ChatAction(
+                                "fereastră " + (policy.timeoutMillis() / 3_600_000L)
+                                        + "h — apasă pentru schimbare", id)));
+            }
+        }
+        return List.copyOf(actions);
+    }
+
+    private static String delegationModeLabel(
+            com.dwurdy.straja.application.port.in.DelegationUseCase.PolicyView policy) {
+        return switch (policy.mode()) {
+            case MANUAL -> "manual — un om decide";
+            case DIGEST -> "digest — se semnează în masă";
+            case STANDING_ORDER -> "ordin permanent — se rezolvă singure";
+            case TIMEOUT -> "presupus după " + (policy.timeoutMillis() / 3_600_000L) + "h";
+        };
+    }
+
+    private static String bounded(String value, int maxLength) {
+        if (value == null) return "";
+        return value.length() <= maxLength ? value : value.substring(0, maxLength - 3) + "...";
+    }
+
     public static Optional<ActionRef> parseActionId(String actionId) {
         if (actionId == null) return Optional.empty();
         int separator = actionId.indexOf(':');

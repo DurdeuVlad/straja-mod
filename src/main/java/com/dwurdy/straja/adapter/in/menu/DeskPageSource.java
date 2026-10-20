@@ -19,6 +19,13 @@ public sealed interface DeskPageSource {
     /** One page of the NPC's role surface grid (paged at 45 items). */
     record RolePage(int page) implements DeskPageSource {}
 
+    /**
+     * One section drawer of the Secretary desk (Issue 4): renders only the
+     * actions {@link DeskSections} classifies under {@code section}, paged at
+     * 45 like the role grid. Reached via {@code desk:section:<key>} nav ids.
+     */
+    record SectionPage(String section, int page) implements DeskPageSource {}
+
     /** A FAQ tree node: target kind is "root" | "menu" | "answer". */
     record FaqPage(NpcFaqSurface.Target target) implements DeskPageSource {}
 

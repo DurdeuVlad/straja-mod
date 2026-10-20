@@ -1938,6 +1938,12 @@ public final class NpcRoles {
                     actions.add(new NpcPlayerSurface.ChatAction("Dosare de arest", "arrest-record-admin"));
                     actions.add(new NpcPlayerSurface.ChatAction("Probe și lanțul custodiei", "evidence-list"));
                 }
+                // FUN-1 parity (NPCDM-4): the delegation console joins the
+                // native surface. The service itself gates the view to
+                // delegation authorities — the Comisar today — so viewers
+                // without authority receive an empty view and emit nothing.
+                actions.addAll(NpcPlayerSurface.delegationActions(
+                        runtime.delegation().surface(gateway)));
             }
             case JAILER -> actions.addAll(NpcPlayerSurface.custodyActions(
                     runtime.custodyRoleplay().availableActions(gateway),

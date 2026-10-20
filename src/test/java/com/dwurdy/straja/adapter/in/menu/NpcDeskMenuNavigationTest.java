@@ -97,4 +97,35 @@ class NpcDeskMenuNavigationTest {
         assertEquals(faq, nav.goToPage(9),
                 "FAQ pages are not paged — the source stays put");
     }
+
+    /**
+     * Issue-4: section drawers page like the role grid — the Comisar
+     * personnel roster can overflow 45 — while «Înapoi» and a cancelled
+     * confirm return to the drawer the player came from.
+     */
+    @Test
+    void sectionPagesRepageAndUnwindLikeTheGrid() {
+        var nav = new DeskNavigation();
+        nav.open(new DeskPageSource.SectionPage(DeskSections.COMISAR, 0));
+        assertEquals(1, nav.depth());
+        nav.goToPage(3);
+        assertEquals(new DeskPageSource.SectionPage(DeskSections.COMISAR, 3),
+                nav.current(), "arrows re-page the drawer, keeping its section");
+        nav.open(new DeskPageSource.ConfirmPage("admin-promote:uuid-1",
+                "Promovează Vlad", List.of("Schimbarea se aplică imediat.")));
+        assertEquals(new DeskPageSource.SectionPage(DeskSections.COMISAR, 3),
+                nav.back(), "NU returns to the roster page the click came from");
+        assertEquals(new DeskPageSource.RolePage(0), nav.back(),
+                "«Înapoi» from the drawer lands back on the desk top");
+    }
+
+    @Test
+    void sectionDrawerSurvivesOnlyInsideItsOwnSection() {
+        var nav = new DeskNavigation();
+        nav.open(new DeskPageSource.SectionPage(DeskSections.RECORDS, 1));
+        nav.open(new DeskPageSource.SectionPage(DeskSections.BOARD, 0));
+        assertEquals(new DeskPageSource.SectionPage(DeskSections.BOARD, 0), nav.current());
+        assertEquals(new DeskPageSource.SectionPage(DeskSections.RECORDS, 1), nav.back(),
+                "the trail keeps each drawer's own page");
+    }
 }

@@ -18,13 +18,15 @@ import net.minecraft.world.entity.player.Player;
  */
 public final class DeskMenuService {
     /**
-     * Routes with a shipped desk (Issues 1–3). Every other role keeps the
-     * chat surface until its desk issue lands — enabling one is a set entry.
-     * RECRUITER is listed for completeness: {@code routeFor} already folds
-     * the recruiter alias into {@code TRAINER}.
+     * Routes with a shipped desk (Issues 1–4) — every player-facing role now
+     * opens the chest menu; the set stays the explicit rollout switch in case
+     * a desk ever needs pulling back to chat. RECRUITER is listed for
+     * completeness: {@code routeFor} already folds the recruiter alias into
+     * {@code TRAINER}.
      */
     static final Set<NpcPlayerSurface.RoleRoute> ENABLED_ROUTES = Set.of(
             NpcPlayerSurface.RoleRoute.RECEPTIONIST,
+            NpcPlayerSurface.RoleRoute.SECRETARY,
             NpcPlayerSurface.RoleRoute.TRAINER,
             NpcPlayerSurface.RoleRoute.RECRUITER,
             NpcPlayerSurface.RoleRoute.JAILER,
@@ -46,8 +48,8 @@ public final class DeskMenuService {
                 return false;
             }
             if (!enabled() || StrajaRuntime.get() == null) return false;
-            // Roles outside ENABLED_ROUTES keep the chat surface until their
-            // desk issue lands (Secretary — Issue 4).
+            // The rollout set covers every shipped desk; a route outside it
+            // falls back to the chat surface untouched.
             if (!ENABLED_ROUTES.contains(NpcPlayerSurface.routeFor(roleId))) {
                 return false;
             }

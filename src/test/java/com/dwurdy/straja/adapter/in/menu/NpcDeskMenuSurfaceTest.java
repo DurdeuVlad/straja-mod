@@ -25,7 +25,7 @@ class NpcDeskMenuSurfaceTest {
     private static final List<String> PURE_FILES = List.of(
             "DeskIcon.java", "DeskButton.java", "DeskPage.java",
             "DeskPageSource.java", "DeskLayout.java", "DeskNavigation.java",
-            "DeskActionStyle.java");
+            "DeskActionStyle.java", "DeskSections.java");
 
     @Test
     void pureViewModelStaysFreeOfPlatformImports() throws IOException {
@@ -89,14 +89,16 @@ class NpcDeskMenuSurfaceTest {
     }
 
     /**
-     * Issue-3 desk rollout: Receptionist, Instructor (TRAINER plus its
-     * RECRUITER alias), Jailer, Inspector, Archivist and Armorer open the
-     * chest menu; SECRETARY still falls back to chat until Issue 4 lands.
+     * Issue-4 completes the desk rollout: all eight player-facing routes —
+     * Receptionist, Secretary, Instructor (TRAINER plus its RECRUITER
+     * alias), Jailer, Inspector, Archivist and Armorer — open the chest
+     * menu; only UNKNOWN stays on the chat fallback.
      */
     @Test
     void enabledRoutesCoverExactlyTheShippedDesks() {
         assertEquals(java.util.Set.of(
                         com.dwurdy.straja.adapter.in.npc.NpcPlayerSurface.RoleRoute.RECEPTIONIST,
+                        com.dwurdy.straja.adapter.in.npc.NpcPlayerSurface.RoleRoute.SECRETARY,
                         com.dwurdy.straja.adapter.in.npc.NpcPlayerSurface.RoleRoute.TRAINER,
                         com.dwurdy.straja.adapter.in.npc.NpcPlayerSurface.RoleRoute.RECRUITER,
                         com.dwurdy.straja.adapter.in.npc.NpcPlayerSurface.RoleRoute.JAILER,
@@ -107,8 +109,11 @@ class NpcDeskMenuSurfaceTest {
         // The recruiter role id folds into the Instructor desk through routing.
         assertTrue(DeskMenuService.ENABLED_ROUTES.contains(
                 com.dwurdy.straja.adapter.in.npc.NpcPlayerSurface.routeFor("recruiter")));
-        assertFalse(DeskMenuService.ENABLED_ROUTES.contains(
+        assertTrue(DeskMenuService.ENABLED_ROUTES.contains(
                 com.dwurdy.straja.adapter.in.npc.NpcPlayerSurface.routeFor("secretary")),
-                "Secretary stays on the chat surface until Issue 4");
+                "Secretary opens the sectioned desk from Issue 4");
+        assertFalse(DeskMenuService.ENABLED_ROUTES.contains(
+                com.dwurdy.straja.adapter.in.npc.NpcPlayerSurface.RoleRoute.UNKNOWN),
+                "an unconfigured NPC keeps the chat fallback");
     }
 }
