@@ -18,7 +18,7 @@ import net.minecraft.world.entity.player.Player;
  */
 public final class DeskMenuService {
     /**
-     * Routes with a shipped desk (Issues 1–2). Every other role keeps the
+     * Routes with a shipped desk (Issues 1–3). Every other role keeps the
      * chat surface until its desk issue lands — enabling one is a set entry.
      * RECRUITER is listed for completeness: {@code routeFor} already folds
      * the recruiter alias into {@code TRAINER}.
@@ -28,7 +28,9 @@ public final class DeskMenuService {
             NpcPlayerSurface.RoleRoute.TRAINER,
             NpcPlayerSurface.RoleRoute.RECRUITER,
             NpcPlayerSurface.RoleRoute.JAILER,
-            NpcPlayerSurface.RoleRoute.INSPECTOR);
+            NpcPlayerSurface.RoleRoute.INSPECTOR,
+            NpcPlayerSurface.RoleRoute.ARCHIVIST,
+            NpcPlayerSurface.RoleRoute.ARMORER);
 
     private DeskMenuService() {}
 
@@ -45,7 +47,7 @@ public final class DeskMenuService {
             }
             if (!enabled() || StrajaRuntime.get() == null) return false;
             // Roles outside ENABLED_ROUTES keep the chat surface until their
-            // desk issues land (Secretary, Archivist, Armorer).
+            // desk issue lands (Secretary — Issue 4).
             if (!ENABLED_ROUTES.contains(NpcPlayerSurface.routeFor(roleId))) {
                 return false;
             }

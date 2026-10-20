@@ -129,6 +129,16 @@ public final class DeskActionStyle {
             Map.entry("join-review:", "straja:seal_stamp"),
             Map.entry("archive-sheet-read:", "straja:archive_document"),
             Map.entry("archive-folder-read:", "straja:archive_folder"),
+            Map.entry("archive-folder-issue:", "straja:archive_folder"),
+            Map.entry("archive-sheet-new:", "straja:carbon_paper"),
+            Map.entry("archive-sheet-edit:", "straja:carbon_paper"),
+            Map.entry("archive-recipients:", "straja:official_envelope"),
+            Map.entry("archive-sheet-submit:", "straja:seal_stamp"),
+            Map.entry("archive-sheet-sign:", "straja:archive_stamp"),
+            Map.entry("archive-sheet-copy:", "straja:carbon_paper"),
+            Map.entry("archive-sheet-envelope:", "straja:official_envelope"),
+            Map.entry("archive-sheet-issue:", "straja:official_document"),
+            Map.entry("archive-sheet-revoke:", "minecraft:barrier"),
             Map.entry("archive-", "straja:archive_document"),
             Map.entry("report-review:", "straja:seal_stamp"),
             Map.entry("petition-read:", "straja:archive_folder"),
@@ -137,6 +147,8 @@ public final class DeskActionStyle {
             Map.entry("incident-", "straja:alarm_whistle"),
             Map.entry("dispatch-", "straja:alarm_whistle"),
             Map.entry("bolo-cancel:", "minecraft:barrier"),
+            Map.entry("evidence-return:", "straja:confiscation_receipt"),
+            Map.entry("evidence-destroy:", "minecraft:barrier"),
             Map.entry("evidence-", "straja:evidence_bag"),
             Map.entry("admin-", "straja:seal_stamp"),
             Map.entry("tool-", "straja:npc_wand"),
@@ -203,7 +215,8 @@ public final class DeskActionStyle {
             "armory-buy:", "armory-reserve:",
             "admin-promote:", "admin-demote:", "admin-suspend:",
             "admin-fire:", "admin-reinstate:", "fine-task-arrest:",
-            "bolo-cancel:", "evidence-return:");
+            "bolo-cancel:", "evidence-return:", "evidence-deposit:",
+            "archive-sheet-submit:", "archive-sheet-revoke:");
 
     /** The icon stack for one surface action; label passes through as the name. */
     public static DeskIcon icon(String label, String actionId) {
@@ -294,6 +307,15 @@ public final class DeskActionStyle {
         }
         if (actionId.startsWith("evidence-return:")) {
             return List.of("Piesa se înapoiază imediat", "proprietarului.");
+        }
+        if (actionId.startsWith("evidence-deposit:")) {
+            return List.of("Proba intră în depozitul Arhivei", "și iese din custodia ta.");
+        }
+        if (actionId.startsWith("archive-sheet-submit:")) {
+            return List.of("Foaia pleacă la semnat și", "nu se mai poate edita.");
+        }
+        if (actionId.startsWith("archive-sheet-revoke:")) {
+            return List.of("Actul semnat este revocat;", "nu mai poate fi folosit.");
         }
         return List.of("Acțiunea se execută imediat", "și nu se poate anula.");
     }

@@ -700,6 +700,83 @@ class NpcInteractionSurfaceTest {
                                 .AvailableAction(null, "A-1"), null)).isEmpty());
     }
 
+    private static com.dwurdy.straja.application.port.in.ArmoryUseCase.Offer
+            armoryOffer(String key, String itemId, int count, int cost,
+                        int minRank, boolean reserve) {
+        return new com.dwurdy.straja.application.port.in.ArmoryUseCase.Offer(
+                key, itemId, count, cost, minRank, reserve);
+    }
+
+    @Test
+    void armoryActionsMapperEmitsFriendlyLabelsAndExactIds() {
+        var actions = NpcPlayerSurface.armoryActions(java.util.List.of(
+                armoryOffer("baton", "straja:baton", 1, 200, 2, false),
+                armoryOffer("sword", "minecraft:iron_sword", 1, 3, 1, true)));
+
+        assertEquals(java.util.List.of("armory-buy:baton", "armory-reserve:sword"),
+                actions.stream().map(NpcPlayerSurface.ChatAction::actionId).toList());
+        assertEquals("Cumpără 1× baston de serviciu — 200 monede",
+                actions.get(0).label());
+        assertEquals("Rezervă 1× sabie de fier — 3 puncte de rechiziție",
+                actions.get(1).label());
+    }
+
+    @Test
+    void armoryActionsSkipMalformedKeysAndPrettifyUnknownItems() {
+        var actions = NpcPlayerSurface.armoryActions(java.util.List.of(
+                armoryOffer("bad:key", "minecraft:dirt", 1, 1, 1, false),
+                armoryOffer(null, "straja:baton", 1, 1, 1, false),
+                armoryOffer("mace", "minecraft:mace", 2, 50, 1, false)));
+
+        assertEquals(java.util.List.of("armory-buy:mace"),
+                actions.stream().map(NpcPlayerSurface.ChatAction::actionId).toList());
+        assertEquals("Cumpără 2× mace — 50 monede", actions.get(0).label());
+        assertTrue(NpcPlayerSurface.armoryActions(null).isEmpty());
+        assertTrue(NpcPlayerSurface.armoryActions(java.util.List.of()).isEmpty());
+    }
+
+    private static com.dwurdy.straja.domain.model.EvidenceRecord evidence(
+            String id, com.dwurdy.straja.domain.model.EvidenceStatus status,
+            String itemId, int amount, String owner) {
+        var record = new com.dwurdy.straja.domain.model.EvidenceRecord();
+        record.id = id;
+        record.status = status;
+        record.itemId = itemId;
+        record.itemName = itemId;
+        record.amount = amount;
+        record.sourcePlayerName = owner;
+        return record;
+    }
+
+    @Test
+    void evidenceActionsMapperLabelsCarryIdItemAndOwner() {
+        var actions = NpcPlayerSurface.evidenceActions(java.util.List.of(
+                evidence("E-1",
+                        com.dwurdy.straja.domain.model.EvidenceStatus.IN_GUARD_CUSTODY,
+                        "minecraft:iron_sword", 3, "Vlad"),
+                evidence("E-2",
+                        com.dwurdy.straja.domain.model.EvidenceStatus.DEPOSITED,
+                        "straja:baton", 1, "Maria"),
+                evidence("E-3",
+                        com.dwurdy.straja.domain.model.EvidenceStatus.SEIZED,
+                        "straja:rope", 1, "")));
+
+        assertEquals(java.util.List.of(
+                        "evidence-deposit:E-1", "evidence-transfer:E-1",
+                        "evidence-destroy:E-1", "evidence-return:E-2",
+                        "evidence-transfer:E-2", "evidence-destroy:E-2"),
+                actions.stream().map(NpcPlayerSurface.ChatAction::actionId).toList());
+        assertEquals("Depune proba E-1 — 3× sabie de fier", actions.get(0).label());
+        assertEquals("Restituie E-2 către Maria — baston de serviciu",
+                actions.get(3).label());
+        assertEquals("Distruge E-2 — baston de serviciu", actions.get(5).label());
+        for (var action : actions) {
+            assertFalse(action.label().contains("/straja"),
+                    () -> action.label() + " must not reference typed commands");
+        }
+        assertTrue(NpcPlayerSurface.evidenceActions(null).isEmpty());
+    }
+
     private static com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.AvailableAction
             adminAction(com.dwurdy.straja.application.port.in.AdminRoleplayUseCase.Action action,
                         String memberId, String memberName) {

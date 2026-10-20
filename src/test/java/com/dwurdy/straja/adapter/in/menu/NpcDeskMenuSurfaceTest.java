@@ -89,10 +89,9 @@ class NpcDeskMenuSurfaceTest {
     }
 
     /**
-     * Issue-2 desk rollout: Receptionist, Instructor (TRAINER plus its
-     * RECRUITER alias), Jailer and Inspector open the chest menu; every other
-     * route — SECRETARY, ARMORER, ARCHIVIST — still falls back to chat until
-     * its own issue lands.
+     * Issue-3 desk rollout: Receptionist, Instructor (TRAINER plus its
+     * RECRUITER alias), Jailer, Inspector, Archivist and Armorer open the
+     * chest menu; SECRETARY still falls back to chat until Issue 4 lands.
      */
     @Test
     void enabledRoutesCoverExactlyTheShippedDesks() {
@@ -101,10 +100,15 @@ class NpcDeskMenuSurfaceTest {
                         com.dwurdy.straja.adapter.in.npc.NpcPlayerSurface.RoleRoute.TRAINER,
                         com.dwurdy.straja.adapter.in.npc.NpcPlayerSurface.RoleRoute.RECRUITER,
                         com.dwurdy.straja.adapter.in.npc.NpcPlayerSurface.RoleRoute.JAILER,
-                        com.dwurdy.straja.adapter.in.npc.NpcPlayerSurface.RoleRoute.INSPECTOR),
+                        com.dwurdy.straja.adapter.in.npc.NpcPlayerSurface.RoleRoute.INSPECTOR,
+                        com.dwurdy.straja.adapter.in.npc.NpcPlayerSurface.RoleRoute.ARCHIVIST,
+                        com.dwurdy.straja.adapter.in.npc.NpcPlayerSurface.RoleRoute.ARMORER),
                 DeskMenuService.ENABLED_ROUTES);
         // The recruiter role id folds into the Instructor desk through routing.
         assertTrue(DeskMenuService.ENABLED_ROUTES.contains(
                 com.dwurdy.straja.adapter.in.npc.NpcPlayerSurface.routeFor("recruiter")));
+        assertFalse(DeskMenuService.ENABLED_ROUTES.contains(
+                com.dwurdy.straja.adapter.in.npc.NpcPlayerSurface.routeFor("secretary")),
+                "Secretary stays on the chat surface until Issue 4");
     }
 }

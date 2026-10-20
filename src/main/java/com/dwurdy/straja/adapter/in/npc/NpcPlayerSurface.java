@@ -1,6 +1,7 @@
 package com.dwurdy.straja.adapter.in.npc;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -88,6 +89,48 @@ public final class NpcPlayerSurface {
     /** Max actions on the primary surface page, including the «Mai multe…» link. */
     static final int PRIMARY_CAP = 6;
     private static final String FAQ_SPEC = "@faq";
+
+    /**
+     * Friendly Romanian item names for desk rows (armory offers, evidence
+     * pieces). Registry ids not listed here degrade to a prettified path —
+     * see {@link #itemLabel} — so configurable offers never print raw ids.
+     */
+    private static final Map<String, String> ITEM_LABELS = Map.ofEntries(
+            Map.entry("straja:baton", "baston de serviciu"),
+            Map.entry("straja:whip", "bici de serviciu"),
+            Map.entry("straja:cuffs", "cătușe"),
+            Map.entry("straja:cuff_key", "cheie de cătușe"),
+            Map.entry("straja:guard_uniform", "uniformă de străjer"),
+            Map.entry("straja:iou_note", "bon de favoare"),
+            Map.entry("straja:evidence_bag", "geantă de dovezi"),
+            Map.entry("straja:confiscation_receipt", "chitanță de confiscare"),
+            Map.entry("straja:rope", "frânghie"),
+            Map.entry("straja:head_sack", "sac de cap"),
+            Map.entry("straja:lockpick", "speraclă"),
+            Map.entry("straja:crowbar", "rangă"),
+            Map.entry("straja:bolt_cutters", "foarfecă"),
+            Map.entry("straja:alarm_whistle", "fluier de alarmă"),
+            Map.entry("minecraft:iron_sword", "sabie de fier"),
+            Map.entry("minecraft:diamond_sword", "sabie de diamant"),
+            Map.entry("minecraft:diamond_chestplate", "platoșă de diamant"),
+            Map.entry("minecraft:shield", "scut"));
+
+    /**
+     * Registry id → player-facing noun: the mapped Romanian name, else the
+     * id's path with underscores spaced. A name (no namespace) passes
+     * through unchanged.
+     */
+    static String itemLabel(String itemId) {
+        if (itemId == null || itemId.isBlank()) return "obiect";
+        String known = ITEM_LABELS.get(itemId.trim());
+        if (known != null) return known;
+        String path = itemId.trim();
+        int separator = path.indexOf(':');
+        if (separator >= 0 && separator < path.length() - 1) {
+            path = path.substring(separator + 1);
+        }
+        return path.replace('_', ' ');
+    }
 
     /** Ordering phases derived from the player's Straja state. */
     enum SurfacePhase { CIVIL, APPLICANT, MEMBER }
@@ -430,8 +473,10 @@ public final class NpcPlayerSurface {
         for (var offer : offers) {
             if (offer == null || offer.key() == null) continue;
             String label = offer.reserve()
-                    ? offer.count() + "× " + offer.itemId() + " — " + offer.cost() + " pct rechiziție"
-                    : offer.count() + "× " + offer.itemId() + " — " + offer.cost() + " monede";
+                    ? "Rezervă " + offer.count() + "× " + itemLabel(offer.itemId())
+                            + " — " + offer.cost() + " puncte de rechiziție"
+                    : "Cumpără " + offer.count() + "× " + itemLabel(offer.itemId())
+                            + " — " + offer.cost() + " monede";
             parameterizedActionId(offer.reserve() ? "armory-reserve" : "armory-buy", offer.key())
                     .ifPresent(id -> actions.add(new ChatAction(label, id)));
         }
@@ -720,15 +765,15 @@ public final class NpcPlayerSurface {
                 case EDIT_SHEET -> parameterizedActionId("archive-sheet-edit", id)
                         .ifPresent(a -> actions.add(new ChatAction("Editează foaia " + id, a)));
                 case SET_RECIPIENTS -> parameterizedActionId("archive-recipients", id)
-                        .ifPresent(a -> actions.add(new ChatAction("Destinatari " + id, a)));
+                        .ifPresent(a -> actions.add(new ChatAction("Destinatari pentru " + id, a)));
                 case SUBMIT_SHEET -> parameterizedActionId("archive-sheet-submit", id)
                         .ifPresent(a -> actions.add(new ChatAction("Trimite la semnat " + id, a)));
                 case SIGN_SHEET -> parameterizedActionId("archive-sheet-sign", id)
                         .ifPresent(a -> actions.add(new ChatAction("Semnează actul " + id, a)));
                 case COPY_SHEET -> parameterizedActionId("archive-sheet-copy", id)
-                        .ifPresent(a -> actions.add(new ChatAction("Copie indigo " + id, a)));
+                        .ifPresent(a -> actions.add(new ChatAction("Copie indigo a actului " + id, a)));
                 case PACK_ENVELOPE -> parameterizedActionId("archive-sheet-envelope", id)
-                        .ifPresent(a -> actions.add(new ChatAction("Plic oficial " + id, a)));
+                        .ifPresent(a -> actions.add(new ChatAction("Plic oficial pentru " + id, a)));
                 case ISSUE_DOCUMENT -> parameterizedActionId("archive-sheet-issue", id)
                         .ifPresent(a -> actions.add(new ChatAction("Emite actul " + id, a)));
                 case REVOKE_SHEET -> parameterizedActionId("archive-sheet-revoke", id)
@@ -867,25 +912,47 @@ public final class NpcPlayerSurface {
         var actions = new java.util.ArrayList<ChatAction>();
         for (var record : records) {
             if (record == null) continue;
-            String operation = record.status
-                    == com.dwurdy.straja.domain.model.EvidenceStatus.IN_GUARD_CUSTODY
-                    ? "evidence-deposit"
-                    : record.status == com.dwurdy.straja.domain.model.EvidenceStatus.DEPOSITED
-                    ? "evidence-return" : "";
-            if (!operation.isBlank()) {
-                parameterizedActionId(operation, record.id)
+            boolean inCustody = record.status
+                    == com.dwurdy.straja.domain.model.EvidenceStatus.IN_GUARD_CUSTODY;
+            boolean deposited = record.status
+                    == com.dwurdy.straja.domain.model.EvidenceStatus.DEPOSITED;
+            if (inCustody) {
+                parameterizedActionId("evidence-deposit", record.id)
                         .ifPresent(id -> actions.add(new ChatAction(
-                                ("evidence-deposit".equals(operation) ? "Depune " : "Restituie ") + record.id, id)));
+                                "Depune proba " + record.id + evidenceSuffix(record), id)));
+            } else if (deposited) {
+                parameterizedActionId("evidence-return", record.id)
+                        .ifPresent(id -> actions.add(new ChatAction(
+                                "Restituie " + record.id + evidenceOwner(record)
+                                        + evidenceSuffix(record), id)));
             }
-            if (record.status == com.dwurdy.straja.domain.model.EvidenceStatus.IN_GUARD_CUSTODY
-                    || record.status == com.dwurdy.straja.domain.model.EvidenceStatus.DEPOSITED) {
+            if (inCustody || deposited) {
                 parameterizedActionId("evidence-transfer", record.id)
-                        .ifPresent(id -> actions.add(new ChatAction("Transferă " + record.id, id)));
+                        .ifPresent(id -> actions.add(new ChatAction(
+                                "Transferă " + record.id + evidenceSuffix(record), id)));
                 parameterizedActionId("evidence-destroy", record.id)
-                        .ifPresent(id -> actions.add(new ChatAction("Distruge " + record.id, id)));
+                        .ifPresent(id -> actions.add(new ChatAction(
+                                "Distruge " + record.id + evidenceSuffix(record), id)));
             }
         }
         return List.copyOf(actions);
+    }
+
+    /** « — 3× sabie de fier» so a desk row says what the evidence piece is. */
+    private static String evidenceSuffix(
+            com.dwurdy.straja.domain.model.EvidenceRecord record) {
+        String raw = record.itemName != null && !record.itemName.isBlank()
+                ? record.itemName : record.itemId;
+        if (raw == null || raw.isBlank()) return "";
+        return " — " + (record.amount > 1 ? record.amount + "× " : "")
+                + itemLabel(raw);
+    }
+
+    /** « către Vlad» names the return row's owner; empty when unknown. */
+    private static String evidenceOwner(
+            com.dwurdy.straja.domain.model.EvidenceRecord record) {
+        return record.sourcePlayerName == null || record.sourcePlayerName.isBlank()
+                ? "" : " către " + record.sourcePlayerName;
     }
 
     /** §14 Comisar admin actions on the Secretary surface. */

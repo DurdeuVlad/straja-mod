@@ -64,7 +64,10 @@ class NpcDeskMenuStyleTest {
     @ParameterizedTest
     @ValueSource(strings = {"fine-pay:F-1", "fine-refuse:F-2",
             "complaint-confirm:C-1", "room-release",
-            "custody-accept:C7", "custody-refuse:C7", "custody-release:uuid-1"})
+            "custody-accept:C7", "custody-refuse:C7", "custody-release:uuid-1",
+            "armory-buy:baton", "armory-reserve:sword",
+            "evidence-deposit:E-1", "evidence-return:E-2",
+            "archive-sheet-submit:A-1", "archive-sheet-revoke:A-1"})
     void immediateMutationsRequireTheConfirmPage(String actionId) {
         assertTrue(DeskActionStyle.needsConfirm(actionId));
         assertTrue(DeskActionStyle.lore(actionId).contains("Cere confirmare."));
@@ -90,7 +93,16 @@ class NpcDeskMenuStyleTest {
     @ValueSource(strings = {"complaint-withdraw:C-1", "fine-appeal:F-1",
             "join-review:JR-1", "rules", "application-submit", "guard-status",
             "custody-wake-downed", "custody-remove-head-sack", "cuffs-item",
-            "arrest-handoff", "quiz-answer", "inspect-documents"})
+            "arrest-handoff", "quiz-answer", "inspect-documents",
+            "archive-folder-create", "archive-folder-issue:D-1",
+            "archive-sheet-new:D-1", "archive-sheet-edit:A-1",
+            "archive-recipients:A-1", "archive-sheet-sign:A-1",
+            "archive-sheet-copy:A-1", "archive-sheet-envelope:A-1",
+            "archive-sheet-issue:A-1", "archive-folder-read:D-1",
+            "archive-sheet-read:A-1", "archive-list", "evidence-list",
+            "evidence-case-view", "evidence-transfer:E-1",
+            "evidence-destroy:E-1", "armory-status", "v2-document-status",
+            "v2-equipment-status", "v2-professional-work", "duty-kit"})
     void formAndReadOnlyActionsSkipTheConfirmPage(String actionId) {
         assertFalse(DeskActionStyle.needsConfirm(actionId),
                 actionId + " must not be confirm-gated");
@@ -110,6 +122,91 @@ class NpcDeskMenuStyleTest {
         assertFalse(icon.itemId().isBlank());
         assertTrue(!"minecraft:paper".equals(icon.itemId()),
                 actionId + " deserves a themed icon: " + icon.itemId());
+    }
+
+    /** Issue-3 desks: no Archivist/Armorer button renders bare paper. */
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "archive-list", "archive-folder-create", "v2-document-status",
+            "evidence-list", "evidence-case-view",
+            "archive-folder-read:D-1", "archive-folder-issue:D-1",
+            "archive-sheet-new:D-1", "archive-sheet-read:A-1",
+            "archive-sheet-edit:A-1", "archive-recipients:A-1",
+            "archive-sheet-submit:A-1", "archive-sheet-sign:A-1",
+            "archive-sheet-copy:A-1", "archive-sheet-envelope:A-1",
+            "archive-sheet-issue:A-1", "archive-sheet-revoke:A-1",
+            "evidence-deposit:E-1", "evidence-return:E-1",
+            "evidence-transfer:E-1", "evidence-destroy:E-1",
+            "armory-status", "v2-equipment-status", "v2-professional-work",
+            "duty-kit", "armory-buy:baton", "armory-reserve:sword"})
+    void issueThreeDesksNeverShowGenericPaper(String actionId) {
+        var icon = DeskActionStyle.icon("Eticheta", actionId);
+        assertFalse(icon.itemId().isBlank());
+        assertTrue(!"minecraft:paper".equals(icon.itemId()),
+                actionId + " deserves a themed icon: " + icon.itemId());
+    }
+
+    @Test
+    void archivistAndArmorerIconsMatchTheActionSemantics() {
+        assertEquals("straja:archive_folder",
+                DeskActionStyle.itemFor("archive-folder-read:D-1"));
+        assertEquals("straja:archive_folder",
+                DeskActionStyle.itemFor("archive-folder-issue:D-1"));
+        assertEquals("straja:archive_document",
+                DeskActionStyle.itemFor("archive-sheet-read:A-1"));
+        assertEquals("straja:carbon_paper",
+                DeskActionStyle.itemFor("archive-sheet-edit:A-1"));
+        assertEquals("straja:carbon_paper",
+                DeskActionStyle.itemFor("archive-sheet-copy:A-1"));
+        assertEquals("straja:official_envelope",
+                DeskActionStyle.itemFor("archive-sheet-envelope:A-1"));
+        assertEquals("straja:official_document",
+                DeskActionStyle.itemFor("archive-sheet-issue:A-1"));
+        assertEquals("straja:seal_stamp",
+                DeskActionStyle.itemFor("archive-sheet-submit:A-1"));
+        assertEquals("straja:archive_stamp",
+                DeskActionStyle.itemFor("archive-sheet-sign:A-1"));
+        assertEquals("minecraft:barrier",
+                DeskActionStyle.itemFor("archive-sheet-revoke:A-1"));
+        assertEquals("straja:evidence_bag",
+                DeskActionStyle.itemFor("evidence-deposit:E-1"));
+        assertEquals("straja:evidence_bag",
+                DeskActionStyle.itemFor("evidence-transfer:E-1"));
+        assertEquals("straja:confiscation_receipt",
+                DeskActionStyle.itemFor("evidence-return:E-1"));
+        assertEquals("minecraft:barrier",
+                DeskActionStyle.itemFor("evidence-destroy:E-1"));
+        assertEquals("minecraft:gold_ingot",
+                DeskActionStyle.itemFor("armory-buy:baton"));
+        assertEquals("straja:iou_note",
+                DeskActionStyle.itemFor("armory-reserve:sword"));
+        assertEquals("straja:baton", DeskActionStyle.itemFor("armory-status"));
+        assertEquals("straja:guard_uniform", DeskActionStyle.itemFor("duty-kit"));
+    }
+
+    /** Sheet submit/revoke and evidence custody moves are one-way — spell it. */
+    @Test
+    void issueThreeConsequencesSpellTheOutcome() {
+        assertTrue(DeskActionStyle.consequence("archive-sheet-submit:A-1").stream()
+                .anyMatch(line -> line.contains("semnat")));
+        assertTrue(DeskActionStyle.consequence("archive-sheet-revoke:A-1").stream()
+                .anyMatch(line -> line.contains("revocat")));
+        assertTrue(DeskActionStyle.consequence("evidence-deposit:E-1").stream()
+                .anyMatch(line -> line.contains("depozitul")));
+        assertTrue(DeskActionStyle.consequence("evidence-return:E-1").stream()
+                .anyMatch(line -> line.contains("proprietarului")));
+        assertTrue(DeskActionStyle.consequence("armory-buy:baton").stream()
+                .anyMatch(line -> line.contains("monede")));
+        assertTrue(DeskActionStyle.consequence("armory-reserve:sword").stream()
+                .anyMatch(line -> line.contains("rechiziție")));
+    }
+
+    @Test
+    void issueThreeRoleHeadersUseTheGuiThemeFallbackChain() {
+        assertEquals("straja:archive_folder",
+                DeskActionStyle.header("archivist", "Arhivă", "x").itemId());
+        assertEquals("straja:baton",
+                DeskActionStyle.header("armorer", "Armurier", "x").itemId());
     }
 
     @Test
