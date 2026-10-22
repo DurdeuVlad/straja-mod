@@ -200,14 +200,13 @@ public final class DeskActionStyle {
             "audience-status", "audience-review-list", "admin-personnel",
             "admin-roster", "admin-policies", "admin-emergency-status",
             "armory-status", "mission-list", "mission-draft-status",
-            "mission-template-list", "inspect-documents",
-            "tool-cell-confirm", "tool-survey-all");
+            "mission-template-list", "inspect-documents");
 
     /** Parameterized ops whose result is a chat dump. */
     private static final Set<String> CHAT_PREFIXES = Set.of(
             "admin-dossier:", "petition-read:", "join-read:",
             "archive-folder-read:", "archive-sheet-read:",
-            "tool-npc-assign:", "tool-npc-record:", "tool-survey-stamp:");
+            "tool-npc-record:");
 
     /** Ids that hand the player a physical item. */
     private static final Set<String> GIVE_ACTIONS = Set.of(
@@ -260,6 +259,11 @@ public final class DeskActionStyle {
             return List.copyOf(lines);
         }
         if (actionId.startsWith("faq:")) return faqLore(actionId);
+        // FUN-11 parole docket rows are display-only: nothing dispatches on
+        // them yet, so they must not promise an execution.
+        if (actionId.startsWith("parole-review:")) {
+            return List.of("Doar informativ — nu execută", "o acțiune.");
+        }
         if (isForm(actionId)) return List.of("Deschide formularul.");
         if (isGive(actionId)) return List.of("Primești obiectul.", "Se execută imediat.");
         if (isChat(actionId)) return List.of("Afișează rezultatul în chat.");

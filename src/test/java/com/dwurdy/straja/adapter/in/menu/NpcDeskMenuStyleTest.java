@@ -351,13 +351,21 @@ class NpcDeskMenuStyleTest {
 
     @Test
     void toolChatOutputsAnnounceTheChatResult() {
+        // Only the NPC record dump reads rather than writes — the only
+        // tool op whose result lands in chat.
+        assertTrue(DeskActionStyle.lore("tool-npc-record:uuid-1").stream()
+                        .anyMatch(line -> line.contains("chat")),
+                "tool-npc-record must say the result goes to chat");
+        // Mutating tool ops must not mislabel as chat output: cell creation,
+        // location stamping, and NPC reassignment all write state.
         for (String id : new String[]{"tool-cell-confirm", "tool-survey-all",
-                "tool-npc-assign:uuid-1-jailer", "tool-npc-record:uuid-1",
-                "tool-survey-stamp:hq"}) {
-            assertTrue(DeskActionStyle.lore(id).stream()
-                            .anyMatch(line -> line.contains("chat")),
-                    id + " must say the result goes to chat");
+                "tool-npc-assign:uuid-1-jailer", "tool-survey-stamp:hq"}) {
+            assertTrue(DeskActionStyle.lore(id).contains("Se execută imediat."),
+                    id + " mutates and must say so");
         }
+        // Display-only rows must not promise an execution.
+        assertTrue(DeskActionStyle.lore("parole-review:PH-1")
+                .contains("Doar informativ — nu execută"));
         assertTrue(DeskActionStyle.lore("tool-npc-rename:uuid-1")
                 .contains("Deschide formularul."));
         assertTrue(DeskActionStyle.lore("tool-npc-skin:uuid-1")

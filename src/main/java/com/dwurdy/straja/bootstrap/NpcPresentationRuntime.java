@@ -7,7 +7,7 @@ import com.dwurdy.straja.adapter.out.persistence.NbtStore;
 import com.dwurdy.straja.adapter.out.persistence.StrajaDataProvider;
 import com.dwurdy.straja.adapter.out.persistence.StoreAccess;
 import com.dwurdy.straja.adapter.out.npc.chestmenu.ChestMenuNpcSurfaceProvider;
-import com.dwurdy.straja.adapter.out.npc.content.NpcContentProfileJsonLoader;
+import com.dwurdy.straja.adapter.out.npc.content.NpcContentCatalogLoader;
 import com.dwurdy.straja.adapter.out.npc.customnpcs.CustomNpcsNpcSurfaceProvider;
 import com.dwurdy.straja.adapter.out.npc.debug.DebugTextNpcSurfaceProvider;
 import com.dwurdy.straja.application.port.in.NpcSurfaceActionTokenIssuer;
@@ -31,15 +31,11 @@ import com.dwurdy.straja.domain.model.FormField;
 import com.dwurdy.straja.domain.model.NpcActionResult;
 import com.dwurdy.straja.domain.model.NpcBinding;
 import com.dwurdy.straja.domain.model.NpcContentId;
-import com.dwurdy.straja.domain.model.NpcContentProfile;
 import com.dwurdy.straja.domain.model.NpcProviderId;
 import com.dwurdy.straja.domain.model.NpcProviderResult;
 import com.dwurdy.straja.domain.model.NpcSurfaceSnapshot;
 import com.dwurdy.straja.domain.model.GuardState;
 import com.dwurdy.straja.config.StrajaServerConfig;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -82,7 +78,7 @@ public final class NpcPresentationRuntime {
                 providers,
                 (playerId, binding) -> playerAtBinding(server, playerId, binding),
                 request -> dispatch(server, request));
-        NpcContentCatalog catalog = loadCatalog();
+        NpcContentCatalog catalog = NpcContentCatalogLoader.load();
         StoreAccess stores = name -> new NbtStore(StrajaDataProvider.get(server, name));
         NpcBindingLifecycleService lifecycle = new NpcBindingLifecycleService(
                 providers,
@@ -324,62 +320,6 @@ public final class NpcPresentationRuntime {
             case UNAVAILABLE -> NpcProviderResult.unavailable(result.message());
             case UNKNOWN -> NpcProviderResult.unknown(result.message());
         };
-    }
-
-    private static NpcContentCatalog loadCatalog() {
-        try (var stream = NpcPresentationRuntime.class.getClassLoader().getResourceAsStream(
-                "data/straja/npc/straja.reception.admission.json")) {
-            if (stream == null) {
-                throw new IllegalStateException("default NPC profile resource is missing");
-            }
-            var loader = new NpcContentProfileJsonLoader();
-            NpcContentProfile reception = loader.load(
-                    new InputStreamReader(stream, StandardCharsets.UTF_8));
-            try (var instructorStream = NpcPresentationRuntime.class.getClassLoader().getResourceAsStream(
-                    "data/straja/npc/straja.instructor.admission.json")) {
-                if (instructorStream == null) {
-                    throw new IllegalStateException("instructor NPC profile resource is missing");
-                }
-                NpcContentProfile instructor = loader.load(
-                        new InputStreamReader(instructorStream, StandardCharsets.UTF_8));
-                try (var secretaryStream = NpcPresentationRuntime.class.getClassLoader().getResourceAsStream(
-                        "data/straja/npc/straja.secretary.workflows.json")) {
-                    if (secretaryStream == null) {
-                        throw new IllegalStateException("secretary NPC profile resource is missing");
-                    }
-                    NpcContentProfile secretary = loader.load(
-                            new InputStreamReader(secretaryStream, StandardCharsets.UTF_8));
-                    try (var armorerStream = NpcPresentationRuntime.class.getClassLoader().getResourceAsStream(
-                            "data/straja/npc/straja.armorer.orders.json")) {
-                        if (armorerStream == null) {
-                            throw new IllegalStateException("armorer NPC profile resource is missing");
-                        }
-                            NpcContentProfile armorer = loader.load(
-                                    new InputStreamReader(armorerStream, StandardCharsets.UTF_8));
-                            try (var jailerStream = NpcPresentationRuntime.class.getClassLoader().getResourceAsStream(
-                                    "data/straja/npc/straja.jailer.custody.json")) {
-                            if (jailerStream == null) {
-                                throw new IllegalStateException("jailer NPC profile resource is missing");
-                            }
-                                NpcContentProfile jailer = loader.load(
-                                        new InputStreamReader(jailerStream, StandardCharsets.UTF_8));
-                            try (var archivistStream = NpcPresentationRuntime.class.getClassLoader().getResourceAsStream(
-                                    "data/straja/npc/straja.archivist.archive.json")) {
-                                if (archivistStream == null) {
-                                    throw new IllegalStateException("archivist NPC profile resource is missing");
-                                }
-                                NpcContentProfile archivist = loader.load(
-                                        new InputStreamReader(archivistStream, StandardCharsets.UTF_8));
-                                return new NpcContentCatalog(
-                                        List.of(reception, instructor, secretary, jailer, armorer, archivist));
-                            }
-                        }
-                    }
-                }
-            }
-        } catch (IOException | RuntimeException exception) {
-            throw new IllegalStateException("NPC content catalog failed to load", exception);
-        }
     }
 
     private static NpcSurfaceSnapshot resolveSurface(

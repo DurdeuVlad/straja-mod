@@ -27,10 +27,14 @@ final class DeskIcons {
         if (stack.isEmpty()) return stack;
         String name = icon.name().length() > MAX_NAME
                 ? icon.name().substring(0, MAX_NAME) : icon.name();
-        stack.set(DataComponents.CUSTOM_NAME, Component.literal(name));
+        // Vanilla renders custom names and lore italic by default; suppress it —
+        // the reference GUI (reclame.js) kept desk text upright for readability.
+        stack.set(DataComponents.CUSTOM_NAME, Component.literal(name)
+                .withStyle(style -> style.withItalic(false)));
         List<Component> lines = icon.lore().stream().limit(MAX_LORE_LINES)
                 .<Component>map(line -> Component.literal(line.length() > MAX_LORE_LINE
-                        ? line.substring(0, MAX_LORE_LINE) : line))
+                        ? line.substring(0, MAX_LORE_LINE) : line)
+                        .withStyle(style -> style.withItalic(false)))
                 .toList();
         stack.set(DataComponents.LORE, new ItemLore(lines));
         return stack;

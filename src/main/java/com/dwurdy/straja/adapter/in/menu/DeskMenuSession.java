@@ -82,9 +82,13 @@ final class DeskMenuSession {
         page = first;
         // The container title is fixed at open — keep the plain surface title:
         // a baked "— 1/2" suffix would stay misleading on every later page.
+        // Strip only a real page-counter tail; a genuine " — " in the title
+        // (e.g. a section drawer name) must survive.
         String title = page.title();
         int pageMark = title.lastIndexOf(" — ");
-        if (pageMark > 0) title = title.substring(0, pageMark);
+        if (pageMark > 0 && title.substring(pageMark + 3).matches("\\d+/\\d+")) {
+            title = title.substring(0, pageMark);
+        }
         var opened = player.openMenu(new SimpleMenuProvider(
                 (containerId, inv, p) -> {
                     menu = new DeskMenu(containerId, inv, this, DeskLayout.ROWS);
