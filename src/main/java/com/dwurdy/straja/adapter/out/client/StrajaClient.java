@@ -1,6 +1,7 @@
 package com.dwurdy.straja.adapter.out.client;
 
 import com.dwurdy.straja.StrajaMod;
+import com.dwurdy.straja.adapter.in.menu.DeskPayloads;
 import com.dwurdy.straja.adapter.in.network.CustodyVisualPayload;
 import com.dwurdy.straja.adapter.in.npc.StrajaNpcEntity;
 import com.dwurdy.straja.bootstrap.StrajaMenus;
@@ -24,8 +25,11 @@ public class StrajaClient {
         modBus.addListener(EntityRenderersEvent.RegisterRenderers.class,
                 event -> event.registerEntityRenderer(
                         StrajaNpcEntity.NPC.get(), StrajaNpcRenderer::new));
-        modBus.addListener(RegisterMenuScreensEvent.class,
-                event -> event.register(StrajaMenus.FORM.get(), StrajaFormScreen::new));
+        modBus.addListener(RegisterMenuScreensEvent.class, event -> {
+            event.register(StrajaMenus.FORM.get(), StrajaFormScreen::new);
+            event.register(StrajaMenus.DESK.get(), StrajaDeskScreen::new);
+        });
+        DeskPayloads.setClientPageConsumer(StrajaDeskScreen::acceptPage);
         // Exposes straja-server.toml through the mod list "Config" button.
         container.registerExtensionPoint(IConfigScreenFactory.class, ConfigurationScreen::new);
     }

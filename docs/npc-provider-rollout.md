@@ -10,8 +10,9 @@ transports the player interaction.
 
 - `customnpcs` — the normal player-facing provider. CustomNPCs supplies the
   native GUI/dialogue/quest surface while Straja remains authoritative.
-- `desk-menu` — the vanilla chest-menu provider for canonically bound NPC
-  hosts (`ChestMenuNpcSurfaceProvider` under `adapter/out/npc/chestmenu`).
+- `desk-menu` — the purpose-built desk GUI provider for canonically bound NPC
+  hosts (`ChestMenuNpcSurfaceProvider` under `adapter/out/npc/chestmenu` —
+  the screens are the slotless `straja:desk` menu + `StrajaDeskScreen`).
   It renders only the snapshot's action rows as a paged desk grid —
   dialogue and quest rows stay with the provider that owns them — and every
   click mints a fresh provider action token through

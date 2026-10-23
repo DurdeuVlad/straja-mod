@@ -67,7 +67,7 @@ public final class NpcPresentationRuntime {
     /** Roles a canonical bind may target — recruiter folds into trainer. */
     private static final Set<String> BINDABLE_ROLES = Set.of(
             "receptionist", "trainer", "secretary", "jailer",
-            "armorer", "archivist", "inspector");
+            "armorer", "archivist", "inspector", "comandant");
 
     public static synchronized void start(MinecraftServer server) {
         if (STATE.get() != null) return;
@@ -269,6 +269,8 @@ public final class NpcPresentationRuntime {
                         ? NpcContentId.of("straja.archivist.archive")
                         : "inspector".equals(role)
                         ? NpcContentId.of("straja.inspector.documents")
+                        : "comandant".equals(role)
+                        ? NpcContentId.of("straja.commander.army")
                         : NpcContentId.of("straja.instructor.admission");
     }
 

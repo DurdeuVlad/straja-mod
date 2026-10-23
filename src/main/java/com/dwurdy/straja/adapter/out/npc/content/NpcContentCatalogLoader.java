@@ -24,7 +24,8 @@ public final class NpcContentCatalogLoader {
             "straja.armorer.orders",
             "straja.jailer.custody",
             "straja.archivist.archive",
-            "straja.inspector.documents");
+            "straja.inspector.documents",
+            "straja.commander.army");
 
     private NpcContentCatalogLoader() {}
 

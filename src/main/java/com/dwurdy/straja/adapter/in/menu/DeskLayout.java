@@ -13,15 +13,18 @@ public final class DeskLayout {
     private DeskLayout() {}
 
     public static final int ROWS = 6;
-    static final int COLUMNS = 9;
-    static final int CONTENT_SLOTS = (ROWS - 1) * COLUMNS; // 45
-    static final int BACK_SLOT = 45;
-    static final int PREV_SLOT = 48;
-    static final int INFO_SLOT = 49;
-    static final int NEXT_SLOT = 50;
-    static final int DETAIL_SLOT = 13;
-    static final int YES_SLOT = 21;
-    static final int NO_SLOT = 23;
+    // Slot indices are the wire contract between server page and client screen.
+    public static final int COLUMNS = 9;
+    public static final int CONTENT_SLOTS = (ROWS - 1) * COLUMNS; // 45
+    public static final int BACK_SLOT = 45;
+    public static final int PREV_SLOT = 48;
+    public static final int INFO_SLOT = 49;
+    public static final int NEXT_SLOT = 50;
+    // The detail body tile must not collide with content: slot 51 sits in the
+    // unused tail of the footer row, outside the 0–44 content grid.
+    public static final int DETAIL_SLOT = 51;
+    public static final int YES_SLOT = 21;
+    public static final int NO_SLOT = 23;
     static final int LORE_WRAP = 35;
 
     /** Page count for {@code items} content buttons at 45 per page (≥1). */

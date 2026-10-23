@@ -1,0 +1,41 @@
+{
+  "contentProfileId": "straja.commander.army",
+  "npcProfileId": "straja:comandant",
+  "schemaVersion": 1,
+  "title": "Straja commander",
+  "body": "The commander runs the station's army unit: enlistment, scheduled operations, muster roll and unit history.",
+  "requiredCapabilities": ["DIALOGUE", "GUI", "ACTION_INPUT", "QUEST_JOURNAL"],
+  "optionalCapabilities": ["RICH_TEXT", "PORTRAITS"],
+  "actions": [
+    {"id": "army-enlist", "label": "Enlist in the unit", "enabled": true},
+    {"id": "army-status", "label": "View unit status", "enabled": true},
+    {"id": "army-history", "label": "View operation history", "enabled": true},
+    {"id": "army-signup", "label": "Sign up for the scheduled operation", "enabled": true},
+    {"id": "army-report", "label": "Report to the active operation", "enabled": true},
+    {"id": "army-leave", "label": "Leave the unit", "enabled": true},
+    {"id": "army-plan-instructie", "label": "Schedule a drill", "enabled": true},
+    {"id": "army-plan-patrula", "label": "Schedule a patrol sweep", "enabled": true},
+    {"id": "army-plan-exercitiu", "label": "Schedule a full exercise", "enabled": true}
+  ],
+  "dialogue": [
+    {
+      "id": "straja.commander.introduction",
+      "text": "The commander reviews your service record and presents the unit's current standing order.",
+      "choices": [
+        {"actionId": "army-enlist", "label": "Enlist me in the unit", "enabled": true},
+        {"actionId": "army-status", "label": "Show unit status", "enabled": true},
+        {"actionId": "army-history", "label": "Show operation history", "enabled": true},
+        {"actionId": "army-signup", "label": "Sign me up for the operation", "enabled": true},
+        {"actionId": "army-report", "label": "I report for muster", "enabled": true},
+        {"actionId": "army-leave", "label": "I want to leave the unit", "enabled": true},
+        {"actionId": "army-plan-instructie", "label": "Schedule a drill", "enabled": true},
+        {"actionId": "army-plan-patrula", "label": "Schedule a patrol sweep", "enabled": true},
+        {"actionId": "army-plan-exercitiu", "label": "Schedule a full exercise", "enabled": true}
+      ]
+    }
+  ],
+  "quests": [
+    {"id": "army-enlistment", "title": "Enlistment in the garrison unit", "state": "AVAILABLE"},
+    {"id": "army-operations", "title": "Unit operations and muster", "state": "LOCKED"}
+  ]
+}

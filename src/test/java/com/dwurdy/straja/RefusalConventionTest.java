@@ -101,6 +101,7 @@ class RefusalConventionTest {
             "Nu există punctul de control", // admin config feedback, not a refusal
             "Nu există birouri de negustor", // desk list status line
             "Nicio tranzacție înregistrată", // desk ledger empty status
+            "Încă nu s-a organizat o unitate militară", // station army bulletin empty status
             "intendentul taberei",           // quartermaster setup confirmation
             "este deja supravegheat",
             "alege din nou sau editează",

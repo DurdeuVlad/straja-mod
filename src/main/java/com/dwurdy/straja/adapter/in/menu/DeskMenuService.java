@@ -23,10 +23,11 @@ import net.minecraft.world.entity.player.Player;
  */
 public final class DeskMenuService {
     /**
-     * Routes with a shipped desk (Issues 1–4) — every player-facing role now
-     * opens the chest menu; the set stays the explicit rollout switch in case
-     * a desk ever needs pulling back to chat. RECRUITER is listed for
-     * completeness: {@code routeFor} already folds the recruiter alias into
+     * Routes with a shipped desk — every player-facing role (including the
+     * Commander's army desk) opens the native {@code straja:desk} menu; the
+     * set stays the explicit rollout switch in case a desk ever needs
+     * pulling back to chat. RECRUITER is listed for completeness:
+     * {@code routeFor} already folds the recruiter alias into
      * {@code TRAINER}.
      */
     static final Set<NpcPlayerSurface.RoleRoute> ENABLED_ROUTES = Set.of(
@@ -37,7 +38,8 @@ public final class DeskMenuService {
             NpcPlayerSurface.RoleRoute.JAILER,
             NpcPlayerSurface.RoleRoute.INSPECTOR,
             NpcPlayerSurface.RoleRoute.ARCHIVIST,
-            NpcPlayerSurface.RoleRoute.ARMORER);
+            NpcPlayerSurface.RoleRoute.ARMORER,
+            NpcPlayerSurface.RoleRoute.COMMANDER);
 
     private DeskMenuService() {}
 

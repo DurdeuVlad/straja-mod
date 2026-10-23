@@ -28,7 +28,7 @@ public final class StrajaDataProvider {
                 "mission_templates", "emergency", "audiences", "reports",
                 "admin_tools", "incidents", "bolos", "bounties", "evidence", "arrest_records", "reputation",
                 "personnel", "promotions", "stations", "documents", "equipment_ledger",
-                "mobilizations", "campaigns", "settlements", "operations", "outbox",
+                "mobilizations", "campaigns", "settlements", "operations", "outbox", "army",
                 "storage_watch", "law_checkpoints", "inspection_ledger",
                 "prisoner_register", "labor_camps", "merchant_desks", "npc_bindings",
                 "protocol", "artifact_registry");

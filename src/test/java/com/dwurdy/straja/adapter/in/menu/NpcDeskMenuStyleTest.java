@@ -54,16 +54,33 @@ class NpcDeskMenuStyleTest {
     @Test
     void chatActionsAnnounceChatOutput() {
         for (String id : new String[]{"rules", "guard-status", "fine-list",
-                "trades-list", "archive-folder-read:D-1", "join-read:JR-1"}) {
+                "trades-list", "archive-folder-read:D-1", "join-read:JR-1",
+                "army-status", "army-history"}) {
             assertTrue(DeskActionStyle.lore(id).stream()
                             .anyMatch(line -> line.contains("chat")),
                     id + " must say the result goes to chat");
         }
     }
 
+    /**
+     * The army leave is a two-step action: the desk confirm page must dispatch
+     * {@code army-leave-confirm} on DA — re-running {@code army-leave} would
+     * land on the ask step again instead of executing the removal.
+     */
+    @Test
+    void armyLeaveConfirmExecutesTheConfirmAction() {
+        assertEquals("army-leave-confirm",
+                DeskActionStyle.confirmExecId("army-leave"));
+        assertEquals("army-status",
+                DeskActionStyle.confirmExecId("army-status"),
+                "ordinary actions execute themselves");
+        assertTrue(DeskActionStyle.consequence("army-leave").stream()
+                .anyMatch(line -> line.contains("anulează")));
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"fine-pay:F-1", "fine-refuse:F-2",
-            "complaint-confirm:C-1", "room-release",
+            "complaint-confirm:C-1", "room-release", "army-leave",
             "custody-accept:C7", "custody-refuse:C7", "custody-release:uuid-1",
             "armory-buy:baton", "armory-reserve:sword",
             "evidence-deposit:E-1", "evidence-return:E-2",

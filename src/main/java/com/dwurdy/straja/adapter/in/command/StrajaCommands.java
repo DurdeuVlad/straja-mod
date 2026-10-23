@@ -73,6 +73,7 @@ public final class StrajaCommands {
         root.then(v2EquipmentCommands());
         root.then(v2MobilizationCommands());
         root.then(v2CampaignCommands());
+        root.then(v2UnitCommands());
         root.then(v2SettlementCommands());
 
         // recruitment
@@ -2315,6 +2316,111 @@ public final class StrajaCommands {
             int changed = StrajaRuntime.get().v2EquipmentLedger().reconcile();
             c.getSource().sendSystemMessage(Component.literal("Obligații reconciliate: " + changed)); return 1;
         }));
+        return node;
+    }
+
+    /**
+     * {@code /straja unit} — army units and operations. Enlistment and muster
+     * are player-facing at the Comandant desk; this branch is the admin
+     * inspection and scheduling surface (also the test hook for op timing).
+     */
+    private static LiteralArgumentBuilder<CommandSourceStack> v2UnitCommands() {
+        var node = adminOnly(Commands.literal("unit"));
+        node.then(Commands.literal("list").executes(c -> {
+            var units = StrajaRuntime.get().army().all();
+            if (units.isEmpty()) {
+                c.getSource().sendSystemMessage(Component.literal("Unități militare: lista e goală."));
+                return 1;
+            }
+            for (var unit : units)
+                c.getSource().sendSystemMessage(Component.literal(unit.unitId + " \"" + unit.name
+                        + "\" stația " + unit.stationId + " | membri " + unit.ensureMembers().size()
+                        + " | pregătire " + unit.readiness + "/100"
+                        + " | operații " + unit.operationsCompleted + "R/" + unit.operationsFailed + "E"));
+            return 1;
+        }));
+        node.then(Commands.literal("status").then(Commands.argument("unit", StringArgumentType.word())
+                .executes(c -> {
+                    var unit = StrajaRuntime.get().army().findUnit(StringArgumentType.getString(c, "unit"));
+                    if (unit == null) {
+                        c.getSource().sendFailure(refusal("straja.cmd.unit_unknown", "straja.remedy.fix_retry"));
+                        return 0;
+                    }
+                    c.getSource().sendSystemMessage(Component.literal(unit.unitId + " \"" + unit.name
+                            + "\" stația " + unit.stationId + " | comandant " + unit.commanderUuid
+                            + " | membri " + unit.ensureMembers().keySet()
+                            + " | pregătire " + unit.readiness + "/100"));
+                    var op = StrajaRuntime.get().army().nextOpFor(unit.unitId);
+                    c.getSource().sendSystemMessage(Component.literal(op == null
+                            ? "Fără operații deschise."
+                            : "Operație " + op.operationId + " " + op.kind + " " + op.status
+                                    + " start " + op.scheduledStart + " end " + op.scheduledEnd
+                                    + " înscriși " + op.ensureSignups().size()
+                                    + " prezenți " + op.ensureParticipants().size()));
+                    return 1;
+                })));
+        node.then(Commands.literal("op").then(Commands.argument("unit", StringArgumentType.word())
+                .then(Commands.argument("kind", StringArgumentType.word())
+                        .then(Commands.argument("delaySec", IntegerArgumentType.integer(0))
+                                .then(Commands.argument("durationSec", IntegerArgumentType.integer(30))
+                                        .executes(c -> {
+                                            var kind = com.dwurdy.straja.domain.model.ArmyOperation.Kind
+                                                    .byName(StringArgumentType.getString(c, "kind"));
+                                            if (kind == null) {
+                                                c.getSource().sendFailure(refusal("straja.cmd.unit_kind",
+                                                        "straja.remedy.fix_retry",
+                                                        "instructie|patrula|exercitiu"));
+                                                return 0;
+                                            }
+                                            if (StrajaRuntime.get().army().findUnit(
+                                                    StringArgumentType.getString(c, "unit")) == null) {
+                                                c.getSource().sendFailure(refusal("straja.cmd.unit_unknown",
+                                                        "straja.remedy.fix_retry"));
+                                                return 0;
+                                            }
+                                            var op = StrajaRuntime.get().army().scheduleAsAuthority(
+                                                    StringArgumentType.getString(c, "unit"), kind,
+                                                    IntegerArgumentType.getInteger(c, "delaySec") * 1_000L,
+                                                    IntegerArgumentType.getInteger(c, "durationSec") * 1_000L,
+                                                    "COMMAND");
+                                            c.getSource().sendSuccess(() -> Component.literal(
+                                                    "Operație " + op.operationId + " " + op.kind
+                                                            + " programată (start "
+                                                            + op.scheduledStart + ")."), false);
+                                            return 1;
+                                        }))))));
+        node.then(Commands.literal("cancel").then(Commands.argument("op", StringArgumentType.word())
+                .executes(c -> {
+                    var op = StrajaRuntime.get().army().findOperation(
+                            StringArgumentType.getString(c, "op"));
+                    if (op == null) {
+                        c.getSource().sendFailure(refusal("straja.cmd.op_unknown",
+                                "straja.remedy.fix_retry"));
+                        return 0;
+                    }
+                    if (op.status != com.dwurdy.straja.domain.model.ArmyOperation.Status.SCHEDULED
+                            && op.status != com.dwurdy.straja.domain.model.ArmyOperation.Status.ACTIVE) {
+                        c.getSource().sendFailure(refusal("straja.cmd.op_not_open",
+                                "straja.remedy.fix_retry"));
+                        return 0;
+                    }
+                    var cancelled = StrajaRuntime.get().army().cancel(
+                            StringArgumentType.getString(c, "op"));
+                    c.getSource().sendSuccess(() -> Component.literal(
+                            "Operație " + cancelled.operationId + " → " + cancelled.status), false);
+                    return 1;
+                })));
+        node.then(Commands.literal("disband").then(Commands.argument("unit", StringArgumentType.word())
+                .executes(c -> {
+                    boolean removed = StrajaRuntime.get().army().disband(
+                            StringArgumentType.getString(c, "unit"));
+                    if (!removed) {
+                        c.getSource().sendFailure(refusal("straja.cmd.unit_unknown", "straja.remedy.fix_retry"));
+                        return 0;
+                    }
+                    c.getSource().sendSuccess(() -> Component.literal("Unitate desființată."), false);
+                    return 1;
+                })));
         return node;
     }
 

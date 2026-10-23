@@ -3,6 +3,7 @@ package com.dwurdy.straja;
 import com.dwurdy.straja.adapter.in.command.StrajaCommands;
 import com.dwurdy.straja.adapter.in.event.StrajaEvents;
 import com.dwurdy.straja.adapter.in.form.FormPayloads;
+import com.dwurdy.straja.adapter.in.menu.DeskPayloads;
 import com.dwurdy.straja.adapter.in.network.CustodyVisualPayload;
 import com.dwurdy.straja.adapter.in.npc.StrajaNpcEntity;
 import com.dwurdy.straja.bootstrap.StrajaIngredients;
@@ -43,6 +44,7 @@ public class StrajaMod {
         StrajaMenus.register(modBus);
         StrajaNpcEntity.register(modBus);
         modBus.addListener(RegisterPayloadHandlersEvent.class, FormPayloads::register);
+        modBus.addListener(RegisterPayloadHandlersEvent.class, DeskPayloads::register);
         modBus.addListener(RegisterPayloadHandlersEvent.class, CustodyVisualPayload::register);
         NeoForge.EVENT_BUS.addListener(StrajaCommands::onRegisterCommands);
         NeoForge.EVENT_BUS.register(new StrajaEvents());

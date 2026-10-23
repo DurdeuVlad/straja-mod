@@ -9,11 +9,11 @@ import com.dwurdy.straja.domain.model.NpcActionResult;
 import com.dwurdy.straja.domain.model.NpcBinding;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.SimpleMenuProvider;
-import net.minecraft.world.inventory.ClickType;
+import net.neoforged.neoforge.network.PacketDistributor;
 
 /**
  * One desk-menu session — lifetime equals the container's. Owns the nav stack
@@ -30,8 +30,10 @@ final class DeskMenuSession {
     private final String roleId;
     private final DeskNavigation nav;
     private final DeskSurfaceBridge surfaceBridge;
-    private DeskMenu menu;
+    private final String sessionId = UUID.randomUUID().toString();
+    private DeskGuiMenu menu;
     private DeskPage page;
+    private int seq;
     private boolean alive = true;
     private long clickGraceUntilNanos;
 
@@ -46,6 +48,11 @@ final class DeskMenuSession {
         this.nav = nav;
         this.surfaceBridge = surfaceBridge;
     }
+
+    String sessionId() { return sessionId; }
+
+    /** Monotonic page sequence — clicks carrying a stale seq are dropped. */
+    int seq() { return seq; }
 
     /** Admin-tool grid: a flat list root dispatching straight to performAction. */
     static DeskMenuSession forList(ServerPlayer player, String title, List<DeskButton> items) {
@@ -80,23 +87,16 @@ final class DeskMenuSession {
 
     private boolean openContainer(DeskPage first) {
         page = first;
-        // The container title is fixed at open — keep the plain surface title:
-        // a baked "— 1/2" suffix would stay misleading on every later page.
-        // Strip only a real page-counter tail; a genuine " — " in the title
-        // (e.g. a section drawer name) must survive.
-        String title = page.title();
-        int pageMark = title.lastIndexOf(" — ");
-        if (pageMark > 0 && title.substring(pageMark + 3).matches("\\d+/\\d+")) {
-            title = title.substring(0, pageMark);
-        }
+        String title = page.title().length() > MAX_TITLE
+                ? page.title().substring(0, MAX_TITLE) : page.title();
         var opened = player.openMenu(new SimpleMenuProvider(
                 (containerId, inv, p) -> {
-                    menu = new DeskMenu(containerId, inv, this, DeskLayout.ROWS);
-                    paint(menu.grid(), page);
+                    menu = new DeskGuiMenu(containerId, inv, this, sessionId);
                     return menu;
                 },
-                Component.literal(title.length() > MAX_TITLE
-                        ? title.substring(0, MAX_TITLE) : title)));
+                Component.literal(title)),
+                buf -> DeskGuiMenu.writeView(buf,
+                        DeskWire.viewOf(sessionId, seq, first)));
         if (opened.isEmpty() || menu == null) {
             alive = false;
             menu = null;
@@ -115,16 +115,13 @@ final class DeskMenuSession {
     }
 
     /**
-     * Routes one grid click: nav ids stay in-menu, everything else dispatches.
-     * Only a single left {@code PICKUP} acts — double-click pickup-all, throw
-     * (Q), hotbar swap, clone and drag gestures never fire actions, so the
-     * DA/NU gate can't be stormed through by an incidental gesture; a short
-     * post-render grace stops a double-click's second hit landing on a freshly
-     * painted confirm slot.
+     * Routes one widget activation (the {@code desk_click} payload): nav ids
+     * stay in-menu, everything else dispatches. The seq check upstream already
+     * dropped clicks against a stale page; a short post-render grace stops a
+     * double-click's second hit landing on a freshly painted confirm slot.
      */
-    void onClick(int slotId, int button, ClickType clickType) {
+    void onClick(int slotId) {
         if (!isAlive() || page == null) return;
-        if (clickType != ClickType.PICKUP || button != 0) return;
         if (System.nanoTime() < clickGraceUntilNanos) return;
         DeskButton clicked = page.buttonAt(slotId);
         if (clicked == null || clicked.actionId() == null) return;
@@ -168,7 +165,8 @@ final class DeskMenuSession {
         } else if (actionId.startsWith("faq:")) {
             openFaq(actionId);
         } else if (DeskActionStyle.needsConfirm(actionId)) {
-            render(nav.open(new DeskPageSource.ConfirmPage(actionId,
+            render(nav.open(new DeskPageSource.ConfirmPage(
+                    DeskActionStyle.confirmExecId(actionId),
                     clicked.icon() == null ? "Acțiune" : clicked.icon().name(),
                     DeskActionStyle.consequence(actionId))));
         } else {
@@ -273,8 +271,9 @@ final class DeskMenuSession {
     private void render(DeskPageSource source) {
         if (!isAlive()) return;
         page = renderPage(source);
-        paint(menu.grid(), page);
-        menu.broadcastChanges();
+        seq++;
+        PacketDistributor.sendToPlayer(player,
+                new DeskPayloads.Page(DeskWire.viewOf(sessionId, seq, page)));
         // Brief click grace after a page swap: a double-click's second hit
         // must not land on a freshly painted confirm/nav slot.
         clickGraceUntilNanos = System.nanoTime() + CLICK_GRACE_NANOS;
@@ -526,14 +525,5 @@ final class DeskMenuSession {
         if (nav.current() instanceof DeskPageSource.ListPage list) return list.page();
         if (nav.current() instanceof DeskPageSource.SurfacePage surface) return surface.page();
         return 0;
-    }
-
-    private static void paint(SimpleContainer grid, DeskPage deskPage) {
-        grid.clearContent();
-        for (DeskButton button : deskPage.buttons()) {
-            if (button.slot() >= 0 && button.slot() < grid.getContainerSize()) {
-                grid.setItem(button.slot(), DeskIcons.stack(button.icon()));
-            }
-        }
     }
 }

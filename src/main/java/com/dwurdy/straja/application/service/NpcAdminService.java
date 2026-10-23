@@ -24,17 +24,18 @@ public class NpcAdminService implements NpcRegistryUseCase {
     public static final String RECRUITER = "recruiter";
     public static final String ARMORER = "armorer";
     public static final String INSPECTOR = "inspector";
+    public static final String COMMANDER = "comandant";
     public static final Set<String> KNOWN_ROLES =
             Set.of(RECEPTIONIST, SECRETARY, JAILER, ARCHIVIST, TRAINER, RECRUITER,
-                    ARMORER, INSPECTOR);
+                    ARMORER, INSPECTOR, COMMANDER);
     /**
-     * Deterministic order for the four physical officials in the current
+     * Deterministic order for the five physical officials in the current
      * headquarters layout. Recruiter remains accepted as a legacy alias for
      * old registry records, but is no longer spawned separately: the Trainer
      * is also the admission examiner.
      */
     public static final List<String> ROLE_ORDER =
-            List.of(RECEPTIONIST, TRAINER, SECRETARY, ARMORER);
+            List.of(RECEPTIONIST, TRAINER, SECRETARY, ARMORER, COMMANDER);
 
     private final StrajaContext ctx;
 

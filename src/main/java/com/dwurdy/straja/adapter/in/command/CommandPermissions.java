@@ -15,6 +15,7 @@ final class CommandPermissions {
             Map.entry("equipment", ADMIN),
             Map.entry("mobilization", ADMIN),
             Map.entry("campaign", ADMIN),
+            Map.entry("unit", ADMIN),
             Map.entry("settlement", ADMIN),
             Map.entry("outbox", ADMIN),
             Map.entry("doctor", ADMIN),

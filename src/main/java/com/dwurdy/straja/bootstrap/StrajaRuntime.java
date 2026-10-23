@@ -97,6 +97,7 @@ public final class StrajaRuntime {
     private final com.dwurdy.straja.application.service.EquipmentLedgerService v2EquipmentLedger;
     private final com.dwurdy.straja.application.service.MobilizationService v2Mobilizations;
     private final com.dwurdy.straja.application.service.CampaignService v2Campaigns;
+    private final com.dwurdy.straja.application.service.ArmyService v2Army;
     private final com.dwurdy.straja.application.service.SettlementService v2Settlements;
     private final com.dwurdy.straja.application.service.MissionV2Service v2Missions;
     private final com.dwurdy.straja.application.service.MissionGeneratorService v2Generators;
@@ -248,6 +249,8 @@ public final class StrajaRuntime {
                 mobilizationRepository, personnelRepository, v2Authorization, clock, ids);
         this.v2Campaigns = new com.dwurdy.straja.application.service.CampaignService(
                 campaignRepository, clock, ids, v2Authorization);
+        this.v2Army = new com.dwurdy.straja.application.service.ArmyService(
+                new SavedStores.Army(stores), personnelRepository, clock, ids);
         this.v2Settlements = new com.dwurdy.straja.application.service.SettlementService(
                 settlementRepository, clock, ids, this.ctx.currency());
         this.v2Settlements.reconcile();
@@ -303,6 +306,20 @@ public final class StrajaRuntime {
         this.players = new PlayerService(ctx);
         this.v2Missions.usePlayerService(players, policies);
         this.v2Promotions.usePlayerService(players, policies);
+        // Operation turnout pays service blocks into the same wallet missions
+        // use — the army feeds the promotion economy, never a parallel one.
+        this.v2Army.useAwardHook((uuid, blocks) -> {
+            try {
+                java.util.UUID id = java.util.UUID.fromString(uuid);
+                var state = players.state(id);
+                if (state != null) {
+                    state.serviceBlocks += Math.max(0, blocks);
+                    players.save(id, state);
+                }
+            } catch (IllegalArgumentException invalidUuid) {
+                // Synthetic/test uuids carry no wallet — drop the award.
+            }
+        });
         this.players.useV2Authority(v2Personnel, v2Authorization);
         this.audit = new AuditService(ctx);
         this.v2ComplaintEscalation.useAuditService(this.audit);
@@ -720,6 +737,7 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.service.EquipmentLedgerService v2EquipmentLedger() { return v2EquipmentLedger; }
     public com.dwurdy.straja.application.service.MobilizationService v2Mobilizations() { return v2Mobilizations; }
     public com.dwurdy.straja.application.service.CampaignService v2Campaigns() { return v2Campaigns; }
+    public com.dwurdy.straja.application.service.ArmyService army() { return v2Army; }
     public com.dwurdy.straja.application.service.SettlementService v2Settlements() { return v2Settlements; }
     public com.dwurdy.straja.application.service.MissionV2Service v2Missions() { return v2Missions; }
     public com.dwurdy.straja.application.service.MissionGeneratorService v2Generators() { return v2Generators; }

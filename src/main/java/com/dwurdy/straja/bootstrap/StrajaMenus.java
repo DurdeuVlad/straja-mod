@@ -2,6 +2,7 @@ package com.dwurdy.straja.bootstrap;
 
 import com.dwurdy.straja.StrajaMod;
 import com.dwurdy.straja.adapter.in.form.StrajaFormMenu;
+import com.dwurdy.straja.adapter.in.menu.DeskGuiMenu;
 import java.util.function.Supplier;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.inventory.MenuType;
@@ -16,6 +17,10 @@ public final class StrajaMenus {
 
     public static final Supplier<MenuType<StrajaFormMenu>> FORM =
             MENUS.register("form", () -> IMenuTypeExtension.create(StrajaFormMenu::client));
+
+    /** The purpose-built desk GUI — a real client screen, not a chest grid. */
+    public static final Supplier<MenuType<DeskGuiMenu>> DESK =
+            MENUS.register("desk", () -> IMenuTypeExtension.create(DeskGuiMenu::client));
 
     private StrajaMenus() {}
 

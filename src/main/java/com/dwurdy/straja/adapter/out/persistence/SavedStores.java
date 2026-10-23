@@ -326,6 +326,12 @@ public final class SavedStores {
         @Override public void write(CampaignStore store) { writeJson(store); }
     }
 
+    public static class Army extends JsonBackedStore implements ArmyRepository {
+        public Army(StoreAccess access) { super(access, "army"); }
+        @Override public ArmyStore read() { return readJsonVersioned(ArmyStore.class, ArmyStore::new, ArmyStore.CURRENT_SCHEMA_VERSION); }
+        @Override public void write(ArmyStore store) { writeJson(store); }
+    }
+
     public static class Settlements extends JsonBackedStore implements SettlementRepository {
         public Settlements(StoreAccess access) { super(access, "settlements"); }
         @Override public SettlementStore read() { return readJsonVersioned(SettlementStore.class, SettlementStore::new, SettlementStore.CURRENT_SCHEMA_VERSION); }

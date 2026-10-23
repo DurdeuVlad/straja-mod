@@ -73,6 +73,35 @@ upgrade in place; no world migration is required over 0.4.0.
 - Admin `promote` now means "approve the member's filed petition"; the
   legacy direct rank-bump path is removed.
 
+### Custom desk GUI + the army loop
+
+- **Slotless `straja:desk` menus**: every native NPC desk and every
+  `bind-desk` host renders through a purpose-built `MenuType` +
+  `StrajaDeskScreen` — live titles, per-action icons, tooltips plus an
+  instant info bar, «Mai multe…»/«Înapoi» pagination, and dedicated DA/NU
+  confirm pages with spelled-out consequences. Clicks travel as
+  `sessionId + sequence + slot` packets validated server-side; the old
+  chest-item renderer is gone. `npcMenus.enabled=false` still degrades to
+  the same actions as clickable chat rows, and CustomNPCs-bound surfaces
+  keep the provider-native `GuiCustom`.
+- **The Comandant**: a fifth physical official (spawned at the HQ anchor)
+  fronts the garrison's army — Straja is now police *and* army.
+- **Army units + operations** (`/straja unit` for admins): military-track
+  members enlist at the Comandant; the station unit self-organizes on
+  first enlistment and the first officer takes command (succession falls
+  to the next officer on leave). Officers schedule drills, patrol sweeps
+  and exercises; populated units without a scheduler auto-plan their next
+  op on a cadence. The player loop is three clicks — sign up, report at
+  muster (walk-ups count), done: the background sweep starts and
+  completes operations, pays every reported participant
+  `serviceBlocks` through the same progression wallet missions use,
+  moves unit readiness by turnout, and keeps the last 20 results per
+  unit for the history view. Leaving the unit is a confirmed action that
+  also drops the player's operation sign-ups.
+- Enlistment is gated server-side to active military-track members;
+  scheduling to active officers of the unit. Every refusal follows the
+  reason→remedy convention.
+
 ## 0.4.0 — 2026-10-06
 
 The Papers-Please forgery epic (#245): a server-authoritative artifact

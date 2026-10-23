@@ -140,6 +140,7 @@ public final class NpcContentCatalog {
         if (value.contains("archive")) return "archivist";
         if (value.contains("archivist")) return "archivist";
         if (value.contains("inspector")) return "inspector";
+        if (value.contains("commander")) return "comandant";
         return "npc";
     }
 }

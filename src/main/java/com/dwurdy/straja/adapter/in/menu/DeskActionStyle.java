@@ -161,7 +161,9 @@ public final class DeskActionStyle {
             Map.entry("tool-", "straja:npc_wand"),
             Map.entry("armory-buy:", "minecraft:gold_ingot"),
             Map.entry("armory-reserve:", "straja:iou_note"),
-            Map.entry("delegation-", "straja:order_book"));
+            Map.entry("delegation-", "straja:order_book"),
+            Map.entry("army-plan-", "straja:order_book"),
+            Map.entry("army-", "straja:baton"));
 
     /** Ids that open a native form — the click closes the desk, not mutates. */
     private static final Set<String> FORM_ACTIONS = Set.of(
@@ -200,7 +202,8 @@ public final class DeskActionStyle {
             "audience-status", "audience-review-list", "admin-personnel",
             "admin-roster", "admin-policies", "admin-emergency-status",
             "armory-status", "mission-list", "mission-draft-status",
-            "mission-template-list", "inspect-documents");
+            "mission-template-list", "inspect-documents",
+            "army-status", "army-history");
 
     /** Parameterized ops whose result is a chat dump. */
     private static final Set<String> CHAT_PREFIXES = Set.of(
@@ -216,7 +219,7 @@ public final class DeskActionStyle {
             "armory-buy:", "armory-reserve:", "mission-template-issue:");
 
     /** Immediate money-spending or record-destroying mutations gated by a DA/NU page. */
-    private static final Set<String> CONFIRM_ACTIONS = Set.of("room-release");
+    private static final Set<String> CONFIRM_ACTIONS = Set.of("room-release", "army-leave");
     private static final Set<String> CONFIRM_PREFIXES = Set.of(
             "fine-pay:", "fine-refuse:", "complaint-confirm:",
             "custody-accept:", "custody-refuse:", "custody-release:",
@@ -270,6 +273,15 @@ public final class DeskActionStyle {
         return List.of("Se execută imediat.");
     }
 
+    /**
+     * What the confirm page's DA button actually executes. Most gated actions
+     * run themselves; two-step actions (a confirm token on the chat/provider
+     * paths) name the execution id here so DA never lands on the ask again.
+     */
+    public static String confirmExecId(String actionId) {
+        return "army-leave".equals(actionId) ? "army-leave-confirm" : actionId;
+    }
+
     /** True when the action is an immediate mutation that needs a DA/NU page. */
     public static boolean needsConfirm(String actionId) {
         if (actionId == null) return false;
@@ -294,6 +306,9 @@ public final class DeskActionStyle {
         }
         if ("room-release".equals(actionId)) {
             return List.of("Camera se eliberează imediat;", "cererea nu poate fi anulată.");
+        }
+        if ("army-leave".equals(actionId)) {
+            return List.of("Părăsești unitatea militară;", "înscrierile la operații se anulează.");
         }
         if (actionId.startsWith("custody-accept:")) {
             return List.of("Accepți cererea — vei fi", "încătușat imediat.");

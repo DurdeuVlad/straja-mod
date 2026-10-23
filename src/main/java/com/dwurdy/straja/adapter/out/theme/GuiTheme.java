@@ -84,7 +84,8 @@ public final class GuiTheme {
             "straja.armorer.", "role_armorer",
             "straja.jailer.", "role_jailer",
             "straja.archivist.", "role_archivist",
-            "straja.inspector.", "role_inspector");
+            "straja.inspector.", "role_inspector",
+            "straja.commander.", "role_commander");
     private static final Map<String, String> NPC_ROLE_ICONS = Map.ofEntries(
             Map.entry("straja:receptionist", "role_receptionist"),
             Map.entry("straja:secretary", "role_secretary"),
@@ -94,7 +95,8 @@ public final class GuiTheme {
             Map.entry("straja:armorer", "role_armorer"),
             Map.entry("straja:jailer", "role_jailer"),
             Map.entry("straja:archivist", "role_archivist"),
-            Map.entry("straja:inspector", "role_inspector"));
+            Map.entry("straja:inspector", "role_inspector"),
+            Map.entry("straja:comandant", "role_commander"));
 
     /** Keys that ship a generated PNG; anything else uses the item fallback. */
     private static final Set<String> TEXTURED_ICONS = Set.of(
@@ -111,6 +113,7 @@ public final class GuiTheme {
             Map.entry("role_jailer", "straja:cuffs"),
             Map.entry("role_archivist", "straja:archive_folder"),
             Map.entry("role_inspector", "straja:seal_stamp"),
+            Map.entry("role_commander", "straja:order_book"),
             Map.entry("admin_selector", "straja:npc_wand"),
             Map.entry("act_assign", "straja:archive_stamp"),
             Map.entry("act_unassign", "straja:bolt_cutters"),

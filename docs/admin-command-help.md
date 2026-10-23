@@ -17,6 +17,7 @@ enforced by the application services.
 | `/straja settlement` | Inspect and place ambiguous payouts in review |
 | `/straja station` | Inspect and validate station fallback configuration |
 | `/straja outbox` | Inspect, retry and list dead-letter outbound events |
+| `/straja unit` | Inspect army units, schedule/cancel operations, disband units |
 
 ## Doctor
 

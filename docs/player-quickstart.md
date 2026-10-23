@@ -7,8 +7,8 @@ fără să întrebi pe nimeni.
 ## Ce este Straja
 
 Straja este forța de ordine a serverului — recrutează membri, patrulează și
-rezolvă incidente. Interacționezi cu ea prin **NPC-uri Straja** (birouri tip
-chest-menu — dai click dreapta și se deschide o grilă cu acțiuni), **obiecte
+rezolvă incidente. Interacționezi cu ea prin **NPC-uri Straja** (birouri cu interfață
+proprie — dai click dreapta și se deschide un panou cu acțiuni), **obiecte
 fizice** și **formulare native**. Meniurile clickabile din chat rămân
 rezerva — dacă biroul nu se poate deschide (sau serverul a oprit
 `npcMenus.enabled`), primești aceleași acțiuni ca rânduri clickabile.
@@ -55,6 +55,36 @@ scris). Comisarul citește cererea și o aprobă sau respinge — blocurile de
 serviciu și modulele de instruire sunt orientative, nu praguri. Ofițerii
 împart aceleași drepturi indiferent de grad; doar Comisarul numește și
 decide cereri.
+
+## Armata: unitatea și operațiile
+
+Straja e și armata garnizoanei. La **Comandant** (stă în curtea cazărmii,
+la ancora HQ) orice membru de pe traseul militar — trupă sau ofițer — își
+găsește unitatea:
+
+1. **Înscrie-te în unitate** — un click la biroul Comandantului. Unitatea
+   stației tale se organizează singură la prima înscriere, iar primul
+   ofițer înscris preia comanda automat.
+2. **Înrolează-te la operație** — biroul îți arată următoarea operație
+   programată (instrucție, patrulare sau exercițiu) cu numărătoarea
+   inversă; un click și ești pe listă.
+3. **Prezintă-te la muster** — când operația pornește, același birou îți
+   oferă «Prezintă-te». Poți veni și fără înscriere — musterul numără
+   cine a venit, nu cine a promis.
+4. **Restul e automat.** Operația se încheie singură la finalul ferestrei:
+   fiecare participant prezent primește **blocuri de serviciu** (aceeași
+   monedă de avansare ca la misiuni), iar **pregătirea unității** crește
+   cu prezența — sau scade dacă nu se prezintă nimeni. Fără ofițer
+   disponibil, unitatea își planifică singură următoarea operație.
+5. **Verifică oricând** «Stare unitate» (comandant, efectiv, pregătire,
+   operația curentă) și «Istoric operații» la același birou.
+6. **«Părăsește unitatea»** cere confirmare DA/NU — plecarea îți anulează
+   și înscrierile la operații.
+
+Ofițerii unității au în plus trei acțiuni de planificare la același birou
+(instrucție / patrulare / exercițiu), iar dacă comandantul pleacă, comanda
+trece automat la următorul ofițer al unității. Civilii și meseriașii văd
+doar informațiile publice ale biroului.
 
 ## Dacă ești trimis la lagărul de muncă
 

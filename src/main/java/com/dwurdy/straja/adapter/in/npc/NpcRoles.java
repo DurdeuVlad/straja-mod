@@ -32,10 +32,11 @@ public final class NpcRoles {
     public static final String TRAINER = "trainer";
     public static final String RECRUITER = "recruiter";
     public static final String ARMORER = "armorer";
+    public static final String COMMANDER = "comandant";
 
     private static final Set<String> KNOWN =
             Set.of(RECEPTIONIST, SECRETARY, JAILER, ARCHIVIST, TRAINER, RECRUITER,
-                    ARMORER, INSPECTOR);
+                    ARMORER, INSPECTOR, COMMANDER);
 
     private NpcRoles() {}
 
@@ -212,6 +213,19 @@ public final class NpcRoles {
                             .collect(java.util.stream.Collectors.joining("; ")));
                 }
             }
+            case "army-enlist" -> armyEnlist(runtime, gw);
+            case "army-status" -> tellArmyStatus(runtime, gw);
+            case "army-history" -> tellArmyHistory(runtime, gw);
+            case "army-signup" -> armySignup(runtime, gw);
+            case "army-report" -> armyReport(runtime, gw);
+            case "army-leave" -> armyLeaveAsk(runtime, player, gw);
+            case "army-leave-confirm" -> armyLeave(runtime, gw);
+            case "army-plan-instructie" -> armyPlan(runtime, gw,
+                    com.dwurdy.straja.domain.model.ArmyOperation.Kind.INSTRUCTIE);
+            case "army-plan-patrula" -> armyPlan(runtime, gw,
+                    com.dwurdy.straja.domain.model.ArmyOperation.Kind.PATRULA);
+            case "army-plan-exercitiu" -> armyPlan(runtime, gw,
+                    com.dwurdy.straja.domain.model.ArmyOperation.Kind.EXERCITIU);
             case "resignation-start" -> runtime.guardDuty().beginResignation(gw);
             case "resignation-confirm" -> runtime.guardDuty().confirmResignation(gw);
             case "resignation-cancel" -> runtime.guardDuty().cancelResignation(gw);
@@ -1993,6 +2007,48 @@ public final class NpcRoles {
             }
             case ARMORER -> actions.addAll(NpcPlayerSurface.armoryActions(
                     runtime.armory().offers(gateway)));
+            case COMMANDER -> {
+                String playerId = gateway.uuid().toString();
+                var army = runtime.army();
+                var unit = army.unitFor(playerId);
+                var record = runtime.v2Personnel().find(playerId);
+                boolean military = record != null && record.active()
+                        && (record.careerGrade == null || !record.careerGrade.isProfessional());
+                if (unit == null) {
+                    if (military) {
+                        actions.add(new NpcPlayerSurface.ChatAction(
+                                "Înscrie-te în unitate", "army-enlist"));
+                    }
+                } else {
+                    var op = army.nextOpFor(unit.unitId);
+                    if (op != null && op.status
+                            == com.dwurdy.straja.domain.model.ArmyOperation.Status.ACTIVE
+                            && !op.ensureParticipants().contains(playerId)) {
+                        actions.add(new NpcPlayerSurface.ChatAction(
+                                "Prezintă-te: " + op.kind.label, "army-report"));
+                    } else if (op != null && op.status
+                            == com.dwurdy.straja.domain.model.ArmyOperation.Status.SCHEDULED
+                            && !op.ensureSignups().contains(playerId)) {
+                        long minutes = Math.max(0,
+                                (op.scheduledStart - runtime.nowMillis()) / 60_000L);
+                        actions.add(new NpcPlayerSurface.ChatAction(
+                                "Înrolează-te: " + op.kind.label
+                                        + " (start în " + minutes + " min)",
+                                "army-signup"));
+                    }
+                    if (record != null && record.active() && record.careerGrade != null
+                            && record.careerGrade.isOfficer()) {
+                        actions.add(new NpcPlayerSurface.ChatAction(
+                                "Planifică instrucție", "army-plan-instructie"));
+                        actions.add(new NpcPlayerSurface.ChatAction(
+                                "Planifică patrulare", "army-plan-patrula"));
+                        actions.add(new NpcPlayerSurface.ChatAction(
+                                "Planifică exercițiu", "army-plan-exercitiu"));
+                    }
+                    actions.add(new NpcPlayerSurface.ChatAction(
+                            "Părăsește unitatea", "army-leave"));
+                }
+            }
             case RECEPTIONIST -> {
                 actions.addAll(NpcPlayerSurface.complaintActions(
                         runtime.complaintRoleplay().availableActions(gateway),
@@ -2011,6 +2067,207 @@ public final class NpcRoles {
             default -> {}
         }
         return actions;
+    }
+
+    // ------------------------------------------------------------ commander: army desk
+
+    private static void armyEnlist(com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                   com.dwurdy.straja.application.port.out.PlayerGateway player) {
+        try {
+            var unit = runtime.army().enlist(player.uuid().toString());
+            player.tell("Te-ai înscris în " + unit.name + " — " + unit.ensureMembers().size()
+                    + " membri, pregătire " + unit.readiness + "/100.");
+        } catch (IllegalStateException denied) {
+            armyRefuse(player, denied);
+        }
+    }
+
+    private static void armySignup(com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                   com.dwurdy.straja.application.port.out.PlayerGateway player) {
+        try {
+            var op = runtime.army().signup(player.uuid().toString());
+            player.tell("Înscris la " + op.kind.label + " — prezintă-te când începe.");
+        } catch (IllegalStateException denied) {
+            armyRefuse(player, denied);
+        }
+    }
+
+    private static void armyReport(com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                   com.dwurdy.straja.application.port.out.PlayerGateway player) {
+        try {
+            var op = runtime.army().report(player.uuid().toString());
+            player.tell("Prezent la " + op.kind.label + " — " + op.ensureParticipants().size()
+                    + "/" + op.ensureSignups().size() + " prezenți.");
+        } catch (IllegalStateException denied) {
+            armyRefuse(player, denied);
+        }
+    }
+
+    /**
+     * Status/history read model: members see their own unit; anyone else
+     * (civilians, visitors, tradespeople) gets the public bulletin of the
+     * local station's unit — the desk informs, it doesn't lock people out.
+     */
+    private static com.dwurdy.straja.domain.model.ArmyUnit armyUnitForView(
+            com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+            com.dwurdy.straja.application.port.out.PlayerGateway player) {
+        var unit = runtime.army().unitFor(player.uuid().toString());
+        if (unit != null) {
+            return unit;
+        }
+        var record = runtime.v2Personnel().find(player.uuid().toString());
+        String station = record == null || record.homeStationId == null
+                || record.homeStationId.isBlank() ? "hq" : record.homeStationId;
+        unit = runtime.army().unitForStationId(station);
+        if (unit == null) {
+            player.tell("Încă nu s-a organizat o unitate militară la stația " + station + ".");
+        }
+        return unit;
+    }
+
+    /**
+     * The player's unit, or null after telling them exactly why there is
+     * none: civilians hear "members only", professional-track members hear
+     * "military only", and military-track members get the enlist pointer.
+     */
+    private static com.dwurdy.straja.domain.model.ArmyUnit armyUnitOrRefuse(
+            com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+            com.dwurdy.straja.application.port.out.PlayerGateway player) {
+        String playerId = player.uuid().toString();
+        var unit = runtime.army().unitFor(playerId);
+        if (unit != null) return unit;
+        var record = runtime.v2Personnel().find(playerId);
+        if (record == null || !record.active()) {
+            player.refuse("straja.army.member_required", "straja.remedy.reception");
+        } else if (record.careerGrade != null && record.careerGrade.isProfessional()) {
+            player.refuse("straja.army.military_only", "straja.remedy.ask_comisar");
+        } else {
+            player.refuse("straja.army.not_in_unit", "straja.remedy.enlist");
+        }
+        return null;
+    }
+
+    /**
+     * Every surface gates the leave behind a DA/NU step: the native desk shows
+     * the confirm page; here (chat tokens, bound providers) the ask prints a
+     * one-use confirm token instead.
+     */
+    private static void armyLeaveAsk(com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                     Player entity,
+                                     com.dwurdy.straja.application.port.out.PlayerGateway player) {
+        var unit = armyUnitOrRefuse(runtime, player);
+        if (unit == null || entity == null) {
+            return;
+        }
+        String token = NpcInteractionService.issueActionToken(
+                entity.getUUID(), "army-leave-confirm");
+        entity.sendSystemMessage(Component.literal(com.dwurdy.straja.domain.model.Text.STRAJA_PREFIX
+                        + "Părăsești «" + unit.name + "» — înscrierile la operații se anulează. ")
+                .append(Component.literal("[Confirmă]")
+                        .withStyle(style -> style
+                                .withColor(ChatFormatting.RED)
+                                .withUnderlined(true)
+                                .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                                        Component.literal("Apasă pentru a confirma.")))
+                                .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND,
+                                        "/straja npc-action " + token)))));
+    }
+
+    private static void armyLeave(com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                  com.dwurdy.straja.application.port.out.PlayerGateway player) {
+        if (runtime.army().leave(player.uuid().toString())) {
+            player.tell("Ai părăsit unitatea militară.");
+        } else {
+            armyUnitOrRefuse(runtime, player);
+        }
+    }
+
+    private static void armyPlan(com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                 com.dwurdy.straja.application.port.out.PlayerGateway player,
+                                 com.dwurdy.straja.domain.model.ArmyOperation.Kind kind) {
+        try {
+            var unit = armyUnitOrRefuse(runtime, player);
+            if (unit == null) {
+                return;
+            }
+            var op = runtime.army().schedule(player.uuid().toString(), unit.unitId, kind,
+                    com.dwurdy.straja.application.service.ArmyService.MUSTER_DELAY_MS,
+                    com.dwurdy.straja.application.service.ArmyService.ACTIVE_WINDOW_MS);
+            player.tell("Operație planificată: " + op.kind.label + " — înscrierea e deschisă, "
+                    + "muster începe în "
+                    + (com.dwurdy.straja.application.service.ArmyService.MUSTER_DELAY_MS / 60_000L)
+                    + " min.");
+        } catch (IllegalStateException denied) {
+            armyRefuse(player, denied);
+        }
+    }
+
+    private static void tellArmyStatus(com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                       com.dwurdy.straja.application.port.out.PlayerGateway player) {
+        var unit = armyUnitForView(runtime, player);
+        if (unit == null) {
+            return;
+        }
+        String commander = unit.commanderUuid.isBlank() ? "—"
+                : runtime.playerQueries().displayName(unit.commanderUuid);
+        player.tell(unit.name + " | comandant: " + commander
+                + " | membri: " + unit.ensureMembers().size()
+                + " | pregătire: " + unit.readiness + "/100"
+                + " | operații: " + unit.operationsCompleted + " reușite, "
+                + unit.operationsFailed + " ratate");
+        var op = runtime.army().nextOpFor(unit.unitId);
+        if (op == null) {
+            player.tell("Următoarea operație se planifică singură — revino în scurt timp.");
+        } else if (op.status == com.dwurdy.straja.domain.model.ArmyOperation.Status.ACTIVE) {
+            player.tell("Operație în desfășurare: " + op.kind.label + " — "
+                    + op.ensureParticipants().size() + "/" + op.ensureSignups().size()
+                    + " prezenți. Prezintă-te!");
+        } else {
+            long minutes = Math.max(0, (op.scheduledStart - runtime.nowMillis()) / 60_000L);
+            player.tell("Operația programată: " + op.kind.label + " — start în " + minutes
+                    + " min | înscriși: " + op.ensureSignups().size());
+        }
+    }
+
+    private static void tellArmyHistory(com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                        com.dwurdy.straja.application.port.out.PlayerGateway player) {
+        var unit = armyUnitForView(runtime, player);
+        if (unit == null) {
+            return;
+        }
+        var history = runtime.army().historyFor(unit.unitId, 5);
+        if (history.isEmpty()) {
+            player.tell(unit.name + ": istoric gol — prima operație e în desfășurare sau în planificare.");
+            return;
+        }
+        player.tell(unit.name + " — ultimele operații:");
+        history.forEach(op -> player.tell("  " + op.kind.label + " | "
+                + (op.status == com.dwurdy.straja.domain.model.ArmyOperation.Status.COMPLETED
+                        ? "reușită" : "ratată")
+                + " | " + op.resultNote
+                + (op.awardedBlocks > 0 ? " | +" + op.awardedBlocks + " blocuri" : "")));
+    }
+
+    private static void armyRefuse(com.dwurdy.straja.application.port.out.PlayerGateway player,
+                                   IllegalStateException error) {
+        switch (error.getMessage() == null ? "" : error.getMessage()) {
+            case "STRAJA_MEMBER_REQUIRED" ->
+                    player.refuse("straja.army.member_required", "straja.remedy.reception");
+            case "MILITARY_TRACK_REQUIRED" ->
+                    player.refuse("straja.army.military_only", "straja.remedy.ask_comisar");
+            case "NOT_IN_UNIT" ->
+                    player.refuse("straja.army.not_in_unit", "straja.remedy.enlist");
+            case "NO_OPERATION_SCHEDULED" ->
+                    player.refuse("straja.army.no_op_scheduled", "straja.remedy.wait");
+            case "NO_OPERATION_ACTIVE" ->
+                    player.refuse("straja.army.no_op_active", "straja.remedy.wait");
+            case "ALREADY_SIGNED" ->
+                    player.refuse("straja.army.already_signed", "straja.remedy.wait");
+            case "DENIED_ARMY_COMMAND" ->
+                    player.refuse("straja.army.officers_only", "straja.remedy.ask_comisar");
+            default ->
+                    player.refuse("straja.army.error", "straja.remedy.fix_retry", error.getMessage());
+        }
     }
 
     private static com.dwurdy.straja.application.port.out.PlayerGateway gateway(

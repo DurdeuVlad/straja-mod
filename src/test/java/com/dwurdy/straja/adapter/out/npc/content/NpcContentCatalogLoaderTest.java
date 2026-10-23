@@ -43,7 +43,8 @@ class NpcContentCatalogLoaderTest {
             "jailer", "straja.jailer.custody",
             "armorer", "straja.armorer.orders",
             "archivist", "straja.archivist.archive",
-            "inspector", "straja.inspector.documents");
+            "inspector", "straja.inspector.documents",
+            "comandant", "straja.commander.army");
 
     /**
      * The load list must equal the bundled directory contents — a file shipped

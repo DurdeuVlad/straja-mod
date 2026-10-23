@@ -83,6 +83,8 @@ public final class StrajaEvents {
         runtime.v2Mobilizations().expireDue();
         runtime.v2Campaigns().expireDue();
         runtime.v2Missions().expireDue();
+        // Armata: unit operations schedule, muster, complete and pay themselves.
+        runtime.army().tick();
         String commissioner = runtime.policies().commissionerUuid == null
                 || runtime.policies().commissionerUuid.isBlank()
                 ? "commissioner" : runtime.policies().commissionerUuid;

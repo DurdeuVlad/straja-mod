@@ -61,6 +61,10 @@ public class SetupData {
             case "trainer", "recruiter", "instructor", "recrutor" -> "trainer";
             case "secretary", "secretara" -> "secretary";
             case "armorer", "armourer", "armurier", "armuriera" -> "armorer";
+            // The Comandant stands at the HQ anchor — no extra required
+            // location, so existing setups keep validating and batch-spawn
+            // can place him on worlds configured before the army loop.
+            case "comandant", "commander" -> HQ;
             default -> null;
         };
     }

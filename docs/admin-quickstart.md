@@ -44,9 +44,10 @@ pas**. Ordinea verificărilor:
 3. **Checkpoint-uri de patrulare** — `/straja setup patrol` așază ruta
    configurată ca inel în jurul tău; rafinează cu
    `/straja set-checkpoint <id>` și `/straja checkpoint add|remove`.
-4. **NPC-uri** (Recepționist, Instructor, Secretară, Armurier) —
+4. **NPC-uri** (Recepționist, Instructor, Secretară, Armurier, Comandant) —
    `/straja setup npcs` spawnează ce lipsește; mută/leagă NPC-uri existente
-   cu bagheta din `/straja setup tools`.
+   cu bagheta din `/straja setup tools`. Comandantul — biroul armatei
+   (unitate + operații) — se așază la ancora **HQ**, fără locație nouă.
 5. **Celule de detenție** — marchează colțurile cu itemul `prison_marker`
    (în kitul `/straja setup tools`).
 6. **Economie** — `coinItemIds` în `[economy]` (implicit monede Ady's

@@ -45,7 +45,7 @@ public final class NpcPlayerSurface {
             "trades-enroll",
             "delegation-mode", "delegation-window", "delegation-revoke");
 
-    public enum RoleRoute { RECEPTIONIST, SECRETARY, JAILER, ARCHIVIST, TRAINER, RECRUITER, ARMORER, INSPECTOR, UNKNOWN }
+    public enum RoleRoute { RECEPTIONIST, SECRETARY, JAILER, ARCHIVIST, TRAINER, RECRUITER, ARMORER, INSPECTOR, COMMANDER, UNKNOWN }
 
     public record ChatAction(String label, String actionId, String labelKey) {
         ChatAction(String label, String actionId) {
@@ -152,6 +152,7 @@ public final class NpcPlayerSurface {
             case NpcRoles.TRAINER, NpcRoles.RECRUITER -> RoleRoute.TRAINER;
             case NpcRoles.ARMORER -> RoleRoute.ARMORER;
             case NpcRoles.INSPECTOR -> RoleRoute.INSPECTOR;
+            case NpcRoles.COMMANDER -> RoleRoute.COMMANDER;
             default -> RoleRoute.UNKNOWN;
         };
     }
@@ -244,6 +245,14 @@ public final class NpcPlayerSurface {
                     List.of(
                             new ChatAction("Prezint documentele la control", "inspect-documents"),
                             faqEntry(RoleRoute.INSPECTOR)));
+            case COMMANDER -> new RoleSurface(
+                    RoleRoute.COMMANDER,
+                    "Comandament",
+                    "Comanda unitatea militară a garnizoanei: înscriere în unitate, operații planificate, muster și istoric — trupa militară și ofițerii servesc aici.",
+                    List.of(
+                            new ChatAction("Stare unitate", "army-status"),
+                            new ChatAction("Istoric operații", "army-history"),
+                            faqEntry(RoleRoute.COMMANDER)));
             case UNKNOWN -> new RoleSurface(
                     RoleRoute.UNKNOWN,
                     "Straja",
@@ -327,6 +336,7 @@ public final class NpcPlayerSurface {
             case TRAINER, RECRUITER -> NpcRoles.TRAINER;
             case ARMORER -> NpcRoles.ARMORER;
             case INSPECTOR -> NpcRoles.INSPECTOR;
+            case COMMANDER -> NpcRoles.COMMANDER;
             case UNKNOWN -> "";
         };
     }
@@ -392,6 +402,7 @@ public final class NpcPlayerSurface {
                             "v2-professional-work", "duty-kit")
                     : List.of(FAQ_SPEC, "armory-status");
             case INSPECTOR -> List.of("inspect-documents", FAQ_SPEC);
+            case COMMANDER -> List.of("army-status", FAQ_SPEC, "army-history");
             case UNKNOWN -> List.of();
         };
     }

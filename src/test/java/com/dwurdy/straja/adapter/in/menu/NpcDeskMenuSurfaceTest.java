@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Source-level pins mirroring {@code ArchitectureBoundaryTest}: the desk view
- * model stays Minecraft-free, the menu uses the vanilla chest type, clicks
+ * model stays Minecraft-free, the menu is a slotless custom GUI whose clicks
  * never mint chat tokens, and the chat fallback remains wired in NpcRoles.
  */
 class NpcDeskMenuSurfaceTest {
@@ -25,7 +25,7 @@ class NpcDeskMenuSurfaceTest {
     private static final List<String> PURE_FILES = List.of(
             "DeskIcon.java", "DeskButton.java", "DeskPage.java",
             "DeskPageSource.java", "DeskLayout.java", "DeskNavigation.java",
-            "DeskActionStyle.java", "DeskSections.java");
+            "DeskActionStyle.java", "DeskSections.java", "DeskWire.java");
 
     @Test
     void pureViewModelStaysFreeOfPlatformImports() throws IOException {
@@ -47,16 +47,32 @@ class NpcDeskMenuSurfaceTest {
     }
 
     @Test
-    void deskMenuIsAVanillaChestMenuThatNeverMovesItems() throws IOException {
-        String menu = Files.readString(MENU.resolve("DeskMenu.java"));
-        assertTrue(menu.contains("extends ChestMenu"),
-                "the desk surface must be a vanilla ChestMenu");
-        assertTrue(menu.contains("MenuType.GENERIC_9x"),
-                "only MenuType.GENERIC_9x* renders on unmodded clients");
-        assertFalse(menu.contains("super.clicked("),
-                "clicked must fully swallow so no item ever moves");
+    void deskMenuIsASlotlessCustomGuiThatNeverMovesItems() throws IOException {
+        String menu = Files.readString(MENU.resolve("DeskGuiMenu.java"));
+        assertTrue(menu.contains("extends AbstractContainerMenu"),
+                "the desk surface must be a purpose-built container menu");
+        assertTrue(menu.contains("StrajaMenus.DESK.get()"),
+                "the desk must ride its own straja:desk MenuType");
         assertTrue(menu.contains("ItemStack.EMPTY"),
-                "quickMoveStack must stay empty");
+                "quickMoveStack must stay empty — the menu has no slots");
+        assertFalse(menu.contains("addSlot("),
+                "a slotless menu never registers an inventory slot");
+        // The click packet carries a slot index the server resolves — the
+        // wire view must never ship action ids the client could forge.
+        assertFalse(menu.contains("actionId"),
+                "the wire view must not serialize DeskButton.actionId");
+    }
+
+    @Test
+    void deskClicksRebindThroughPayloadsServerSide() throws IOException {
+        String payloads = Files.readString(MENU.resolve("DeskPayloads.java"));
+        assertTrue(payloads.contains("desk_click"),
+                "client activations ride the desk_click payload");
+        assertTrue(payloads.contains("desk_page"),
+                "page turns arrive as desk_page pushes, not slot syncs");
+        String menu = Files.readString(MENU.resolve("DeskGuiMenu.java"));
+        assertTrue(menu.contains("session.seq() != seq"),
+                "a stale-seq click must drop before touching the session");
     }
 
     @Test
@@ -89,10 +105,10 @@ class NpcDeskMenuSurfaceTest {
     }
 
     /**
-     * Issue-4 completes the desk rollout: all eight player-facing routes —
-     * Receptionist, Secretary, Instructor (TRAINER plus its RECRUITER
-     * alias), Jailer, Inspector, Archivist and Armorer — open the chest
-     * menu; only UNKNOWN stays on the chat fallback.
+     * The desk rollout covers all nine player-facing routes — Receptionist,
+     * Secretary, Instructor (TRAINER plus its RECRUITER alias), Jailer,
+     * Inspector, Archivist, Armorer and Commander — over the native
+     * {@code straja:desk} menu; only UNKNOWN stays on the chat fallback.
      */
     @Test
     void enabledRoutesCoverExactlyTheShippedDesks() {
@@ -104,7 +120,8 @@ class NpcDeskMenuSurfaceTest {
                         com.dwurdy.straja.adapter.in.npc.NpcPlayerSurface.RoleRoute.JAILER,
                         com.dwurdy.straja.adapter.in.npc.NpcPlayerSurface.RoleRoute.INSPECTOR,
                         com.dwurdy.straja.adapter.in.npc.NpcPlayerSurface.RoleRoute.ARCHIVIST,
-                        com.dwurdy.straja.adapter.in.npc.NpcPlayerSurface.RoleRoute.ARMORER),
+                        com.dwurdy.straja.adapter.in.npc.NpcPlayerSurface.RoleRoute.ARMORER,
+                        com.dwurdy.straja.adapter.in.npc.NpcPlayerSurface.RoleRoute.COMMANDER),
                 DeskMenuService.ENABLED_ROUTES);
         // The recruiter role id folds into the Instructor desk through routing.
         assertTrue(DeskMenuService.ENABLED_ROUTES.contains(

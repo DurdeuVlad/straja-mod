@@ -23,7 +23,8 @@ class NpcInteractionSurfaceTest {
                 Arguments.of(NpcRoles.JAILER, NpcPlayerSurface.RoleRoute.JAILER),
                 Arguments.of(NpcRoles.ARCHIVIST, NpcPlayerSurface.RoleRoute.ARCHIVIST),
                 Arguments.of(NpcRoles.TRAINER, NpcPlayerSurface.RoleRoute.TRAINER),
-                Arguments.of(NpcRoles.ARMORER, NpcPlayerSurface.RoleRoute.ARMORER));
+                Arguments.of(NpcRoles.ARMORER, NpcPlayerSurface.RoleRoute.ARMORER),
+                Arguments.of(NpcRoles.COMMANDER, NpcPlayerSurface.RoleRoute.COMMANDER));
     }
 
     @ParameterizedTest
@@ -282,10 +283,11 @@ class NpcInteractionSurfaceTest {
     }
 
     @Test
-    void setupSpawnsTheFourPhysicalOfficialsAndKeepsRecruiterAsAlias() {
+    void setupSpawnsTheFivePhysicalOfficialsAndKeepsRecruiterAsAlias() {
         assertEquals(java.util.List.of(
                         NpcRoles.RECEPTIONIST, NpcRoles.TRAINER,
-                        NpcRoles.SECRETARY, NpcRoles.ARMORER),
+                        NpcRoles.SECRETARY, NpcRoles.ARMORER,
+                        NpcRoles.COMMANDER),
                 com.dwurdy.straja.application.service.NpcAdminService.ROLE_ORDER);
     }
 
@@ -299,6 +301,10 @@ class NpcInteractionSurfaceTest {
                 com.dwurdy.straja.domain.model.SetupData.npcLocationKey(NpcRoles.SECRETARY));
         assertEquals("armorer",
                 com.dwurdy.straja.domain.model.SetupData.npcLocationKey(NpcRoles.ARMORER));
+        // The Comandant shares the already-required HQ anchor so existing
+        // setups stay valid and batch-spawn can place him.
+        assertEquals("hq",
+                com.dwurdy.straja.domain.model.SetupData.npcLocationKey(NpcRoles.COMMANDER));
         assertNull(com.dwurdy.straja.domain.model.SetupData.npcLocationKey(NpcRoles.JAILER));
 
         var legacySetup = new com.dwurdy.straja.domain.model.SetupData();
