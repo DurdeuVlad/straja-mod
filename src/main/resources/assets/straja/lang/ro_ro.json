@@ -133,6 +133,7 @@
   "straja.army.no_op_scheduled": "Unitatea nu are nicio operație programată acum.",
   "straja.army.not_in_unit": "Nu ești înscris în nicio unitate militară.",
   "straja.army.officers_only": "Doar ofițerii unității pot planifica operații.",
+  "straja.army.op_open": "Unitatea are deja o operație deschisă — una câte una.",
   "straja.arrest.jailer_only": "Predarea la Temnicer cere un străjer activ.",
   "straja.arrest.no_sentence": "Nu există o sentință activă pentru această predare.",
   "straja.artifact.already_marked": "Obiectul poartă deja marca %s.",

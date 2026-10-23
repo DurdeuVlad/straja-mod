@@ -12,6 +12,8 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.function.BiConsumer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The army half of the institution: standing units plus scheduled operations.
@@ -42,6 +44,7 @@ public final class ArmyService {
     private static final int READINESS_BASE_GAIN = 3;
     private static final int READINESS_PER_PARTICIPANT = 3;
     private static final int READINESS_MAX_GAIN = 12;
+    private static final Logger LOGGER = LoggerFactory.getLogger(ArmyService.class);
 
     private final ArmyRepository repository;
     private final PersonnelRepository personnel;
@@ -74,7 +77,7 @@ public final class ArmyService {
         String existing = store.ensureMemberIndex().get(playerUuid);
         if (existing != null) {
             ArmyUnit unit = store.ensureUnits().get(existing);
-            if (unit != null) return unit;
+            if (unit != null && unit.isMember(playerUuid)) return unit;
             store.ensureMemberIndex().remove(playerUuid);
         }
         ArmyUnit unit = unitForStation(store, person.homeStationId);
@@ -135,7 +138,7 @@ public final class ArmyService {
 
     /** Next officer member when the commander steps down (deterministic order). */
     private String successor(ArmyUnit unit, ArmyStore store) {
-        var records = personnel.read().records;
+        var records = personnel.read().ensureRecords();
         for (String memberUuid : unit.ensureMembers().keySet()) {
             PersonnelRecord member = records.get(memberUuid);
             if (member != null && member.active() && member.careerGrade != null
@@ -157,13 +160,16 @@ public final class ArmyService {
                                                long durationMs) {
         ArmyStore store = repository.read();
         ArmyUnit unit = requireUnit(store, unitId);
-        PersonnelRecord actor = personnel.read().records.get(actorUuid);
+        PersonnelRecord actor = personnel.read().ensureRecords().get(actorUuid);
         if (actor == null || !actor.active()) {
             throw new IllegalStateException("STRAJA_MEMBER_REQUIRED");
         }
         if (actor.careerGrade == null || !actor.careerGrade.isOfficer()
                 || !unit.isMember(actorUuid)) {
             throw new IllegalStateException("DENIED_ARMY_COMMAND");
+        }
+        if (hasOpenOp(store, unit.unitId)) {
+            throw new IllegalStateException("OP_ALREADY_OPEN");
         }
         return create(store, unit, kind, startDelayMs, durationMs, actorUuid);
     }
@@ -246,7 +252,7 @@ public final class ArmyService {
         // Membership follows personnel status: suspended/terminated/resigned
         // members fall off the roster (and every open-op slot) on the next
         // sweep instead of lingering as phantom strength.
-        var records = personnel.read().records;
+        var records = personnel.read().ensureRecords();
         for (ArmyUnit unit : store.ensureUnits().values()) {
             if (unit == null || unit.ensureMembers().isEmpty()) continue;
             for (String memberUuid : new ArrayList<>(unit.ensureMembers().keySet())) {
@@ -291,7 +297,11 @@ public final class ArmyService {
         // The latched COMPLETED status is already on disk — a hook failure or
         // retry can never double-pay because the op can never re-complete.
         for (String[] payout : payouts) {
-            awardHook.accept(payout[0], Integer.parseInt(payout[1]));
+            try {
+                awardHook.accept(payout[0], Integer.parseInt(payout[1]));
+            } catch (RuntimeException hookError) {
+                LOGGER.warn("army award hook failed for {}", payout[0], hookError);
+            }
         }
         return changed;
     }
@@ -446,7 +456,7 @@ public final class ArmyService {
     // ---------------------------------------------------------------- helpers
 
     private PersonnelRecord requireMilitary(String playerUuid) {
-        PersonnelRecord person = personnel.read().records.get(playerUuid);
+        PersonnelRecord person = personnel.read().ensureRecords().get(playerUuid);
         if (person == null || !person.active()) {
             throw new IllegalStateException("STRAJA_MEMBER_REQUIRED");
         }
@@ -470,7 +480,11 @@ public final class ArmyService {
         String unitId = store.ensureMemberIndex().get(playerUuid);
         ArmyUnit unit = unitId == null ? null : store.ensureUnits().get(unitId);
         if (unit == null || !unit.isMember(playerUuid)) {
-            if (unitId != null) store.ensureMemberIndex().remove(playerUuid);
+            if (unitId != null) {
+                store.ensureMemberIndex().remove(playerUuid);
+                store.storeRevision++;
+                repository.write(store);
+            }
             throw new IllegalStateException("NOT_IN_UNIT");
         }
         return unit;

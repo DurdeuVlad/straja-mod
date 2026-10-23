@@ -2264,7 +2264,9 @@ public final class NpcRoles {
             case "ALREADY_SIGNED" ->
                     player.refuse("straja.army.already_signed", "straja.remedy.wait");
             case "DENIED_ARMY_COMMAND" ->
-                    player.refuse("straja.army.officers_only", "straja.remedy.ask_comisar");
+                    player.refuse("straja.army.officers_only", "straja.remedy.commander");
+            case "OP_ALREADY_OPEN" ->
+                    player.refuse("straja.army.op_open", "straja.remedy.wait");
             default ->
                     player.refuse("straja.army.error", "straja.remedy.fix_retry", error.getMessage());
         }

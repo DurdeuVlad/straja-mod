@@ -133,6 +133,7 @@
   "straja.army.no_op_scheduled": "The unit has no operation scheduled right now.",
   "straja.army.not_in_unit": "You are not enlisted in any army unit.",
   "straja.army.officers_only": "Only the unit's officers can schedule operations.",
+  "straja.army.op_open": "The unit already has an open operation — one at a time.",
   "straja.arrest.jailer_only": "Handing over to the Jailer requires an on-duty guard.",
   "straja.arrest.no_sentence": "There is no active sentence for this handover.",
   "straja.artifact.already_marked": "The item already carries mark %s.",

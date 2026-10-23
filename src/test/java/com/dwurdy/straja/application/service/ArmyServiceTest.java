@@ -24,9 +24,10 @@ class ArmyServiceTest {
     private static final String P2 = "00000000-0000-0000-0000-0000000000b2";
 
     private final ArmyStore store = new ArmyStore();
+    private int writes;
     private final ArmyRepository armyRepo = new ArmyRepository() {
         @Override public ArmyStore read() { return store; }
-        @Override public void write(ArmyStore ignored) {}
+        @Override public void write(ArmyStore ignored) { writes++; }
     };
     private final Map<String, MemoryStore> memory = new HashMap<>();
     private final SavedStores.Personnel personnelRepo =
@@ -334,9 +335,59 @@ class ArmyServiceTest {
         enlistMilitary(P1, CareerGrade.MILITARY_STRAJER);
         var unit = army.enlist(P1);
         unit.ensureMembers().remove(P1); // torn state: index rows survives roster loss
+        int before = writes;
         assertEquals("NOT_IN_UNIT",
                 assertThrows(IllegalStateException.class, () -> army.signup(P1)).getMessage());
         assertNull(store.ensureMemberIndex().get(P1),
                 "a stale index row is dropped on contact");
+        assertTrue(writes > before,
+                "the index heal must reach the repository, not just the in-memory store");
+    }
+
+    @Test
+    void enlistHealsTornIndexAndRejoinsSameUnit() {
+        enlistMilitary(P1, CareerGrade.MILITARY_STRAJER);
+        var unit = army.enlist(P1);
+        unit.ensureMembers().remove(P1); // index→unit but roster row missing
+        var rejoined = army.enlist(P1);
+        assertEquals(unit.unitId, rejoined.unitId);
+        assertTrue(rejoined.isMember(P1));
+        assertEquals(unit.unitId, store.ensureMemberIndex().get(P1));
+    }
+
+    @Test
+    void officerCannotStackOpenOperations() {
+        enlistMilitary(P1, CareerGrade.OFFICER_CAPITAN);
+        var unit = army.enlist(P1);
+        army.schedule(P1, unit.unitId, ArmyOperation.Kind.PATRULA, 0, 60_000L);
+        assertEquals("OP_ALREADY_OPEN",
+                assertThrows(IllegalStateException.class,
+                        () -> army.schedule(P1, unit.unitId,
+                                ArmyOperation.Kind.EXERCITIU, 0, 60_000L)).getMessage());
+        // The authority path stays permissive — the admin decides to override.
+        assertNotNull(army.scheduleAsAuthority(unit.unitId,
+                ArmyOperation.Kind.INSTRUCTIE, 0, 60_000L, "TEST"));
+    }
+
+    @Test
+    void awardHookFailureDoesNotStarveOtherPayouts() {
+        enlistMilitary(P1, CareerGrade.MILITARY_STRAJER);
+        enlistMilitary(P2, CareerGrade.MILITARY_STRAJER);
+        var unit = army.enlist(P1);
+        army.enlist(P2);
+        army.useAwardHook((uuid, blocks) -> {
+            if (uuid.equals(P1)) throw new RuntimeException("hook blew up");
+            awarded.merge(uuid, blocks, Integer::sum);
+        });
+        var op = army.scheduleAsAuthority(unit.unitId,
+                ArmyOperation.Kind.PATRULA, 0, 60_000L, "TEST");
+        clock.advance(1_000L);
+        army.tick();
+        army.report(P1);
+        army.report(P2);
+        clock.advance(60_000L);
+        assertDoesNotThrow(() -> army.tick(), "a hook failure must not abort the tick");
+        assertNotNull(awarded.get(P2), "later payouts must still land after a hook failure");
+        assertEquals(ArmyOperation.Status.COMPLETED, army.findOperation(op.operationId).status);
     }
 }
