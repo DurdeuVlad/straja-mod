@@ -2,8 +2,8 @@
   "name": "quiz-form",
   "group": "client-form",
   "timeoutSeconds": 300,
-  "observable": "the client applies at the receptionist through the clickable chat menu, asks the trainer for the admission exam through a second tokenized action, opens the native NeoForge quiz form, types the correct answer (derived from the question told in chat), submits it, and the server records exactly one advancement (Răspuns corect in chat, uuid resolvable in dump-state)",
-  "failure": "a clickable action token cannot be resolved, the form never opens, the typed answer is not submitted, or the server records no quiz progress",
+  "observable": "the client applies at the receptionist through the native desk GUI, asks the trainer for the admission exam through the desk surface, opens the native NeoForge quiz form, types the correct answer (derived from the question told in chat), submits it, and the server records exactly one advancement (Răspuns corect in chat, uuid resolvable in dump-state)",
+  "failure": "a desk action cannot be resolved, the form never opens, the typed answer is not submitted, or the server records no quiz progress",
   "prerequisites": [
     "combined server running",
     "client joined as ci_straja"
@@ -90,6 +90,12 @@
       ]
     },
     {
+      "name": "close-receptionist-desk",
+      "type": "mct",
+      "setup": true,
+      "args": ["gui", "close"]
+    },
+    {
       "name": "remove-receptionist",
       "type": "rcon",
       "setup": true,
@@ -150,6 +156,12 @@
         "name": "answer",
         "regex": "scrie: ([^)\"\\\\]+)"
       }
+    },
+    {
+      "name": "close-trainer-desk",
+      "type": "mct",
+      "setup": true,
+      "args": ["gui", "close"]
     },
     {
       "name": "interact-trainer-again",

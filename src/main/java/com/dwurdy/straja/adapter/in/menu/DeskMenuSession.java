@@ -54,6 +54,22 @@ final class DeskMenuSession {
     /** Monotonic page sequence — clicks carrying a stale seq are dropped. */
     int seq() { return seq; }
 
+    /**
+     * Diagnostic view of the current page — one "slot|action|name" line per
+     * button so the test surface can resolve labels to wire slots.
+     */
+    public List<String> describeButtons() {
+        DeskPage current = page;
+        if (current == null) return List.of();
+        var lines = new ArrayList<String>(current.buttons().size() + 1);
+        lines.add("title=" + current.title());
+        for (DeskButton button : current.buttons()) {
+            lines.add(button.slot() + "|" + button.actionId()
+                    + "|" + button.icon().name());
+        }
+        return lines;
+    }
+
     /** Admin-tool grid: a flat list root dispatching straight to performAction. */
     static DeskMenuSession forList(ServerPlayer player, String title, List<DeskButton> items) {
         return new DeskMenuSession(player, null,

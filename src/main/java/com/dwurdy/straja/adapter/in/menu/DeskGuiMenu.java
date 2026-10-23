@@ -47,6 +47,11 @@ public class DeskGuiMenu extends AbstractContainerMenu {
     DeskMenuSession session() { return session; }
     String sessionId() { return sessionId; }
 
+    /** Diagnostic view of the open page — see {@link DeskMenuSession#describeButtons()}. */
+    public java.util.List<String> describePageButtons() {
+        return session == null ? java.util.List.of() : session.describeButtons();
+    }
+
     /** The view the client renders — null until the open data lands. */
     public DeskWire.View view() { return view; }
 

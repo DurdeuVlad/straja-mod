@@ -548,10 +548,69 @@ def _raw_messages(reply) -> list:
     return raws
 
 
+def _desk_snapshot(ctx: ClientContext):
+    """The open StrajaDeskScreen's snapshot dict, or None when a different/no
+    screen is up — the desk fallback only fires on the real surface."""
+    try:
+        reply = ctx.mct.json(["gui", "snapshot"], timeout=20)
+    except ClientUiError:
+        return None
+    snap = (reply.get("data") or {}).get("data") or {}
+    if snap.get("open") and snap.get("type") == "StrajaDeskScreen":
+        return snap
+    return None
+
+
+def _npc_action_desk(label: str, step: dict, ctx: ClientContext):
+    """Desk-surface fallback for npc-action: `straja test desk-actions` maps
+    the open page's labels to wire slots; the click lands on the tile's
+    screen-center, mirroring StrajaDeskScreen.rebuildTiles geometry
+    (PAD=12, CONTENT_Y=60, COLUMNS=9, INFOBAR_GAP=24, tile from scaled
+    height, footer slots anchored under the last content row)."""
+    snap = _desk_snapshot(ctx)
+    if snap is None:
+        raise ClientUiError(
+            "assertion",
+            f"no clickable action {label!r} in recent chat and no desk "
+            f"screen open")
+    account = ctx.vars.get("account", "")
+    out = ctx.rcon.execute(f"straja test desk-actions {account}")
+    ctx.transcript.record("desk-actions", out[:4000])
+    buttons = []
+    for line in out.splitlines():
+        parts = line.strip().split("|", 2)
+        if len(parts) == 3 and parts[0].isdigit():
+            buttons.append((int(parts[0]), parts[1], parts[2]))
+    match = next(((s, a, n) for s, a, n in buttons if n == label), None) \
+        or next(((s, a, n) for s, a, n in buttons
+                 if label in n or n in label), None)
+    if match is None:
+        raise ClientUiError(
+            "assertion",
+            f"no desk tile {label!r} on the open page "
+            f"({[n for _, _, n in buttons][:12]})")
+    slot = match[0]
+    height = int(snap.get("height", 240))
+    tile = 26 if height >= 250 else (24 if height >= 232 else 22)
+    col, row = slot % 9, slot // 9
+    x = int(snap["guiLeft"]) + 12 + col * tile + tile // 2
+    if slot < 45:
+        y = int(snap["guiTop"]) + 60 + row * tile + tile // 2
+    else:
+        rows = 1
+        for other, _, _ in buttons:
+            if other < 45:
+                rows = max(rows, other // 9 + 1)
+        footer_y = 60 + rows * tile + 4 + 24
+        y = int(snap["guiTop"]) + footer_y + tile // 2
+    out = ctx.mct(["input", "click", str(x), str(y)], timeout=15)
+    _expect_text(out, step, f"npc-action {label} (desk)")
+
+
 def _npc_action(step: dict, ctx: ClientContext):
-    """Click a chat-menu action: read `chat history`, parse each message's
-    raw serialized component, find the labelled run_command clickEvent,
-    and send it back as a real player command."""
+    """Click an npc action: the labelled chat clickEvent when chat rows are
+    the live surface (npcMenus.enabled=false or provider-bound), else the
+    labelled desk tile via the server-side page dump."""
     label = step["label"]
     last = int(step.get("historyLast", 20))
     reply = ctx.mct.json(["chat", "history", "--last", str(last)],
@@ -570,11 +629,8 @@ def _npc_action(step: dict, ctx: ClientContext):
     # from a repeat interaction win over consumed ones from an earlier menu.
     command = next((c for t, c in reversed(found) if needle in t or label in t), None)
     if command is None:
-        raise ClientUiError(
-            "assertion",
-            f"no clickable action {label!r} in recent chat "
-            f"({len(found)} actions seen: "
-            f"{[t for t, _ in found][:10]})")
+        _npc_action_desk(label, step, ctx)
+        return
     out = ctx.mct(["chat", "send", command], timeout=45)
     _expect_text(out, step, f"npc-action {label}")
 
@@ -702,6 +758,17 @@ def run_scenario(scenario: dict, ctx: ClientContext, log) -> dict:
               "status": PASS, "steps": [], "skipped": False}
     timeout = float(scenario.get("timeoutSeconds", 180))
     deadline = time.time() + timeout
+    # A leftover screen from the previous scenario (e.g. a desk GUI a failing
+    # scenario never closed) swallows inventory/hotbar input — always start
+    # clean. Only close when something is actually open: a blind Esc would
+    # open the pause menu instead. Never counted as a step.
+    try:
+        reply = ctx.mct.json(["gui", "snapshot"], timeout=10)
+        snap = (reply.get("data") or {}).get("data") or {}
+        if snap.get("open"):
+            ctx.mct(["gui", "close"], timeout=10)
+    except ClientUiError:
+        pass
     failed = None
     try:
         for step in scenario["steps"]:

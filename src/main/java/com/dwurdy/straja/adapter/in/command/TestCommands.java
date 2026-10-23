@@ -115,6 +115,28 @@ final class TestCommands {
                                     return 1;
                                 }))));
 
+        test.then(Commands.literal("desk-actions")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(ctx -> {
+                            var runtime = gated(ctx);
+                            if (runtime == null) return 0;
+                            var online = ctx.getSource().getServer().getPlayerList()
+                                    .getPlayerByName(StringArgumentType.getString(ctx, "id"));
+                            if (online == null) {
+                                ctx.getSource().sendFailure(Component.literal("not online"));
+                                return 0;
+                            }
+                            if (!(online.containerMenu
+                                    instanceof com.dwurdy.straja.adapter.in.menu.DeskGuiMenu desk)) {
+                                ctx.getSource().sendFailure(Component.literal("no desk open"));
+                                return 0;
+                            }
+                            for (String line : desk.describePageButtons()) {
+                                send(ctx, line);
+                            }
+                            return 1;
+                        })));
+
         test.then(Commands.literal("give")
                 .then(Commands.argument("id", StringArgumentType.word())
                         .then(Commands.argument("item",

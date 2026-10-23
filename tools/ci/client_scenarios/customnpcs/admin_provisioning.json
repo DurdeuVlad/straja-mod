@@ -83,8 +83,8 @@
     {
       "name": "choose-jailer-profile",
       "type": "mct",
-      "note": "coordinate click — mct exposes no component ids/labels for GuiCustom (snapshot slots are empty). Targets profile row index 2 (straja:jailer): gui (12,102,396,22) -> screen center ~(213,113).",
-      "args": ["input", "click", "213", "113"],
+      "note": "coordinate click — profiles sort by npcProfileId (straja:trainer sorts last, so 8 profiles fit page 1 differently than content ids suggest): jailer is page 0 row 4 at gui (12,152,396,22) -> screen center ~(213,163). Verified against a live selector.",
+      "args": ["input", "click", "213", "163"],
       "expect": [{"rawRegex": "\\\"clicked\\\"\\s*:\\s*true"}]
     },
     {
@@ -174,10 +174,22 @@
       "expect": [{"rawRegex": "\\\"open\\\"\\s*:\\s*true"}]
     },
     {
+      "name": "selector-next-page-for-secretary",
+      "type": "mct",
+      "note": "coordinate click — selector reopened on page 0; secretary is page 1 row 1 (npcProfileId sort: …receptionist, secretary, trainer). Next button at gui (276,185,132,22) -> screen center ~(342,196).",
+      "args": ["input", "click", "342", "196"],
+      "expect": [{"rawRegex": "\\\"clicked\\\"\\s*:\\s*true"}]
+    },
+    {
+      "name": "wait-for-secretary-page",
+      "type": "sleep",
+      "seconds": 1
+    },
+    {
       "name": "choose-secretary-profile",
       "type": "mct",
-      "note": "coordinate click — targets profile row index 4 (straja:secretary): gui (12,152,396,22) -> screen center ~(213,163).",
-      "args": ["input", "click", "213", "163"],
+      "note": "coordinate click — page 1 row 1 (straja.secretary.workflows): gui (12,77,396,22) -> screen center ~(213,88). Verified against a live selector.",
+      "args": ["input", "click", "213", "88"],
       "expect": [{"rawRegex": "\\\"clicked\\\"\\s*:\\s*true"}]
     },
     {

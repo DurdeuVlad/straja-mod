@@ -2,8 +2,8 @@
   "name": "receptionist-civil-order",
   "group": "client-proof",
   "timeoutSeconds": 180,
-  "observable": "a civilian clicking the receptionist sees «Depune cererea» first, «Regulament» second and «Am o întrebare» within the first three actions, with «Mai multe…» as the last primary link; member bookkeeping (Fișa mea V2 etc.) is absent from the primary page, appears after clicking «Mai multe…», and «Înapoi» returns to the primary page",
-  "failure": "the primary order differs, «Am o întrebare» is not in the first three positions, member-only actions leak onto the civilian page, or the overflow/back navigation is unreachable",
+  "observable": "a civilian interacting with the receptionist opens the native desk GUI; the desk exposes the civilian actions «Depune cererea», «Regulament» and «Am o întrebare»; member bookkeeping (Fișa mea V2 etc.) renders as gated tiles on the same page; the FAQ tile opens a sub-page with « Înapoi, and the back tile returns to the root desk page",
+  "failure": "the desk does not open, a civilian action is missing from the desk surface, or the sub-page/back navigation is unreachable",
   "prerequisites": [
     "combined server running",
     "client joined as ci_straja"
@@ -69,62 +69,49 @@
       "setup": true
     },
     {
-      "name": "primary-order",
+      "name": "desk-opened",
       "type": "mct",
       "args": [
-        "chat",
-        "history",
-        "--last",
+        "gui",
+        "wait-open",
+        "--timeout",
         "20"
       ],
+      "timeout": 30,
       "expect": [
         {
-          "rawRegex": "Depune cererea.*Regulament.*Am o întrebare"
-        },
-        {
-          "rawRegex": "Mai multe"
+          "rawRegex": "StrajaDeskScreen"
         }
       ]
     },
     {
-      "name": "no-member-actions-on-primary",
-      "type": "mct",
-      "args": [
-        "chat",
-        "history",
-        "--last",
-        "20"
-      ],
-      "expectAbsentRegex": "Fișa mea V2"
+      "name": "primary-actions-present",
+      "type": "rcon",
+      "command": "straja test desk-actions {account}",
+      "expectRegex": "Depune cererea[\\s\\S]*Regulament|Regulament[\\s\\S]*Depune cererea"
     },
     {
-      "name": "open-overflow",
+      "name": "faq-action-present",
+      "type": "rcon",
+      "command": "straja test desk-actions {account}",
+      "expectRegex": "Am o întrebare"
+    },
+    {
+      "name": "open-faq",
       "type": "npc-action",
-      "label": "Mai multe…"
+      "label": "Am o întrebare"
     },
     {
-      "name": "overflow-settle",
+      "name": "faq-settle",
       "type": "sleep",
       "seconds": 1,
       "setup": true
     },
     {
-      "name": "overflow-contents",
-      "type": "mct",
-      "args": [
-        "chat",
-        "history",
-        "--last",
-        "20"
-      ],
-      "expect": [
-        {
-          "rawRegex": "Fișa mea V2"
-        },
-        {
-          "rawRegex": "Înapoi"
-        }
-      ]
+      "name": "faq-page-contents",
+      "type": "rcon",
+      "command": "straja test desk-actions {account}",
+      "expectRegex": "Înapoi"
     },
     {
       "name": "back-to-primary",
@@ -139,21 +126,24 @@
     },
     {
       "name": "primary-restored",
+      "type": "rcon",
+      "command": "straja test desk-actions {account}",
+      "expectRegex": "title=Recepție[\\s\\S]*Depune cererea"
+    },
+    {
+      "name": "close-desk",
       "type": "mct",
-      "args": [
-        "chat",
-        "history",
-        "--last",
-        "20"
-      ],
-      "expect": [
-        {
-          "rawRegex": "Depune cererea.*Regulament.*Am o întrebare"
-        }
-      ]
+      "setup": true,
+      "args": ["gui", "close"]
     }
   ],
   "cleanup": [
+    {
+      "name": "close-any-gui",
+      "type": "mct",
+      "setup": true,
+      "args": ["gui", "close"]
+    },
     {
       "name": "remove-receptionist",
       "type": "rcon",

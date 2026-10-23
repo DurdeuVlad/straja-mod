@@ -2,8 +2,8 @@
   "name": "join-observe",
   "group": "client-proof",
   "timeoutSeconds": 240,
-  "observable": "the real NeoForge client is in-world (health/position answer), a Straja NPC spawned via RCON at the player's position is visible in the client's entity list, its guidance menu reaches chat, and a framebuffer screenshot is captured",
-  "failure": "status/entity queries error, the NPC is absent from the client view, the guidance menu never arrives, or the screenshot cannot be produced",
+  "observable": "the real NeoForge client is in-world (health/position answer), a Straja NPC spawned via RCON at the player's position is visible in the client's entity list, interacting with it opens the native Straja desk screen, and a framebuffer screenshot is captured",
+  "failure": "status/entity queries error, the NPC is absent from the client view, the native desk screen never opens, or the screenshot cannot be produced",
   "prerequisites": [
     "combined server running",
     "client joined as ci_straja"
@@ -108,18 +108,18 @@
       "setup": true
     },
     {
-      "name": "guidance-arrives",
+      "name": "desk-opens",
       "type": "mct",
       "args": [
-        "chat",
-        "history",
-        "--last",
+        "gui",
+        "wait-open",
+        "--timeout",
         "20"
       ],
       "timeout": 30,
       "expect": [
         {
-          "rawRegex": "Straja"
+          "rawRegex": "StrajaDeskScreen"
         }
       ]
     },
@@ -128,11 +128,29 @@
       "type": "screenshot"
     },
     {
+      "name": "close-desk",
+      "type": "mct",
+      "setup": true,
+      "args": [
+        "gui",
+        "close"
+      ]
+    },
+    {
       "name": "join-observe",
       "type": "screenshot"
     }
   ],
   "cleanup": [
+    {
+      "name": "close-any-gui",
+      "type": "mct",
+      "setup": true,
+      "args": [
+        "gui",
+        "close"
+      ]
+    },
     {
       "name": "remove-trainer",
       "type": "rcon",
