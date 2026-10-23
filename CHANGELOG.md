@@ -99,8 +99,13 @@ upgrade in place; no world migration is required over 0.4.0.
   unit for the history view. Leaving the unit is a confirmed action that
   also drops the player's operation sign-ups.
 - Enlistment is gated server-side to active military-track members;
-  scheduling to active officers of the unit. Every refusal follows the
-  reason→remedy convention.
+  scheduling to active officers of the unit, and a unit runs one open
+  operation at a time. Every refusal follows the reason→remedy
+  convention.
+- Every desk-rendered icon now ships a real item model + texture —
+  `seal_stamp`, `official_document`, `guard_uniform`, `identity_card`,
+  `training_manual` and the rest no longer render as missing-texture
+  placeholders.
 
 ## 0.4.0 — 2026-10-06
 
