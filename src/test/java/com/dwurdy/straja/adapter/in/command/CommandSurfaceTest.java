@@ -36,7 +36,7 @@ class CommandSurfaceTest {
         }
         for (String name : Set.of(
                 "set-checkpoint", "set-mission-time", "set-location", "setup",
-                "policy", "migrate", "npc", "debug", "test")) {
+                "policy", "commissioner", "migrate", "npc", "debug", "test")) {
             assertEquals(4, StrajaCommands.CommandPolicy.permissionLevel(name),
                     name + " must require OP 4");
         }

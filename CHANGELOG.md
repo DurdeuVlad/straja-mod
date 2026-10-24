@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.6.0 — 2026-10-24
+
+Polish + stability over 0.5.0: institution copy is consistent, and the
+army treadmill no longer bleeds unattended units.
+
+- **Idle operations resolve quietly**: auto-scheduled unit operations
+  that nobody signed up for and nobody attended drop from the ledger
+  instead of recording `-8` readiness failures every cycle — units stop
+  sliding to 0 while the garrison sleeps. Committed no-shows and
+  officer-planned operations still fail honestly.
+- Terminology normalized: members are `străjer` (RO) / displayed rank
+  names (EN) across refusal, custody and mission text; the player help
+  intro, FAQ "Despre Strajă", manual oath and quickstarts now describe
+  Straja as the garrison's police *and* army.
+- Fixes a server crash when an idle auto-operation resolved while
+  another operation was due in the same tick.
+- **Commissioner bootstrap**: `/straja commissioner select <player>`
+  (OP 4 / console) pins the commissioner identity into the authoritative
+  server config and applies it immediately — non-local installs no longer
+  need hand-edited TOML to grant the role. `/straja commissioner status`
+  reads back the pin; every selection is audited.
+- Small copy corrections in the player/admin quickstarts and config
+  comments.
+
 ## 0.5.0 — 2026-10-18
 
 The Straja career epic: the faction now matches the public recruitment
@@ -106,25 +130,6 @@ upgrade in place; no world migration is required over 0.4.0.
   `seal_stamp`, `official_document`, `guard_uniform`, `identity_card`,
   `training_manual` and the rest no longer render as missing-texture
   placeholders.
-
-## 0.6.0 — 2026-10-24
-
-Polish + stability over 0.5.0: institution copy is consistent, and the
-army treadmill no longer bleeds unattended units.
-
-- **Idle operations resolve quietly**: auto-scheduled unit operations
-  that nobody signed up for and nobody attended drop from the ledger
-  instead of recording `-8` readiness failures every cycle — units stop
-  sliding to 0 while the garrison sleeps. Committed no-shows and
-  officer-planned operations still fail honestly.
-- Terminology normalized: members are `străjer` (RO) / displayed rank
-  names (EN) across refusal, custody and mission text; the player help
-  intro, FAQ "Despre Strajă", manual oath and quickstarts now describe
-  Straja as the garrison's police *and* army.
-- Fixes a server crash when an idle auto-operation resolved while
-  another operation was due in the same tick.
-- Small copy corrections in the player/admin quickstarts and config
-  comments.
 
 ## 0.4.0 — 2026-10-06
 

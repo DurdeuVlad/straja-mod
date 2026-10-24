@@ -68,6 +68,7 @@ public final class StrajaRuntime {
     private final com.dwurdy.straja.application.service.FormSessionService formSessions;
     private volatile com.dwurdy.straja.adapter.in.form.FormSubmissionRouter npcFormRouter;
     private final com.dwurdy.straja.application.service.PolicyService policyService;
+    private final com.dwurdy.straja.application.service.CommissionerBootstrapService commissionerBootstrap;
     private final com.dwurdy.straja.application.service.IncidentService incidents;
     private final com.dwurdy.straja.application.service.DispatchService dispatch;
     private final com.dwurdy.straja.application.service.ManhuntService manhunts;
@@ -406,6 +407,11 @@ public final class StrajaRuntime {
             com.dwurdy.straja.StrajaMod.LOGGER.warn(
                     Text.STRAJA_PREFIX + "Ignored malformed policy override '{}' in straja-policies.yaml", failed);
         }
+        // Commissioner identity bootstrap pins the canonical UUID into the
+        // authoritative server config — deliberately NOT through the policy
+        // override layer (identity fields are excluded there by design).
+        this.commissionerBootstrap = new com.dwurdy.straja.application.service.CommissionerBootstrapService(
+                ctx, audit, StrajaServerConfig::pinCommissioner);
         // Persisted policy overrides cannot re-enable Straja's generic downed
         // owner while an optional provider is present.
         OptionalModCompatibility.applyFailSafe(compatibility, policies);
@@ -840,6 +846,7 @@ public final class StrajaRuntime {
         if (router != null) router.submit(player, submission);
     }
     public com.dwurdy.straja.application.port.in.PolicyConfigUseCase policyConfig() { return policyService; }
+    public com.dwurdy.straja.application.service.CommissionerBootstrapService commissionerBootstrap() { return commissionerBootstrap; }
     public com.dwurdy.straja.application.port.out.MutableClock clock() { return clock; }
     public com.dwurdy.straja.adapter.in.test.TestPlayerRegistry testPlayers() { return testPlayers; }
     public String bootId() { return bootId; }

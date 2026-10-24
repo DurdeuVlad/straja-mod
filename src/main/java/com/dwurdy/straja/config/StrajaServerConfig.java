@@ -1500,6 +1500,22 @@ public final class StrajaServerConfig {
 
     private StrajaServerConfig() {}
 
+    /**
+     * Pins the commissioner identity into this server config — the
+     * authoritative {@code straja-server.toml} identity section. Both values
+     * land in a single {@code save()} so the file never carries a UUID with a
+     * stale name; the return value is a readback so callers can surface a
+     * persisted-vs-volatile warning.
+     */
+    public static boolean pinCommissioner(String uuid, String name) {
+        COMMISSIONER_UUID.set(uuid);
+        COMMISSIONER_NAME.set(name);
+        // ConfigValue.set() only mutates the loaded in-memory config — the file
+        // write must be requested explicitly. One save covers both values.
+        COMMISSIONER_UUID.save();
+        return uuid.equals(COMMISSIONER_UUID.get());
+    }
+
     /** Maps the loaded ModConfigSpec values into the domain policy object. */
     public static com.dwurdy.straja.domain.model.StrajaPolicies toPolicies() {
         var p = new com.dwurdy.straja.domain.model.StrajaPolicies();

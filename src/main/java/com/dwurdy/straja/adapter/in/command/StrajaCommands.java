@@ -545,6 +545,17 @@ public final class StrajaCommands {
                                 .reset(p, StringArgumentType.getString(c, "key"))))));
         root.then(adminOnly(policy));
 
+        // commissioner identity bootstrap — OP4/console only; the secure path to
+        // pin the canonical commissioner UUID on non-local deployments.
+        var commissioner = Commands.literal("commissioner");
+        commissioner.then(Commands.literal("status")
+                .executes(c -> adminActor(c, StrajaRuntime.get().commissionerBootstrap()::status)));
+        commissioner.then(Commands.literal("select")
+                .then(Commands.argument("player", EntityArgument.player())
+                        .executes(c -> adminActor(c, p -> StrajaRuntime.get().commissionerBootstrap()
+                                .select(p, target(c, "player"))))));
+        root.then(adminOnly(commissioner));
+
         // inbox communication
         for (String op : new String[]{"report", "message", "request"}) {
             var command = Commands.literal(op)

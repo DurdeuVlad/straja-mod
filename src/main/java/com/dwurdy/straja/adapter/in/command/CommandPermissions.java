@@ -50,6 +50,7 @@ final class CommandPermissions {
             Map.entry("set-location", SETUP),
             Map.entry("setup", SETUP),
             Map.entry("policy", SETUP),
+            Map.entry("commissioner", SETUP),
             Map.entry("report", ADMIN),
             Map.entry("storage", ADMIN),
             Map.entry("message", ADMIN),

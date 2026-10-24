@@ -18,6 +18,7 @@ enforced by the application services.
 | `/straja station` | Inspect and validate station fallback configuration |
 | `/straja outbox` | Inspect, retry and list dead-letter outbound events |
 | `/straja unit` | Inspect army units, schedule/cancel operations, disband units |
+| `/straja commissioner` | **OP4/console** — pin the commissioner identity into `straja-server.toml`: `status` (readback) and `select <online player>` |
 
 ## Doctor
 

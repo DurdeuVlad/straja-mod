@@ -70,6 +70,7 @@ public final class AuditActions {
     public static final String COMPLAINT_SATISFIED = "complaint_satisfied";
     public static final String COMPLAINT_SUBMIT = "complaint_submit";
     public static final String COMPLAINT_WITHDRAW = "complaint_withdraw";
+    public static final String COMMISSIONER_PIN = "commissioner_pin";
     public static final String CRATE_SEAL = "crate_seal";
     public static final String CRATE_UNSEAL = "crate_unseal";
     public static final String CUFF_ACCEPT = "cuff_accept";

@@ -18,7 +18,20 @@ Configurația serverului este în `world/serverconfig/straja-server.toml`
 
 ## 2. Comisarul
 
-În `[identity]` din `straja-server.toml`:
+**Calea recomandată (bootstrap în joc, OP 4 sau consolă):**
+
+```
+/straja commissioner select <jucător-online>
+/straja commissioner status
+```
+
+`select` scrie numele și UUID-ul țintei direct în `straja-server.toml`
+(secțiunea `[identity]`) și activează identitatea imediat, fără restart;
+`status` arată cine deține rolul și starea pin-ului. Ambele cer OP 4 și sunt
+auditate (`commissioner_pin`). Serverul pornește fail-closed fără pin —
+acțiunile protejate refuză până la selecție.
+
+**Alternativ, manual**, în `[identity]` din `straja-server.toml`:
 
 ```toml
 [identity]
@@ -28,7 +41,9 @@ commissionerUuid = "uuid-ul-tau"     # recomandat în producție
 
 Fără `commissionerUuid` fixat, instalările non-local opresc la pornire cu
 `DEPLOYMENT GATE FAILED` — fixează UUID-ul (îl afli cu `/straja status` după
-prima logare sau din API-uri de tipul mcuuid) și repornește.
+prima logare sau din API-uri de tipul mcuuid) și repornește. În staging /
+producție păstrează `allowNameFallback = false` — numele sunt falsificabile
+pe servere offline-mode.
 
 ## 3. Checklist-ul `/straja setup` (OP 4)
 
