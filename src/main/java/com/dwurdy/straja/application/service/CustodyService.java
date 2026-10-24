@@ -491,8 +491,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
         ctx.custody().write(store);
         applyCuffSlowness(player);
         boolean keyDelivered = grantCuffKey(issuer, request);
-        player.tell("Ai acceptat. Ești încătușat și primești efect de încetinire. Gardianul a primit cheia.");
-        if (!keyDelivered) player.tell("Gardianul este offline; cheia va fi livrată când revine.");
+        player.tell("Ai acceptat. Ești încătușat și primești efect de încetinire. Străjerul a primit cheia.");
+        if (!keyDelivered) player.tell("Străjerul este offline; cheia va fi livrată când revine.");
         if (issuer != null) issuer.tell(player.name() + " a acceptat încătușarea.");
         audit.record(AuditActions.CUFF_ACCEPT, request.issuer, request.issuerUuid,
                 player.name(), uuidOf(player), AuditResults.SUCCESS, "accepted requestId=" + request.id);
@@ -585,7 +585,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
         target.tell(surrendered
                 ? "Te-ai predat. Ești încătușat și primești efect de încetinire."
                 : "Bastonul te-a doborât. Ești încătușat și primești efect de încetinire.");
-        if (!keyDelivered) target.tell("Gardianul este fără spațiu; cheia va fi livrată când inventarul permite.");
+        if (!keyDelivered) target.tell("Străjerul este fără spațiu; cheia va fi livrată când inventarul permite.");
         issuer.tell(target.name() + (surrendered ? " s-a predat și a fost încătușat." : " a fost încătușat automat.")
                 + (keyDelivered ? "" : " Cheia a fost pusă în așteptare până când inventarul permite."));
         audit.record(AuditActions.CUFF_APPLY, issuer.name(), uuidOf(issuer),

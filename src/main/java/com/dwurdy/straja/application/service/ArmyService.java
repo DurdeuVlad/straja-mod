@@ -44,6 +44,10 @@ public final class ArmyService {
     private static final int READINESS_BASE_GAIN = 3;
     private static final int READINESS_PER_PARTICIPANT = 3;
     private static final int READINESS_MAX_GAIN = 12;
+    /** scheduledBy marker for tick-created operations (vs officer uuid). */
+    public static final String AUTO_SOURCE = "AUTO";
+    /** scheduledBy marker for admin-commanded operations. */
+    public static final String COMMAND_SOURCE = "COMMAND";
     private static final Logger LOGGER = LoggerFactory.getLogger(ArmyService.class);
 
     private final ArmyRepository repository;
@@ -272,13 +276,14 @@ public final class ArmyService {
                 unit.nextAutoKind++;
                 unit.nextAutoAt = now + AUTO_INTERVAL_MS;
                 unit.version++;
-                create(store, unit, kind, MUSTER_DELAY_MS, ACTIVE_WINDOW_MS, "AUTO");
+                create(store, unit, kind, MUSTER_DELAY_MS, ACTIVE_WINDOW_MS, AUTO_SOURCE);
                 changed++;
             }
         }
 
-        for (ArmyOperation op : store.ensureOperations().values()) {
-            if (op == null) continue;
+        // Snapshot: complete() may drop an idle auto-op mid-sweep.
+        for (ArmyOperation op : new ArrayList<>(store.ensureOperations().values())) {
+            if (op == null || !store.ensureOperations().containsKey(op.operationId)) continue;
             if (op.status == ArmyOperation.Status.SCHEDULED && now >= op.scheduledStart) {
                 op.status = ArmyOperation.Status.ACTIVE;
                 op.version++;
@@ -317,7 +322,7 @@ public final class ArmyService {
         ArmyUnit unit = store.ensureUnits().get(op.unitId);
         int turnout = op.ensureParticipants().size();
         int signed = op.ensureSignups().size();
-        if (turnout == 0 && signed == 0 && "AUTO".equals(op.scheduledBy)) {
+        if (turnout == 0 && signed == 0 && AUTO_SOURCE.equals(op.scheduledBy)) {
             // Idle treadmill pass: nobody committed, nobody failed. Dropping
             // the op quietly keeps unattended units from bleeding readiness
             // and keeps the history view free of automatic filler.

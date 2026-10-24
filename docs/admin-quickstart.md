@@ -121,7 +121,7 @@ coinItemIds pentru cele patru monede, `[labor_camp].freedomPriceMode` /
 Gărzile NPC (facțiunea `[storage].factionId`, implicit 12) atacă din proprie
 inițiativă orice jucător **wanted**: BOLO activ (`/straja bolo`), fugitiv
 înregistrat (evadare din celulă/lagăr) sau marcă wanted moștenită. Reguli de
-angajare: **niciodată** un suspect încătușat aflat în escortă (ofiterul în
+angajare: **niciodată** un suspect încătușat aflat în escortă (ofițerul în
 raza lese) — lovitura e anulată chiar și între două cicluri de scanare;
 niciodată un deținut în custodie sau un jucător în afara survival/adventure.
 Arestarea rezolvă marcajele ca `RESOLVED`; eliberarea face la fel. Anularea
@@ -208,7 +208,7 @@ Un jucător nou ajunge la Recepție → «Depune cererea» → examen la Instruc
 (6 întrebări fixe, trece cu ≥5). Meseriașii depun o **cerere de muncă** tot
 la Recepție — tu o aprobi sau respingi acolo. Avansările se cer la Secretară
 și le decizi citind fiecare cerere. Detalii complete:
-**[manualul de gardă](guard-manual.md)** · **[player quickstart](player-quickstart.md)**.
+**[manualul Străjii](guard-manual.md)** · **[player quickstart](player-quickstart.md)**.
 
 ## 6. Predarea unui build unui tester
 

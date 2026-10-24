@@ -280,7 +280,7 @@ public final class NpcFaqSurface {
                             "{secretariat} și {commissionerOffice} sunt în stația {station}; locația exactă este cea configurată pentru această stație.");
             case "locations:second" ->
                     context.stationMessage("faq.locations.second",
-                            "Camerele Străjerilor și {armorer} sunt în stația {station}; întreabă personalul local pentru traseul curent.");
+                            "Camerele străjerilor și {armorer} sunt în stația {station}; întreabă personalul local pentru traseul curent.");
             case "locations:basement" ->
                     context.stationMessage("faq.locations.basement",
                             "{prison} este în stația {station}; accesul și operațiunile de custodie depind de statut și autorizație.");

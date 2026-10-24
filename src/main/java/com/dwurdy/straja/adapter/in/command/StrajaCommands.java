@@ -5,6 +5,7 @@ import com.dwurdy.straja.adapter.in.npc.NpcInteractionService;
 import com.dwurdy.straja.adapter.in.npc.NpcRoles;
 import com.dwurdy.straja.adapter.out.persistence.StrajaDataProvider;
 import com.dwurdy.straja.application.port.out.PlayerGateway;
+import com.dwurdy.straja.application.service.ArmyService;
 import com.dwurdy.straja.bootstrap.StrajaRuntime;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.BoolArgumentType;
@@ -2382,7 +2383,7 @@ public final class StrajaCommands {
                                                     StringArgumentType.getString(c, "unit"), kind,
                                                     IntegerArgumentType.getInteger(c, "delaySec") * 1_000L,
                                                     IntegerArgumentType.getInteger(c, "durationSec") * 1_000L,
-                                                    "COMMAND");
+                                                    ArmyService.COMMAND_SOURCE);
                                             c.getSource().sendSuccess(() -> Component.literal(
                                                     "Operație " + op.operationId + " " + op.kind
                                                             + " programată (start "

@@ -900,7 +900,7 @@ public class FineService implements FineRoleplayUseCase {
             if (assignee != null) assignee.tell("Cetățeanul a refuzat plata amenzii " + fine.id
                     + ". Poți executa arestarea conform dosarului " + task.id + " lângă țintă.");
         }
-        player.tell("Refuzul a fost înregistrat. Garda poate executa arestarea conform misiunii.");
+        player.tell("Refuzul a fost înregistrat. Străjerii pot executa arestarea conform misiunii.");
         return true;
     }
 
@@ -1172,7 +1172,7 @@ public class FineService implements FineRoleplayUseCase {
         for (PlayerGateway candidate : ctx.server().onlinePlayers()) {
             if (onDutyGuard(candidate)) candidate.tell("Mandat de audiere " + task.id + ": adu " + task.target + " la biroul Comisaru'.");
         }
-        target.tell("Un mandat de audiere a fost pus pe numele tău. Gărzile te vor conduce la biroul Comisaru'.");
+        target.tell("Un mandat de audiere a fost pus pe numele tău. Străjerii te vor conduce la biroul Comisaru'.");
         audit.record(AuditActions.HEARING_WARRANT_ISSUE, player.name(), player.uuid().toString(), target.name(), target.uuid().toString(), AuditResults.SUCCESS, "signed_warrant taskId=" + task.id);
         player.tell("Mandatul " + task.id + " a fost emis și semnat de " + player.name() + ".");
         return true;
@@ -1216,7 +1216,7 @@ public class FineService implements FineRoleplayUseCase {
                 candidate.tell("Misiune urgentă " + task.id + ": arestează " + task.target + " pentru vătămarea Temnicerului.");
             }
         }
-        attacker.tell("Un mandat de arest a fost emis pentru vătămarea Temnicerului. Gărzile vor veni după tine.");
+        attacker.tell("Un mandat de arest a fost emis pentru vătămarea Temnicerului. Străjerii vor veni după tine.");
         audit.record(AuditActions.JAILER_ASSAULT_MISSION, attacker.name(), attacker.uuid().toString(), jailerName, null, AuditResults.SUCCESS, result.toLowerCase() + " taskId=" + task.id);
         return task;
     }

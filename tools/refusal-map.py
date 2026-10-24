@@ -344,13 +344,13 @@ MAP = {
     "Dosarul nu îți este atribuit.":
         ("straja.complaint.not_assigned", R + "retry",
          "The case is not assigned to you."),
-    "Participantul trebuie să fie o gardă activă.":
+    "Participantul trebuie să fie un străjer activ.":
         ("straja.complaint.participant_inactive", R + "duty",
          "The participant must be an active guard."),
     "Poți mobiliza doar Stagiari și Străjeri.":
         ("straja.complaint.mobilize_ranks", R + "fix_retry",
          "You can only mobilize Trainees and Guards."),
-    "Doar o gardă activă poate participa la o investigație.":
+    "Doar un străjer activ poate participa la o investigație.":
         ("straja.complaint.join_inactive", R + "duty",
          "Only an active guard can join an investigation."),
     "Nu ai o mobilizare activă pentru acest dosar.":
@@ -403,7 +403,7 @@ MAP = {
     "Încătușarea a fost refuzată: starea de custodie nu este validă.":
         ("straja.custody.cuff_state", R + "retry",
          "Cuffing was refused: the custody state is not valid."),
-    "Cererea de predare nu mai este validă: gardianul nu este disponibil sau nu mai are Cătușe.":
+    "Cererea de predare nu mai este validă: străjerul nu este disponibil sau nu mai are Cătușe.":
         ("straja.custody.surrender_invalid", R + "retry",
          "The surrender request is no longer valid: the guard is unavailable or no longer has Cuffs."),
     "Cererea de predare a expirat: trebuie să fii activ și să ai Cătușele în inventar.":
@@ -624,7 +624,7 @@ MAP = {
     "Cetățeanul trebuie să fie online pentru întocmirea amenzii.":
         ("straja.fine.citizen_offline", R + "wait",
          "The citizen must be online for the fine to be drawn up."),
-    "Nu poți amenda Comisaru' sau un gardian de același rang/superior.":
+    "Nu poți amenda Comisaru' sau un străjer de același rang/superior.":
         ("straja.fine.protected_target", R + "fix_retry",
          "You cannot fine the Commissioner or a guard of the same/higher rank."),
     "Suma trebuie să fie una standard: %s monede.":
@@ -1421,7 +1421,7 @@ MAP = {
     "Ține o Cheie, Foarfeca sau Brelocul Temnicerului în mâna principală.":
         ("straja.custody.hold_tool", R + "fix_retry",
          "Hold a Key, Shears, or the Jailer Keyring in your main hand."),
-    "Ești încătușat de %s. Cheia trebuie folosită de acel gardian.":
+    "Ești încătușat de %s. Cheia trebuie folosită de acel străjer.":
         ("straja.custody.cuffed_by_other", R + "jailer",
          "You are cuffed by %s. The key must be used by that guard."),
 
@@ -1601,7 +1601,7 @@ MAP = {
     "Scrie motivul contestației, maximum %s caractere.":
         ("straja.fine.appeal_reason", R + "fix_retry",
          "Write the appeal reason, at most %s characters."),
-    "Misiunea are deja numărul maxim de gărzi.":
+    "Misiunea are deja numărul maxim de străjeri.":
         ("straja.fine.mission_full", R + "wait",
          "The mission already has the maximum number of guards."),
     "Plata se face la recepționistă. Mergi la locația configurată de Comisaru'.":

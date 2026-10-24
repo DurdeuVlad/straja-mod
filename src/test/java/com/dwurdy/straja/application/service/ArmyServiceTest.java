@@ -187,6 +187,39 @@ class ArmyServiceTest {
     }
 
     @Test
+    void tickDropsIdleOpMidSweepWithoutBreaking() {
+        enlistMilitary(P1, CareerGrade.MILITARY_STRAJER);
+        enlistMilitary(P2, CareerGrade.MILITARY_STRAJER);
+        var unit = army.enlist(P1);
+        army.enlist(P2);
+        int readinessBefore = army.findUnit(unit.unitId).readiness;
+        // Two due ops in one sweep: the idle auto-op drops mid-iteration
+        // while a committed op behind it must still complete as FAILED.
+        ArmyOperation idle = new ArmyOperation();
+        idle.operationId = "OPS-IDLE";
+        idle.unitId = unit.unitId;
+        idle.scheduledBy = ArmyService.AUTO_SOURCE;
+        idle.status = ArmyOperation.Status.ACTIVE;
+        idle.scheduledStart = 1;
+        idle.scheduledEnd = 1;
+        store.ensureOperations().put(idle.operationId, idle);
+        ArmyOperation committed = new ArmyOperation();
+        committed.operationId = "OPS-CMD";
+        committed.unitId = unit.unitId;
+        committed.scheduledBy = ArmyService.COMMAND_SOURCE;
+        committed.status = ArmyOperation.Status.ACTIVE;
+        committed.scheduledStart = 1;
+        committed.scheduledEnd = 1;
+        committed.ensureSignups().add(P2);
+        store.ensureOperations().put(committed.operationId, committed);
+        assertDoesNotThrow(() -> army.tick(),
+                "dropping an op mid-sweep must not break the iteration");
+        assertNull(army.findOperation("OPS-IDLE"));
+        assertEquals(ArmyOperation.Status.FAILED, army.findOperation("OPS-CMD").status);
+        assertTrue(army.findUnit(unit.unitId).readiness < readinessBefore);
+    }
+
+    @Test
     void walkUpReportCountsWithoutSignup() {
         enlistMilitary(P1, CareerGrade.MILITARY_STRAJER);
         enlistMilitary(P2, CareerGrade.MILITARY_STRAJER);

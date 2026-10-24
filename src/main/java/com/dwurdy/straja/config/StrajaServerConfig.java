@@ -920,7 +920,7 @@ public final class StrajaServerConfig {
                         () -> "1=Stagiar", StrajaServerConfig::isIntStringMapEntry);
         RANK_MESERIAS_NAMES = B.comment(
                         "Display names per trades (Meseriași) path level",
-                        "(1=Zilier freelance day-hand, 2=Meșter contracted",
+                        "(1=Zilier freelance day-hand, 2=Meseriaș contracted",
                         "tradesman). Entries: \"nivel=nume\".")
                 .defineListAllowEmpty(List.of("meseriasNames"),
                         StrajaPolicies.formatIntStringMap(defaults.meseriasRankNames),

@@ -24,7 +24,7 @@ chat rămân rezerva — dacă biroul nu se poate deschide (sau serverul a oprit
 | `/straja bounty list` | recompensele active — cine e vânat și pentru cât |
 | `/straja surrender` | te predai unui vânător din apropiere (oprește urmărirea) |
 | `/straja bail <jucător>` | plătești cauțiunea cuiva din recompensă — oricine poate plăti pentru oricine |
-| `/straja debt <jucător>` | vezi datoriile restante — ofiterii văd pe ale oricui, tu pe ale tale |
+| `/straja debt <jucător>` | vezi datoriile restante — ofițerii văd pe ale oricui, tu pe ale tale |
 | `/straja debt pay <jucător> [sumă]` | achiți din datoriile cuiva — oricine poate plăti pentru oricine |
 | `/straja stop` | încheie serviciul (doar după ce ești membru și ești în tură) |
 
@@ -45,11 +45,11 @@ chat rămân rezerva — dacă biroul nu se poate deschide (sau serverul a oprit
 ## Cariera: două intrări, un corp de ofițeri
 
 - **Soldat (normă parțială):** Stagiar → Străjer — intri prin examen.
-- **Meseriaș (normă parțială):** Zilier → Meșter — la Recepție apeși
+- **Meseriaș (normă parțială):** Zilier → Meseriaș → Maistru — la Recepție apeși
   **«Meseriași — înscriere»**, alegi meseria și depui **cerere de muncă** cu
   motiv; Comisarul o aprobă sau respinge tot la Recepție.
 - **Ofițer (normă întreagă):** Locotenent → Căpitan → Colonel — din Străjer
-  sau Meșter, prin cerere de avansare.
+  sau Maistru, prin cerere de avansare.
 
 **Orice avansare** se depune la **Secretară** («Cere avansarea», cu motiv
 scris). Comisarul citește cererea și o aprobă sau respinge — blocurile de
@@ -75,8 +75,10 @@ găsește unitatea:
 4. **Restul e automat.** Operația se încheie singură la finalul ferestrei:
    fiecare participant prezent primește **blocuri de serviciu** (aceeași
    monedă de avansare ca la misiuni), iar **pregătirea unității** crește
-   cu prezența — sau scade dacă nu se prezintă nimeni. Fără ofițer
-   disponibil, unitatea își planifică singură următoarea operație.
+   cu prezența. Eșecul doare doar când cineva a promis și n-a venit —
+   o operație automată pe care n-o calculează nimeni se anulează în
+   liniște, fără penalizare.
+   Fără ofițer disponibil, unitatea își planifică singură următoarea operație.
 5. **Verifică oricând** «Stare unitate» (comandant, efectiv, pregătire,
    operația curentă) și «Istoric operații» la același birou.
 6. **«Părăsește unitatea»** cere confirmare DA/NU — plecarea îți anulează
@@ -89,7 +91,7 @@ doar informațiile publice ale biroului.
 
 ## Dacă ești trimis la lagărul de muncă
 
-Un deținut în lagăr minesz și vinde minereul la intendent — încasările nu vin
+Un deținut în lagăr minează și vinde minereul la intendent — încasările nu vin
 în mână, ci în **contul de muncă**. Când contul atinge prețul libertății
 (`flat` sau un multiplicator al amenzilor tale), ești eliberat automat și îți
 recuperezi lucrurile. `/straja camp status` îți arată progresul. Nu ieși din
