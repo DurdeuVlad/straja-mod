@@ -107,6 +107,25 @@ upgrade in place; no world migration is required over 0.4.0.
   `training_manual` and the rest no longer render as missing-texture
   placeholders.
 
+## 0.5.1 — 2026-10-24
+
+Polish + stability over 0.5.0: institution copy is consistent, and the
+army treadmill no longer bleeds unattended units.
+
+- **Idle operations resolve quietly**: auto-scheduled unit operations
+  that nobody signed up for and nobody attended drop from the ledger
+  instead of recording `-8` readiness failures every cycle — units stop
+  sliding to 0 while the garrison sleeps. Committed no-shows and
+  officer-planned operations still fail honestly.
+- Terminology normalized: members are `străjer` (RO) / displayed rank
+  names (EN) across refusal, custody and mission text; the player help
+  intro, FAQ "Despre Strajă", manual oath and quickstarts now describe
+  Straja as the garrison's police *and* army.
+- Fixes a server crash when an idle auto-operation resolved while
+  another operation was due in the same tick.
+- Small copy corrections in the player/admin quickstarts and config
+  comments.
+
 ## 0.4.0 — 2026-10-06
 
 The Papers-Please forgery epic (#245): a server-authoritative artifact
