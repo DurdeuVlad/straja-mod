@@ -226,9 +226,9 @@ public final class NpcFaqSurface {
         String key = (topic == null ? "" : topic) + ":" + (question == null ? "" : question);
         return switch (key) {
             case "about:what" ->
-                    "Straja protejează Castelul, face patrule, răspunde la incidente și ține evidența oficială a activității.";
+                    "Straja este poliția și armata garnizoanei: protejează Castelul, face patrule, răspunde la incidente, ține evidența oficială și conduce operațiile militare ale unităților.";
             case "about:ranks" ->
-                    "Parcursul este Civil → Stagiar → Străjer → Locotenent → Căpitan → Colonel. Comisarul este o funcție de autoritate, nu o treaptă obișnuită.";
+                    "Parcursul este Civil → Stagiar → Străjer → Locotenent → Căpitan → Colonel; meseriașii urmează Zilier → Meseriaș → Maistru. Comisarul este o funcție de autoritate, nu o treaptă obișnuită.";
             case "about:faction" ->
                     "Da. Facțiunea nativă rămâne înregistrată, iar în timpul serviciului acționezi temporar ca membru al Străjii.";
             case "entry:join" -> entryAnswer(context);
@@ -280,7 +280,7 @@ public final class NpcFaqSurface {
                             "{secretariat} și {commissionerOffice} sunt în stația {station}; locația exactă este cea configurată pentru această stație.");
             case "locations:second" ->
                     context.stationMessage("faq.locations.second",
-                            "Camerele Străjerilor și {armorer} sunt în stația {station}; întreabă personalul local pentru traseul curent.");
+                            "Camerele străjerilor și {armorer} sunt în stația {station}; întreabă personalul local pentru traseul curent.");
             case "locations:basement" ->
                     context.stationMessage("faq.locations.basement",
                             "{prison} este în stația {station}; accesul și operațiunile de custodie depind de statut și autorizație.");

@@ -142,7 +142,7 @@ class ArmyServiceTest {
     }
 
     @Test
-    void emptyMusterFailsTheOperation() {
+    void idleAutoOperationDropsQuietly() {
         enlistMilitary(P1, CareerGrade.MILITARY_STRAJER);
         var unit = army.enlist(P1);
         int readinessBefore = army.findUnit(unit.unitId).readiness;
@@ -150,10 +150,73 @@ class ArmyServiceTest {
         var op = army.nextOpFor(unit.unitId);
         clock.advance(ArmyService.MUSTER_DELAY_MS + ArmyService.ACTIVE_WINDOW_MS + 2_000L);
         army.tick();
+        // Nobody signed up and nobody showed — the unattended treadmill op
+        // disappears instead of bleeding readiness and filling history.
+        assertNull(army.findOperation(op.operationId));
+        assertEquals(readinessBefore, army.findUnit(unit.unitId).readiness);
+        assertNull(awarded.get(P1));
+    }
+
+    @Test
+    void signedButNoShowFailsTheOperation() {
+        enlistMilitary(P1, CareerGrade.MILITARY_STRAJER);
+        var unit = army.enlist(P1);
+        army.tick();
+        var op = army.nextOpFor(unit.unitId);
+        army.signup(P1);
+        int readinessBefore = army.findUnit(unit.unitId).readiness;
+        clock.advance(ArmyService.MUSTER_DELAY_MS + ArmyService.ACTIVE_WINDOW_MS + 2_000L);
+        army.tick();
         var finished = army.findOperation(op.operationId);
         assertEquals(ArmyOperation.Status.FAILED, finished.status);
         assertTrue(army.findUnit(unit.unitId).readiness < readinessBefore);
         assertNull(awarded.get(P1));
+    }
+
+    @Test
+    void officerPlannedEmptyMusterStillFails() {
+        enlistMilitary(P1, CareerGrade.OFFICER_CAPITAN);
+        var unit = army.enlist(P1);
+        var op = army.schedule(P1, unit.unitId, ArmyOperation.Kind.INSTRUCTIE, 0, 60_000L);
+        int readinessBefore = army.findUnit(unit.unitId).readiness;
+        clock.advance(ArmyService.ACTIVE_WINDOW_MS + 62_000L);
+        army.tick();
+        var finished = army.findOperation(op.operationId);
+        assertEquals(ArmyOperation.Status.FAILED, finished.status);
+        assertTrue(army.findUnit(unit.unitId).readiness < readinessBefore);
+    }
+
+    @Test
+    void tickDropsIdleOpMidSweepWithoutBreaking() {
+        enlistMilitary(P1, CareerGrade.MILITARY_STRAJER);
+        enlistMilitary(P2, CareerGrade.MILITARY_STRAJER);
+        var unit = army.enlist(P1);
+        army.enlist(P2);
+        int readinessBefore = army.findUnit(unit.unitId).readiness;
+        // Two due ops in one sweep: the idle auto-op drops mid-iteration
+        // while a committed op behind it must still complete as FAILED.
+        ArmyOperation idle = new ArmyOperation();
+        idle.operationId = "OPS-IDLE";
+        idle.unitId = unit.unitId;
+        idle.scheduledBy = ArmyService.AUTO_SOURCE;
+        idle.status = ArmyOperation.Status.ACTIVE;
+        idle.scheduledStart = 1;
+        idle.scheduledEnd = 1;
+        store.ensureOperations().put(idle.operationId, idle);
+        ArmyOperation committed = new ArmyOperation();
+        committed.operationId = "OPS-CMD";
+        committed.unitId = unit.unitId;
+        committed.scheduledBy = ArmyService.COMMAND_SOURCE;
+        committed.status = ArmyOperation.Status.ACTIVE;
+        committed.scheduledStart = 1;
+        committed.scheduledEnd = 1;
+        committed.ensureSignups().add(P2);
+        store.ensureOperations().put(committed.operationId, committed);
+        assertDoesNotThrow(() -> army.tick(),
+                "dropping an op mid-sweep must not break the iteration");
+        assertNull(army.findOperation("OPS-IDLE"));
+        assertEquals(ArmyOperation.Status.FAILED, army.findOperation("OPS-CMD").status);
+        assertTrue(army.findUnit(unit.unitId).readiness < readinessBefore);
     }
 
     @Test
@@ -234,6 +297,7 @@ class ArmyServiceTest {
         var unit = army.enlist(P1);
         army.tick();
         var op = army.nextOpFor(unit.unitId);
+        army.signup(P1); // a promise that flakes is a real failure row
         clock.advance(ArmyService.MUSTER_DELAY_MS + ArmyService.ACTIVE_WINDOW_MS + 2_000L);
         army.tick();
         var history = army.historyFor(unit.unitId, 5);
@@ -321,6 +385,7 @@ class ArmyServiceTest {
         army.enlist(P1);
         army.tick();
         var op = army.nextOpFor(army.unitFor(P1).unitId);
+        army.signup(P1); // signed no-show completes FAILED; idle auto-ops drop instead
         clock.advance(ArmyService.MUSTER_DELAY_MS + ArmyService.ACTIVE_WINDOW_MS + 2_000L);
         army.tick();
         assertEquals(ArmyOperation.Status.FAILED, army.findOperation(op.operationId).status);

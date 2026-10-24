@@ -491,8 +491,8 @@ public class CustodyService implements CustodyRoleplayUseCase {
         ctx.custody().write(store);
         applyCuffSlowness(player);
         boolean keyDelivered = grantCuffKey(issuer, request);
-        player.tell("Ai acceptat. Ești încătușat și primești efect de încetinire. Gardianul a primit cheia.");
-        if (!keyDelivered) player.tell("Gardianul este offline; cheia va fi livrată când revine.");
+        player.tell("Ai acceptat. Ești încătușat și primești efect de încetinire. Străjerul a primit cheia.");
+        if (!keyDelivered) player.tell("Străjerul este offline; cheia va fi livrată când revine.");
         if (issuer != null) issuer.tell(player.name() + " a acceptat încătușarea.");
         audit.record(AuditActions.CUFF_ACCEPT, request.issuer, request.issuerUuid,
                 player.name(), uuidOf(player), AuditResults.SUCCESS, "accepted requestId=" + request.id);
@@ -585,7 +585,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
         target.tell(surrendered
                 ? "Te-ai predat. Ești încătușat și primești efect de încetinire."
                 : "Bastonul te-a doborât. Ești încătușat și primești efect de încetinire.");
-        if (!keyDelivered) target.tell("Gardianul este fără spațiu; cheia va fi livrată când inventarul permite.");
+        if (!keyDelivered) target.tell("Străjerul este fără spațiu; cheia va fi livrată când inventarul permite.");
         issuer.tell(target.name() + (surrendered ? " s-a predat și a fost încătușat." : " a fost încătușat automat.")
                 + (keyDelivered ? "" : " Cheia a fost pusă în așteptare până când inventarul permite."));
         audit.record(AuditActions.CUFF_APPLY, issuer.name(), uuidOf(issuer),
@@ -2384,7 +2384,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
         startDowned(target, issuer, whip ? "whip_lethal_hit" : "baton_lethal_hit");
         if (!hasItem(issuer, CUFFS)) {
             issuer.refuse("straja.custody.ko_no_cuffs", "straja.remedy.jailer");
-            target.tell(weapon + " te-a doborât, dar gardianul nu avea Cătușe disponibile.");
+            target.tell(weapon + " te-a doborât, dar străjerul nu avea Cătușe disponibile.");
             audit.record(auditAction, issuer.name(), uuidOf(issuer),
                     target.name(), uuidOf(target), AuditResults.SUCCESS, "no_cuffs_available");
             return new DamageDecision(DamageAction.CANCEL, "no_cuffs_available");
@@ -2677,7 +2677,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
                 if (farAway) {
                     if (record.outOfRangeAt == null) {
                         record.outOfRangeAt = now();
-                        target.tell("Cătușele se slăbesc: ești prea departe de gardian.");
+                        target.tell("Cătușele se slăbesc: ești prea departe de străjer.");
                         changed = true;
                     } else if (now() - record.outOfRangeAt
                             >= Math.max(1, ctx.policies().cuffBreakGraceSeconds) * 1000L) {
@@ -2691,7 +2691,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
                             restoreCuffedHand(store, target, record);
                             store.cuffed.remove(entry.getKey());
                             restraintReleasedHook.accept(issuer, target);
-                            target.tell("Cătușele s-au rupt după ce ai ieșit din raza gardianului.");
+                            target.tell("Cătușele s-au rupt după ce ai ieșit din raza străjerului.");
                             issuer.tell(target.name() + " a ieșit din raza cătușelor; acestea s-au rupt.");
                             audit.record(AuditActions.CUFF_EXPIRE, issuer.name(), record.issuerUuid,
                                     target.name(), record.targetUuid, AuditResults.SUCCESS,

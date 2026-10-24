@@ -111,7 +111,7 @@ class RefusalConventionTest {
             "refuz",              // notices that a refusal happened (post-event, both sides)
             "Ești încătușat de",  // status notice naming the cuffer
             "Ești transportat de",
-            "Cheia trebuie folosită de acel gardian",
+            "Cheia trebuie folosită de acel străjer",
             "Checkpoint disponibil",
             "devine disponibil",
             "Reîncadrarea este disponibilă",
