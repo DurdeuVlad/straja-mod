@@ -715,7 +715,7 @@ public class FineService implements FineRoleplayUseCase {
             if (!task.assignees.isEmpty() && !task.assignees.contains(player.uuid().toString()) && !players.isCommissioner(player)) continue;
             Fine fine = task.fineId == null ? null : data.find(task.fineId);
             String value = fine != null ? String.valueOf(fine.amount) : (task.injuryAmount > 0 ? "vătămare " + task.injuryAmount : "—");
-            player.tell(task.id + " | țintă: " + task.target + " | tip: " + task.kind + " | " + value + " | gărzi: " + task.assignees.size() + "/" + Math.max(1, task.maxAssignees));
+            player.tell(task.id + " | țintă: " + task.target + " | tip: " + task.kind + " | " + value + " | străjeri: " + task.assignees.size() + "/" + Math.max(1, task.maxAssignees));
             any = true;
         }
         if (!any) player.refuse("straja.fine.no_tasks", "straja.remedy.wait");

@@ -4,7 +4,7 @@ Acesta este textul de referință pentru manualul Minecraft straja:training_manu
 
 ## Principii
 
-Straja apără oamenii, procedura și dovezile. Serverul este autoritatea: chatul, etichetele, obiectele și BOLO-urile sunt interfețe, nu mandate.
+Straja apără tărâmul, oamenii, procedura și dovezile. Serverul este autoritatea: chatul, etichetele, obiectele și BOLO-urile sunt interfețe, nu mandate.
 
 ## Flux operațional
 

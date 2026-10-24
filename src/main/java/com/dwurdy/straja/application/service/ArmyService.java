@@ -317,6 +317,13 @@ public final class ArmyService {
         ArmyUnit unit = store.ensureUnits().get(op.unitId);
         int turnout = op.ensureParticipants().size();
         int signed = op.ensureSignups().size();
+        if (turnout == 0 && signed == 0 && "AUTO".equals(op.scheduledBy)) {
+            // Idle treadmill pass: nobody committed, nobody failed. Dropping
+            // the op quietly keeps unattended units from bleeding readiness
+            // and keeps the history view free of automatic filler.
+            store.ensureOperations().remove(op.operationId);
+            return;
+        }
         if (turnout == 0) {
             op.status = ArmyOperation.Status.FAILED;
             op.resultNote = "Nicio prezentare — operație eșuată";

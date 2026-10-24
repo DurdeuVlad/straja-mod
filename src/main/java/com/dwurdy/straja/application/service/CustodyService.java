@@ -2384,7 +2384,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
         startDowned(target, issuer, whip ? "whip_lethal_hit" : "baton_lethal_hit");
         if (!hasItem(issuer, CUFFS)) {
             issuer.refuse("straja.custody.ko_no_cuffs", "straja.remedy.jailer");
-            target.tell(weapon + " te-a doborât, dar gardianul nu avea Cătușe disponibile.");
+            target.tell(weapon + " te-a doborât, dar străjerul nu avea Cătușe disponibile.");
             audit.record(auditAction, issuer.name(), uuidOf(issuer),
                     target.name(), uuidOf(target), AuditResults.SUCCESS, "no_cuffs_available");
             return new DamageDecision(DamageAction.CANCEL, "no_cuffs_available");
@@ -2677,7 +2677,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
                 if (farAway) {
                     if (record.outOfRangeAt == null) {
                         record.outOfRangeAt = now();
-                        target.tell("Cătușele se slăbesc: ești prea departe de gardian.");
+                        target.tell("Cătușele se slăbesc: ești prea departe de străjer.");
                         changed = true;
                     } else if (now() - record.outOfRangeAt
                             >= Math.max(1, ctx.policies().cuffBreakGraceSeconds) * 1000L) {
@@ -2691,7 +2691,7 @@ public class CustodyService implements CustodyRoleplayUseCase {
                             restoreCuffedHand(store, target, record);
                             store.cuffed.remove(entry.getKey());
                             restraintReleasedHook.accept(issuer, target);
-                            target.tell("Cătușele s-au rupt după ce ai ieșit din raza gardianului.");
+                            target.tell("Cătușele s-au rupt după ce ai ieșit din raza străjerului.");
                             issuer.tell(target.name() + " a ieșit din raza cătușelor; acestea s-au rupt.");
                             audit.record(AuditActions.CUFF_EXPIRE, issuer.name(), record.issuerUuid,
                                     target.name(), record.targetUuid, AuditResults.SUCCESS,
