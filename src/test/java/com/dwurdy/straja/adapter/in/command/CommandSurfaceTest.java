@@ -46,6 +46,17 @@ class CommandSurfaceTest {
     }
 
     @Test
+    void commissionerLiteralIsActuallyWrappedInAdminOnly() throws Exception {
+        // A manifest entry alone proves nothing — the OP4 gate only engages if
+        // the commissioner node is registered through adminOnly(...). Scan the
+        // source so a dropped wrapper cannot pass as a perm-0 pin command.
+        String src = java.nio.file.Files.readString(
+                java.nio.file.Path.of("src/main/java/com/dwurdy/straja/adapter/in/command/StrajaCommands.java"));
+        assertTrue(src.contains("adminOnly(commissioner)"),
+                "the commissioner literal must be registered inside adminOnly(...)");
+    }
+
+    @Test
     void backupIsAnAdminCommandAndPublicHelpDoesNotAdvertiseIt() {
         assertFalse(StrajaCommands.CommandPolicy.isAdminOnly("status"));
         assertFalse(StrajaCommands.CommandPolicy.isAdminOnly("rules"));

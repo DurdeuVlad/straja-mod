@@ -19,12 +19,16 @@ public class CommissionerBootstrapService {
     private final StrajaContext ctx;
     private final AuditService audit;
     private final BiFunction<String, String, Boolean> pinWriter;
+    /** Reads the uuid currently in the authoritative config (durable readback). */
+    private final java.util.function.Supplier<String> persistedUuid;
 
     public CommissionerBootstrapService(StrajaContext ctx, AuditService audit,
-                                        BiFunction<String, String, Boolean> pinWriter) {
+                                        BiFunction<String, String, Boolean> pinWriter,
+                                        java.util.function.Supplier<String> persistedUuid) {
         this.ctx = ctx;
         this.audit = audit;
         this.pinWriter = pinWriter;
+        this.persistedUuid = persistedUuid;
     }
 
     /** Readback: environment, pin state, and who currently holds the identity. */
@@ -40,6 +44,15 @@ public class CommissionerBootstrapService {
                 : "nesetat (rol nealocat)"));
         actor.tell("Mediu: " + p.environment + " | pin de uuid cerut: " + pinRequired(p)
                 + " | fallback pe nume: " + p.allowNameFallback);
+        // Readback distinguishes a durable pin from a session-only (failed save) one.
+        String onDisk = persistedUuid.get();
+        actor.tell("Config: " + (pinned && pinnedUuid(onDisk, p.commissionerUuid)
+                ? "uuid salvat în straja-server.toml"
+                : "uuid absent din config (volatil până la restart)"));
+    }
+
+    private static boolean pinnedUuid(String persisted, String live) {
+        return persisted != null && persisted.equalsIgnoreCase(live);
     }
 
     /** Pin the online target player as commissioner; persists into the server config. */

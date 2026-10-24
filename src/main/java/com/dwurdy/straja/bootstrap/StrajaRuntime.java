@@ -411,7 +411,8 @@ public final class StrajaRuntime {
         // authoritative server config — deliberately NOT through the policy
         // override layer (identity fields are excluded there by design).
         this.commissionerBootstrap = new com.dwurdy.straja.application.service.CommissionerBootstrapService(
-                ctx, audit, StrajaServerConfig::pinCommissioner);
+                ctx, audit, StrajaServerConfig::pinCommissioner,
+                StrajaServerConfig.COMMISSIONER_UUID::get);
         // Persisted policy overrides cannot re-enable Straja's generic downed
         // owner while an optional provider is present.
         OptionalModCompatibility.applyFailSafe(compatibility, policies);

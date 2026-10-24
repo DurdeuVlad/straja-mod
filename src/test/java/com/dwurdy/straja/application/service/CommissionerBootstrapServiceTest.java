@@ -34,6 +34,8 @@ class CommissionerBootstrapServiceTest {
     private PlayerService players;
     private AuditService audit;
     private MemPinner pinner;
+    private final java.util.concurrent.atomic.AtomicReference<String> persisted =
+            new java.util.concurrent.atomic.AtomicReference<>("");
     private CommissionerBootstrapService bootstrap;
 
     @BeforeEach
@@ -43,7 +45,7 @@ class CommissionerBootstrapServiceTest {
         players = new PlayerService(ctx);
         audit = new AuditService(ctx);
         pinner = new MemPinner();
-        bootstrap = new CommissionerBootstrapService(ctx, audit, pinner);
+        bootstrap = new CommissionerBootstrapService(ctx, audit, pinner, persisted::get);
     }
 
     private TestPlayer op() {
@@ -148,9 +150,19 @@ class CommissionerBootstrapServiceTest {
         TestPlayer admin = op();
         TestPlayer target = server.add("nominee");
         bootstrap.select(admin, target);
+        persisted.set(target.uuid().toString()); // simulate the config file landing
         bootstrap.status(admin);
         assertTrue(admin.told("Comisar: nominee"), "readback shows the pinned name");
         assertTrue(admin.told(target.uuid().toString()), "readback shows the pinned uuid");
+        assertTrue(admin.told("uuid salvat"), "durable pin reported");
+    }
+
+    @Test
+    void statusDistinguishesVolatilePin() {
+        TestPlayer admin = op();
+        bootstrap.select(admin, server.add("nominee"));
+        bootstrap.status(admin);
+        assertTrue(admin.told("volatil"), "unpersisted pin is not reported as durable");
     }
 
     @Test
@@ -158,7 +170,7 @@ class CommissionerBootstrapServiceTest {
         StrajaPolicies p = ctx.policies();
         p.environment = "staging";
         p.requireCommissionerUuidOutsideLocal = true;
-        p.allowNameFallback = false;
+        p.allowNameFallback = true; // even with fallback permitted, an empty uuid pins nothing
         p.commissionerUuid = "";
         p.commissionerName = "nominee"; // name alone must not grant anything
         TestPlayer target = server.add("nominee");
