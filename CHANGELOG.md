@@ -107,7 +107,7 @@ upgrade in place; no world migration is required over 0.4.0.
   `training_manual` and the rest no longer render as missing-texture
   placeholders.
 
-## 0.5.1 — 2026-10-24
+## 0.6.0 — 2026-10-24
 
 Polish + stability over 0.5.0: institution copy is consistent, and the
 army treadmill no longer bleeds unattended units.
