@@ -1,0 +1,187 @@
+name: CurseForge file metadata fix
+
+# One-shot repair for CurseForge file 9296761 (straja-0.5.0.jar on project
+# 1693950): the RC pipeline published it as releaseType=beta with the
+# prerelease display name "Straja v0.5.0-rc.3", and the stable promotion
+# path uploads new bytes rather than editing metadata. The upload API's
+# update-file endpoint edits metadata in place — no byte re-upload — so
+# this dispatch flips releaseType to release and displayName to
+# "Straja v0.5.0".
+#
+# Manual only: Actions -> this workflow -> Run workflow on the default
+# branch. The job validates the file identity before mutating, sends the
+# smallest possible edit, then re-reads the public Core API to verify —
+# failing closed on any mismatch.
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: cf-update-file-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CF_PROJECT_ID: "1693950"
+  CF_FILE_ID: "9296761"
+  CF_EXPECTED_FILE_NAME: "straja-0.5.0.jar"
+  CF_TARGET_DISPLAY_NAME: "Straja v0.5.0"
+
+jobs:
+  update-file:
+    name: Flip file 9296761 to release
+    # Never run from a branch/fork dispatch — protected default branch only.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: release
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Resolve CurseForge read key
+        # Core-API reads want an x-api-key header and upload tokens get 403
+        # there, so publish.py carries CurseForge's public read key. Extract
+        # the committed constant rather than duplicating it.
+        run: |
+          set -euo pipefail
+          KEY=$(python3 - <<'PYEOF'
+          import re
+          src = open("tools/ci/publish.py", encoding="utf-8").read()
+          print(re.search(r'CURSEFORGE_READ_KEY = "([^"]+)"', src).group(1))
+          PYEOF
+          )
+          echo "::add-mask::$KEY"
+          echo "CF_READ_KEY=$KEY" >> "$GITHUB_ENV"
+
+      - name: Validate file identity and record before-state
+        # Fail closed unless the target file is exactly the artifact this
+        # workflow exists to fix. Record releaseType/displayName so the
+        # verify step can print a before/after, and make an already-correct
+        # file a skip instead of a redundant mutation.
+        run: |
+          set -euo pipefail
+          HTTP=$(curl -sS -o cf-before.json -w '%{http_code}' \
+            -H "x-api-key: $CF_READ_KEY" -H "Accept: application/json" \
+            "https://api.curseforge.com/v1/mods/$CF_PROJECT_ID/files/$CF_FILE_ID")
+          if [ "$HTTP" != "200" ]; then
+            echo "::error::Core API GET files/$CF_FILE_ID -> HTTP $HTTP"
+            cat cf-before.json || true
+            exit 1
+          fi
+          python3 - <<'PYEOF'
+          import json, os, sys
+          d = json.load(open("cf-before.json"))["data"]
+          bad = []
+          if d.get("id") != int(os.environ["CF_FILE_ID"]):
+              bad.append(f"id={d.get('id')}")
+          if d.get("modId") != int(os.environ["CF_PROJECT_ID"]):
+              bad.append(f"modId={d.get('modId')}")
+          if d.get("fileName") != os.environ["CF_EXPECTED_FILE_NAME"]:
+              bad.append(f"fileName={d.get('fileName')!r}")
+          if bad:
+              print("::error::file identity mismatch: " + ", ".join(bad))
+              sys.exit(1)
+          state = {"releaseType": d.get("releaseType"),
+                   "displayName": d.get("displayName"),
+                   "fileName": d.get("fileName")}
+          json.dump(state, open("cf-before-state.json", "w"))
+          print(f"before: releaseType={state['releaseType']} "
+                f"displayName={state['displayName']!r} "
+                f"fileName={state['fileName']}")
+          if state["releaseType"] == 1 and \
+                  state["displayName"] == os.environ["CF_TARGET_DISPLAY_NAME"]:
+              print("::notice::file already at target state — update skipped")
+              with open(os.environ["GITHUB_ENV"], "a") as fh:
+                  fh.write("SKIP_UPDATE=true\n")
+          PYEOF
+
+      - name: Set releaseType=release and displayName
+        if: env.SKIP_UPDATE != 'true'
+        env:
+          CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
+        run: |
+          set -euo pipefail
+          # Tokens pasted through `gh secret set` can carry trailing
+          # whitespace; the upload API rejects that as malformed.
+          CURSEFORGE_API_KEY=$(printf '%s' "$CURSEFORGE_API_KEY" | tr -d '[:space:]')
+          if [ -z "$CURSEFORGE_API_KEY" ]; then
+            echo "::error::CURSEFORGE_API_KEY secret is not configured"
+            exit 1
+          fi
+          echo "::add-mask::$CURSEFORGE_API_KEY"
+          METADATA=$(python3 - <<'PYEOF'
+          import json, os
+          print(json.dumps({
+              "fileID": int(os.environ["CF_FILE_ID"]),
+              "releaseType": "release",
+              "displayName": os.environ["CF_TARGET_DISPLAY_NAME"],
+          }))
+          PYEOF
+          )
+          echo "request metadata: $METADATA"
+          HTTP=$(curl -sS -o cf-update-response.json -w '%{http_code}' \
+            -X POST \
+            -H "X-Api-Token: $CURSEFORGE_API_KEY" \
+            --form-string "metadata=$METADATA" \
+            "https://minecraft.curseforge.com/api/projects/$CF_PROJECT_ID/update-file")
+          cat cf-update-response.json || true
+          echo ""
+          if [ "$HTTP" -lt 200 ] || [ "$HTTP" -ge 300 ]; then
+            echo "::error::update-file -> HTTP $HTTP"
+            exit 1
+          fi
+          echo "update-file -> HTTP $HTTP"
+
+      - name: Verify and report final state
+        # Re-read the public Core API (short retry for propagation lag) and
+        # assert both fields now hold the target values; print the
+        # before/after for the audit log.
+        run: |
+          set -euo pipefail
+          cat > cf-verify.py <<'PYEOF'
+          import json, os, sys
+          try:
+              d = json.load(open("cf-after.json"))["data"]
+          except Exception as exc:
+              print(f"unparseable Core API response: {exc}")
+              sys.exit(1)
+          state = {"releaseType": d.get("releaseType"),
+                   "displayName": d.get("displayName"),
+                   "fileName": d.get("fileName")}
+          json.dump(state, open("cf-after-state.json", "w"))
+          print(f"observed: releaseType={state['releaseType']} "
+                f"displayName={state['displayName']!r}")
+          sys.exit(0 if state["releaseType"] == 1
+                   and state["displayName"] == os.environ["CF_TARGET_DISPLAY_NAME"]
+                   else 1)
+          PYEOF
+          VERIFIED=""
+          for attempt in 1 2 3 4 5 6; do
+            HTTP=$(curl -sS -o cf-after.json -w '%{http_code}' \
+              -H "x-api-key: $CF_READ_KEY" -H "Accept: application/json" \
+              "https://api.curseforge.com/v1/mods/$CF_PROJECT_ID/files/$CF_FILE_ID")
+            echo "attempt $attempt: Core API GET -> HTTP $HTTP"
+            if [ "$HTTP" = "200" ] && python3 cf-verify.py; then
+              VERIFIED=1
+              break
+            fi
+            sleep 5
+          done
+          if [ -z "$VERIFIED" ]; then
+            echo "::error::post-update verification failed"
+            cat cf-after.json || true
+            exit 1
+          fi
+          python3 - <<'PYEOF'
+          import json
+          b = json.load(open("cf-before-state.json"))
+          a = json.load(open("cf-after-state.json"))
+          print(f"releaseType: {b['releaseType']} -> {a['releaseType']} "
+                f"(1=release, 2=beta, 3=alpha)")
+          print(f"displayName: {b['displayName']!r} -> {a['displayName']!r}")
+          print(f"fileName: {a['fileName']}")
+          PYEOF
