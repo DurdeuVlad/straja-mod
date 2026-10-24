@@ -84,7 +84,7 @@ rând imuabil în registrul de vânzări.
 
 ### 3.2 Lagăre de muncă (LAW-006)
 
-Un lagăr de muncă e o custodie pe perimetru: deținuții minesz, vând la
+Un lagăr de muncă e o custodie pe perimetru: deținuții minează, vând la
 intendent, iar vânzările le creditează contul de muncă până la prețul
 libertății — atunci eliberarea e automată.
 
@@ -122,7 +122,7 @@ Gărzile NPC (facțiunea `[storage].factionId`, implicit 12) atacă din proprie
 inițiativă orice jucător **wanted**: BOLO activ (`/straja bolo`), fugitiv
 înregistrat (evadare din celulă/lagăr) sau marcă wanted moștenită. Reguli de
 angajare: **niciodată** un suspect încătușat aflat în escortă (ofițerul în
-raza lese) — lovitura e anulată chiar și între două cicluri de scanare;
+raza lesei) — lovitura e anulată chiar și între două cicluri de scanare;
 niciodată un deținut în custodie sau un jucător în afara survival/adventure.
 Arestarea rezolvă marcajele ca `RESOLVED`; eliberarea face la fel. Anularea
 manuală a unui BOLO **nu** oprește urmărirea unui fugitiv înregistrat —
@@ -143,7 +143,7 @@ Doar **ofițerii (Locotenent+) și Comisarul** pot pune recompense pe jucători:
 - Suma e în unități de bază (bronz = 1), între `[bounty] minAmount` /
   `maxAmount` (implicit 64–65536). TTL implicit 7 zile → `EXPIRED`.
 - Orice civil poate captura ținta cu **Frânghia** — dar numai **doborâtă**
-  sau **predată** (`/straja surrender`). Ofiterii ocolesc regula prin
+  sau **predată** (`/straja surrender`). Ofițerii ocolesc regula prin
   cătușe, nu prin frânghie.
 - Captivul tras la o **poartă cu arest** intră în pipeline-ul complet de
   arest → statul plătește recompensa vânătorului → prizonierul primește o
@@ -161,7 +161,7 @@ Fiecare amendă duce un `paidAmount` și un istoric de contribuții
 (`FINE_PAY` | `LEVY` | `CONTRIBUTION` | `BAIL`). Comenzile:
 
 ```
-/straja debt <jucător>                 # soldul restant, rând cu rând (ofiterii văd orice ledger, civilii doar propriul)
+/straja debt <jucător>                 # soldul restant, rând cu rând (ofițerii văd orice ledger, civilii doar propriul)
 /straja debt pay <jucător> [sumă]      # contribuție terță — fără sumă acoperă tot restul
 /straja bail <jucător> [sumă]          # idem, dar servește întâi amenzile bounty_capture
 ```

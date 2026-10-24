@@ -210,21 +210,21 @@ MAP = {
     "Doar un draft dintr-un dosar deschis poate fi trimis.":
         ("straja.archive.submit_draft", R + "fix_retry",
          "Only a draft in an open dossier can be submitted."),
-    "Doar un Inspector sau Comisaru' poate semna acte.":
+    "Doar un ofițer (Căpitan+) sau Comisaru' poate semna acte.":
         ("straja.archive.sign_rank", R + "ask_comisar",
-         "Only an Inspector or the Commissioner can sign acts."),
+         "Only an officer (Captain+) or the Commissioner can sign acts."),
     "Foaia nu este pregătită pentru semnătură sau nu ai acces.":
         ("straja.archive.sign_not_ready", R + "archivist",
          "The sheet is not ready for signature or you have no access."),
-    "Doar Inspectorul, Comisaru' sau Arhivista pot revoca un act.":
+    "Doar un ofițer (Căpitan+), Comisaru' sau Arhivista pot revoca un act.":
         ("straja.archive.revoke_rank", R + "ask_comisar",
-         "Only the Inspector, the Commissioner, or the Archivist can revoke an act."),
+         "Only an officer (Captain+), the Commissioner, or the Archivist can revoke an act."),
     "Foaia nu există.":
         ("straja.archive.sheet_gone", R + "retry",
          "The sheet does not exist."),
-    "Doar Arhivista autorizată, Inspectorul sau Comisaru' pot genera copii.":
+    "Doar Arhivista autorizată, un ofițer (Căpitan+) sau Comisaru' pot genera copii.":
         ("straja.archive.copy_rank", R + "archivist",
-         "Only the authorized Archivist, the Inspector, or the Commissioner can generate copies."),
+         "Only the authorized Archivist, an officer (Captain+) or the Commissioner can generate copies."),
     "Numărul de copii este invalid.":
         ("straja.archive.copy_count", R + "fix_retry",
          "The number of copies is invalid."),
@@ -237,9 +237,9 @@ MAP = {
     "Operația nu a putut consuma Foi Indigo; nimic nu a fost livrat.":
         ("straja.archive.indigo_consume_fail", R + "retry",
          "The Indigo Sheets could not be consumed; nothing was delivered."),
-    "Doar Arhivista autorizată, Inspectorul sau Comisaru' pot împacheta acte.":
+    "Doar Arhivista autorizată, un ofițer (Căpitan+) sau Comisaru' pot împacheta acte.":
         ("straja.archive.pack_rank", R + "archivist",
-         "Only the authorized Archivist, the Inspector, or the Commissioner can package acts."),
+         "Only the authorized Archivist, an officer (Captain+) or the Commissioner can package acts."),
     "Doar un act semnat poate fi împachetat.":
         ("straja.archive.pack_unsigned", R + "fix_retry",
          "Only a signed act can be packaged."),
@@ -332,15 +332,15 @@ MAP = {
     "Nu poți depune o plângere împotriva ta.":
         ("straja.complaint.self", R + "fix_retry",
          "You cannot file a complaint against yourself."),
-    "Doar Sergentul sau un rang superior poate vedea dosarele.":
+    "Doar un ofițer sau un membru mobilizat poate vedea dosarele.":
         ("straja.complaint.view_rank", R + "instructor",
-         "Only the Sergeant or a higher rank can view cases."),
-    "Doar Sergentul sau un rang superior poate prelua plângeri.":
+         "Only an officer or a mobilized member can view cases."),
+    "Doar un ofițer sau un membru mobilizat poate prelua plângeri.":
         ("straja.complaint.claim_rank", R + "instructor",
-         "Only the Sergeant or a higher rank can take complaints."),
-    "Doar Sergentul sau un rang superior poate mobiliza participanți.":
+         "Only an officer or a mobilized member can take complaints."),
+    "Doar un ofițer sau Comisarul poate mobiliza participanți.":
         ("straja.complaint.mobilize_rank", R + "instructor",
-         "Only the Sergeant or a higher rank can mobilize participants."),
+         "Only an officer or the Commissioner can mobilize participants."),
     "Dosarul nu îți este atribuit.":
         ("straja.complaint.not_assigned", R + "retry",
          "The case is not assigned to you."),
@@ -349,7 +349,7 @@ MAP = {
          "The participant must be an active guard."),
     "Poți mobiliza doar Stagiari și Străjeri.":
         ("straja.complaint.mobilize_ranks", R + "fix_retry",
-         "You can only mobilize Trainees and Guards."),
+         "You can only mobilize Stagiar and Străjer members."),
     "Doar un străjer activ poate participa la o investigație.":
         ("straja.complaint.join_inactive", R + "duty",
          "Only an active guard can join an investigation."),
@@ -365,9 +365,9 @@ MAP = {
     "Dosarul nu are încă un raport final.":
         ("straja.complaint.no_report", R + "instructor",
          "The case has no final report yet."),
-    "Doar Inspectorul sau Comisaru' poate verifica și plăti dosare.":
+    "Doar un ofițer sau Comisaru' poate verifica și plăti dosare.":
         ("straja.complaint.verify_rank", R + "ask_comisar",
-         "Only the Inspector or the Commissioner can verify and pay cases."),
+         "Only an officer or the Commissioner can verify and pay cases."),
     "Dosarul nu este pregătit pentru verificare.":
         ("straja.complaint.not_ready", R + "retry",
          "The case is not ready for verification."),
@@ -377,9 +377,9 @@ MAP = {
     "Plângerea nu este disponibilă pentru preluare.":
         ("straja.complaint.claim_gone", R + "retry",
          "The complaint is not available to be taken."),
-    "Doar Sergentul sau un rang superior poate depune raportul de investigație.":
+    "Doar un ofițer sau un membru mobilizat poate depune raportul de investigație.":
         ("straja.complaint.report_rank", R + "instructor",
-         "Only the Sergeant or a higher rank can file the investigation report."),
+         "Only an officer or a mobilized member can file the investigation report."),
     "Raportul trebuie completat și să aibă maximum %s caractere.":
         ("straja.complaint.report_required", R + "fix_retry",
          "The report is required and must be at most %s characters."),
@@ -636,9 +636,6 @@ MAP = {
     "Descrierea trebuie completată și să aibă maximum %s caractere.":
         ("straja.fine.desc_required", R + "fix_retry",
          "The description is required and must be at most %s characters."),
-    "Nu ai un formular de amendă scris. Completează Registrul de Amenzi înainte să-l prezinți țintei.":
-        ("straja.fine.no_form", R + "fix_retry",
-         "You have no written fine form. Fill in the Fine Register before presenting it to the target."),
     "Aceasta nu este ținta înscrisă în formular.":
         ("straja.fine.wrong_target", R + "fix_retry",
          "This is not the target written on the form."),
@@ -675,9 +672,9 @@ MAP = {
     "Doar cetățeanul amendat poate depune contestația.":
         ("straja.fine.appeal_owner", R + "reception",
          "Only the fined citizen can file the appeal."),
-    "Doar Inspectorul sau Comisaru' poate decide contestații.":
+    "Doar un ofițer sau Comisaru' poate decide contestații.":
         ("straja.fine.appeal_judge", R + "ask_comisar",
-         "Only the Inspector or the Commissioner can decide appeals."),
+         "Only an officer or the Commissioner can decide appeals."),
     "Contestația nu există sau nu mai este în așteptare.":
         ("straja.fine.appeal_gone", R + "retry",
          "The appeal does not exist or is no longer pending."),
@@ -698,13 +695,13 @@ MAP = {
          "There are no open fine missions."),
     "Doar un Străjer activ poate prelua misiunea.":
         ("straja.fine.task_claim_rank", R + "duty",
-         "Only an active Guard can take the mission."),
+         "Only an active Străjer can take the mission."),
     "Misiunea nu există sau este deja închisă.":
         ("straja.fine.task_missing", R + "retry",
          "The mission does not exist or is already closed."),
     "Doar un Străjer activ poate închide misiunea.":
         ("straja.fine.task_close_rank", R + "duty",
-         "Only an active Guard can close the mission."),
+         "Only an active Străjer can close the mission."),
     "Misiunea nu există sau nu îți este atribuită.":
         ("straja.fine.task_not_assigned", R + "retry",
          "The mission does not exist or is not assigned to you."),
@@ -722,10 +719,7 @@ MAP = {
          "The fine is no longer eligible for recovery."),
     "Doar Străjerul sau un rang superior poate executa mandatul de audiere.":
         ("straja.fine.warrant_rank", R + "duty",
-         "Only the Guard or a higher rank can execute the hearing warrant."),
-    "Doar Străjerul sau un rang superior poate executa această arestare.":
-        ("straja.fine.arrest_rank", R + "duty",
-         "Only the Guard or a higher rank can execute this arrest."),
+         "Only the Străjer or a higher rank can execute the hearing warrant."),
     "Misiunea nu îți este atribuită.":
         ("straja.fine.mission_not_yours", R + "retry",
          "The mission is not assigned to you."),
@@ -752,7 +746,7 @@ MAP = {
          "The payment refusal is declared at the receptionist."),
     "Doar Străjerul sau un rang superior poate executa arestarea.":
         ("straja.fine.execute_rank", R + "duty",
-         "Only the Guard or a higher rank can execute the arrest."),
+         "Only Străjer rank or higher can execute the arrest."),
     "Arestarea este permisă doar după refuzul explicit al cetățeanului la recepționistă (dosar %s).":
         ("straja.fine.arrest_needs_refusal", R + "reception",
          "The arrest is only allowed after the citizen's explicit refusal at the receptionist (case %s)."),
@@ -777,12 +771,12 @@ MAP = {
     "Nu există o recompensă de arestare pentru acest dosar.":
         ("straja.fine.no_reward", R + "faq",
          "There is no arrest reward for this case."),
-    "Doar garda însărcinată cu dosarul poate ridica recompensa.":
+    "Doar străjerul însărcinat cu dosarul poate ridica recompensa.":
         ("straja.fine.reward_owner", R + "fix_retry",
-         "Only the guard assigned to the case can claim the reward."),
-    "Doar Inspectorul activ sau Comisaru' poate emite mandat de audiere.":
+         "Only the străjer assigned to the case can claim the reward."),
+    "Doar un ofițer activ (Căpitan+) sau Comisaru' poate emite mandat de audiere.":
         ("straja.fine.warrant_issue_rank", R + "ask_comisar",
-         "Only the active Inspector or the Commissioner can issue a hearing warrant."),
+         "Only an active officer (Captain+) or the Commissioner can issue a hearing warrant."),
     "Ținta mandatului trebuie să fie online.":
         ("straja.fine.warrant_offline", R + "wait",
          "The warrant target must be online."),
@@ -795,9 +789,9 @@ MAP = {
     "Amenda nu există.":
         ("straja.fine.gone", R + "retry",
          "The fine does not exist."),
-    "Doar Inspectorul sau Comisaru' poate vedea contestațiile.":
+    "Doar un ofițer sau Comisaru' poate vedea contestațiile.":
         ("straja.fine.appeals_view_rank", R + "ask_comisar",
-         "Only the Inspector or the Commissioner can view appeals."),
+         "Only an officer or the Commissioner can view appeals."),
     "Testul de timeout pentru contestații este disponibil doar Comisarului în debug local.":
         ("straja.fine.timeout_debug", R + "ask_comisar",
          "The appeal-timeout test is only available to the Commissioner in local debug."),
@@ -848,9 +842,9 @@ MAP = {
     "Mai sunt necesare %s blocuri de serviciu.":
         ("straja.duty.blocks_short", R + "duty",
          "%s more service blocks are needed."),
-    "Rang invalid. Folosește un rang între Stagiar și Inspector.":
+    "Rang invalid. Folosește un rang între Stagiar și Colonel.":
         ("straja.duty.rank_invalid", R + "fix_retry",
-         "Invalid rank. Use a rank between Trainee and Inspector."),
+         "Invalid rank. Use a rank between Trainee and Colonel."),
     "Autorizarea V2 a fost refuzată; starea V1 nu a fost modificată.":
         ("straja.duty.v2_auth_refused", R + "ask_comisar",
          "V2 authorization was refused; the V1 state was not changed."),
@@ -905,9 +899,6 @@ MAP = {
     "Plata anterioară nu a putut fi confirmată; blocată pentru verificarea Comisarului.":
         ("straja.duty.payment_unconfirmed", R + "ask_comisar",
          "The previous payment could not be confirmed; blocked pending the Commissioner's review."),
-    "Hrana de serviciu este disponibilă doar pentru un străjer activ.":
-        ("straja.duty.food_rank", R + "duty",
-         "Duty food is only available to an active guard."),
     "Hrana nu încape în inventar. Eliberează un slot și încearcă din nou.":
         ("straja.duty.food_full", R + "retry",
          "The food does not fit your inventory. Free a slot and try again."),
@@ -923,9 +914,9 @@ MAP = {
     "Nu există sloturi de checkpoint. Adaugă-le cu /straja checkpoint add.":
         ("straja.duty.no_checkpoint_slots", R + "ask_comisar",
          "There are no checkpoint slots."),
-    "Doar Inspectorul sau Comisaru' pot stabili timpul misiunii.":
+    "Doar un ofițer sau Comisaru' pot stabili timpul misiunii.":
         ("straja.duty.mission_time_rank", R + "ask_comisar",
-         "Only the Inspector or the Commissioner can set mission time."),
+         "Only an officer or the Commissioner can set mission time."),
     "Doar Comisaru' poate configura locațiile administrative.":
         ("straja.duty.locations_comisar", R + "ask_comisar",
          "Only the Commissioner can configure administrative locations."),
@@ -977,10 +968,10 @@ MAP = {
          "The incident is no longer active."),
     "Doar Străjerul principal sau un superior poate încheia incidentul.":
         ("straja.incident.close_rank", R + "duty",
-         "Only the lead Guard or a superior can close the incident."),
+         "Only the lead Străjer or a superior can close the incident."),
     "Trebuie să fii Străjer activ pentru a lucra la incidente.":
         ("straja.incident.work_rank", R + "duty",
-         "You must be an active Guard to work on incidents."),
+         "You must be an active Străjer to work on incidents."),
 
     # ── application/service/MissionService.java ─────────────────────────
     "Misiunea trebuie predată unui subordonat online, nu emitentului.":
@@ -1001,9 +992,9 @@ MAP = {
     "Rangul minim trebuie să fie inferior rangului emitentului.":
         ("straja.mission.min_rank_too_high", R + "fix_retry",
          "The minimum rank must be below the issuer's rank."),
-    "Carnetul de Misiuni este disponibil doar Inspectorului și Comisarului.":
+    "Carnetul de Misiuni este disponibil doar ofițerilor și Comisarului.":
         ("straja.mission.book_rank", R + "ask_comisar",
-         "The Mission Ledger is only available to the Inspector and the Commissioner."),
+         "The Mission Ledger is only available to officers and the Commissioner."),
     "Nu ai un ordin în lucru.":
         ("straja.mission.no_order", R + "retry",
          "You have no order in progress."),
@@ -1016,12 +1007,12 @@ MAP = {
     "Nu există un ordin în lucru.":
         ("straja.mission.no_draft", R + "retry",
          "There is no order in progress."),
-    "Doar Inspectorul sau Comisaru' pot folosi Carnetul de Misiuni.":
+    "Doar un ofițer sau Comisaru' pot folosi Carnetul de Misiuni.":
         ("straja.mission.book_use_rank", R + "ask_comisar",
-         "Only the Inspector or the Commissioner can use the Mission Ledger."),
-    "Doar Inspectorul sau Comisaru' pot consulta șabloanele de misiune.":
+         "Only an officer or the Commissioner can use the Mission Ledger."),
+    "Doar un ofițer sau Comisaru' pot consulta șabloanele de misiune.":
         ("straja.mission.templates_rank", R + "ask_comisar",
-         "Only the Inspector or the Commissioner can view mission templates."),
+         "Only an officer or the Commissioner can view mission templates."),
     "Nu există șabloane de misiune active.":
         ("straja.mission.no_templates", R + "ask_comisar",
          "There are no active mission templates."),
@@ -1076,12 +1067,9 @@ MAP = {
     "Obiectivul trebuie să aibă 1-%s caractere.":
         ("straja.mission.objective_length", R + "fix_retry",
          "The objective must be 1-%s characters."),
-    "Doar Inspectorul sau Comisaru' pot declara misiuni plătite.":
+    "Doar un ofițer sau Comisaru' pot declara misiuni plătite.":
         ("straja.mission.declare_rank", R + "ask_comisar",
-         "Only the Inspector or the Commissioner can declare paid missions."),
-    "Jucătorul țintă trebuie să fie online.":
-        ("straja.common.target_offline", R + "wait",
-         "The target player must be online."),
+         "Only an officer or the Commissioner can declare paid missions."),
     "Destinatarul nu atinge rangul minim al misiunii (%s).":
         ("straja.mission.recipient_below_min", R + "fix_retry",
          "The recipient does not meet the mission's minimum rank (%s)."),
@@ -1215,7 +1203,7 @@ MAP = {
          "The arrest was recorded, but the prison handover must be retried."),
     "Doar un Străjer sau Comisaru' poate elibera un deținut.":
         ("straja.prison.release_rank", R + "jailer",
-         "Only a Guard or the Commissioner can release a prisoner."),
+         "Only a Străjer or the Commissioner can release a prisoner."),
     "%s nu are o sentință activă.":
         ("straja.prison.no_sentence", R + "jailer",
          "%s has no active sentence."),
@@ -1367,9 +1355,9 @@ MAP = {
     "Alege un alt jucător online.":
         ("straja.custody.policy_self", R + "fix_retry",
          "Choose another online player."),
-    "Un străjer nu poate încătușa alt membru al Străjii fără override de Inspector sau Comisaru'.":
+    "Un străjer nu poate încătușa alt membru al Străjii fără override de ofițer sau Comisaru'.":
         ("straja.custody.policy_guard", R + "ask_comisar",
-         "A guard cannot cuff another Straja member without an Inspector or Commissioner override."),
+         "A guard cannot cuff another Straja member without an officer or Commissioner override."),
 
     # ── remaining denials in swept files ────────────────────────────────
     "Doar Comisarul poate folosi interfața administrativă.":
@@ -1412,12 +1400,9 @@ MAP = {
     # ── second pass: adversarial-review misses ──────────────────────────
 
     # CustodyService
-    "Cătușele se acordă de la rangul Străjer în sus.":
-        ("straja.custody.cuffs_rank", R + "instructor",
-         "Cuffs are granted from the Guard rank up."),
     "Cererea de predare și cătușele se folosesc de la rangul Străjer în sus.":
         ("straja.custody.surrender_rank", R + "instructor",
-         "Surrender requests and cuffs are used from the Guard rank up."),
+         "Surrender requests and cuffs are used from the Străjer rank up."),
     "Ține o Cheie, Foarfeca sau Brelocul Temnicerului în mâna principală.":
         ("straja.custody.hold_tool", R + "fix_retry",
          "Hold a Key, Shears, or the Jailer Keyring in your main hand."),
@@ -1450,9 +1435,9 @@ MAP = {
     "Manualul este pentru recruții invitați și străjeri. Vorbește cu Comisaru'.":
         ("straja.duty.manual_ranks", R + "ask_comisar",
          "The manual is for invited recruits and guards. Talk to the Commissioner."),
-    "Special Duty poate fi autorizat de Comisaru' sau de un Inspector pentru alt străjer.":
+    "Special Duty poate fi autorizat de Comisaru' sau de un ofițer pentru alt străjer.":
         ("straja.duty.special_auth", R + "ask_comisar",
-         "Special Duty may be authorized by the Commissioner or an Inspector for another guard."),
+         "Special Duty may be authorized by the Commissioner or an officer for another guard."),
     "Locație necunoscută: reports, mailbox, office, receptionist, secretary, trainer, armorer, prison-release, infirmary sau hq.":
         ("straja.admin.location_unknown", R + "fix_retry",
          "Unknown location: reports, mailbox, office, receptionist, secretary, trainer, armorer, prison-release, infirmary or hq."),
@@ -1503,9 +1488,9 @@ MAP = {
     "La recepționistă, alege confirmarea soluționării sau retragerea plângerii.":
         ("straja.complaint.decision_reception", R + "reception",
          "At the receptionist, choose confirming the resolution or withdrawing the complaint."),
-    "Bugetul zilnic al Inspectorului este insuficient (%s/%s).":
+    "Bugetul zilnic al ofițerului este insuficient (%s/%s).":
         ("straja.complaint.budget", R + "wait",
-         "The Inspector's daily budget is insufficient (%s/%s)."),
+         "The officer's daily budget is insufficient (%s/%s)."),
     "Verificarea dosarelor se face la secretară.":
         ("straja.complaint.verify_secretary", R + "secretary",
          "Case verification is done at the secretary."),
@@ -1586,9 +1571,6 @@ MAP = {
     "Sistemul de amenzi este dezactivat.":
         ("straja.fine.disabled", R + "ask_comisar",
          "The fines system is disabled."),
-    "Retry este blocat: inventarul poate fi modificat parțial. Verifică tranzacția și folosește recover paid dacă plata a fost pierdută.":
-        ("straja.fine.retry_blocked", R + "fix_retry",
-         "Retry is blocked: the inventory may be partially modified. Check the transaction and use recover paid if the payment was lost."),
     "Contestațiile sunt dezactivate.":
         ("straja.fine.appeals_off", R + "ask_comisar",
          "Appeals are disabled."),
@@ -1659,7 +1641,7 @@ MAP = {
          "The Fines register is reserved for active Straja members."),
     "Arestarea cere rangul de Străjer sau Comisaru'.":
         ("straja.cmd.arrest_rank", R + "duty",
-         "Arresting requires the rank of Guard or Commissioner."),
+         "Arresting requires the rank of Străjer or Commissioner."),
     "Jucător offline.":
         ("straja.cmd.offline", R + "retry",
          "Player offline."),
@@ -1748,9 +1730,9 @@ MAP = {
     "[Straja] Ramură FAQ necunoscută.":
         ("straja.npc.faq_unknown", R + "fix_retry",
          "[Straja] Unknown FAQ branch."),
-    "Rang sau grad necunoscut: %s. Folosește un rang 1-4 sau un grad (ex. ziler, meserias, inspector).":
+    "Rang sau grad necunoscut: %s. Folosește un rang 1-5 sau un grad (ex. strajer, zilier, capitan).":
         ("straja.admin.rank_unknown", R + "fix_retry",
-         "Unknown rank or grade: %s. Use a rank 1-4 or a grade (e.g. ziler, meserias, inspector)."),
+         "Unknown rank or grade: %s. Use a rank 1-5 or a grade (e.g. strajer, zilier, capitan)."),
     "[Straja] Membru necunoscut: %s":
         ("straja.admin.member_unknown", R + "fix_retry",
          "[Straja] Unknown member: %s"),
@@ -1915,7 +1897,7 @@ MAP.update({
     "Alege un alt jucător.": ("straja.custody.pick_other",
         "straja.remedy.fix_retry", "Pick another player."),
     "Cătușele sunt disponibile de la rangul Străjer în sus.": ("straja.custody.cuffs_rank",
-        "straja.remedy.instructor", "Handcuffs are available from Străjer rank up."),
+        "straja.remedy.instructor", "Handcuffs are available from the Străjer rank up."),
     "Ține Frânghia în mâna principală.": ("straja.custody.hold_rope",
         "straja.remedy.fix_retry", "Hold the Rope in your main hand."),
     "Ține Sacul de Captiv în mâna principală.": ("straja.custody.hold_bag",
@@ -1925,7 +1907,7 @@ MAP.update({
     "Ținta este deja transportată.": ("straja.custody.already_carried",
         "straja.remedy.retry", "The target is already being carried."),
     "%s de Poliție se folosește de la rangul Străjer în sus.": ("straja.custody.weapon_rank",
-        "straja.remedy.instructor", "%s is used from Străjer rank up."),
+        "straja.remedy.instructor", "%s is used from the Străjer rank up."),
     # --- ArchiveService limits --------------------------------------------------
     "Ai atins limita de dosare pentru acest proprietar.": ("straja.archive.owner_limit",
         "straja.remedy.wait", "You reached the dossier limit for this owner."),
@@ -1962,7 +1944,7 @@ MAP.update({
     "Folosește uphold, reduce <tarif-standard> sau void.": ("straja.fine.decision_invalid",
         "straja.remedy.fix_retry", "Use uphold, reduce <standard-fee> or void."),
     "Misiunile de arestare sunt disponibile de la rangul Străjer în sus.": ("straja.fine.arrest_rank",
-        "straja.remedy.instructor", "Arrest missions are available from Străjer rank up."),
+        "straja.remedy.instructor", "Arrest missions are available from the Străjer rank up."),
     "Ești deja în echipa acestei misiuni.": ("straja.fine.already_in_mission",
         "straja.remedy.retry", "You are already on this mission's team."),
     "Ținta are deja o sentință activă.": ("straja.fine.sentence_active",
@@ -2119,10 +2101,12 @@ MAP.update({
     "Niciun șablon de șters.": ("straja.admintool.nothing_to_clear",
         "straja.remedy.fix_retry", "No template to delete."),
     # --- NpcCommands ------------------------------------------------------------------
-    "Provider necunoscut. Valori valide: customnpcs, debug-text.": ("straja.npc.provider_unknown",
-        "straja.remedy.fix_retry", "Unknown provider. Valid values: customnpcs, debug-text."),
-    "Legarea CustomNPCs a eșuat: %s": ("straja.npc.binding_failed",
-        "straja.remedy.retry", "CustomNPCs binding failed: %s"),
+    "Provider necunoscut. Valori valide: customnpcs, desk-menu, debug-text.":
+        ("straja.npc.provider_unknown", "straja.remedy.fix_retry",
+         "Unknown provider. Valid values: customnpcs, desk-menu, debug-text."),
+    "Legarea NPC-ului la furnizor a eșuat: %s":
+        ("straja.npc.binding_failed", "straja.remedy.retry",
+         "NPC provider binding failed: %s"),
     "Toate NPC-urile Straja sunt deja înregistrate.": ("straja.npc.all_registered",
         "straja.remedy.fix_retry", "All Straja NPCs are already registered."),
     # --- StrajaCommands parse helpers ----------------------------------------------------

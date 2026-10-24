@@ -33,6 +33,8 @@ import static com.dwurdy.straja.adapter.in.StrajaText.refusal;
  * application service calls; all rules live in the services.
  */
 public final class StrajaCommands {
+
+    private static final String AUDIT_SOURCE_COMMAND = "COMMAND";
     private StrajaCommands() {}
 
     public static void onRegisterCommands(RegisterCommandsEvent event) {
@@ -2085,7 +2087,7 @@ public final class StrajaCommands {
                     StrajaRuntime.get().v2Personnel().authorize(actor(c).uuid().toString(), target.uuid().toString(), grade,
                             grade.fullTimeRequired() ? com.dwurdy.straja.domain.model.EmploymentMode.FULL_TIME
                                     : com.dwurdy.straja.domain.model.EmploymentMode.PART_TIME,
-                            "COMMAND", "hq", "command:authorize:" + target.uuid());
+                            AUDIT_SOURCE_COMMAND, "hq", "command:authorize:" + target.uuid());
                     return 1;
                 }))));
         node.then(Commands.literal("profession").then(Commands.argument("player", EntityArgument.player())
@@ -2131,11 +2133,11 @@ public final class StrajaCommands {
                             return 1;
                         }))));
         node.then(Commands.literal("suspend").then(Commands.argument("player", EntityArgument.player())
-                .executes(c -> { StrajaRuntime.get().v2Personnel().suspend(actor(c).uuid().toString(), target(c, "player").uuid().toString(), "COMMAND"); return 1; })));
+                .executes(c -> { StrajaRuntime.get().v2Personnel().suspend(actor(c).uuid().toString(), target(c, "player").uuid().toString(), AUDIT_SOURCE_COMMAND); return 1; })));
         node.then(Commands.literal("reinstate").then(Commands.argument("player", EntityArgument.player())
                 .executes(c -> { StrajaRuntime.get().v2Personnel().reinstate(actor(c).uuid().toString(), target(c, "player").uuid().toString()); return 1; })));
         node.then(Commands.literal("terminate").then(Commands.argument("player", EntityArgument.player())
-                .executes(c -> { StrajaRuntime.get().v2Personnel().terminate(actor(c).uuid().toString(), target(c, "player").uuid().toString(), "COMMAND"); return 1; })));
+                .executes(c -> { StrajaRuntime.get().v2Personnel().terminate(actor(c).uuid().toString(), target(c, "player").uuid().toString(), AUDIT_SOURCE_COMMAND); return 1; })));
         return node;
     }
 
@@ -2448,7 +2450,7 @@ public final class StrajaCommands {
                                                     StringArgumentType.getString(c, "station"),
                                                     StringArgumentType.getString(c, "jurisdiction"),
                                                     IntegerArgumentType.getInteger(c, "hours") * 3_600_000L,
-                                                    "", "", "COMMAND");
+                                                    "", "", AUDIT_SOURCE_COMMAND);
                                             c.getSource().sendSuccess(() -> Component.literal(
                                                     "Mobilizare " + order.mobilizationId + " autorizată."), false);
                                             return 1;
