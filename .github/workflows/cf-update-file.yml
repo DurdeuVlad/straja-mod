@@ -123,49 +123,83 @@ jobs:
           PYEOF
           )
           echo "request metadata: $METADATA"
+          # metadata is sent as an explicitly typed application/json part;
+          # update-file has been observed to 500 *after* committing the edit
+          # (run 40097496058), so the verify step — not this HTTP code — is
+          # the authority on the applied state. Auth failures can never
+          # mutate, so they still stop the job here.
           HTTP=$(curl -sS -o cf-update-response.json -w '%{http_code}' \
             -X POST \
             -H "X-Api-Token: $CURSEFORGE_API_KEY" \
-            --form-string "metadata=$METADATA" \
+            -F "metadata=$METADATA;type=application/json" \
             "https://minecraft.curseforge.com/api/projects/$CF_PROJECT_ID/update-file")
           cat cf-update-response.json || true
           echo ""
-          if [ "$HTTP" -lt 200 ] || [ "$HTTP" -ge 300 ]; then
-            echo "::error::update-file -> HTTP $HTTP"
+          if [ "$HTTP" = "401" ] || [ "$HTTP" = "403" ]; then
+            echo "::error::update-file auth rejected -> HTTP $HTTP"
             exit 1
+          elif [ "$HTTP" -lt 200 ] || [ "$HTTP" -ge 300 ]; then
+            echo "::warning::update-file -> HTTP $HTTP; the applied state is decided by the verify step"
+          else
+            echo "update-file -> HTTP $HTTP"
           fi
-          echo "update-file -> HTTP $HTTP"
 
       - name: Verify and report final state
         # Re-read the public Core API (short retry for propagation lag) and
         # assert both fields now hold the target values; print the
-        # before/after for the audit log.
+        # before/after for the audit log. Run 40097496058 showed the
+        # file-detail endpoint lagging the files-list endpoint for minutes
+        # after an update-file edit, so either authoritative read model
+        # confirming the target state counts — and neither means failure.
         run: |
           set -euo pipefail
           cat > cf-verify.py <<'PYEOF'
           import json, os, sys
+          target = os.environ["CF_TARGET_DISPLAY_NAME"]
+          file_id = int(os.environ["CF_FILE_ID"])
+
+          def state(d):
+              return {"releaseType": d.get("releaseType"),
+                      "displayName": d.get("displayName"),
+                      "fileName": d.get("fileName")}
+
+          states = {}
           try:
-              d = json.load(open("cf-after.json"))["data"]
+              states["detail"] = state(json.load(open("cf-after.json"))["data"])
           except Exception as exc:
-              print(f"unparseable Core API response: {exc}")
+              print(f"detail read model unavailable: {exc}")
+          try:
+              files = json.load(open("cf-list.json")).get("data", [])
+              hit = [f for f in files if f.get("id") == file_id]
+              if hit:
+                  states["list"] = state(hit[0])
+              else:
+                  print("list read model: file absent from first page")
+          except Exception as exc:
+              print(f"list read model unavailable: {exc}")
+
+          confirmed = None
+          for name, st in states.items():
+              print(f"{name}: releaseType={st['releaseType']} "
+                    f"displayName={st['displayName']!r}")
+              if confirmed is None and st["releaseType"] == 1 \
+                      and st["displayName"] == target:
+                  confirmed = name
+          if confirmed is None:
               sys.exit(1)
-          state = {"releaseType": d.get("releaseType"),
-                   "displayName": d.get("displayName"),
-                   "fileName": d.get("fileName")}
-          json.dump(state, open("cf-after-state.json", "w"))
-          print(f"observed: releaseType={state['releaseType']} "
-                f"displayName={state['displayName']!r}")
-          sys.exit(0 if state["releaseType"] == 1
-                   and state["displayName"] == os.environ["CF_TARGET_DISPLAY_NAME"]
-                   else 1)
+          json.dump(states[confirmed], open("cf-after-state.json", "w"))
+          print(f"target state confirmed via {confirmed} read model")
           PYEOF
           VERIFIED=""
           for attempt in 1 2 3 4 5 6; do
-            HTTP=$(curl -sS -o cf-after.json -w '%{http_code}' \
+            H1=$(curl -sS -o cf-after.json -w '%{http_code}' \
               -H "x-api-key: $CF_READ_KEY" -H "Accept: application/json" \
-              "https://api.curseforge.com/v1/mods/$CF_PROJECT_ID/files/$CF_FILE_ID")
-            echo "attempt $attempt: Core API GET -> HTTP $HTTP"
-            if [ "$HTTP" = "200" ] && python3 cf-verify.py; then
+              "https://api.curseforge.com/v1/mods/$CF_PROJECT_ID/files/$CF_FILE_ID") || H1="000"
+            H2=$(curl -sS -o cf-list.json -w '%{http_code}' \
+              -H "x-api-key: $CF_READ_KEY" -H "Accept: application/json" \
+              "https://api.curseforge.com/v1/mods/$CF_PROJECT_ID/files?pageSize=50") || H2="000"
+            echo "attempt $attempt: detail=$H1 list=$H2"
+            if python3 cf-verify.py; then
               VERIFIED=1
               break
             fi
@@ -174,6 +208,7 @@ jobs:
           if [ -z "$VERIFIED" ]; then
             echo "::error::post-update verification failed"
             cat cf-after.json || true
+            cat cf-list.json || true
             exit 1
           fi
           python3 - <<'PYEOF'
