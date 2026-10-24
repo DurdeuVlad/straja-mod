@@ -230,10 +230,10 @@ MAP.update({
     "Niciun șablon de șters.": ("straja.admintool.nothing_to_clear",
         "straja.remedy.fix_retry", "No template to delete."),
     # --- NpcCommands ------------------------------------------------------------------
-    "Provider necunoscut. Valori valide: customnpcs, debug-text.": ("straja.npc.provider_unknown",
-        "straja.remedy.fix_retry", "Unknown provider. Valid values: customnpcs, debug-text."),
-    "Legarea CustomNPCs a eșuat: %s": ("straja.npc.binding_failed",
-        "straja.remedy.retry", "CustomNPCs binding failed: %s"),
+    "Provider necunoscut. Valori valide: customnpcs, desk-menu, debug-text.": ("straja.npc.provider_unknown",
+        "straja.remedy.fix_retry", "Unknown provider. Valid values: customnpcs, desk-menu, debug-text."),
+    "Legarea NPC-ului la furnizor a eșuat: %s": ("straja.npc.binding_failed",
+        "straja.remedy.retry", "NPC provider binding failed: %s"),
     "Toate NPC-urile Straja sunt deja înregistrate.": ("straja.npc.all_registered",
         "straja.remedy.fix_retry", "All Straja NPCs are already registered."),
     # --- StrajaCommands parse helpers ----------------------------------------------------
