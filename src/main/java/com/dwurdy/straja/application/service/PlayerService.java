@@ -82,6 +82,15 @@ public class PlayerService implements com.dwurdy.straja.application.port.in.Play
                     && v2Record.hasAppointment(com.dwurdy.straja.domain.model.AppointmentType.COMMISSIONER,
                     ctx.clock().nowMillis());
         }
+        // The config pin is a bootstrap identity, not parallel authority: it
+        // may still describe a recordless player (e.g. a civilian who never
+        // joined personnel), so it can only authorize while NO live
+        // COMMISSIONER mandate exists anywhere. Once the first mandate is
+        // stored - and it is durable across restart - mandates are the sole
+        // authority and a stale pin can never mint a second commissioner.
+        if (v2Personnel != null && v2Personnel.commissioner() != null) {
+            return false;
+        }
         return isConfiguredCommissioner(name, uuid);
     }
 
