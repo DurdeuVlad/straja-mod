@@ -109,7 +109,13 @@ final class TestCommands {
                                     "reset-all", rec.playerUuid, apptId);
                         }
                     }
-                    send(ctx, "all virtual player state reset");
+                    // Real players keep no state across scenarios either: a
+                    // leftover held item (e.g. an arrest proces-verbal) would
+                    // poison the next journey's held-slot and NPC interactions.
+                    for (var online : ctx.getSource().getServer().getPlayerList().getPlayers()) {
+                        online.getInventory().clearContent();
+                    }
+                    send(ctx, "all virtual player state reset; online inventories cleared");
                     return 1;
                 }));
 

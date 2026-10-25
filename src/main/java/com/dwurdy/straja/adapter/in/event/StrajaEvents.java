@@ -523,7 +523,11 @@ public final class StrajaEvents {
                     // Same trailing-packet guard as the tool claim: a held
                     // patrol wand must not see this click as an air gesture.
                     toolClickHandledAt.put(player.getUUID(), player.level().getGameTime());
-                    if (NpcRoles.trySecretaryBookCopy(registration.role(), gateway)) return;
+                    // A held book still earns its copy, but the copy is an
+                    // affordance, not a gate — the desk/chat surface must
+                    // always open so institution tasks stay reachable through
+                    // the GUI while holding a book.
+                    NpcRoles.trySecretaryBookCopy(registration.role(), gateway);
                     NpcRoles.interact(registration.role(), player, level);
                 }
             }

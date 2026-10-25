@@ -38,6 +38,20 @@ and common paperwork stops needing typed commands.
 - Desk pages lead with urgent actions, questions sit behind FAQ, and
   every refusal explains the remedy.
 
+### Regression fixes (rc.5)
+
+- **A held book no longer locks out the Secretary desk**: the
+  "hold a book to get a copy" affordance used to swallow the whole
+  interaction, so anyone carrying paperwork (an arrest proces-verbal, a
+  signed order) could never reach `Registre și dosare` or file a report.
+  The copy still happens — the desk GUI now opens on top of it, keeping
+  institution tasks on the clear custom GUI instead of an item-only flow.
+- **`/straja test reset-all` clears real players' inventories too**:
+  scenario state used to leak across test journeys (an arrest's
+  proces-verbal survived into the next run and poisoned held-slot
+  checks); every reset now leaves the world truly clean for the next
+  journey.
+
 ### Earlier release candidates (rc.1–rc.3)
 
 - **Idle operations resolve quietly**: auto-scheduled unit operations

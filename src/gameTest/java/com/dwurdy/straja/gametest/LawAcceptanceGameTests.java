@@ -868,16 +868,22 @@ public final class LawAcceptanceGameTests {
 
         Runnable cleanup = () -> {
             removeSite(runtime, "at8_gate");
-            removeCell(runtime, "at8_cell");
+            removeCell(runtime, "at0_cell");
             removeCustodyState(runtime, suspectUuid);
             removeCustodyState(runtime, officerUuid);
         };
         cleanup.run();
 
         // Cell the prisoner belongs to — uncuff inside it restores custody.
+        // The id sorts before every other test cell ("at0" < "at1*"/"at3"),
+        // and firstFree picks the lowest free id, so this test's own booking
+        // — which runs atomically in the same tick as the registration —
+        // deterministically lands here. A shared-pool id lets another test's
+        // cleanup remove the assigned cell mid-flight and flip the uncuff
+        // outcome to FUGITIVE.
         var prison = runtime.context().prison().read();
         var cell = new com.dwurdy.straja.domain.model.Cell();
-        cell.id = "at8_cell";
+        cell.id = "at0_cell";
         cell.dimension = dim;
         cell.minX = anchor.getX() - 30; cell.minY = anchor.getY() - 5;
         cell.minZ = anchor.getZ() - 30;
