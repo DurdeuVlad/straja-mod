@@ -1,6 +1,7 @@
 package com.dwurdy.straja.gametest;
 
 import com.dwurdy.straja.adapter.in.event.StrajaEvents;
+import com.dwurdy.straja.adapter.in.npc.NpcInteractionService;
 import com.dwurdy.straja.adapter.in.npc.NpcRoles;
 import com.dwurdy.straja.adapter.in.npc.StrajaNpcEntity;
 import com.dwurdy.straja.adapter.in.test.VirtualPlayerGateway;
@@ -313,6 +314,128 @@ public final class StrajaGameTests {
                     "the captured template must be cleared");
             helper.succeed();
         });
+    }
+
+    /**
+     * rc.4 regression (report-form journey): a held bookshelf book earns its
+     * Secretary copy, but the copy is an affordance, not a gate — the
+     * desk/chat surface must still dispatch so common institution tasks stay
+     * reachable through the GUI instead of an item-only flow. A mock player's
+     * connection cannot carry the advanced-open payload, so the surface
+     * resolves through the chat fallback here: dispatched surfaces mint one
+     * action token per row, which is the observable contract.
+     */
+    @GameTest(template = "empty")
+    public static void secretaryBookCopyKeepsSurfaceReachable(GameTestHelper helper) {
+        var runtime = runtime(helper);
+        ServerLevel level = helper.getLevel();
+        var player = mockPlayer(helper);
+        var pos = helper.absolutePos(new BlockPos(2, 1, 2));
+        // Keep the assertion about the fix, not the environment's flag state.
+        boolean menusBefore = com.dwurdy.straja.config.StrajaServerConfig.NPC_MENUS_ENABLED
+                .getAsBoolean();
+        com.dwurdy.straja.config.StrajaServerConfig.NPC_MENUS_ENABLED.set(true);
+        try {
+            // Unregistered native entity — the mobInteract leg.
+            var npc = StrajaNpcEntity.spawn(level, pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5,
+                    "secretary", null, "Secretara");
+            player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.WRITTEN_BOOK));
+            NpcInteractionService.interact(npc, player, level);
+            helper.assertTrue(countItems(player, Items.WRITTEN_BOOK) == 2,
+                    "the held book must still produce a Secretary copy");
+            helper.assertTrue(NpcInteractionService.pendingActionsFor(player.getUUID()) > 0,
+                    "the NPC surface must still dispatch while the player holds a book (mobInteract leg)");
+
+            // Registry-bound entity — the EntityInteract leg real clients take.
+            runtime.npcRegistry().adopt(npc.getStringUUID(), "secretary");
+            long issued = NpcInteractionService.pendingActionsFor(player.getUUID());
+            var interactEvent = new PlayerInteractEvent.EntityInteract(
+                    player, InteractionHand.MAIN_HAND, npc);
+            NeoForge.EVENT_BUS.post(interactEvent);
+            helper.assertTrue(countItems(player, Items.WRITTEN_BOOK) == 3,
+                    "the registry-bound interact must still copy the held book");
+            helper.assertTrue(NpcInteractionService.pendingActionsFor(player.getUUID()) > issued,
+                    "the NPC surface must still dispatch while the player holds a book (event leg)");
+            npc.discard();
+        } finally {
+            com.dwurdy.straja.config.StrajaServerConfig.NPC_MENUS_ENABLED.set(menusBefore);
+        }
+        helper.succeed();
+    }
+
+    private static int countItems(net.minecraft.server.level.ServerPlayer player,
+                                  net.minecraft.world.item.Item item) {
+        int count = 0;
+        var inventory = player.getInventory();
+        for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
+            count += inventory.getItem(slot).is(item)
+                    ? inventory.getItem(slot).getCount() : 0;
+        }
+        return count;
+    }
+
+    /**
+     * rc.4 regression (physical-items journey): reset-all must leave real
+     * players inventory-empty as well — an arrest's proces-verbal used to
+     * survive into the next scenario's held slot and block the give check.
+     * Other batch tests hold items across ticks, so their inventories are
+     * snapshotted and restored around the command — the suite never observes
+     * the global clear.
+     */
+    @GameTest(template = "empty")
+    public static void resetAllClearsOnlineInventories(GameTestHelper helper) {
+        var runtime = runtime(helper);
+        var server = helper.getLevel().getServer();
+        var dispatcher = server.getCommands().getDispatcher();
+        List<String> lines = new ArrayList<>();
+        var admin = capturingSource(helper, lines);
+        var player = mockPlayer(helper);
+        player.getInventory().setItem(0, new ItemStack(Items.WRITTEN_BOOK));
+
+        var snapshots = new java.util.HashMap<net.minecraft.server.level.ServerPlayer,
+                java.util.List<net.minecraft.core.NonNullList<ItemStack>>>();
+        for (var other : server.getPlayerList().getPlayers()) {
+            if (other == player) continue;
+            var inv = other.getInventory();
+            var compartments = new ArrayList<net.minecraft.core.NonNullList<ItemStack>>();
+            for (var compartment : java.util.List.of(inv.items, inv.armor, inv.offhand)) {
+                var copy = net.minecraft.core.NonNullList.withSize(
+                        compartment.size(), ItemStack.EMPTY);
+                for (int i = 0; i < compartment.size(); i++) {
+                    copy.set(i, compartment.get(i).copy());
+                }
+                compartments.add(copy);
+            }
+            snapshots.put(other, compartments);
+        }
+        var testStoreBefore = runtime.context().test().read();
+
+        boolean previous = runtime.policies().testCommandsEnabled;
+        runtime.policies().testCommandsEnabled = true;
+        try {
+            run(helper, dispatcher, admin, "straja test reset-all");
+            helper.assertTrue(player.getInventory().isEmpty(),
+                    "reset-all must clear online player inventories");
+            for (var other : snapshots.keySet()) {
+                helper.assertTrue(other.getInventory().isEmpty(),
+                        "reset-all must clear every online player's inventory");
+            }
+        } finally {
+            runtime.policies().testCommandsEnabled = previous;
+            runtime.context().test().write(testStoreBefore);
+            snapshots.forEach((other, compartments) -> {
+                var inv = other.getInventory();
+                var targets = java.util.List.of(inv.items, inv.armor, inv.offhand);
+                for (int c = 0; c < compartments.size(); c++) {
+                    var source = compartments.get(c);
+                    var target = targets.get(c);
+                    for (int i = 0; i < source.size(); i++) {
+                        target.set(i, source.get(i));
+                    }
+                }
+            });
+        }
+        helper.succeed();
     }
 
     /** A confirmed cell protects its blocks from non-admin players only. */

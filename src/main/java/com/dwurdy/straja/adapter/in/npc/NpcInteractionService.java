@@ -40,6 +40,17 @@ public final class NpcInteractionService {
         return issueActionToken(playerId, actionId);
     }
 
+    /**
+     * Diagnostic seam: how many live action tokens are bound to a player.
+     * Lets tests prove the NPC surface actually dispatched (chat fallback
+     * mints one token per action) without replaying chat components.
+     */
+    public static long pendingActionsFor(UUID playerId) {
+        purgeExpiredTokens();
+        return ACTION_TOKENS.values().stream()
+                .filter(pending -> pending.playerId().equals(playerId)).count();
+    }
+
     /** Issues a token with an explicit TTL — notice links pass the window they gate. */
     public static String issueActionToken(UUID playerId, String actionId, long ttlNanos) {
         purgeExpiredTokens();
@@ -80,10 +91,12 @@ public final class NpcInteractionService {
     private record PendingAction(UUID playerId, String actionId, long expiresAtNanos) {}
 
     public static void interact(StrajaNpcEntity npc, Player player, ServerLevel level) {
-        if (player instanceof net.minecraft.server.level.ServerPlayer serverPlayer
-                && NpcRoles.trySecretaryBookCopy(npc.getRoleId(),
-                new MinecraftPlayerGateway(serverPlayer.getServer(), serverPlayer.getUUID()))) {
-            return;
+        // A held book still earns its copy, but the copy is an affordance, not
+        // a gate: the desk/chat surface must always open so institution tasks
+        // stay reachable through the GUI while holding a book.
+        if (player instanceof net.minecraft.server.level.ServerPlayer serverPlayer) {
+            NpcRoles.trySecretaryBookCopy(npc.getRoleId(),
+                    new MinecraftPlayerGateway(serverPlayer.getServer(), serverPlayer.getUUID()));
         }
         NpcRoles.interact(npc.getRoleId(), player, level);
     }
