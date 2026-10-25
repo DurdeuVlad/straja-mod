@@ -43,7 +43,12 @@ public final class NpcPlayerSurface {
             "armory-buy", "armory-reserve",
             "duty-checkpoint",
             "trades-enroll",
-            "delegation-mode", "delegation-window", "delegation-revoke");
+            "delegation-mode", "delegation-window", "delegation-revoke",
+            "parole-review", "parole-open", "parole-decide-paroled",
+            "parole-decide-denied", "parole-decide-conditional",
+            "parole-object", "parole-advocate-answer",
+            "manhunt-calloff", "transfer-join", "transfer-pickup",
+            "transfer-cancel", "bounty-cancel");
 
     public enum RoleRoute { RECEPTIONIST, SECRETARY, JAILER, ARCHIVIST, TRAINER, RECRUITER, ARMORER, INSPECTOR, COMMANDER, UNKNOWN }
 
@@ -287,15 +292,24 @@ public final class NpcPlayerSurface {
         java.util.function.Consumer<ChatAction> push = action -> {
             if (action != null && seen.add(action.actionId())) eligible.add(action);
         };
-        // Members see their actionable-now (dynamic) actions ahead of the static
-        // bookkeeping; civilians and applicants see orientation first instead.
-        if (phase == SurfacePhase.MEMBER) extras.forEach(push);
+        // Open-window rows — a pending consent, muster, objection or exam —
+        // always lead: burying them under «Mai multe…» costs the player the
+        // window. Members and the jailer desk put every live row first
+        // (custody is detention-driven, not membership-driven).
+        extras.stream().filter(NpcPlayerSurface::isUrgent).forEach(push);
+        boolean extrasLead = phase == SurfacePhase.MEMBER
+                || base.route() == RoleRoute.JAILER;
+        if (extrasLead) {
+            extras.stream().filter(action -> !isUrgent(action)).forEach(push);
+        }
         String routeKey = NpcFaqSurface.roleKey(base.route());
         for (String specId : orderSpec(base.route(), phase)) {
             String actionId = FAQ_SPEC.equals(specId) ? faqId : specId;
             push.accept(present.get(actionId));
         }
-        if (phase != SurfacePhase.MEMBER) extras.forEach(push);
+        if (!extrasLead) {
+            extras.stream().filter(action -> !isUrgent(action)).forEach(push);
+        }
 
         // Actions that do not fit the current state stay reachable, but only
         // under «Mai multe…» — nothing is removed outright.
@@ -346,6 +360,35 @@ public final class NpcPlayerSurface {
         if (context.commissioner() || context.activeMember()) return SurfacePhase.MEMBER;
         if (context.memberRecord()) return SurfacePhase.APPLICANT;
         return SurfacePhase.CIVIL;
+    }
+
+    /**
+     * Rows whose window is open right now: consent prompts, musters, exam and
+     * objection windows, the current-shift checkpoint. They outrank both the
+     * static order and the «Mai multe…» overflow in every phase.
+     */
+    private static final List<String> URGENT_PREFIXES = List.of(
+            "custody-accept:", "custody-refuse:", "custody-release:",
+            "parole-object:", "parole-advocate-answer:",
+            "complaint-claim:", "complaint-join:", "complaint-leave:",
+            "complaint-confirm:",
+            "fine-pay:", "fine-refuse:", "fine-task-accept:",
+            "mission-accept:", "mission-decline:", "mission-join:",
+            "v2-mission-claim:",
+            "incident-accept:", "incident-join:", "incident-leave:",
+            "incident-resolve:",
+            "dispatch-accept:", "dispatch-decline:",
+            "duty-checkpoint:",
+            "army-signup", "army-report", "army-leave-confirm",
+            "recruit", "quiz-answer",
+            "bribe-accept", "bribe-decline", "trade-accept", "trade-decline");
+
+    static boolean isUrgent(ChatAction action) {
+        if (action == null || action.actionId() == null) return false;
+        for (String prefix : URGENT_PREFIXES) {
+            if (action.actionId().startsWith(prefix)) return true;
+        }
+        return false;
     }
 
     private static int indexOf(List<ChatAction> actions, String actionId) {
@@ -743,6 +786,117 @@ public final class NpcPlayerSurface {
                         new ChatAction("Primește cătușe", "cuffs-item"));
             }
         }
+        return List.copyOf(actions);
+    }
+
+    /**
+     * Jailer-desk parole rows: filing verbs for an eligible prisoner, the
+     * advocate row once a case is pending, the bail row while a CONDITIONAL
+     * offer is open, and the parolee check-in. Officers also get the docket —
+     * the institution rows render for whoever the desk belongs to, never by
+     * hiding the surface itself.
+     */
+    static List<ChatAction> paroleActions(
+            com.dwurdy.straja.application.port.in.ParoleUseCase.ParoleSurface surface,
+            boolean officer) {
+        if (surface == null) return List.of();
+        var actions = new java.util.ArrayList<ChatAction>();
+        if (surface.prisoner() || surface.parolee()
+                || !surface.pendingId().isEmpty() || !surface.conditionalId().isEmpty()) {
+            actions.add(new ChatAction("Statutul eliberării", "parole-status"));
+        }
+        if (surface.prisoner() && surface.eligible()
+                && surface.pendingId().isEmpty() && surface.conditionalId().isEmpty()) {
+            actions.add(new ChatAction("Cere eliberarea condiționată", "parole-file"));
+            actions.add(new ChatAction("Contează sentința", "parole-appeal"));
+        }
+        if (!surface.pendingId().isEmpty()
+                && !"AGREED".equals(surface.advocateStatus())) {
+            actions.add(new ChatAction("Desemnează un avocat", "parole-advocate"));
+        }
+        if (!surface.conditionalId().isEmpty()) {
+            actions.add(new ChatAction("Plătește cauțiunea (" + surface.bailAmount()
+                    + " credite)", "parole-settle"));
+        }
+        if (surface.parolee()) {
+            actions.add(new ChatAction("Raportează-te (check-in)", "parole-checkin"));
+        }
+        if (officer) {
+            actions.add(new ChatAction("Dosare de eliberare", "parole-docket"));
+        }
+        return List.copyOf(actions);
+    }
+
+    /**
+     * Receptionist parole rows: a victim's open objection windows and a
+     * pending advocacy ask — the two civil seats the parole loop touches.
+     */
+    static List<ChatAction> paroleCivilActions(
+            List<String> openObjections, String advocacyAsk) {
+        var actions = new java.util.ArrayList<ChatAction>();
+        if (openObjections != null) {
+            for (String hearingId : openObjections) {
+                parameterizedActionId("parole-object", hearingId)
+                        .ifPresent(a -> actions.add(new ChatAction(
+                                "Obiectează la eliberarea " + hearingId, a)));
+            }
+        }
+        if (advocacyAsk != null && !advocacyAsk.isBlank()) {
+            parameterizedActionId("parole-advocate-answer", "accept")
+                    .ifPresent(a -> actions.add(new ChatAction(
+                            "Acceptă avocatura " + advocacyAsk, a)));
+            parameterizedActionId("parole-advocate-answer", "decline")
+                    .ifPresent(a -> actions.add(new ChatAction(
+                            "Refuză avocatura " + advocacyAsk, a)));
+        }
+        return List.copyOf(actions);
+    }
+
+    /**
+     * The prisoner's own loop at the jailer desk — the repeated work of a
+     * sentence (jobs, camp status, market trades, IOUs, bribe, debt, bail)
+     * rides rows instead of typed commands. {@code inCell} mirrors the
+     * bribe verb's custody gate; {@code bountied} gates surrender; every
+     * click still revalidates inside its service.
+     */
+    static List<ChatAction> prisonLoopActions(boolean prisoner, boolean inCell,
+                                              boolean inCamp, boolean bountied) {
+        if (!prisoner) return List.of();
+        var actions = new java.util.ArrayList<ChatAction>();
+        actions.add(new ChatAction("Munca ta — cote și plata", "job-status"));
+        if (inCamp) {
+            actions.add(new ChatAction("Statutul taberei de muncă", "camp-status"));
+        }
+        actions.add(new ChatAction("Propune un schimb", "trade-offer"));
+        actions.add(new ChatAction("Semnează o cambie (IOU)", "iou-issue"));
+        if (inCell) {
+            actions.add(new ChatAction("Oferă mită străjerului", "bribe-offer"));
+        }
+        actions.add(new ChatAction("Datoriile tale", "debt-status"));
+        actions.add(new ChatAction("Plătește din datorie", "debt-pay"));
+        actions.add(new ChatAction("Plătește cauțiunea ta", "bail-pay"));
+        if (bountied) {
+            actions.add(new ChatAction("Predă-te (recompensa e activă)", "surrender"));
+        }
+        return List.copyOf(actions);
+    }
+
+    /**
+     * The detention-shift verbs a jailer works with — cell search, the hunt,
+     * transfer and bounty boards, posting and inspecting. {@code senior}
+     * gates the posting row (Inspector+ / Comisar, same bar the service sets).
+     */
+    static List<ChatAction> guardCustodyActions(boolean onDuty, boolean senior) {
+        if (!onDuty) return List.of();
+        var actions = new java.util.ArrayList<ChatAction>();
+        actions.add(new ChatAction("Percheziționează celula", "cell-search"));
+        actions.add(new ChatAction("Panou vânători", "manhunt-board"));
+        actions.add(new ChatAction("Panou transferuri", "transfer-board"));
+        actions.add(new ChatAction("Panou recompense", "bounty-board"));
+        if (senior) {
+            actions.add(new ChatAction("Pune recompensă", "bounty-post"));
+        }
+        actions.add(new ChatAction("Verifică documentele unui jucător", "inspect-player"));
         return List.copyOf(actions);
     }
 

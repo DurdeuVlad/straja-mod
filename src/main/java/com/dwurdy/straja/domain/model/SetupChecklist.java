@@ -13,12 +13,20 @@ public final class SetupChecklist {
 
     /**
      * Install-state probes the checklist cannot reach itself: policies are
-     * already domain-owned, while cell counts and station health are read by
-     * the runtime and handed in pre-computed.
+     * already domain-owned, while cell counts, station health and the
+     * appointed-commissioner marker are read by the runtime and handed in
+     * pre-computed.
      */
-    public record Probes(StrajaPolicies policies, int prisonCells, List<String> stationErrors) {
+    public record Probes(StrajaPolicies policies, int prisonCells, List<String> stationErrors,
+                         String appointedCommissioner) {
         public Probes {
             stationErrors = stationErrors == null ? List.of() : List.copyOf(stationErrors);
+            appointedCommissioner = appointedCommissioner == null ? "" : appointedCommissioner;
+        }
+
+        /** Legacy construction — pre-appointment runtimes without the marker. */
+        public Probes(StrajaPolicies policies, int prisonCells, List<String> stationErrors) {
+            this(policies, prisonCells, stationErrors, "");
         }
     }
 
@@ -57,8 +65,13 @@ public final class SetupChecklist {
         return List.copyOf(missing);
     }
 
-    /** A commissioner identity is appointed when a uuid or a name is configured. */
+    /**
+     * A commissioner is appointed when the personnel appointment exists (the
+     * in-world selection from {@code /straja setup commissioner}) or a legacy
+     * identity is still pinned in config.
+     */
     public static boolean commissionerAppointed(Probes probes) {
+        if (!blank(probes.appointedCommissioner())) return true;
         var policies = probes.policies();
         return policies != null
                 && (!blank(policies.commissionerUuid) || !blank(policies.commissionerName));
@@ -94,8 +107,8 @@ public final class SetupChecklist {
     public static String nextStep(SetupData setup, NpcRegistry registry, List<String> expectedRoles,
                                   Probes probes) {
         if (!commissionerAppointed(probes)) {
-            return "Comisarul nu este configurat — setează commissionerName sau commissionerUuid "
-                    + "în straja-server.toml și repornește.";
+            return "Comisarul nu este numit — rulează /straja setup commissioner <jucător> "
+                    + "și numește-l din lume.";
         }
         if (!missingLocations(setup).isEmpty()) {
             return "Lipsesc locațiile administrative — stai unde vrei ghișeele și rulează /straja setup here.";

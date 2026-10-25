@@ -510,6 +510,12 @@ public final class StrajaCommands {
                         .showSetup(p, StrajaRuntime.get().setupProbes())));
         setup.then(Commands.literal("here")
                 .executes(c -> adminActor(c, StrajaRuntime.get().guards()::setupLocationsHere)));
+        // Data-first commissioner selection: name/uuid arg, appointment is
+        // persisted in the personnel store — no TOML edit, no restart.
+        setup.then(Commands.literal("commissioner")
+                .then(Commands.argument("player", StringArgumentType.word())
+                        .executes(c -> adminActor(c, p -> StrajaRuntime.get().guards()
+                                .setupCommissioner(p, StringArgumentType.getString(c, "player"))))));
         setup.then(Commands.literal("patrol")
                 .executes(c -> adminActor(c, StrajaRuntime.get().guards()::setupPatrol)));
         setup.then(Commands.literal("npcs").executes(NpcCommands::spawnMissing));

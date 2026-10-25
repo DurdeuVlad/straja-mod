@@ -394,13 +394,17 @@ public class CustodyService implements CustodyRoleplayUseCase {
         request.expiresAt = now() + timeoutSec * 1000;
         store.cuffRequests.put(request.id, request);
         ctx.custody().write(store);
+        long linkTtl = Math.max(0, request.expiresAt - now());
+        var links = List.of(
+                new PlayerGateway.ActionLink("Acceptă", "custody-accept:" + request.id, linkTtl),
+                new PlayerGateway.ActionLink("Refuză", "custody-refuse:" + request.id, linkTtl));
         if ("SURRENDER".equals(kind)) {
-            target.tell(Text.STRAJA_PREFIX + issuer.name() + " îți cere predarea. Alege Acceptă sau Refuză "
-                    + "în cererea din chat (" + request.id + ").");
+            target.tellAction("straja.custody.request_surrender", links,
+                    issuer.name(), request.id);
             issuer.tell("Cererea de predare a fost trimisă lui " + target.name() + ".");
         } else {
-            target.tell(Text.STRAJA_PREFIX + issuer.name() + " vrea să te încătușeze. Alege Acceptă sau Refuză "
-                    + "în cererea din chat (" + request.id + ").");
+            target.tellAction("straja.custody.request_cuffs", links,
+                    issuer.name(), request.id);
             issuer.tell("Cererea de încătușare a fost trimisă lui " + target.name()
                     + ". Așteaptă acceptarea sau refuzul.");
         }

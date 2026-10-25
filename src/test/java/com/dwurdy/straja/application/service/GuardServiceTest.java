@@ -1712,7 +1712,7 @@ class GuardServiceTest {
     void setupChecklistGuidesThroughMissingPieces() {
         TestPlayer c = commissioner();
         guards.showSetup(c, probes());
-        assertTrue(c.told("Comisar: dwurdy"),
+        assertTrue(c.told("Comisar: config dwurdy"),
                 "the configured commissioner name is shown, not just a flag");
         assertTrue(c.told("Locații administrative: 0/" + SetupData.LOCATION_KEYS.length));
         assertTrue(c.told("Celule de detenție: 0"), "cells category is listed");
@@ -1737,7 +1737,7 @@ class GuardServiceTest {
         TestPlayer c = commissioner();
         guards.showSetup(c, probes());
         assertTrue(c.told("✗ Comisar: nesetat"));
-        assertTrue(c.told("Comisarul nu este configurat"),
+        assertTrue(c.told("Comisarul nu este numit"),
                 "the commissioner step leads because it gates setup here");
     }
 

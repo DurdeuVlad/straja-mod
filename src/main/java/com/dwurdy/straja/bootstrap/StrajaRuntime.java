@@ -613,7 +613,7 @@ public final class StrajaRuntime {
                 instance.guards, instance.missions, instance.complaints, instance.fines,
                 instance.archive, instance.reports, instance.audiences, instance.admin,
                 instance.adminTools, instance.custody, instance.expansion, instance.v2Promotions,
-                instance.v2JoinRequests);
+                instance.v2JoinRequests, instance.parole);
         // This is the reusable equivalent of the original
         // instance.adminTools, instance.custody, instance.expansion)::submit
         // wiring; NPC and native forms now share the same authenticated route.
@@ -634,10 +634,11 @@ public final class StrajaRuntime {
      */
     private void logDeploymentGates() {
         if (policies.isLocalEnvironment()) return;
-        if (policies.requireCommissionerUuidOutsideLocal && policies.commissionerUuid.isEmpty()) {
+        if (policies.requireCommissionerUuidOutsideLocal && policies.commissionerUuid.isEmpty()
+                && v2Personnel.commissioner() == null) {
             com.dwurdy.straja.StrajaMod.LOGGER.error(
-                    Text.STRAJA_PREFIX + "DEPLOYMENT GATE FAILED: commissionerUuid is not pinned outside a local "
-                            + "environment — no commissioner identity will be granted");
+                    Text.STRAJA_PREFIX + "DEPLOYMENT GATE FAILED: no commissioner is appointed outside a local "
+                            + "environment — run /straja setup commissioner <player> or pin commissionerUuid");
         }
         if (policies.requireDebugDisabledOutsideLocal && policies.debugEnabled) {
             com.dwurdy.straja.StrajaMod.LOGGER.error(
@@ -737,8 +738,10 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.domain.model.SetupChecklist.Probes setupProbes() {
         var stationErrors = com.dwurdy.straja.domain.model.SetupChecklist.stationProblems(
                 v2Stations.get("hq"), v2Stations.validateFallbacks());
+        var appointed = v2Personnel.commissioner();
         return new com.dwurdy.straja.domain.model.SetupChecklist.Probes(
-                ctx.policies(), ctx.prison().read().cells.size(), stationErrors);
+                ctx.policies(), ctx.prison().read().cells.size(), stationErrors,
+                appointed == null ? "" : appointed.playerUuid);
     }
     public com.dwurdy.straja.application.service.DocumentService v2Documents() { return v2Documents; }
     public com.dwurdy.straja.application.service.EquipmentLedgerService v2EquipmentLedger() { return v2EquipmentLedger; }
@@ -803,7 +806,9 @@ public final class StrajaRuntime {
             boolean configuredCommissioner = players.isConfiguredCommissioner(player);
             var legacy = ctx.players().read(player.uuid());
             var record = v2Personnel.projectLegacy(player.uuid(), legacy, player.uuid().toString());
-            if (configuredCommissioner) {
+            // The TOML pin only bootstraps — once a live appointment exists it is
+            // authoritative, so a stale pin must never resurrect a second Comisar.
+            if (configuredCommissioner && v2Personnel.commissioner() == null) {
                 record = v2Personnel.ensureCommissioner(player.uuid().toString());
                 if (!record.hasAppointment(com.dwurdy.straja.domain.model.AppointmentType.COMMISSIONER, clock.nowMillis())) {
                     v2Personnel.appointInternal(player.uuid().toString(),

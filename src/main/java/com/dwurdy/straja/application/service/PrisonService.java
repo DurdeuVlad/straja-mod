@@ -339,6 +339,14 @@ public class PrisonService implements PrisonRoleplayUseCase {
         return activeSentenceFrom(store(), target);
     }
 
+    /** {@inheritDoc} — the register's view of the player's detention state. */
+    @Override
+    public PrisonerStatus registerStatus(PlayerGateway player) {
+        if (player == null || player.uuid() == null) return null;
+        var record = ctx.prisonerRegister().read().prisoner(player.uuid().toString());
+        return record == null ? null : record.status;
+    }
+
     public Sentence findSentence(String id) {
         if (id == null || id.isEmpty()) return null;
         for (Sentence s : store().sentences) if (s.id.equals(id)) return s;

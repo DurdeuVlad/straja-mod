@@ -88,7 +88,7 @@ public final class Fakes {
 
     // ---------------------------------------------------------------- player
 
-    public static final class TestPlayer implements PlayerGateway {
+    public static class TestPlayer implements PlayerGateway {
         public TestServer server;
         public final UUID uuid;
         public String name;
@@ -612,8 +612,7 @@ public final class Fakes {
 
     /** Full context backed by in-memory SavedData-equivalent stores. */
     public static StrajaContext context(TestServer server, FixedClock clock) {
-        StrajaPolicies policies = new StrajaPolicies();
-        return context(server, clock, policies);
+        return context(server, clock, policies());
     }
 
     public static StrajaContext context(TestServer server, FixedClock clock, StrajaPolicies policies) {
@@ -738,6 +737,9 @@ public final class Fakes {
     public static StrajaPolicies policies() {
         StrajaPolicies p = new StrajaPolicies();
         p.testCommandsEnabled = true;
+        // The production default ships blank (the commissioner is appointed
+        // in-world); fixtures that exercise a named commissioner pin it here.
+        p.commissionerName = "dwurdy";
         return p;
     }
 }

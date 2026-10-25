@@ -22,6 +22,7 @@ public final class FormField {
     public static final String CONTENT = "content";
     public static final String COUNT = "count";
     public static final String CUSTODIAN = "custodian";
+    public static final String DAYS = "days";
     public static final String DECISION = "decision";
     public static final String DELTA = "delta";
     public static final String DEPARTMENT = "department";

@@ -89,6 +89,26 @@ final class TestCommands {
                         runtime.players().save(p.uuid(), new GuardState());
                         p.clearLog();
                     }
+                    var testStore = runtime.context().test().read();
+                    testStore.debugCommissionerUuid = "";
+                    runtime.context().test().write(testStore);
+                    long now = System.currentTimeMillis();
+                    for (var p : runtime.testPlayers().all()) {
+                        var rec = runtime.v2Personnel().find(p.uuid().toString());
+                        if (rec == null) continue;
+                        var activeIds = new java.util.ArrayList<String>();
+                        for (var appt : rec.appointments) {
+                            if (appt != null
+                                    && appt.type == com.dwurdy.straja.domain.model.AppointmentType.COMMISSIONER
+                                    && appt.activeAt(now)) {
+                                activeIds.add(appt.appointmentId);
+                            }
+                        }
+                        for (String apptId : activeIds) {
+                            runtime.v2Personnel().revokeAppointmentInternal(
+                                    "reset-all", rec.playerUuid, apptId);
+                        }
+                    }
                     send(ctx, "all virtual player state reset");
                     return 1;
                 }));
@@ -406,6 +426,14 @@ final class TestCommands {
                             send(ctx, "debug commissioner = " + player.name());
                             return 1;
                         })));
+
+        test.then(Commands.literal("appoint-commissioner")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("target", StringArgumentType.word())
+                                .executes(ctx -> run(ctx, runtime ->
+                                        runtime.guards().setupCommissioner(
+                                                player(ctx, runtime),
+                                                StringArgumentType.getString(ctx, "target")))))));
 
         test.then(Commands.literal("set-checkpoint")
                 .then(Commands.argument("id", StringArgumentType.word())
@@ -808,6 +836,134 @@ final class TestCommands {
                     }
                     send(ctx, "cells=" + s.cells.size() + " assignments=" + s.assignments.keySet()
                             + " waitlist=" + s.waitlist.size());
+                })));
+
+        // -------------------------------------------------- parole (FUN-11)
+        // The same verbs the desk rows dispatch — the harness drives the
+        // whole journey: file → advocate → open → object → decide → settle
+        // → check-in. Clickable-notice links land in the actor's tell-log
+        // (VirtualPlayerGateway records them as link:<actionId>).
+        test.then(Commands.literal("prison-record")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("field", StringArgumentType.word())
+                                .then(Commands.argument("value", IntegerArgumentType.integer(0))
+                                        .executes(ctx -> run(ctx, runtime -> {
+                                            var target = player(ctx, runtime);
+                                            if (target == null || target.uuid() == null) return;
+                                            String field = StringArgumentType.getString(ctx, "field");
+                                            int value = IntegerArgumentType.getInteger(ctx, "value");
+                                            var reg = runtime.context().prisonerRegister().read();
+                                            var rec = reg.prisoner(target.uuid().toString());
+                                            if (rec == null) {
+                                                send(ctx, "no register record");
+                                                return;
+                                            }
+                                            switch (field) {
+                                                case "standing" -> rec.standing = value;
+                                                case "labor" -> rec.laborAccount = value;
+                                                case "servedPercent" -> {
+                                                    var data = runtime.context().prison().read();
+                                                    var s = data.activeSentenceFor(
+                                                            target.uuid().toString());
+                                                    if (s == null) {
+                                                        send(ctx, "no active sentence");
+                                                        return;
+                                                    }
+                                                    long total = (long) s.sentenceDays
+                                                            * Math.max(1, runtime.context().policies()
+                                                            .prisonActiveMinutesPerMinecraftDay)
+                                                            * 60_000L;
+                                                    s.remainingActiveMs = Math.max(0, Math.min(100,
+                                                            100 - value)) * total / 100;
+                                                    runtime.context().prison().write(data);
+                                                }
+                                                default -> {
+                                                    send(ctx, "unknown field " + field);
+                                                    return;
+                                                }
+                                            }
+                                            runtime.context().prisonerRegister().write(reg);
+                                            send(ctx, field + "=" + value);
+                                        }))))));
+        test.then(Commands.literal("parole-status")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(ctx -> run(ctx, runtime ->
+                                runtime.parole().status(player(ctx, runtime))))));
+        test.then(Commands.literal("parole-file")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("kind", StringArgumentType.word())
+                                .then(Commands.argument("reason", StringArgumentType.greedyString())
+                                        .executes(ctx -> run(ctx, runtime -> send(ctx,
+                                                "file=" + runtime.parole().file(
+                                                        player(ctx, runtime),
+                                                        StringArgumentType.getString(ctx, "kind"),
+                                                        StringArgumentType.getString(ctx, "reason")))))))));
+        test.then(Commands.literal("parole-docket")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(ctx -> run(ctx, runtime -> {
+                            runtime.parole().docket(player(ctx, runtime));
+                            for (var h : runtime.parole().reviewDocket()) {
+                                send(ctx, "docket=" + h.id + " " + h.kind + " "
+                                        + h.status + " " + h.prisonerName);
+                            }
+                        }))));
+        test.then(Commands.literal("parole-open")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("hearing", StringArgumentType.word())
+                                .executes(ctx -> run(ctx, runtime -> send(ctx,
+                                        "open=" + runtime.parole().open(player(ctx, runtime),
+                                                StringArgumentType.getString(ctx, "hearing"))))))));
+        test.then(Commands.literal("parole-object")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("hearing", StringArgumentType.word())
+                                .executes(ctx -> run(ctx, runtime -> send(ctx,
+                                        "object=" + runtime.parole().object(player(ctx, runtime),
+                                                StringArgumentType.getString(ctx, "hearing"))))))));
+        test.then(Commands.literal("parole-advocate")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("advocate", StringArgumentType.word())
+                                .executes(ctx -> run(ctx, runtime -> send(ctx,
+                                        "advocate=" + runtime.parole().advocate(player(ctx, runtime),
+                                                StringArgumentType.getString(ctx, "advocate"))))))));
+        test.then(Commands.literal("parole-advocate-answer")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("verdict", StringArgumentType.word())
+                                .executes(ctx -> run(ctx, runtime -> send(ctx,
+                                        "answer=" + runtime.parole().advocateAnswer(
+                                                player(ctx, runtime),
+                                                "accept".equalsIgnoreCase(
+                                                        StringArgumentType.getString(ctx, "verdict")))))))));
+        test.then(Commands.literal("parole-decide")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("hearing", StringArgumentType.word())
+                                .then(Commands.argument("outcome", StringArgumentType.word())
+                                        .executes(ctx -> run(ctx, runtime -> send(ctx,
+                                                "decide=" + runtime.parole().decide(
+                                                        player(ctx, runtime),
+                                                        StringArgumentType.getString(ctx, "hearing"),
+                                                        StringArgumentType.getString(ctx, "outcome")))))))));
+        test.then(Commands.literal("parole-settle")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(ctx -> run(ctx, runtime -> send(ctx,
+                                "settle=" + runtime.parole().settle(player(ctx, runtime)))))));
+        test.then(Commands.literal("parole-checkin")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(ctx -> run(ctx, runtime ->
+                                runtime.parole().checkIn(player(ctx, runtime))))));
+        test.then(Commands.literal("parole-dump")
+                .executes(ctx -> run(ctx, runtime -> {
+                    var store = runtime.context().paroles().read();
+                    for (var h : store.docket) {
+                        send(ctx, "hearing=" + h.id + " " + h.kind + " " + h.status
+                                + " prisoner=" + h.prisonerName
+                                + " objections=" + h.objections
+                                + " advocate=" + h.advocateStatus);
+                    }
+                    for (var e : store.paroles.entrySet()) {
+                        send(ctx, "parole=" + e.getKey() + " " + e.getValue().status);
+                    }
+                    send(ctx, "hearings=" + store.docket.size()
+                            + " paroles=" + store.paroles.size());
                 })));
 
         // ---------------------------------------------------------------- fines

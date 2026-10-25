@@ -225,4 +225,63 @@ class NpcSurfaceOrderingTest {
         assertTrue(ordered.surface().actions().isEmpty());
         assertTrue(ordered.overflow().isEmpty());
     }
+
+    @Test
+    void consentAnswersLeadEvenForCivilians() {
+        var extras = List.of(
+                new NpcPlayerSurface.ChatAction("Reguli", "rules"),
+                new NpcPlayerSurface.ChatAction("Acceptă mita", "bribe-accept"),
+                new NpcPlayerSurface.ChatAction("Refuză mita", "bribe-decline"),
+                new NpcPlayerSurface.ChatAction("Acceptă schimbul", "trade-accept"));
+        var ordered = NpcPlayerSurface.orderedFor(NpcRoles.JAILER, extras, civil());
+        var primary = primaryIds(ordered);
+        assertEquals(List.of("bribe-accept", "bribe-decline"),
+                primary.subList(0, 2),
+                "consent answers lead the page");
+        assertTrue(primary.contains("trade-accept")
+                        && !ids(ordered.overflow()).stream()
+                                .anyMatch(id -> id.startsWith("bribe-")
+                                        || id.startsWith("trade-")),
+                "a ticking consent window can never sink under «Mai multe…»");
+    }
+
+    @Test
+    void jailerLeadsEveryLiveRowRegardlessOfPhase() {
+        var extras = List.of(
+                new NpcPlayerSurface.ChatAction("Munca ta", "job-status"),
+                new NpcPlayerSurface.ChatAction("Datoriile tale", "debt-status"));
+        var ordered = NpcPlayerSurface.orderedFor(NpcRoles.JAILER, extras, civil());
+        assertEquals(List.of("job-status", "debt-status"),
+                primaryIds(ordered).subList(0, 2),
+                "the jailer desk is detention-driven — live rows outrank "
+                        + "the static custody order even for a civilian click");
+    }
+
+    @Test
+    void prisonLoopEmitsTheWholeDetentionRound() {
+        var prisoner = NpcPlayerSurface.prisonLoopActions(true, true, true, true);
+        var ids = ids(prisoner);
+        assertTrue(ids.containsAll(List.of("job-status", "camp-status",
+                        "trade-offer", "iou-issue", "bribe-offer",
+                        "debt-status", "debt-pay", "bail-pay", "surrender")),
+                "the prisoner runs the whole loop without a typed command");
+
+        var free = NpcPlayerSurface.prisonLoopActions(false, false, false, false);
+        assertFalse(ids(free).contains("bribe-offer"),
+                "no cell, no bribe row");
+        assertFalse(ids(free).contains("surrender"),
+                "no bounty, no surrender row");
+    }
+
+    @Test
+    void guardRowsGateThePostingVerbOnSeniority() {
+        var junior = ids(NpcPlayerSurface.guardCustodyActions(true, false));
+        assertTrue(junior.containsAll(List.of("cell-search", "manhunt-board",
+                        "transfer-board", "bounty-board", "inspect-player")));
+        assertFalse(junior.contains("bounty-post"),
+                "posting a bounty is a senior verb");
+
+        var senior = ids(NpcPlayerSurface.guardCustodyActions(true, true));
+        assertTrue(senior.contains("bounty-post"));
+    }
 }

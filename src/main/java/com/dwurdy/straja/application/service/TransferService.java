@@ -595,6 +595,15 @@ public final class TransferService {
         return t != null && t.isLive() ? t : null;
     }
 
+    /** Every live ride — the read-only snapshot a desk board renders. */
+    public synchronized List<TransferRecord> liveTransfers() {
+        var out = new ArrayList<TransferRecord>();
+        for (var t : store().transfers) {
+            if (t != null && t.isLive()) out.add(t);
+        }
+        return out;
+    }
+
     /** `/straja transfer` — prisoner sees their ride; escorts see their job. */
     public synchronized void status(PlayerGateway player) {
         if (player == null || player.uuid() == null) return;

@@ -88,6 +88,15 @@ final class DeskMenuSession {
     }
 
     /**
+     * A desk session rooted at a live-data page — chat-token clicks (digest
+     * rows, action links) land on the same page a desk click would open.
+     */
+    static DeskMenuSession forDynamic(ServerPlayer player, String kind, String recordId) {
+        return new DeskMenuSession(player, null,
+                new DeskNavigation(new DeskPageSource.DynamicPage(kind, recordId, 0)), null);
+    }
+
+    /**
      * Opens the chest menu once, rendering page 0 of the ordered surface.
      * Subsequent page turns reuse this container; {@link #isAlive} ends the
      * session when the menu is replaced (e.g. a form opens) or removed.
@@ -212,8 +221,24 @@ final class DeskMenuSession {
      * parameterized ops re-validate inside via isStillValidForPlayer.
      * An action opening a native form replaces containerMenu; our removed()
      * then fires and the session ends — re-render is skipped by isAlive().
+     * View actions (dockets, boards, status) never leave the menu: they push
+     * a live-data {@link DeskPageSource.DynamicPage} onto the trail instead.
      */
     private void dispatch(String actionId) {
+        if ("v2-professional-work".equals(actionId)) {
+            dispatchV2Offer();
+            return;
+        }
+        var dynamic = DeskDynamicPages.sourceFor(actionId);
+        if (dynamic != null) {
+            if (dynamicGate(dynamic)) {
+                render(nav.open(dynamic));
+                return;
+            }
+            // false falls through so the service delivers its loud refusal —
+            // a forged or stale desk click lands on the same gate a typed
+            // command hits.
+        }
         try {
             NpcRoles.performAction(actionId, player, player.serverLevel());
         } catch (RuntimeException actionFailed) {
@@ -222,6 +247,25 @@ final class DeskMenuSession {
                             + "Desk action failed", actionFailed);
         }
         if (isAlive()) render(nav.current());
+    }
+
+    /**
+     * The daily offer is a mutation before it is a view: publish first (the
+     * same call the chat path makes), then land on the claim page. The
+     * refusal path already told the player why nothing appeared.
+     */
+    private void dispatchV2Offer() {
+        var runtime = com.dwurdy.straja.bootstrap.StrajaRuntime.get();
+        if (runtime == null) return;
+        var gw = new com.dwurdy.straja.adapter.out.minecraft.MinecraftPlayerGateway(
+                player.getServer(), player.getUUID());
+        var offer = NpcRoles.publishV2Offer(runtime, gw);
+        if (offer == null) {
+            render(nav.current());
+            return;
+        }
+        render(nav.open(new DeskPageSource.DynamicPage(
+                DeskDynamicPages.V2_OFFER, offer.id, 0)));
     }
 
     /**
@@ -312,6 +356,8 @@ final class DeskMenuSession {
                         true);
                 case DeskPageSource.ListPage list -> listPage(list);
                 case DeskPageSource.SurfacePage surface -> surfacePage(surface);
+                case DeskPageSource.DynamicPage dynamic ->
+                        dynamicPage(dynamic.kind(), dynamic.id(), dynamic.page());
             };
         } catch (RuntimeException renderFailed) {
             com.dwurdy.straja.StrajaMod.LOGGER.warn(
@@ -540,6 +586,173 @@ final class DeskMenuSession {
         if (nav.current() instanceof DeskPageSource.SectionPage section) return section.page();
         if (nav.current() instanceof DeskPageSource.ListPage list) return list.page();
         if (nav.current() instanceof DeskPageSource.SurfacePage surface) return surface.page();
+        if (nav.current() instanceof DeskPageSource.DynamicPage dynamic) return dynamic.page();
         return 0;
+    }
+
+    // ------------------------------------------------------------ dynamic pages
+
+    /**
+     * true → open the page; false → fall through to {@code performAction}
+     * (the service's loud refusal is the right answer). The parole cases
+     * mirror {@code NpcRoles.isStillValidForPlayer} — the desk path must
+     * not admit a click the chat path would reject.
+     */
+    private boolean dynamicGate(DeskPageSource.DynamicPage dynamic) {
+        var runtime = com.dwurdy.straja.bootstrap.StrajaRuntime.get();
+        if (runtime == null) return false;
+        var gw = new com.dwurdy.straja.adapter.out.minecraft.MinecraftPlayerGateway(
+                player.getServer(), player.getUUID());
+        return switch (dynamic.kind()) {
+            case DeskDynamicPages.PAROLE_DOCKET -> runtime.parole().officerCapable(gw);
+            case DeskDynamicPages.PAROLE_HEARING -> {
+                var hearing = runtime.parole().findHearing(dynamic.id());
+                yield hearing != null && runtime.parole().officerCapable(gw)
+                        && ("FILED".equals(hearing.status) || "HEARING".equals(hearing.status));
+            }
+            case DeskDynamicPages.DISPATCH ->
+                    runtime.playerQueries().rankPrefixFor(gw) != null;
+            case DeskDynamicPages.TRADES ->
+                    NpcRoles.tradesFor(runtime, gw) != null;
+            // Detention-shift boards mirror their service gates: hunts and
+            // transfer rides are on-duty intel; the bounty board is public.
+            case DeskDynamicPages.MANHUNT, DeskDynamicPages.TRANSFER ->
+                    runtime.playerQueries().isOnDutyGuard(gw);
+            default -> true;
+        };
+    }
+
+    /** Resolves a dynamic page's snapshot fresh — countdowns stay honest. */
+    private DeskPage dynamicPage(String kind, String id, int pageIndex) {
+        var runtime = com.dwurdy.straja.bootstrap.StrajaRuntime.get();
+        if (runtime == null) {
+            return DeskLayout.info("Straja",
+                    new DeskIcon(DeskIcon.FALLBACK_ITEM, "Indisponibil",
+                            List.of("Serviciul nu rulează.")), nav.depth() > 0);
+        }
+        String uuid = player.getUUID().toString();
+        return switch (kind) {
+            case DeskDynamicPages.PAROLE_STATUS -> DeskDynamicPages.paroleStatus(
+                    runtime.parole().eligibility(uuid), runtime.parole().surface(uuid));
+            case DeskDynamicPages.PAROLE_DOCKET -> officerCapable(runtime)
+                    ? DeskDynamicPages.paroleDocket(runtime.parole().reviewDocket(), pageIndex)
+                    : deniedPage();
+            case DeskDynamicPages.PAROLE_HEARING -> officerCapable(runtime)
+                    ? DeskDynamicPages.paroleHearing(
+                            runtime.parole().findHearing(id), runtime.nowMillis())
+                    : deniedPage();
+            case DeskDynamicPages.ARMY_STATUS -> armyStatusPage(runtime, uuid);
+            case DeskDynamicPages.ARMY_HISTORY -> armyHistoryPage(runtime, uuid, pageIndex);
+            case DeskDynamicPages.TRADES -> tradesPage(runtime, uuid);
+            case DeskDynamicPages.DISPATCH -> DeskDynamicPages.dispatch(
+                    runtime.dispatch().board());
+            case DeskDynamicPages.MANHUNT -> onDutyGuard(runtime)
+                    ? DeskDynamicPages.manhuntBoard(
+                            runtime.manhunts().activeHunts(), seniorOfficer(runtime),
+                            runtime.nowMillis())
+                    : deniedPage();
+            case DeskDynamicPages.TRANSFER -> onDutyGuard(runtime)
+                    ? DeskDynamicPages.transferBoard(
+                            runtime.transfers().liveTransfers(), uuid,
+                            seniorOfficer(runtime), runtime.nowMillis())
+                    : deniedPage();
+            case DeskDynamicPages.BOUNTY -> DeskDynamicPages.bountyBoard(
+                    runtime.bounties().activeBounties(), seniorOfficer(runtime),
+                    runtime.nowMillis());
+            case DeskDynamicPages.V2_OFFER -> v2OfferPage(runtime, id);
+            default -> DeskLayout.info("Straja",
+                    new DeskIcon(DeskIcon.FALLBACK_ITEM, "Pagină necunoscută",
+                            List.of("Reîncearcă.")), nav.depth() > 0);
+        };
+    }
+
+    private DeskPage armyStatusPage(com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                    String uuid) {
+        var unit = runtime.army().unitFor(uuid);
+        if (unit == null) {
+            var record = runtime.v2Personnel().find(uuid);
+            String station = record == null || record.homeStationId == null
+                    || record.homeStationId.isBlank() ? "hq" : record.homeStationId;
+            unit = runtime.army().unitForStationId(station);
+        }
+        String commander = unit == null || unit.commanderUuid.isBlank() ? "—"
+                : runtime.playerQueries().displayName(unit.commanderUuid);
+        return DeskDynamicPages.armyStatus(unit,
+                unit == null ? null : runtime.army().nextOpFor(unit.unitId),
+                commander, runtime.nowMillis());
+    }
+
+    private DeskPage armyHistoryPage(com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                     String uuid, int pageIndex) {
+        var unit = runtime.army().unitFor(uuid);
+        if (unit == null) {
+            var record = runtime.v2Personnel().find(uuid);
+            String station = record == null || record.homeStationId == null
+                    || record.homeStationId.isBlank() ? "hq" : record.homeStationId;
+            unit = runtime.army().unitForStationId(station);
+        }
+        return DeskDynamicPages.armyHistory(
+                unit == null ? List.of() : runtime.army().historyFor(unit.unitId, 20),
+                pageIndex);
+    }
+
+    private DeskPage tradesPage(com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                String uuid) {
+        var professions = NpcRoles.tradesFor(runtime,
+                new com.dwurdy.straja.adapter.out.minecraft.MinecraftPlayerGateway(
+                        player.getServer(), player.getUUID()));
+        var open = runtime.v2JoinRequests().findOpen(uuid);
+        return DeskDynamicPages.trades(professions,
+                open == null ? "" : open.requestId);
+    }
+
+    private DeskPage v2OfferPage(com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                 String missionId) {
+        var mission = runtime.v2Missions().find(missionId);
+        boolean claimed = mission != null
+                && mission.v2Status != com.dwurdy.straja.domain.model.MissionStatus.AVAILABLE;
+        if (mission == null || claimed) {
+            return DeskLayout.info("Ofertă profesională",
+                    new DeskIcon("straja:mission_carnet",
+                            mission == null ? "Ofertă dispărută" : "Ofertă acceptată",
+                            List.of(mission == null
+                                    ? "Oferta nu mai există." : "Misiunea e deja a ta.")),
+                    true);
+        }
+        return DeskDynamicPages.v2Offer(mission.id, mission.objective);
+    }
+
+    private boolean officerCapable(com.dwurdy.straja.bootstrap.StrajaRuntime runtime) {
+        return runtime.parole().officerCapable(
+                new com.dwurdy.straja.adapter.out.minecraft.MinecraftPlayerGateway(
+                        player.getServer(), player.getUUID()));
+    }
+
+    /** On-duty guard — the same bar dynamicGate sets for MANHUNT/TRANSFER rows. */
+    private boolean onDutyGuard(com.dwurdy.straja.bootstrap.StrajaRuntime runtime) {
+        return runtime.playerQueries().isOnDutyGuard(
+                new com.dwurdy.straja.adapter.out.minecraft.MinecraftPlayerGateway(
+                        player.getServer(), player.getUUID()));
+    }
+
+    /** Locotenent+ or Comisar — the same bar the bounty/transfer verbs set. */
+    private boolean seniorOfficer(com.dwurdy.straja.bootstrap.StrajaRuntime runtime) {
+        var gw = new com.dwurdy.straja.adapter.out.minecraft.MinecraftPlayerGateway(
+                player.getServer(), player.getUUID());
+        var state = runtime.playerQueries().readState(gw);
+        return state != null
+                && state.rank >= com.dwurdy.straja.application.service
+                        .BountyService.MIN_POSTER_RANK
+                || runtime.playerQueries().isCommissioner(gw);
+    }
+
+    private DeskPage deniedPage() {
+        return DeskLayout.info("Acces restricționat",
+                new DeskIcon("minecraft:barrier", "Doar pentru ofițeri",
+                        List.of("Dosarele de eliberare sunt",
+                                "lucrul ofițerilor.",
+                                "Ajungi ofițer prin avansare —",
+                                "întreabă la Recepție.")),
+                true);
     }
 }
