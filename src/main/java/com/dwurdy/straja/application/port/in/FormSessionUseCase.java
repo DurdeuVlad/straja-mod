@@ -72,6 +72,12 @@ public interface FormSessionUseCase {
         REPUTATION_CORRECTION("reputation-correction"),
         PAROLE_FILE("parole-file"),
         PAROLE_ADVOCATE("parole-advocate"),
+        TRADE_OFFER("trade-offer"),
+        IOU_ISSUE("iou-issue"),
+        BAIL_PAY("bail-pay"),
+        BOUNTY_POST("bounty-post"),
+        INSPECT_PLAYER("inspect-player"),
+        ABSENCE_DECLARE("absence-declare"),
         OTHER_REQUEST("other-request");
 
         private final String id;

@@ -248,6 +248,33 @@ public final class NpcRoles {
             case "custody-remove-head-sack" -> runtime.custodyRoleplay().removeHeadSack(gw);
             case "custody-wake-downed" -> runtime.custodyRoleplay().wakeDowned(gw, "jailer_npc");
             case "cuffs-item" -> runtime.custodyRoleplay().giveCuffs(gw);
+            // Timed consent answers — minted as clickable links on the notice;
+            // each service drops and re-verifies the clicker's own pending offer.
+            case "bribe-accept" -> runtime.escapes().bribeAnswer(gw, true);
+            case "bribe-decline" -> runtime.escapes().bribeAnswer(gw, false);
+            case "trade-accept" -> runtime.prisonJobs().tradeAnswer(gw, true);
+            case "trade-decline" -> runtime.prisonJobs().tradeAnswer(gw, false);
+            // FUN-9/10 detention loop — the jailer desk's typed-command
+            // parity rows. Statuses dump to chat, offers/postings ride the
+            // native form, money moves behind the desk's DA/NU page.
+            case "job-status" -> runtime.prisonJobs().jobStatus(gw);
+            case "camp-status" -> runtime.laborCamps().status(gw, "");
+            case "trade-offer" -> openTradeOfferForm(player, runtime, gw);
+            case "iou-issue" -> openIouForm(player, runtime, gw);
+            case "bribe-offer" -> runtime.escapes().bribe(gw);
+            case "debt-status" -> runtime.debt().showDebt(gw, gw.name());
+            case "debt-pay" -> runtime.debt().payContribution(
+                    gw, gw.name(), null, "CONTRIBUTION", null);
+            case "bail-pay" -> runtime.bounties().payBail(gw, gw.name(), null);
+            case "bail-other" -> openBailForm(player, runtime, gw);
+            case "surrender" -> runtime.bounties().surrender(gw);
+            case "cell-search" -> runtime.escapes().inspect(gw);
+            case "manhunt-board" -> manhuntBoard(player, runtime, gw);
+            case "transfer-board" -> transferBoard(player, runtime, gw);
+            case "bounty-board" -> bountyBoard(player, runtime, gw);
+            case "bounty-post" -> openBountyForm(player, runtime, gw);
+            case "inspect-player" -> openInspectForm(player, runtime, gw);
+            case "absence-declare" -> openAbsenceForm(player, runtime, gw);
             case "fine-list" -> runtime.fineRoleplay().listFines(gw);
             case "identity-request" -> runtime.identityCards().request(gw);
             case "identity-list" -> runtime.identityCards().list(gw);
@@ -807,6 +834,13 @@ public final class NpcRoles {
             case "evidence-destroy" -> openEvidenceDestroyForm(player, id);
             case "armory-buy" -> runtime.armory().buy(gw, id);
             case "armory-reserve" -> runtime.armory().buyReserve(gw, id);
+            // FUN-7/8 board rows — the officer verbs behind the live pages;
+            // rank and record freshness re-verify inside each service.
+            case "manhunt-calloff" -> runtime.manhunts().callOff(gw, id, "desk");
+            case "transfer-join" -> runtime.transfers().join(gw, id);
+            case "transfer-pickup" -> runtime.transfers().pickup(gw, id);
+            case "transfer-cancel" -> runtime.transfers().cancel(gw, id);
+            case "bounty-cancel" -> runtime.bounties().cancel(gw, id);
             default -> { return false; }
         }
         return true;
@@ -1613,6 +1647,142 @@ public final class NpcRoles {
         return true;
     }
 
+    // ------------------------------------------------------------ detention loop forms
+
+    /**
+     * Live-board openers — a real client lands on the desk page (its own
+     * revalidation at dispatch covers a stale click); everywhere else the
+     * service's chat dump prints, matching the typed command byte-for-byte.
+     */
+    private static void manhuntBoard(Player player,
+                                     com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                     com.dwurdy.straja.application.port.out.PlayerGateway gw) {
+        if (player instanceof ServerPlayer serverPlayer
+                && com.dwurdy.straja.adapter.in.menu.DeskMenuService.openDynamic(
+                        serverPlayer,
+                        com.dwurdy.straja.adapter.in.menu.DeskDynamicPages.MANHUNT, "")) {
+            return;
+        }
+        runtime.manhunts().board(gw);
+    }
+
+    private static void transferBoard(Player player,
+                                      com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                      com.dwurdy.straja.application.port.out.PlayerGateway gw) {
+        if (player instanceof ServerPlayer serverPlayer
+                && com.dwurdy.straja.adapter.in.menu.DeskMenuService.openDynamic(
+                        serverPlayer,
+                        com.dwurdy.straja.adapter.in.menu.DeskDynamicPages.TRANSFER, "")) {
+            return;
+        }
+        runtime.transfers().listFor(gw);
+    }
+
+    private static void bountyBoard(Player player,
+                                    com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                    com.dwurdy.straja.application.port.out.PlayerGateway gw) {
+        if (player instanceof ServerPlayer serverPlayer
+                && com.dwurdy.straja.adapter.in.menu.DeskMenuService.openDynamic(
+                        serverPlayer,
+                        com.dwurdy.straja.adapter.in.menu.DeskDynamicPages.BOUNTY, "")) {
+            return;
+        }
+        runtime.bounties().list(gw);
+    }
+
+    /** Trade offer — the buyer's name and the labor-credit price (0 = favor). */
+    private static boolean openTradeOfferForm(Player player,
+                                              com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                              com.dwurdy.straja.application.port.out.PlayerGateway gw) {
+        if (!(player instanceof ServerPlayer serverPlayer)) return true;
+        FormSessionBridge.open(serverPlayer, new FormSessionUseCase.Request(
+                FormSessionUseCase.Action.TRADE_OFFER, "",
+                "Propune un schimb",
+                "Deținutul cumpărător și prețul în credite de muncă (0 = favor, se emite cambie).",
+                java.util.List.of(
+                        new FormSessionUseCase.Field(FormField.TARGET, "Deținut", 40, false),
+                        new FormSessionUseCase.Field(FormField.AMOUNT, "Preț", 10, false))));
+        return true;
+    }
+
+    /** IOU — the creditor's name and the favor's text. */
+    private static boolean openIouForm(Player player,
+                                       com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                       com.dwurdy.straja.application.port.out.PlayerGateway gw) {
+        if (!(player instanceof ServerPlayer serverPlayer)) return true;
+        FormSessionBridge.open(serverPlayer, new FormSessionUseCase.Request(
+                FormSessionUseCase.Action.IOU_ISSUE, "",
+                "Semnează o cambie",
+                "Creditorul și textul favorului — nota se predă fizic.",
+                java.util.List.of(
+                        new FormSessionUseCase.Field(FormField.TARGET, "Creditor", 40, false),
+                        new FormSessionUseCase.Field(FormField.REASON, "Favor",
+                                com.dwurdy.straja.domain.model.Text.REASON_LIMIT, true, false))));
+        return true;
+    }
+
+    /** Third-party bail — the prisoner's name and an optional amount (blank = full). */
+    private static boolean openBailForm(Player player,
+                                        com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                        com.dwurdy.straja.application.port.out.PlayerGateway gw) {
+        if (!(player instanceof ServerPlayer serverPlayer)) return true;
+        FormSessionBridge.open(serverPlayer, new FormSessionUseCase.Request(
+                FormSessionUseCase.Action.BAIL_PAY, "",
+                "Plătește cauțiunea",
+                "Numele deținutului și suma — gol acoperă întreaga datorie rămasă.",
+                java.util.List.of(
+                        new FormSessionUseCase.Field(FormField.TARGET, "Deținut", 40, false),
+                        new FormSessionUseCase.Field(FormField.AMOUNT, "Sumă", 10, false, false))));
+        return true;
+    }
+
+    /** Bounty posting — target, amount and an optional reason for the BOLO. */
+    private static boolean openBountyForm(Player player,
+                                          com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                          com.dwurdy.straja.application.port.out.PlayerGateway gw) {
+        if (!(player instanceof ServerPlayer serverPlayer)) return true;
+        FormSessionBridge.open(serverPlayer, new FormSessionUseCase.Request(
+                FormSessionUseCase.Action.BOUNTY_POST, "",
+                "Pune recompensă",
+                "Ținta (jucător online), suma și motivul — un BOLO se emite automat.",
+                java.util.List.of(
+                        new FormSessionUseCase.Field(FormField.TARGET, "Țintă", 40, false),
+                        new FormSessionUseCase.Field(FormField.AMOUNT, "Sumă", 10, false),
+                        new FormSessionUseCase.Field(FormField.REASON, "Motiv",
+                                com.dwurdy.straja.domain.model.Text.REASON_LIMIT, false, false))));
+        return true;
+    }
+
+    /** Officer inspection — the traveler's name; rank re-verifies at consume. */
+    private static boolean openInspectForm(Player player,
+                                           com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                           com.dwurdy.straja.application.port.out.PlayerGateway gw) {
+        if (!(player instanceof ServerPlayer serverPlayer)) return true;
+        FormSessionBridge.open(serverPlayer, new FormSessionUseCase.Request(
+                FormSessionUseCase.Action.INSPECT_PLAYER, "",
+                "Verifică documentele",
+                "Numele jucătorului ale cărui documente le verifici.",
+                java.util.List.of(
+                        new FormSessionUseCase.Field(FormField.TARGET, "Jucător", 40, false))));
+        return true;
+    }
+
+    /** Announced absence — days away plus an optional reason for Comandament. */
+    private static boolean openAbsenceForm(Player player,
+                                           com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                           com.dwurdy.straja.application.port.out.PlayerGateway gw) {
+        if (!(player instanceof ServerPlayer serverPlayer)) return true;
+        FormSessionBridge.open(serverPlayer, new FormSessionUseCase.Request(
+                FormSessionUseCase.Action.ABSENCE_DECLARE, "",
+                "Anunță o absență",
+                "Câte zile lipsă și motivul (opțional) — Comandamentul îl vede.",
+                java.util.List.of(
+                        new FormSessionUseCase.Field(FormField.DAYS, "Zile", 4, false),
+                        new FormSessionUseCase.Field(FormField.REASON, "Motiv",
+                                com.dwurdy.straja.domain.model.Text.REASON_LIMIT, true, false))));
+        return true;
+    }
+
     /**
      * The digest/docket row: on a real client the hearing opens as a desk
      * page (a fresh session rooted at the case); elsewhere the case summary
@@ -1979,6 +2149,15 @@ public final class NpcRoles {
                 yield ("accept".equals(id) || "decline".equals(id))
                         && runtime.parole().advocacyAskFor(advocate) != null;
             }
+            // FUN-7/8 board rows — record-live checks; the service still
+            // re-gates rank and window on every dispatch.
+            case "manhunt-calloff" -> runtime.manhunts().activeHunts().stream()
+                    .anyMatch(h -> id.equals(h.id));
+            case "transfer-join", "transfer-pickup", "transfer-cancel" ->
+                    runtime.transfers().liveTransfers().stream()
+                            .anyMatch(t -> id.equals(t.id));
+            case "bounty-cancel" -> runtime.bounties().activeBounties().stream()
+                    .anyMatch(r -> id.equals(r.id));
             default -> false;
         };
     }
@@ -2148,6 +2327,14 @@ public final class NpcRoles {
                     actions.add(new NpcPlayerSurface.ChatAction(
                             "Dosare de eliberare", "parole-docket"));
                 }
+                // Announced absence — the member-facing notice that keeps a
+                // week offline from costing the roster spot rides the desk.
+                var memberState = runtime.playerQueries().readState(gateway);
+                if (memberState != null && memberState.rank > 0
+                        && !memberState.fired && !memberState.resigned) {
+                    actions.add(new NpcPlayerSurface.ChatAction(
+                            "Anunță o absență", "absence-declare"));
+                }
                 // FUN-1 parity (NPCDM-4): the delegation console joins the
                 // native surface. The service itself gates the view to
                 // delegation authorities — the Comisar today — so viewers
@@ -2167,6 +2354,39 @@ public final class NpcRoles {
                 actions.addAll(NpcPlayerSurface.paroleActions(
                         runtime.parole().surface(paroleUuid),
                         runtime.parole().officerCapable(gateway)));
+                // FUN-9/10: the rest of the detention loop — the prisoner's
+                // repeated work (jobs, market, IOU, bribe, debt, bail,
+                // surrender) and the guard's shift verbs ride desk rows
+                // instead of typed commands. Pending consent answers surface
+                // as rows too; every verb still revalidates in service.
+                var recStatus = runtime.prisonRoleplay().registerStatus(gateway);
+                boolean hasSentence = runtime.prisonRoleplay().activeSentence(gateway) != null;
+                actions.addAll(NpcPlayerSurface.prisonLoopActions(
+                        hasSentence,
+                        recStatus == com.dwurdy.straja.domain.model.PrisonerStatus.IN_CELL,
+                        recStatus == com.dwurdy.straja.domain.model.PrisonerStatus.IN_CAMP,
+                        runtime.bounties().activeFor(paroleUuid) != null));
+                if (!hasSentence) {
+                    // Third-party bail: a visitor or guard pays a prisoner's
+                    // cauțiune — the form asks for the name; the service re-checks.
+                    actions.add(new NpcPlayerSurface.ChatAction(
+                            "Plătește cauțiunea altui deținut", "bail-other"));
+                }
+                var jailerState = runtime.playerQueries().readState(gateway);
+                actions.addAll(NpcPlayerSurface.guardCustodyActions(
+                        runtime.playerQueries().isOnDutyGuard(gateway),
+                        jailerState != null
+                                && jailerState.rank >= com.dwurdy.straja.application
+                                        .service.BountyService.MIN_POSTER_RANK
+                                || runtime.playerQueries().isCommissioner(gateway)));
+                if (runtime.escapes().pendingBribeFor(paroleUuid)) {
+                    actions.add(new NpcPlayerSurface.ChatAction("Acceptă mita", "bribe-accept"));
+                    actions.add(new NpcPlayerSurface.ChatAction("Refuză mita", "bribe-decline"));
+                }
+                if (runtime.prisonJobs().pendingTradeFor(paroleUuid)) {
+                    actions.add(new NpcPlayerSurface.ChatAction("Acceptă schimbul", "trade-accept"));
+                    actions.add(new NpcPlayerSurface.ChatAction("Refuză schimbul", "trade-decline"));
+                }
             }
             case ARCHIVIST -> {
                 actions.addAll(NpcPlayerSurface.archiveActions(

@@ -115,7 +115,25 @@ public final class DeskActionStyle {
             Map.entry("parole-advocate", "straja:identity_card"),
             Map.entry("parole-checkin", "straja:baton"),
             Map.entry("parole-settle", "straja:iou_note"),
-            Map.entry("parole-docket", "straja:order_book"));
+            Map.entry("parole-docket", "straja:order_book"),
+            // FUN-9/10 detention loop — the jailer desk's own rows.
+            Map.entry("job-status", "minecraft:iron_pickaxe"),
+            Map.entry("camp-status", "minecraft:campfire"),
+            Map.entry("trade-offer", "straja:iou_note"),
+            Map.entry("iou-issue", "straja:iou_note"),
+            Map.entry("bribe-offer", "minecraft:gold_ingot"),
+            Map.entry("debt-status", "straja:fine_book"),
+            Map.entry("debt-pay", "minecraft:gold_ingot"),
+            Map.entry("bail-pay", "minecraft:gold_ingot"),
+            Map.entry("bail-other", "minecraft:gold_ingot"),
+            Map.entry("surrender", "minecraft:white_banner"),
+            Map.entry("cell-search", "minecraft:spyglass"),
+            Map.entry("manhunt-board", "straja:alarm_whistle"),
+            Map.entry("transfer-board", "straja:cuffs"),
+            Map.entry("bounty-board", "straja:fine_notice"),
+            Map.entry("bounty-post", "straja:carbon_paper"),
+            Map.entry("inspect-player", "minecraft:spyglass"),
+            Map.entry("absence-declare", "straja:carbon_paper"));
 
     /** Parameterized (op:recordId) prefixes → icon, longest-prefix wins by order. */
     private static final List<Map.Entry<String, String>> ITEM_BY_PREFIX = List.of(
@@ -175,6 +193,11 @@ public final class DeskActionStyle {
             Map.entry("armory-buy:", "minecraft:gold_ingot"),
             Map.entry("armory-reserve:", "straja:iou_note"),
             Map.entry("delegation-", "straja:order_book"),
+            Map.entry("manhunt-calloff:", "minecraft:barrier"),
+            Map.entry("transfer-join:", "minecraft:arrow"),
+            Map.entry("transfer-pickup:", "straja:cuffs"),
+            Map.entry("transfer-cancel:", "minecraft:barrier"),
+            Map.entry("bounty-cancel:", "minecraft:barrier"),
             Map.entry("army-plan-", "straja:order_book"),
             Map.entry("army-", "straja:baton"));
 
@@ -187,7 +210,9 @@ public final class DeskActionStyle {
             "complaint-submit", "archive-folder-create", "report-submit",
             "petition-request", "audience-request", "admin-authorize",
             "admin-policy-set", "admin-emergency-alert", "admin-emergency-start",
-            "parole-file", "parole-appeal", "parole-advocate");
+            "parole-file", "parole-appeal", "parole-advocate",
+            "trade-offer", "iou-issue", "bail-other", "bounty-post",
+            "inspect-player", "absence-declare");
 
     /** Parameterized ops that open a native form (never confirm-gated). */
     private static final Set<String> FORM_PREFIXES = Set.of(
@@ -208,7 +233,8 @@ public final class DeskActionStyle {
     private static final Set<String> PAGE_ACTIONS = Set.of(
             "v2-professional-work", "trades-list", "dispatch-board",
             "army-status", "army-history",
-            "parole-status", "parole-docket");
+            "parole-status", "parole-docket",
+            "manhunt-board", "transfer-board", "bounty-board");
 
     /** Ids whose result is a chat dump (status, lists, ledger text). */
     private static final Set<String> CHAT_ACTIONS = Set.of(
@@ -225,7 +251,8 @@ public final class DeskActionStyle {
             "audience-status", "audience-review-list", "admin-personnel",
             "admin-roster", "admin-policies", "admin-emergency-status",
             "armory-status", "mission-list", "mission-draft-status",
-            "mission-template-list", "inspect-documents");
+            "mission-template-list", "inspect-documents",
+            "job-status", "camp-status", "debt-status");
 
     /** Parameterized ops whose result is a chat dump. */
     private static final Set<String> CHAT_PREFIXES = Set.of(
@@ -242,7 +269,9 @@ public final class DeskActionStyle {
 
     /** Immediate money-spending or record-destroying mutations gated by a DA/NU page. */
     private static final Set<String> CONFIRM_ACTIONS = Set.of(
-            "room-release", "army-leave", "parole-settle");
+            "room-release", "army-leave", "parole-settle",
+            "bribe-offer", "debt-pay", "bail-pay", "surrender",
+            "bribe-accept", "trade-accept");
     private static final Set<String> CONFIRM_PREFIXES = Set.of(
             "fine-pay:", "fine-refuse:", "complaint-confirm:",
             "custody-accept:", "custody-refuse:", "custody-release:",
@@ -253,7 +282,8 @@ public final class DeskActionStyle {
             "archive-sheet-submit:", "archive-sheet-revoke:",
             "tool-npc-remove-confirm:",
             "parole-open:", "parole-decide-paroled:", "parole-decide-denied:",
-            "parole-decide-conditional:");
+            "parole-decide-conditional:",
+            "manhunt-calloff:", "transfer-cancel:", "bounty-cancel:");
 
     /** The icon stack for one surface action; label passes through as the name. */
     public static DeskIcon icon(String label, String actionId) {
@@ -354,6 +384,39 @@ public final class DeskActionStyle {
         }
         if (actionId.startsWith("custody-release:")) {
             return List.of("Persoana este eliberată imediat", "din custodie.");
+        }
+        if ("bribe-offer".equals(actionId)) {
+            return List.of("Oferta de mită ajunge la străjer;",
+                    "un refuz te raportează.");
+        }
+        if ("bribe-accept".equals(actionId)) {
+            return List.of("Iei mita — ușa celulei se deschide;",
+                    "actul se scrie în jurnal.");
+        }
+        if ("debt-pay".equals(actionId)) {
+            return List.of("Plata se ia imediat din monedele tale",
+                    "și acoperă datoriile în ordine.");
+        }
+        if ("bail-pay".equals(actionId)) {
+            return List.of("Cauțiunea se plătește acum;",
+                    "o datorie de captură acoperită eliberează.");
+        }
+        if ("surrender".equals(actionId)) {
+            return List.of("Te predai — următoarea reținere",
+                    "reusșește fără doborâre.");
+        }
+        if ("trade-accept".equals(actionId)) {
+            return List.of("Plata pleacă din creditul tău de muncă",
+                    "și obiectele îți ajung imediat.");
+        }
+        if (actionId.startsWith("manhunt-calloff:")) {
+            return List.of("Vânătoarea se oprește pentru", "toți fugitivii rămași.");
+        }
+        if (actionId.startsWith("transfer-cancel:")) {
+            return List.of("Cursa se anulează; deținutul", "revine în custodie.");
+        }
+        if (actionId.startsWith("bounty-cancel:")) {
+            return List.of("Recompensa și BOLO-ul legat", "se retrag imediat.");
         }
         if (actionId.startsWith("armory-buy:")) {
             return List.of("Cumperi echipamentul; monedele", "se iau imediat din inventar.");

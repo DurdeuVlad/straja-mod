@@ -71,6 +71,18 @@ public final class StrajaGameTests {
         return runtime;
     }
 
+    /**
+     * The test commissioner holds the personnel appointment — the same
+     * in-world selection {@code /straja setup commissioner} performs. No
+     * identity ships as a config default, so fixtures grant the mandate.
+     */
+    private static VirtualPlayerGateway appointCommissioner(StrajaRuntime runtime) {
+        var commissioner = new VirtualPlayerGateway("gt_commissioner");
+        commissioner.setOp(true); // the cold-start op path /straja setup commissioner allows
+        runtime.guards().setupCommissioner(commissioner, commissioner.uuid().toString());
+        return commissioner;
+    }
+
     private static ResourceLocation straja(String path) {
         return ResourceLocation.fromNamespaceAndPath("straja", path);
     }
@@ -326,8 +338,7 @@ public final class StrajaGameTests {
         helper.setBlock(new BlockPos(2, 2, 0), Blocks.OAK_DOOR.defaultBlockState()
                 .setValue(DoorBlock.HALF, DoubleBlockHalf.UPPER));
 
-        var commissioner = new VirtualPlayerGateway("dwurdy");
-        commissioner.setOp(true);
+        var commissioner = appointCommissioner(runtime);
         commissioner.setDimension(dimension);
         var cornerA = helper.absolutePos(new BlockPos(1, 1, 1));
         var cornerB = helper.absolutePos(new BlockPos(3, 3, 3));
@@ -374,8 +385,7 @@ public final class StrajaGameTests {
     @GameTest(template = "empty")
     public static void recoveryIdempotent(GameTestHelper helper) {
         var runtime = runtime(helper);
-        var commissioner = new VirtualPlayerGateway("dwurdy");
-        commissioner.setOp(true);
+        var commissioner = appointCommissioner(runtime);
         commissioner.giveVerified(ItemSpec.of("straja:rope", 1));
         commissioner.selectSlot(0);
         var victim = new VirtualPlayerGateway("victim");
@@ -899,8 +909,7 @@ public final class StrajaGameTests {
         ServerLevel level = helper.getLevel();
         String dim = level.dimension().location().toString();
 
-        var commissioner = new VirtualPlayerGateway("dwurdy");
-        commissioner.setOp(true);
+        var commissioner = appointCommissioner(runtime);
         commissioner.setDimension(dim);
 
         var min = helper.absolutePos(new BlockPos(0, -60, 0));
@@ -1000,8 +1009,7 @@ public final class StrajaGameTests {
         helper.assertTrue(runtime.wanted().isWanted(prisoner.getUUID()),
                 "an ACTIVE bolo must make the player wanted");
 
-        var commissioner = new VirtualPlayerGateway("dwurdy");
-        commissioner.setOp(true);
+        var commissioner = appointCommissioner(runtime);
         commissioner.setDimension(prisoner.level().dimension().location().toString());
         runtime.prison().arrest(pg, null, 1, commissioner, "gt-wanted");
 

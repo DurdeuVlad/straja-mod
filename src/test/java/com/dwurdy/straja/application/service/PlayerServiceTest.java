@@ -81,8 +81,9 @@ class PlayerServiceTest {
         // quiz-form enrollment leaves an authorized V2 record without a
         // commissioner appointment; the local debug override must still win.
         TestPlayer p = server.add("tester");
+        var rawStores = new java.util.HashMap<String, com.dwurdy.straja.support.MemoryStore>();
         var people = new com.dwurdy.straja.adapter.out.persistence.SavedStores.Personnel(
-                name -> new com.dwurdy.straja.support.MemoryStore());
+                name -> rawStores.computeIfAbsent(name, ignored -> new com.dwurdy.straja.support.MemoryStore()));
         var personnel = new PersonnelService(people, new FixedClock(0), new Fakes.SeqIds());
         personnel.authorize("bootstrap", p.uuid().toString(),
                 com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STAGIAR,
@@ -94,6 +95,100 @@ class PlayerServiceTest {
         test.debugCommissionerUuid = p.uuid().toString();
         ctx.test().write(test);
         assertTrue(players.isCommissioner(p));
+    }
+
+    @Test
+    void stalePinNeverAuthorizesRecordlessFormerCommissioner() {
+        policies.environment = "production";
+        UUID pinned = UUID.randomUUID();
+        policies.commissionerUuid = pinned.toString();
+        var rawStores = new java.util.HashMap<String, com.dwurdy.straja.support.MemoryStore>();
+        var personnelRepo = new com.dwurdy.straja.adapter.out.persistence.SavedStores.Personnel(
+                name -> rawStores.computeIfAbsent(name, ignored -> new com.dwurdy.straja.support.MemoryStore()));
+        var personnel = new PersonnelService(personnelRepo, new FixedClock(0), new Fakes.SeqIds());
+        players.useV2Authority(personnel, new AuthorizationService(personnelRepo, new FixedClock(0)));
+        // Bootstrap: the recordless pinned player is commissioner while no
+        // authoritative mandate exists anywhere.
+        assertTrue(players.isCommissioner("former", pinned));
+        // A different player is appointed COMMISSIONER through the personnel
+        // store - the mandate is now the sole authority, and the stale pin
+        // must stop minting a second commissioner even though "former" still
+        // has no personnel record.
+        var newcomer = server.add("newcom");
+        personnel.authorize("bootstrap", newcomer.uuid().toString(),
+                com.dwurdy.straja.domain.model.CareerGrade.OFFICER_COLONEL,
+                com.dwurdy.straja.domain.model.EmploymentMode.FULL_TIME,
+                "TEST", "hq", "auth:newcom");
+        personnel.appoint("bootstrap", newcomer.uuid().toString(),
+                com.dwurdy.straja.domain.model.AppointmentType.COMMISSIONER, "hq", "", null);
+        assertFalse(players.isCommissioner("former", pinned));
+        assertTrue(players.isCommissioner(newcomer));
+    }
+
+    @Test
+    void pinStillAuthorizesRecordlessCommissionerUntilFirstMandate() {
+        policies.environment = "production";
+        UUID pinned = UUID.randomUUID();
+        policies.commissionerUuid = pinned.toString();
+        var rawStores = new java.util.HashMap<String, com.dwurdy.straja.support.MemoryStore>();
+        var personnelRepo = new com.dwurdy.straja.adapter.out.persistence.SavedStores.Personnel(
+                name -> rawStores.computeIfAbsent(name, ignored -> new com.dwurdy.straja.support.MemoryStore()));
+        var personnel = new PersonnelService(personnelRepo, new FixedClock(0), new Fakes.SeqIds());
+        players.useV2Authority(personnel, new AuthorizationService(personnelRepo, new FixedClock(0)));
+        // Records may exist for other players without any COMMISSIONER
+        // mandate; the pin still bootstraps until the first appointment.
+        var other = server.add("civilian");
+        personnel.authorize("bootstrap", other.uuid().toString(),
+                com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STAGIAR,
+                com.dwurdy.straja.domain.model.EmploymentMode.PART_TIME,
+                "TEST", "hq", "auth:civ");
+        assertTrue(players.isCommissioner("former", pinned));
+        assertFalse(players.isCommissioner(other));
+    }
+
+    @Test
+    void pinnedPlayerWithRecordButNoMandateIsDenied() {
+        policies.environment = "production";
+        var rawStores = new java.util.HashMap<String, com.dwurdy.straja.support.MemoryStore>();
+        var personnelRepo = new com.dwurdy.straja.adapter.out.persistence.SavedStores.Personnel(
+                name -> rawStores.computeIfAbsent(name, ignored -> new com.dwurdy.straja.support.MemoryStore()));
+        var personnel = new PersonnelService(personnelRepo, new FixedClock(0), new Fakes.SeqIds());
+        players.useV2Authority(personnel, new AuthorizationService(personnelRepo, new FixedClock(0)));
+        // The pinned player has a personnel record (no COMMISSIONER
+        // appointment): the record is authoritative even with zero mandates,
+        // so the pin never applies.
+        TestPlayer p = server.add("former");
+        policies.commissionerUuid = p.uuid().toString();
+        personnel.authorize("bootstrap", p.uuid().toString(),
+                com.dwurdy.straja.domain.model.CareerGrade.MILITARY_STAGIAR,
+                com.dwurdy.straja.domain.model.EmploymentMode.PART_TIME,
+                "TEST", "hq", "auth:former");
+        assertFalse(players.isCommissioner(p));
+    }
+
+    @Test
+    void revokedMandateReArmsPinBootstrap() {
+        policies.environment = "production";
+        UUID pinned = UUID.randomUUID();
+        policies.commissionerUuid = pinned.toString();
+        var rawStores = new java.util.HashMap<String, com.dwurdy.straja.support.MemoryStore>();
+        var personnelRepo = new com.dwurdy.straja.adapter.out.persistence.SavedStores.Personnel(
+                name -> rawStores.computeIfAbsent(name, ignored -> new com.dwurdy.straja.support.MemoryStore()));
+        var personnel = new PersonnelService(personnelRepo, new FixedClock(0), new Fakes.SeqIds());
+        players.useV2Authority(personnel, new AuthorizationService(personnelRepo, new FixedClock(0)));
+        var holder = server.add("holder");
+        personnel.authorize("bootstrap", holder.uuid().toString(),
+                com.dwurdy.straja.domain.model.CareerGrade.OFFICER_COLONEL,
+                com.dwurdy.straja.domain.model.EmploymentMode.FULL_TIME,
+                "TEST", "hq", "auth:holder");
+        var mandate = personnel.appoint("bootstrap", holder.uuid().toString(),
+                com.dwurdy.straja.domain.model.AppointmentType.COMMISSIONER, "hq", "", null);
+        assertFalse(players.isCommissioner("former", pinned));
+        // A live mandate is the latch, not an ever-existed flag: once the
+        // mandate is revoked the pin re-arms so the server can bootstrap a
+        // commissioner again instead of locking the role out permanently.
+        personnel.revokeAppointmentInternal("bootstrap", holder.uuid().toString(), mandate.appointmentId);
+        assertTrue(players.isCommissioner("former", pinned));
     }
 
     @Test
@@ -184,3 +279,4 @@ class PlayerServiceTest {
         assertEquals("[Șef]", players.rankPrefixFor(dwurdy));
     }
 }
+

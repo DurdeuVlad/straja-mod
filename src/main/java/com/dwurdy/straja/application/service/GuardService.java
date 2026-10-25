@@ -2298,8 +2298,10 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
         player.tell(Text.STRAJA_PREFIX + "Checklist de configurare:");
         player.tell(check(commissioner)
                 + " Comisar: " + (commissioner
-                        ? commissionerLabel(probes) + (players.isCommissioner(player) ? " (tu)" : "")
-                        : "nesetat — definește-l în [identity] din straja-server.toml"));
+                        ? commissionerLabel(probes,
+                                v2PersonnelService == null ? null : v2PersonnelService.commissioner())
+                                + (players.isCommissioner(player) ? " (tu)" : "")
+                        : "nesetat — /straja setup commissioner <jucător>"));
         player.tell(check(missingLocations.isEmpty())
                 + " Locații administrative: " + (SetupData.LOCATION_KEYS.length - missingLocations.size())
                 + "/" + SetupData.LOCATION_KEYS.length
@@ -2355,12 +2357,85 @@ public class GuardService implements GuardRecruitmentUseCase, GuardDutyUseCase {
                 : "Instalarea NU este gata — rezolvă elementele marcate cu ✗ din /straja setup.");
     }
 
-    private static String commissionerLabel(SetupChecklist.Probes probes) {
+    /**
+     * Data-first commissioner selection ({@code /straja setup commissioner}):
+     * appoints the target's V2 record to COMMISSIONER and clears the same
+     * appointment on everyone else, so one Comisar holds the seal at a time.
+     * Ops may run the cold start; afterwards the sitting Comisar can hand
+     * the role over. The appointment lives in the personnel store — it is
+     * the authoritative selection, no TOML edit or restart required.
+     */
+    public void setupCommissioner(PlayerGateway actor, String targetArg) {
+        if (!players.isCommissioner(actor) && !actor.isOp()) {
+            actor.refuse("straja.cmd.comisar_op", "straja.remedy.ask_comisar");
+            return;
+        }
+        if (v2PersonnelService == null) {
+            actor.refuse("straja.cmd.personnel_off", "straja.remedy.enable_v2");
+            return;
+        }
+        String subjectUuid = resolveSubjectUuid(targetArg);
+        if (subjectUuid == null) {
+            actor.refuse("straja.cmd.unknown_target", "straja.remedy.fix_retry");
+            return;
+        }
+        long now = now();
+        var existing = v2PersonnelService.find(subjectUuid);
+        boolean reshaped = existing != null
+                && (existing.careerGrade != com.dwurdy.straja.domain.model.CareerGrade.OFFICER_COLONEL
+                        || existing.careerTrack != com.dwurdy.straja.domain.model.CareerTrack.OFFICER
+                        || existing.careerOrigin != com.dwurdy.straja.domain.model.CareerTrack.MILITARY
+                        || existing.employmentMode != com.dwurdy.straja.domain.model.EmploymentMode.FULL_TIME
+                        || !"hq".equals(existing.homeStationId)
+                        || existing.membershipStatus != com.dwurdy.straja.domain.model.PersonnelStatus.AUTHORIZED_ACTIVE);
+        var record = v2PersonnelService.ensureCommissioner(subjectUuid);
+        if (!record.hasAppointment(com.dwurdy.straja.domain.model.AppointmentType.COMMISSIONER, now)) {
+            v2PersonnelService.appointInternal(actor.uuid().toString(), subjectUuid,
+                    com.dwurdy.straja.domain.model.AppointmentType.COMMISSIONER, "hq", "", null);
+        }
+        int revoked = 0;
+        for (var other : v2PersonnelService.all()) {
+            if (other == null || subjectUuid.equals(other.playerUuid)) continue;
+            for (var appt : other.appointments) {
+                if (appt != null && appt.type == com.dwurdy.straja.domain.model.AppointmentType.COMMISSIONER
+                        && appt.activeAt(now)) {
+                    v2PersonnelService.revokeAppointmentInternal(actor.uuid().toString(),
+                            other.playerUuid, appt.appointmentId);
+                    revoked++;
+                }
+            }
+        }
+        audit.record(AuditActions.PERSONNEL_AUTHORIZE, actor.name(), actor.uuid().toString(),
+                players.displayName(subjectUuid), subjectUuid, AuditResults.SUCCESS,
+                "appointment=COMMISSIONER");
+        actor.tell("Comisar numit: " + players.displayName(subjectUuid)
+                + (revoked > 0 ? " — " + revoked + " mandat(e) anterioare revocate." : ".")
+                + " Mandatul e salvat în personal — funcționează fără repornire."
+                + (reshaped ? " Fișa de personal a fost aliniată la rangul de comisar." : ""));
+    }
+
+    /** Accepts a player name/uuid (online or virtual) or a bare UUID. */
+    private String resolveSubjectUuid(String arg) {
+        if (arg == null || arg.isBlank()) return null;
+        PlayerGateway target = players.findPlayer(arg.trim());
+        if (target != null) return target.uuid().toString();
+        try {
+            return java.util.UUID.fromString(arg.trim()).toString();
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    private static String commissionerLabel(SetupChecklist.Probes probes,
+                                            com.dwurdy.straja.domain.model.PersonnelRecord appointed) {
+        if (appointed != null && appointed.playerUuid != null && !appointed.playerUuid.isBlank()) {
+            return "numit · " + appointed.playerUuid.substring(0, 8);
+        }
         var policies = probes.policies();
         if (policies == null) return "";
         return policies.commissionerUuid != null && !policies.commissionerUuid.isBlank()
-                ? "uuid " + policies.commissionerUuid
-                : String.valueOf(policies.commissionerName);
+                ? "config uuid " + policies.commissionerUuid
+                : "config " + String.valueOf(policies.commissionerName);
     }
 
     private static String check(boolean done) {

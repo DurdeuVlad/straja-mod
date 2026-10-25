@@ -11,8 +11,9 @@ import java.util.Map;
  * Defaults mirror kubejs/startup_scripts/00_straja_config.js.
  */
 public class StrajaPolicies {
-    // identity
-    public String commissionerName = "dwurdy";
+    // identity — deliberately empty: the commissioner is selected in-world via
+    // /straja setup commissioner, never shipped as a baked-in default name.
+    public String commissionerName = "";
     public String commissionerUuid = "";
     public boolean requireUuid;
     public boolean allowNameFallback = true;

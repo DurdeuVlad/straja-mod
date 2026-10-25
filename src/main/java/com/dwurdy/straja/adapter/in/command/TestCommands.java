@@ -89,6 +89,26 @@ final class TestCommands {
                         runtime.players().save(p.uuid(), new GuardState());
                         p.clearLog();
                     }
+                    var testStore = runtime.context().test().read();
+                    testStore.debugCommissionerUuid = "";
+                    runtime.context().test().write(testStore);
+                    long now = System.currentTimeMillis();
+                    for (var p : runtime.testPlayers().all()) {
+                        var rec = runtime.v2Personnel().find(p.uuid().toString());
+                        if (rec == null) continue;
+                        var activeIds = new java.util.ArrayList<String>();
+                        for (var appt : rec.appointments) {
+                            if (appt != null
+                                    && appt.type == com.dwurdy.straja.domain.model.AppointmentType.COMMISSIONER
+                                    && appt.activeAt(now)) {
+                                activeIds.add(appt.appointmentId);
+                            }
+                        }
+                        for (String apptId : activeIds) {
+                            runtime.v2Personnel().revokeAppointmentInternal(
+                                    "reset-all", rec.playerUuid, apptId);
+                        }
+                    }
                     send(ctx, "all virtual player state reset");
                     return 1;
                 }));
@@ -406,6 +426,14 @@ final class TestCommands {
                             send(ctx, "debug commissioner = " + player.name());
                             return 1;
                         })));
+
+        test.then(Commands.literal("appoint-commissioner")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("target", StringArgumentType.word())
+                                .executes(ctx -> run(ctx, runtime ->
+                                        runtime.guards().setupCommissioner(
+                                                player(ctx, runtime),
+                                                StringArgumentType.getString(ctx, "target")))))));
 
         test.then(Commands.literal("set-checkpoint")
                 .then(Commands.argument("id", StringArgumentType.word())

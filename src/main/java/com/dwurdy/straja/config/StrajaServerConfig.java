@@ -403,8 +403,9 @@ public final class StrajaServerConfig {
         var defaults = new StrajaPolicies();
 
         B.push("identity");
-        COMMISSIONER_NAME = B.comment("Configured commissioner account name (local fallback only).")
-                .define("commissionerName", "dwurdy");
+        COMMISSIONER_NAME = B.comment("Configured commissioner account name (local fallback only). "
+                        + "Prefer /straja setup commissioner — no name ships by default.")
+                .define("commissionerName", "");
         COMMISSIONER_UUID = B.comment("Canonical commissioner UUID. Required outside local environments.")
                 .define("commissionerUuid", "");
         COMMISSIONER_TITLE = B.comment("Display title for the commissioner in rules/status text.")
