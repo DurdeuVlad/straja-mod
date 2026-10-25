@@ -43,7 +43,10 @@ public final class NpcPlayerSurface {
             "armory-buy", "armory-reserve",
             "duty-checkpoint",
             "trades-enroll",
-            "delegation-mode", "delegation-window", "delegation-revoke");
+            "delegation-mode", "delegation-window", "delegation-revoke",
+            "parole-review", "parole-open", "parole-decide-paroled",
+            "parole-decide-denied", "parole-decide-conditional",
+            "parole-object", "parole-advocate-answer");
 
     public enum RoleRoute { RECEPTIONIST, SECRETARY, JAILER, ARCHIVIST, TRAINER, RECRUITER, ARMORER, INSPECTOR, COMMANDER, UNKNOWN }
 
@@ -742,6 +745,69 @@ public final class NpcPlayerSurface {
                 case GIVE_CUFFS -> actions.add(
                         new ChatAction("Primește cătușe", "cuffs-item"));
             }
+        }
+        return List.copyOf(actions);
+    }
+
+    /**
+     * Jailer-desk parole rows: filing verbs for an eligible prisoner, the
+     * advocate row once a case is pending, the bail row while a CONDITIONAL
+     * offer is open, and the parolee check-in. Officers also get the docket —
+     * the institution rows render for whoever the desk belongs to, never by
+     * hiding the surface itself.
+     */
+    static List<ChatAction> paroleActions(
+            com.dwurdy.straja.application.port.in.ParoleUseCase.ParoleSurface surface,
+            boolean officer) {
+        if (surface == null) return List.of();
+        var actions = new java.util.ArrayList<ChatAction>();
+        if (surface.prisoner() || surface.parolee()
+                || !surface.pendingId().isEmpty() || !surface.conditionalId().isEmpty()) {
+            actions.add(new ChatAction("Statutul eliberării", "parole-status"));
+        }
+        if (surface.prisoner() && surface.eligible()
+                && surface.pendingId().isEmpty() && surface.conditionalId().isEmpty()) {
+            actions.add(new ChatAction("Cere eliberarea condiționată", "parole-file"));
+            actions.add(new ChatAction("Contează sentința", "parole-appeal"));
+        }
+        if (!surface.pendingId().isEmpty()
+                && !"AGREED".equals(surface.advocateStatus())) {
+            actions.add(new ChatAction("Desemnează un avocat", "parole-advocate"));
+        }
+        if (!surface.conditionalId().isEmpty()) {
+            actions.add(new ChatAction("Plătește cauțiunea (" + surface.bailAmount()
+                    + " credite)", "parole-settle"));
+        }
+        if (surface.parolee()) {
+            actions.add(new ChatAction("Raportează-te (check-in)", "parole-checkin"));
+        }
+        if (officer) {
+            actions.add(new ChatAction("Dosare de eliberare", "parole-docket"));
+        }
+        return List.copyOf(actions);
+    }
+
+    /**
+     * Receptionist parole rows: a victim's open objection windows and a
+     * pending advocacy ask — the two civil seats the parole loop touches.
+     */
+    static List<ChatAction> paroleCivilActions(
+            List<String> openObjections, String advocacyAsk) {
+        var actions = new java.util.ArrayList<ChatAction>();
+        if (openObjections != null) {
+            for (String hearingId : openObjections) {
+                parameterizedActionId("parole-object", hearingId)
+                        .ifPresent(a -> actions.add(new ChatAction(
+                                "Obiectează la eliberarea " + hearingId, a)));
+            }
+        }
+        if (advocacyAsk != null && !advocacyAsk.isBlank()) {
+            parameterizedActionId("parole-advocate-answer", "accept")
+                    .ifPresent(a -> actions.add(new ChatAction(
+                            "Acceptă avocatura " + advocacyAsk, a)));
+            parameterizedActionId("parole-advocate-answer", "decline")
+                    .ifPresent(a -> actions.add(new ChatAction(
+                            "Refuză avocatura " + advocacyAsk, a)));
         }
         return List.copyOf(actions);
     }

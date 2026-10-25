@@ -606,7 +606,7 @@ public final class StrajaRuntime {
                 instance.guards, instance.missions, instance.complaints, instance.fines,
                 instance.archive, instance.reports, instance.audiences, instance.admin,
                 instance.adminTools, instance.custody, instance.expansion, instance.v2Promotions,
-                instance.v2JoinRequests);
+                instance.v2JoinRequests, instance.parole);
         // This is the reusable equivalent of the original
         // instance.adminTools, instance.custody, instance.expansion)::submit
         // wiring; NPC and native forms now share the same authenticated route.

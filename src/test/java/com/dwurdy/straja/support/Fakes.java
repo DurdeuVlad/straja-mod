@@ -88,7 +88,7 @@ public final class Fakes {
 
     // ---------------------------------------------------------------- player
 
-    public static final class TestPlayer implements PlayerGateway {
+    public static class TestPlayer implements PlayerGateway {
         public TestServer server;
         public final UUID uuid;
         public String name;

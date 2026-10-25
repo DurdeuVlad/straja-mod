@@ -54,12 +54,48 @@ class NpcDeskMenuStyleTest {
     @Test
     void chatActionsAnnounceChatOutput() {
         for (String id : new String[]{"rules", "guard-status", "fine-list",
-                "trades-list", "archive-folder-read:D-1", "join-read:JR-1",
-                "army-status", "army-history"}) {
+                "archive-folder-read:D-1", "join-read:JR-1"}) {
             assertTrue(DeskActionStyle.lore(id).stream()
                             .anyMatch(line -> line.contains("chat")),
                     id + " must say the result goes to chat");
         }
+    }
+
+    /**
+     * Live-view actions swap desk pages — the tile must promise the page,
+     * never a chat dump the player no longer sees.
+     */
+    @Test
+    void pageActionsAnnounceTheDeskPage() {
+        for (String id : new String[]{"trades-list", "dispatch-board",
+                "army-status", "army-history", "v2-professional-work",
+                "parole-status", "parole-docket", "parole-review:PAR-1"}) {
+            assertTrue(DeskActionStyle.lore(id).contains("Deschide pagina."),
+                    id + " must announce the desk page");
+        }
+    }
+
+    /**
+     * Parole verbs: filing and advocacy open forms, bail + hearing verbs
+     * gate behind DA/NU, the civil answers execute immediately.
+     */
+    @Test
+    void paroleActionsClassifyHonesty() {
+        for (String id : new String[]{"parole-file", "parole-appeal", "parole-advocate"}) {
+            assertTrue(DeskActionStyle.lore(id).contains("Deschide formularul."),
+                    id + " must announce the native form");
+        }
+        for (String id : new String[]{"parole-settle", "parole-open:PAR-1",
+                "parole-decide-paroled:PAR-1", "parole-decide-denied:PAR-1",
+                "parole-decide-conditional:PAR-1"}) {
+            assertTrue(DeskActionStyle.needsConfirm(id),
+                    id + " must gate behind the DA/NU page");
+        }
+        assertFalse(DeskActionStyle.needsConfirm("parole-object:PAR-1"));
+        assertFalse(DeskActionStyle.needsConfirm("parole-advocate-answer:accept"));
+        assertFalse(DeskActionStyle.needsConfirm("parole-checkin"));
+        assertFalse(DeskActionStyle.consequence("parole-settle").isEmpty());
+        assertFalse(DeskActionStyle.consequence("parole-decide-paroled:PAR-1").isEmpty());
     }
 
     /**
@@ -380,9 +416,9 @@ class NpcDeskMenuStyleTest {
             assertTrue(DeskActionStyle.lore(id).contains("Se execută imediat."),
                     id + " mutates and must say so");
         }
-        // Display-only rows must not promise an execution.
+        // Record-scoped page rows announce the page, not an execution.
         assertTrue(DeskActionStyle.lore("parole-review:PH-1")
-                .contains("Doar informativ — nu execută"));
+                .contains("Deschide pagina."));
         assertTrue(DeskActionStyle.lore("tool-npc-rename:uuid-1")
                 .contains("Deschide formularul."));
         assertTrue(DeskActionStyle.lore("tool-npc-skin:uuid-1")
