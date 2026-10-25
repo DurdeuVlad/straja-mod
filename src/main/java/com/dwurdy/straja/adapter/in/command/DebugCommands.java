@@ -31,7 +31,8 @@ final class DebugCommands {
                     ? "PASS" : "FAIL") + " currency provider (configured coin items)");
             send(ctx, (runtime.context().delivery().available() ? "PASS" : "FAIL")
                     + " envelope provider (Envelope mail service)");
-            send(ctx, (!p.commissionerUuid.isEmpty() || p.isLocalEnvironment() || !p.requireCommissionerUuidOutsideLocal
+            send(ctx, (!p.commissionerUuid.isEmpty() || runtime.v2Personnel().commissioner() != null
+                    || p.isLocalEnvironment() || !p.requireCommissionerUuidOutsideLocal
                     ? "PASS" : "FAIL") + " commissioner identity");
             send(ctx, (!p.debugEnabled || p.isLocalEnvironment() || !p.requireDebugDisabledOutsideLocal
                     ? "PASS" : "FAIL") + " debug disabled outside local");

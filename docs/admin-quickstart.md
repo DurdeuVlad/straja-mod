@@ -18,7 +18,20 @@ Configurația serverului este în `world/serverconfig/straja-server.toml`
 
 ## 2. Comisarul
 
-**Calea recomandată (bootstrap în joc, OP 4 sau consolă):**
+**Calea recomandată (data-first, fără repornire):**
+
+```
+/straja setup commissioner <jucător>
+```
+
+Un operator (OP 4) numește Comisarul direct din lume — mandatul se salvează
+în registrul de personal (appointment `COMMISSIONER`), funcționează imediat
+și supraviețuiește repornirilor. Re-rularea comenzii mută mandatul: fostul
+Comisar pierde appointment-ul automat. Argumentul acceptă numele unui
+jucător online sau un UUID — pentru un jucător offline folosește UUID-ul
+(căutarea după nume offline e refuzată, numele sunt falsificabile).
+
+**Alternativ (bootstrap prin pin în config, OP 4 sau consolă):**
 
 ```
 /straja commissioner select <jucător-online>
@@ -28,29 +41,31 @@ Configurația serverului este în `world/serverconfig/straja-server.toml`
 `select` scrie numele și UUID-ul țintei direct în `straja-server.toml`
 (secțiunea `[identity]`) și activează identitatea imediat, fără restart;
 `status` arată cine deține rolul și starea pin-ului. Ambele cer OP 4 și sunt
-auditate (`commissioner_pin`). Serverul pornește fail-closed fără pin —
-acțiunile protejate refuză până la selecție.
+auditate (`commissioner_pin`). Un mandat `COMMISSIONER` din registrul de
+personal are prioritate peste pin-ul din config — pin-ul rămâne calea de
+bootstrap până la prima numire.
 
-**Alternativ, manual**, în `[identity]` din `straja-server.toml`:
+**Manual**, în `[identity]` din `straja-server.toml`:
 
 ```toml
 [identity]
 commissionerName = "numele_tau"      # fallback după nume (allowNameFallback)
-commissionerUuid = "uuid-ul-tau"     # recomandat în producție
+commissionerUuid = "uuid-ul-tau"     # pin explicit, opțional
 ```
 
-Fără `commissionerUuid` fixat, instalările non-local opresc la pornire cu
-`DEPLOYMENT GATE FAILED` — fixează UUID-ul (îl afli cu `/straja status` după
-prima logare sau din API-uri de tipul mcuuid) și repornește. În staging /
-producție păstrează `allowNameFallback = false` — numele sunt falsificabile
-pe servere offline-mode.
+Fără Comisar numit (mandat sau `commissionerUuid` fixat), instalările
+non-local opresc la pornire cu `DEPLOYMENT GATE FAILED` — rulează
+`/straja setup commissioner <jucător>` sau `/straja commissioner select
+<jucător>` ori fixează UUID-ul și repornește. În staging / producție
+păstrează `allowNameFallback = false` — numele sunt falsificabile pe
+servere offline-mode.
 
 ## 3. Checklist-ul `/straja setup` (OP 4)
 
 Rulează `/straja setup` în orice moment — afișează starea și **Următorul
 pas**. Ordinea verificărilor:
 
-1. **Comisar** — setat prin `[identity]` (pasul 2).
+1. **Comisar** — numit prin `/straja setup commissioner <jucător>` (pasul 2).
 2. **Locații administrative** (9: reportsLectern, commissionerMailbox,
    commissionerOffice, receptionist, secretary, trainer, armorer,
    prisonRelease, infirmary, HQ) — stai unde vrei sediul și rulează

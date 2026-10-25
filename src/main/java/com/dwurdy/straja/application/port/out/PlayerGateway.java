@@ -47,6 +47,30 @@ public interface PlayerGateway {
     default void tellKey(String translationKey, Object... args) { tell(translationKey); }
 
     /**
+     * One clickable decision attached to a notice: the label renders as a
+     * button and the action id dispatches through the same validated path a
+     * desk click would (player-bound, one-use on the concrete adapter).
+     * {@code ttlMillis} bounds the click's lifetime — notices should pass
+     * the duration of the window they gate (0 leaves the adapter's short
+     * default). Services name the outcome — never the transport.
+     */
+    record ActionLink(String label, String actionId, long ttlMillis) {
+        public ActionLink(String label, String actionId) {
+            this(label, actionId, 0);
+        }
+    }
+
+    /**
+     * Sends a localized notice with action links appended. The default
+     * degrades to the plain localized message — headless and test gateways
+     * still get the full text, only the buttons are absent.
+     */
+    default void tellAction(String translationKey, java.util.List<ActionLink> links,
+                            Object... args) {
+        tellKey(translationKey, args);
+    }
+
+    /**
      * Sends a refusal that names the concrete remedy, not just the reason.
      * Player-facing denials route through here so a bare reason can never
      * ship: {@code straja.refusal.format} renders "{reason} → {remedy}" and

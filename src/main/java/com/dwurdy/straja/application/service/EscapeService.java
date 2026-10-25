@@ -226,10 +226,20 @@ public final class EscapeService {
         offers.put(gkey, new BribeOffer(uuidOf(prisoner), prisoner.name(), gkey,
                 now() + Math.max(5_000, ctx.policies().bribeOfferMs)));
         prisoner.tell("§6Ai oferit mită lui " + guard.name() + " — așteaptă răspunsul.");
-        guard.tell("§c" + prisoner.name() + " îți oferă " + Math.max(1, ctx.policies().bribePostPrice)
-                + " B să deschizi celula. /straja bribe accept sau decline — "
-                + (Math.max(5_000, ctx.policies().bribeOfferMs) / 1000) + "s.");
+        guard.tellAction("straja.escape.bribe_offer",
+                List.of(new PlayerGateway.ActionLink("Acceptă", "bribe-accept",
+                                Math.max(5_000, ctx.policies().bribeOfferMs)),
+                        new PlayerGateway.ActionLink("Refuză", "bribe-decline",
+                                Math.max(5_000, ctx.policies().bribeOfferMs))),
+                prisoner.name(), Math.max(1, ctx.policies().bribePostPrice),
+                Math.max(5_000, ctx.policies().bribeOfferMs) / 1000);
         return true;
+    }
+
+    /** True while a live bribe offer awaits this guard's answer. */
+    public synchronized boolean pendingBribeFor(String guardUuid) {
+        var offer = guardUuid == null || guardUuid.isBlank() ? null : offers.get(guardUuid);
+        return offer != null && now() <= offer.expiresAt;
     }
 
     /** `/straja bribe accept|decline` — the guard answers a pending offer. */

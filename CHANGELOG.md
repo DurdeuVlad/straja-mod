@@ -2,8 +2,43 @@
 
 ## 0.6.0 — 2026-10-24
 
-Polish + stability over 0.5.0: institution copy is consistent, and the
-army treadmill no longer bleeds unattended units.
+Polish + stability over 0.5.0, then the gendarmerie institution: native
+desk GUIs for police and army work, commissioner setup as a command,
+clickable consent links, and a full custody-to-bail loop.
+
+### Institution surfaces & custody loop (rc.4)
+
+The gendarmerie desks become the real way things get done: commissioner
+setup is a single command, custody and bail run through the custom GUI,
+and common paperwork stops needing typed commands.
+
+- **Commissioner setup is one command**: `/straja setup commissioner
+  <player>` appoints through the personnel register — effective
+  immediately, survives restarts, and hands the mandate over cleanly when
+  re-run. `/straja commissioner select` remains as the config-pin
+  bootstrap path. The `/straja setup` checklist shows who's appointed.
+- **Clickable answers instead of typed replies**: cuff requests,
+  surrender offers, bribe and trade proposals arrive as `[Acceptă]` /
+  `[Refuză]` links in chat — one click, time-limited, re-checked by the
+  server.
+- **The Temniță desk covers the whole custody loop**: prisoners see work
+  quotas, trades, IOUs, bribes, debt, bail and parole status; officers
+  get cell search, manhunt/transfer/bounty boards and document checks.
+  Money and destructive actions confirm with a DA/NU page first.
+- **Bail and trade flow through native forms**: a friend can pay a
+  prisoner's bail at the jailer desk (`Plătește cauțiunea altui
+  deținut`), and prisoner-to-prisoner trade offers open a form that
+  delivers a clickable offer to the buyer.
+- **Reliability fixes**: promotion petitions, trade/IOU/bail/bounty and
+  inspection forms now open reliably from desk tiles on all NPC surfaces.
+- **Commissioner authority tightened**: the config pin is now strictly a
+  bootstrap seed — once a commissioner is appointed through the personnel
+  register, the register alone decides who holds the role. The pin can no
+  longer linger as a second, parallel grant.
+- Desk pages lead with urgent actions, questions sit behind FAQ, and
+  every refusal explains the remedy.
+
+### Earlier release candidates (rc.1–rc.3)
 
 - **Idle operations resolve quietly**: auto-scheduled unit operations
   that nobody signed up for and nobody attended drop from the ledger
