@@ -614,6 +614,10 @@ final class DeskMenuSession {
                     runtime.playerQueries().rankPrefixFor(gw) != null;
             case DeskDynamicPages.TRADES ->
                     NpcRoles.tradesFor(runtime, gw) != null;
+            // Detention-shift boards mirror their service gates: hunts and
+            // transfer rides are on-duty intel; the bounty board is public.
+            case DeskDynamicPages.MANHUNT, DeskDynamicPages.TRANSFER ->
+                    runtime.playerQueries().isOnDutyGuard(gw);
             default -> true;
         };
     }
@@ -642,6 +646,19 @@ final class DeskMenuSession {
             case DeskDynamicPages.TRADES -> tradesPage(runtime, uuid);
             case DeskDynamicPages.DISPATCH -> DeskDynamicPages.dispatch(
                     runtime.dispatch().board());
+            case DeskDynamicPages.MANHUNT -> onDutyGuard(runtime)
+                    ? DeskDynamicPages.manhuntBoard(
+                            runtime.manhunts().activeHunts(), seniorOfficer(runtime),
+                            runtime.nowMillis())
+                    : deniedPage();
+            case DeskDynamicPages.TRANSFER -> onDutyGuard(runtime)
+                    ? DeskDynamicPages.transferBoard(
+                            runtime.transfers().liveTransfers(), uuid,
+                            seniorOfficer(runtime), runtime.nowMillis())
+                    : deniedPage();
+            case DeskDynamicPages.BOUNTY -> DeskDynamicPages.bountyBoard(
+                    runtime.bounties().activeBounties(), seniorOfficer(runtime),
+                    runtime.nowMillis());
             case DeskDynamicPages.V2_OFFER -> v2OfferPage(runtime, id);
             default -> DeskLayout.info("Straja",
                     new DeskIcon(DeskIcon.FALLBACK_ITEM, "Pagină necunoscută",
@@ -711,9 +728,31 @@ final class DeskMenuSession {
                         player.getServer(), player.getUUID()));
     }
 
+    /** On-duty guard — the same bar dynamicGate sets for MANHUNT/TRANSFER rows. */
+    private boolean onDutyGuard(com.dwurdy.straja.bootstrap.StrajaRuntime runtime) {
+        return runtime.playerQueries().isOnDutyGuard(
+                new com.dwurdy.straja.adapter.out.minecraft.MinecraftPlayerGateway(
+                        player.getServer(), player.getUUID()));
+    }
+
+    /** Locotenent+ or Comisar — the same bar the bounty/transfer verbs set. */
+    private boolean seniorOfficer(com.dwurdy.straja.bootstrap.StrajaRuntime runtime) {
+        var gw = new com.dwurdy.straja.adapter.out.minecraft.MinecraftPlayerGateway(
+                player.getServer(), player.getUUID());
+        var state = runtime.playerQueries().readState(gw);
+        return state != null
+                && state.rank >= com.dwurdy.straja.application.service
+                        .BountyService.MIN_POSTER_RANK
+                || runtime.playerQueries().isCommissioner(gw);
+    }
+
     private DeskPage deniedPage() {
         return DeskLayout.info("Acces restricționat",
                 new DeskIcon("minecraft:barrier", "Doar pentru ofițeri",
-                        List.of("Dosarele de eliberare sunt", "lucrul ofițerilor.")), true);
+                        List.of("Dosarele de eliberare sunt",
+                                "lucrul ofițerilor.",
+                                "Ajungi ofițer prin avansare —",
+                                "întreabă la Recepție.")),
+                true);
     }
 }

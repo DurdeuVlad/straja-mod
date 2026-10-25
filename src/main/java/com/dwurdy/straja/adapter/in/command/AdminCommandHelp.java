@@ -270,6 +270,7 @@ final class AdminCommandHelp {
             Map.entry("set-mission-time", "Schimbă timpul configurat pentru o misiune."),
             Map.entry("set-location", "Salvează locația curentă sub numele dat."),
             Map.entry("setup", "Arată checklist-ul și acțiunile de configurare ghidată."),
+            Map.entry("setup commissioner", "Numește Comisarul din lume — mandat salvat, fără repornire."),
             Map.entry("setup here", "Configurează locațiile sediului la poziția curentă."),
             Map.entry("setup patrol", "Configurează patrula inițială."),
             Map.entry("setup npcs", "Spawnează NPC-urile lipsă în locațiile configurate."),

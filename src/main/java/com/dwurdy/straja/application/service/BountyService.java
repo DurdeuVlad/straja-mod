@@ -10,6 +10,7 @@ import com.dwurdy.straja.domain.model.BountyStore;
 import com.dwurdy.straja.domain.model.Fine;
 import com.dwurdy.straja.domain.model.Sentence;
 import java.util.ArrayList;
+import java.util.List;
 import com.dwurdy.straja.domain.model.AuditActions;
 import com.dwurdy.straja.domain.model.AuditResults;
 
@@ -209,6 +210,15 @@ public final class BountyService {
 
     public BountyRecord activeFor(String targetUuidOrName) {
         return store().activeFor(targetUuidOrName);
+    }
+
+    /** Every ACTIVE bounty — the read-only snapshot a desk board renders. */
+    public List<BountyRecord> activeBounties() {
+        var out = new ArrayList<BountyRecord>();
+        for (BountyRecord record : store().records) {
+            if (record != null && record.status == BountyStatus.ACTIVE) out.add(record);
+        }
+        return out;
     }
 
     public boolean isBountied(PlayerGateway target) {

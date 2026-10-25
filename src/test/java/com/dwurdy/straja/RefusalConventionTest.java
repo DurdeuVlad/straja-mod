@@ -68,8 +68,6 @@ class RefusalConventionTest {
             "Dosarul nu are foi",
             "au fost returnate",
             "eliberat cât era offline",
-            "îți cere predarea",
-            "vrea să te încătușeze",
             "va fi livrată când revine",
             "Ți s-a pus Sacul",
             "nu mai sunt posibile",

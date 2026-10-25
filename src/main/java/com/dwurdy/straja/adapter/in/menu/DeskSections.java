@@ -51,6 +51,7 @@ public final class DeskSections {
         if ("mission-carnet".equals(actionId)) return GENERAL;
         if (actionId.startsWith("duty-")
                 || "work-start".equals(actionId)
+                || "absence-declare".equals(actionId)
                 || actionId.startsWith("resignation-")
                 || "rejoin".equals(actionId)) return DUTY;
         if (actionId.startsWith("v2-mission-claim")
@@ -59,7 +60,11 @@ public final class DeskSections {
                 || actionId.startsWith("report-") || actionId.startsWith("audience-")
                 || actionId.startsWith("petition-") || actionId.startsWith("join-")) return RECORDS;
         if (actionId.startsWith("incident-") || actionId.startsWith("dispatch-")
-                || actionId.startsWith("bolo-")) return BOARD;
+                || actionId.startsWith("bolo-")
+                || actionId.startsWith("manhunt-") || actionId.startsWith("transfer-")
+                || actionId.startsWith("bounty-")
+                || "cell-search".equals(actionId)
+                || "inspect-player".equals(actionId)) return BOARD;
         if (actionId.startsWith("admin-") || actionId.startsWith("delegation-")
                 || "reputation-view".equals(actionId)
                 || "reputation-correction".equals(actionId)

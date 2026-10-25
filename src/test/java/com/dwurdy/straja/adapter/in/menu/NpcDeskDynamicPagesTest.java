@@ -6,8 +6,11 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.dwurdy.straja.application.port.in.ParoleUseCase;
+import com.dwurdy.straja.domain.model.BountyRecord;
 import com.dwurdy.straja.domain.model.DispatchCall;
 import com.dwurdy.straja.domain.model.HearingRecord;
+import com.dwurdy.straja.domain.model.ManhuntRecord;
+import com.dwurdy.straja.domain.model.TransferRecord;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -57,6 +60,15 @@ class NpcDeskDynamicPagesTest {
         assertEquals(DeskDynamicPages.ARMY_HISTORY,
                 ((DeskPageSource.DynamicPage) DeskDynamicPages
                         .sourceFor("army-history")).kind());
+        assertEquals(DeskDynamicPages.MANHUNT,
+                ((DeskPageSource.DynamicPage) DeskDynamicPages
+                        .sourceFor("manhunt-board")).kind());
+        assertEquals(DeskDynamicPages.TRANSFER,
+                ((DeskPageSource.DynamicPage) DeskDynamicPages
+                        .sourceFor("transfer-board")).kind());
+        assertEquals(DeskDynamicPages.BOUNTY,
+                ((DeskPageSource.DynamicPage) DeskDynamicPages
+                        .sourceFor("bounty-board")).kind());
         var hearing = (DeskPageSource.DynamicPage)
                 DeskDynamicPages.sourceFor("parole-review:PAR-9");
         assertEquals(DeskDynamicPages.PAROLE_HEARING, hearing.kind());
@@ -195,5 +207,89 @@ class NpcDeskDynamicPagesTest {
     void v2OfferCarriesExactlyTheClaimVerb() {
         var page = DeskDynamicPages.v2Offer("M-42", "Patrulează portul");
         assertEquals(List.of("v2-mission-claim:M-42"), actionIds(page));
+    }
+
+    // ---------- FUN-7/8 live boards ----------
+
+    private static ManhuntRecord hunt(String id) {
+        var h = new ManhuntRecord();
+        h.id = id;
+        h.coolAt = 120_000L;
+        var r = new ManhuntRecord.Runner();
+        r.name = "Evadat";
+        h.runners.add(r);
+        return h;
+    }
+
+    @Test
+    void manhuntBoardLimitsCallOffToSeniors() {
+        var junior = actionIds(DeskDynamicPages.manhuntBoard(
+                List.of(hunt("MH-1")), false, 0L));
+        assertTrue(junior.isEmpty(),
+                "a junior officer reads the board but cannot call the hunt off");
+
+        var senior = actionIds(DeskDynamicPages.manhuntBoard(
+                List.of(hunt("MH-1")), true, 0L));
+        assertEquals(List.of("manhunt-calloff:MH-1"), senior,
+                "the senior verb rides the live record id");
+    }
+
+    private static TransferRecord ride(String id, String status, String escortUuid) {
+        var t = new TransferRecord();
+        t.id = id;
+        t.status = status;
+        t.prisonerName = "Puscarias";
+        t.destLabel = "Tabăra Nord";
+        t.escortDeadlineAt = 60_000L;
+        if (escortUuid != null) {
+            var e = new TransferRecord.Escort();
+            e.uuid = escortUuid;
+            t.escorts.add(e);
+        }
+        return t;
+    }
+
+    @Test
+    void transferBoardGatesPickupToTheEscort() {
+        var ordered = ride("TR-1", "ORDERED", "guard-1");
+        var outsider = actionIds(DeskDynamicPages.transferBoard(
+                List.of(ordered), "guard-2", false, 0L));
+        assertEquals(List.of("transfer-join:TR-1"), outsider,
+                "any on-duty guard may join an ORDERED ride");
+
+        var escort = actionIds(DeskDynamicPages.transferBoard(
+                List.of(ordered), "guard-1", false, 0L));
+        assertTrue(escort.containsAll(
+                        List.of("transfer-join:TR-1", "transfer-pickup:TR-1")),
+                "the assigned escort also gets the pickup verb");
+
+        var rolling = ride("TR-2", "IN_TRANSIT", "guard-1");
+        assertTrue(actionIds(DeskDynamicPages.transferBoard(
+                        List.of(rolling), "guard-1", false, 0L)).isEmpty(),
+                "a moving convoy offers no verbs");
+    }
+
+    @Test
+    void bountyBoardIsPublicAndCancelsForSeniorsOnly() {
+        var r = new BountyRecord();
+        r.id = "BTY-1";
+        r.targetName = "Hotul";
+        r.amount = 200;
+        r.postedBy = "Comisar";
+        r.expiresAt = 7_200_000L;
+
+        assertTrue(actionIds(DeskDynamicPages.bountyBoard(
+                        List.of(r), false, 0L)).isEmpty(),
+                "the public board is read-only for ordinary players");
+        assertEquals(List.of("bounty-cancel:BTY-1"),
+                actionIds(DeskDynamicPages.bountyBoard(List.of(r), true, 0L)),
+                "seniors retract the bounty and its linked BOLO");
+    }
+
+    @Test
+    void liveBoardsDegradeToAnEmptyState() {
+        assertTrue(actionIds(DeskDynamicPages.manhuntBoard(List.of(), false, 0L)).isEmpty());
+        assertTrue(actionIds(DeskDynamicPages.transferBoard(List.of(), "g", false, 0L)).isEmpty());
+        assertTrue(actionIds(DeskDynamicPages.bountyBoard(List.of(), false, 0L)).isEmpty());
     }
 }

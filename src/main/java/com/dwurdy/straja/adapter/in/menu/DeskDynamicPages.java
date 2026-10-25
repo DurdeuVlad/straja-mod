@@ -3,8 +3,11 @@ package com.dwurdy.straja.adapter.in.menu;
 import com.dwurdy.straja.application.port.in.ParoleUseCase;
 import com.dwurdy.straja.domain.model.ArmyOperation;
 import com.dwurdy.straja.domain.model.ArmyUnit;
+import com.dwurdy.straja.domain.model.BountyRecord;
 import com.dwurdy.straja.domain.model.DispatchCall;
 import com.dwurdy.straja.domain.model.HearingRecord;
+import com.dwurdy.straja.domain.model.ManhuntRecord;
+import com.dwurdy.straja.domain.model.TransferRecord;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -23,6 +26,9 @@ public final class DeskDynamicPages {
     public static final String TRADES = "trades";
     public static final String DISPATCH = "dispatch";
     public static final String V2_OFFER = "v2-offer";
+    public static final String MANHUNT = "manhunt";
+    public static final String TRANSFER = "transfer";
+    public static final String BOUNTY = "bounty";
 
     private DeskDynamicPages() {}
 
@@ -43,6 +49,9 @@ public final class DeskDynamicPages {
             case "army-history" -> new DeskPageSource.DynamicPage(ARMY_HISTORY, "", 0);
             case "trades-list" -> new DeskPageSource.DynamicPage(TRADES, "", 0);
             case "dispatch-board" -> new DeskPageSource.DynamicPage(DISPATCH, "", 0);
+            case "manhunt-board" -> new DeskPageSource.DynamicPage(MANHUNT, "", 0);
+            case "transfer-board" -> new DeskPageSource.DynamicPage(TRANSFER, "", 0);
+            case "bounty-board" -> new DeskPageSource.DynamicPage(BOUNTY, "", 0);
             default -> null;
         };
     }
@@ -339,6 +348,139 @@ public final class DeskDynamicPages {
         return DeskLayout.grid("Ofertă profesională",
                 new DeskIcon("straja:mission_carnet", "Comanda zilei",
                         List.of("Publicată pentru tine — o poți revendica acum.")),
+                items, 0, true);
+    }
+
+    // ---------- custody-shift boards ----------
+
+    /**
+     * Active hunts: one info tile per pursuit plus, for senior officers, the
+     * call-off verb — rank re-verifies inside the service on the click.
+     */
+    static DeskPage manhuntBoard(List<ManhuntRecord> hunts, boolean senior, long nowMs) {
+        var items = new ArrayList<DeskButton>();
+        if (hunts != null) {
+            for (ManhuntRecord h : hunts) {
+                if (h == null) continue;
+                long left = Math.max(0, h.coolAt - nowMs) / 60_000L;
+                var lore = new ArrayList<String>();
+                lore.add(h.runners.size() + " fugitiv" + (h.runners.size() == 1 ? "" : "i")
+                        + " — ~" + left + " min până la mandat");
+                if (h.originLabel != null && !h.originLabel.isBlank()) {
+                    lore.addAll(DeskLayout.wrapLore("Origine: " + h.originLabel,
+                            DeskLayout.LORE_WRAP));
+                }
+                var names = new StringBuilder();
+                for (ManhuntRecord.Runner r : h.runners) {
+                    if (r == null) continue;
+                    if (names.length() > 0) names.append(", ");
+                    names.append(r.name);
+                    if (names.length() > 30) break;
+                }
+                if (names.length() > 0) lore.add("Ținte: " + bounded(names.toString(), 34));
+                items.add(button(new DeskIcon("straja:alarm_whistle",
+                        h.id + " — vânătoare activă",
+                        List.copyOf(lore)), null));
+                if (senior) {
+                    items.add(button(DeskActionStyle.icon(
+                            "Oprește vânătoarea " + h.id,
+                            "manhunt-calloff:" + h.id), "manhunt-calloff:" + h.id));
+                }
+            }
+        }
+        if (items.isEmpty()) {
+            items.add(button(new DeskIcon("minecraft:paper", "Nicio vânătoare",
+                    List.of("Liniște — niciun dosar activ.")), null));
+        }
+        return DeskLayout.grid("Panou vânători",
+                new DeskIcon("straja:alarm_whistle", "Vânători active",
+                        List.of("Urmăririle în desfășurare.", "Un ofițer senior le poate opri.")),
+                items, 0, true);
+    }
+
+    /**
+     * Live transfer rides: route and escorts as info; ORDERED rides offer
+     * join to every on-duty guard and pickup to their escorts; seniors get
+     * the cancel verb.
+     */
+    static DeskPage transferBoard(List<TransferRecord> rides, String viewerUuid,
+                                  boolean senior, long nowMs) {
+        var items = new ArrayList<DeskButton>();
+        if (rides != null) {
+            for (TransferRecord t : rides) {
+                if (t == null) continue;
+                var lore = new ArrayList<String>();
+                lore.add(t.prisonerName + " → " + t.destLabel);
+                lore.add("Statut: " + t.status
+                        + " — escorte " + t.escorts.size());
+                if ("ORDERED".equals(t.status)) {
+                    long left = Math.max(0, t.escortDeadlineAt - nowMs) / 60_000L;
+                    lore.add("Preluare în ~" + left + " min sau se întoarce.");
+                }
+                items.add(button(new DeskIcon("straja:cuffs",
+                        t.id + " — transfer",
+                        List.copyOf(lore)), null));
+                if ("ORDERED".equals(t.status)) {
+                    items.add(button(DeskActionStyle.icon(
+                            "Alătură-te escortei " + t.id,
+                            "transfer-join:" + t.id), "transfer-join:" + t.id));
+                    if (viewerUuid != null && t.escort(viewerUuid) != null) {
+                        items.add(button(DeskActionStyle.icon(
+                                "Ia lanțul " + t.id,
+                                "transfer-pickup:" + t.id), "transfer-pickup:" + t.id));
+                    }
+                }
+                if (senior) {
+                    items.add(button(DeskActionStyle.icon(
+                            "Anulează transferul " + t.id,
+                            "transfer-cancel:" + t.id), "transfer-cancel:" + t.id));
+                }
+            }
+        }
+        if (items.isEmpty()) {
+            items.add(button(new DeskIcon("minecraft:paper", "Niciun transfer",
+                    List.of("Liniște — nicio cursă în desfășurare.")), null));
+        }
+        return DeskLayout.grid("Panou transferuri",
+                new DeskIcon("straja:cuffs", "Curse în desfășurare",
+                        List.of("Deținuți mutați între unități.", "Escortele îi preiau de aici.")),
+                items, 0, true);
+    }
+
+    /**
+     * The public bounty board: every ACTIVE bounty as an info tile; seniors
+     * get the cancel verb; posting rides a separate form row on the desk.
+     */
+    static DeskPage bountyBoard(List<BountyRecord> records, boolean senior, long nowMs) {
+        var items = new ArrayList<DeskButton>();
+        if (records != null) {
+            for (BountyRecord r : records) {
+                if (r == null) continue;
+                long leftH = Math.max(1, (r.expiresAt - nowMs) / 3_600_000L);
+                var lore = new ArrayList<String>();
+                lore.add(r.amount + " unități — expiră în " + leftH + "h");
+                if (r.reason != null && !r.reason.isBlank()) {
+                    lore.addAll(DeskLayout.wrapLore("Motiv: " + r.reason,
+                            DeskLayout.LORE_WRAP));
+                }
+                lore.add("Oferită de " + r.postedBy);
+                items.add(button(new DeskIcon("straja:fine_notice",
+                        r.id + " — " + bounded(r.targetName, 24),
+                        List.copyOf(lore)), null));
+                if (senior) {
+                    items.add(button(DeskActionStyle.icon(
+                            "Retrage recompensa " + r.id,
+                            "bounty-cancel:" + r.id), "bounty-cancel:" + r.id));
+                }
+            }
+        }
+        if (items.isEmpty()) {
+            items.add(button(new DeskIcon("minecraft:paper", "Nicio recompensă",
+                    List.of("Tabloul e gol — nimeni căutat", "pe recompensă acum.")), null));
+        }
+        return DeskLayout.grid("Panou recompense",
+                new DeskIcon("straja:fine_notice", "Recompense active",
+                        List.of("Capturile se plătesc la predare.", "Orice jucător poate captura.")),
                 items, 0, true);
     }
 
