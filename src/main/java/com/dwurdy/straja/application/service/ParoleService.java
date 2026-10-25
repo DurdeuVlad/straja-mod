@@ -26,7 +26,7 @@ import java.util.List;
  * order matching {@code CLEAN} resolves hearings with no victim complainants
  * and still-clean eligibility; everything else stays on the human digest.</p>
  */
-public final class ParoleService {
+public final class ParoleService implements com.dwurdy.straja.application.port.in.ParoleUseCase {
 
     private final StrajaContext ctx;
     private final PlayerService players;
@@ -44,9 +44,6 @@ public final class ParoleService {
     private long now() { return ctx.clock().nowMillis(); }
 
     // ---------- eligibility ----------
-
-    /** One transparent eligibility check — what the prisoner can read. */
-    public record Check(String key, boolean ok, String detail) {}
 
     /** The ledger-derived gate list — order matches the status surface. */
     public List<Check> eligibility(String prisonerUuid) {
@@ -91,6 +88,108 @@ public final class ParoleService {
     public boolean eligible(String prisonerUuid) {
         for (Check c : eligibility(prisonerUuid)) if (!c.ok()) return false;
         return true;
+    }
+
+    // ---------- desk surface reads ----------
+
+    /**
+     * Desk snapshot — which parole rows the jailer desk shows this player:
+     * filing rows for an eligible prisoner, the pending-case row (advocate
+     * once filed), the settle row while a CONDITIONAL offer is open, and the
+     * check-in row for an active parolee. Pure read — no mutation, no refuse.
+     */
+    public ParoleSurface surface(String uuid) {
+        if (uuid == null || uuid.isBlank()) {
+            return new ParoleSurface(false, false, "", "", "", false, "", 0);
+        }
+        var reg = ctx.prisonerRegister().read();
+        var rec = reg.prisoner(uuid);
+        ParoleStore store = ctx.paroles().read();
+        var parole = store.parole(uuid);
+        boolean parolee = parole != null && "ACTIVE".equals(parole.status);
+        boolean prisoner = rec != null && !rec.status.isReleased()
+                && rec.status != PrisonerStatus.FUGITIVE
+                && ctx.prison().read().activeSentenceFor(uuid) != null;
+        HearingRecord pending = store.pendingFor(uuid);
+        String conditionalId = "";
+        int bail = 0;
+        for (HearingRecord h : store.docket) {
+            if (h != null && uuid.equals(h.prisonerUuid)
+                    && "CONDITIONAL".equals(h.status)
+                    && h.conditionalUntil > now()) {
+                conditionalId = h.id;
+                bail = h.bailAmount;
+                break;
+            }
+        }
+        return new ParoleSurface(
+                prisoner, eligible(uuid),
+                pending == null ? "" : pending.id,
+                pending == null ? "" : pending.kind,
+                pending == null ? "" : pending.advocateStatus,
+                parolee, conditionalId, bail);
+    }
+
+    /**
+     * Hearings whose objection window is currently open to this victim — the
+     * receptionist desk renders one {@code parole-object:<id>} row each.
+     */
+    public List<String> openObjectionsFor(String uuid) {
+        List<String> out = new ArrayList<>();
+        if (uuid == null || uuid.isBlank()) return out;
+        long now = now();
+        for (HearingRecord h : ctx.paroles().read().docket) {
+            if (h == null || !"HEARING".equals(h.status) || now >= h.objectionUntil) {
+                continue;
+            }
+            if (h.objectorUuids != null && h.objectorUuids.contains(uuid)) {
+                continue; // already objected — the row's job is done
+            }
+            if (victimsOf(h.prisonerUuid).contains(uuid)) out.add(h.id);
+        }
+        return out;
+    }
+
+    /**
+     * The hearing this player was asked to advocate for, else null — backs
+     * both the receptionist answer rows and the advocateAnswer revalidation.
+     */
+    public String advocacyAskFor(String uuid) {
+        if (uuid == null || uuid.isBlank()) return null;
+        for (var cand : ctx.paroles().read().docket) {
+            if (cand != null && uuid.equals(cand.advocateUuid)
+                    && "ASKED".equals(cand.advocateStatus)) {
+                return cand.id;
+            }
+        }
+        return null;
+    }
+
+    /** Live hearing lookup for desk pages and click revalidation. */
+    public HearingRecord findHearing(String id) {
+        return ctx.paroles().read().hearing(id);
+    }
+
+    /** FILED/HEARING docket rows for the officer desk page — same order as {@link #docket}. */
+    public List<HearingRecord> reviewDocket() {
+        List<HearingRecord> out = new ArrayList<>();
+        for (HearingRecord h : ctx.paroles().read().docket) {
+            if (h != null && ("FILED".equals(h.status) || "HEARING".equals(h.status))) {
+                out.add(h);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Silent authority check — the desk uses it to emit rows and revalidate
+     * clicks without spamming refusals/audits; {@link #officerGate} keeps the
+     * loud variant for actual mutations.
+     */
+    public boolean officerCapable(PlayerGateway actor) {
+        return actor != null && (players.isCommissioner(actor) || actor.isOp()
+                || players.permissionLevel(actor, players.state(actor)).atLeast(
+                        com.dwurdy.straja.domain.model.PermissionLevel.LIEUTENANT));
     }
 
     /**
@@ -246,8 +345,17 @@ public final class ParoleService {
         tell(officer, "straja.parole.hearing_opened", h.id);
         for (String v : victims) {
             var g = findOnline(v);
-            if (g != null) tell(g, "straja.parole.victim_notice", h.id,
-                    h.prisonerName, String.valueOf(ctx.policies().paroleObjectionMinutes));
+            if (g != null) {
+                // One click objects — the link mints a victim-bound token
+                // that revalidates against the live docket on dispatch and
+                // lives exactly as long as the objection window it gates.
+                g.tellAction("straja.parole.victim_notice",
+                        List.of(new PlayerGateway.ActionLink(
+                                "Obiectează", "parole-object:" + h.id,
+                                ctx.policies().paroleObjectionMinutes * 60_000L)),
+                        h.id, h.prisonerName,
+                        String.valueOf(ctx.policies().paroleObjectionMinutes));
+            }
         }
         return true;
     }
@@ -265,6 +373,13 @@ public final class ParoleService {
             victim.refuse("straja.parole.not_victim", "straja.remedy.jailer");
             return false;
         }
+        if (h.objectorUuids != null && h.objectorUuids.contains(uuid)) {
+            // One objection per victim — a repeated click doesn't stack.
+            tell(victim, "straja.parole.object_recorded", h.id);
+            return true;
+        }
+        if (h.objectorUuids == null) h.objectorUuids = new java.util.ArrayList<>();
+        h.objectorUuids.add(uuid);
         h.objections++;
         h.version = store.version++;
         ctx.paroles().write(store);
@@ -292,7 +407,17 @@ public final class ParoleService {
         h.advocateStatus = "ASKED";
         h.version = store.version++;
         ctx.paroles().write(store);
-        tell(adv, "straja.parole.advocate_asked", h.id, prisoner.name());
+        // The ask stands until answered or the hearing resolves — a day is
+        // a generous bound; the service revalidates the live ask on click.
+        long advocateLinkTtl = 24L * 3_600_000L;
+        adv.tellAction("straja.parole.advocate_asked",
+                List.of(new PlayerGateway.ActionLink(
+                                "Acceptă", "parole-advocate-answer:accept",
+                                advocateLinkTtl),
+                        new PlayerGateway.ActionLink(
+                                "Refuză", "parole-advocate-answer:decline",
+                                advocateLinkTtl)),
+                prisoner.name(), h.id);
         tell(prisoner, "straja.parole.advocate_sent", adv.name());
         return true;
     }
@@ -301,11 +426,8 @@ public final class ParoleService {
     public boolean advocateAnswer(PlayerGateway advocate, boolean accept) {
         ParoleStore store = ctx.paroles().read();
         String uuid = safeUuid(advocate);
-        HearingRecord h = null;
-        for (var cand : store.docket) {
-            if (cand != null && uuid.equals(cand.advocateUuid)
-                    && "ASKED".equals(cand.advocateStatus)) { h = cand; break; }
-        }
+        String askId = advocacyAskFor(uuid);
+        HearingRecord h = askId == null ? null : store.hearing(askId);
         if (h == null) {
             advocate.refuse("straja.parole.no_advocacy", "straja.remedy.wait");
             return false;
@@ -355,7 +477,12 @@ public final class ParoleService {
                 h.bailAmount = ctx.policies().paroleBailAmount;
                 var prisoner = findOnline(h.prisonerUuid);
                 if (prisoner != null) {
-                    tell(prisoner, "straja.parole.conditional_offer", h.bailAmount,
+                    // The pay link lives for the whole conditional window.
+                    prisoner.tellAction("straja.parole.conditional_offer",
+                            List.of(new PlayerGateway.ActionLink(
+                                    "Plătește cauțiunea", "parole-settle",
+                                    ctx.policies().paroleConditionalHours * 3_600_000L)),
+                            h.bailAmount,
                             String.valueOf(ctx.policies().paroleConditionalHours));
                 }
             }
@@ -382,10 +509,13 @@ public final class ParoleService {
         ParoleStore store = ctx.paroles().read();
         HearingRecord h = null;
         for (var cand : store.docket) {
+            // An expired offer can never settle — skip it so a stale record
+            // doesn't shadow a live refile further down the docket.
             if (cand != null && uuid.equals(cand.prisonerUuid)
-                    && "CONDITIONAL".equals(cand.status)) { h = cand; break; }
+                    && "CONDITIONAL".equals(cand.status)
+                    && cand.conditionalUntil > now()) { h = cand; break; }
         }
-        if (h == null || now() >= h.conditionalUntil) {
+        if (h == null) {
             prisoner.refuse("straja.parole.no_conditional", "straja.remedy.jailer");
             return false;
         }
@@ -395,9 +525,30 @@ public final class ParoleService {
             prisoner.refuse("straja.parole.bail_short", "straja.remedy.earn_blocks");
             return false;
         }
-        rec.laborAccount -= h.bailAmount;
-        ctx.prisonerRegister().write(reg);
-        return grantParole(store, h) && markDecided(store, h, uuid, prisoner.name());
+        if (!releasableNow(h)) {
+            // The release check runs before the bail moves — a prisoner who
+            // left custody after the decision keeps both the labor credit
+            // and the open case.
+            prisoner.refuse("straja.parole.not_in_custody", "straja.remedy.jailer");
+            audit.record(AuditActions.PRISON_HEARING, prisoner.name(), uuid,
+                    h.id, h.prisonerUuid, AuditResults.REFUSED, "settle_not_in_custody");
+            return false;
+        }
+        if (!grantParole(store, h)) {
+            // Never confiscate bail for a release that did not happen.
+            prisoner.refuse("straja.parole.not_in_custody", "straja.remedy.jailer");
+            audit.record(AuditActions.PRISON_HEARING, prisoner.name(), uuid,
+                    h.id, h.prisonerUuid, AuditResults.REFUSED, "settle_release_failed");
+            return false;
+        }
+        // Re-read after the release — the grant rewrote the register status.
+        var post = ctx.prisonerRegister().read();
+        var postRec = post.prisoner(uuid);
+        if (postRec != null) {
+            postRec.laborAccount -= h.bailAmount;
+            ctx.prisonerRegister().write(post);
+        }
+        return markDecided(store, h, uuid, prisoner.name());
     }
 
     private boolean markDecided(ParoleStore store, HearingRecord h, String uuid, String name) {
@@ -412,17 +563,31 @@ public final class ParoleService {
         return true;
     }
 
-    /** Shared release: sentence ends, register flips PAROLED, conditions open. */
-    private boolean grantParole(ParoleStore store, HearingRecord h) {
+    /**
+     * The release half of {@link #grantParole} without the mutation: in
+     * custody, releasable status and an active sentence still present.
+     * {@code settle} runs this before the bail moves so a failed release
+     * never confiscates labor.
+     */
+    private boolean releasableNow(HearingRecord h) {
         var rec = ctx.prisonerRegister().read().prisoner(h.prisonerUuid);
         if (rec == null || rec.status.isReleased()
                 || rec.status == PrisonerStatus.FUGITIVE
                 || rec.status == PrisonerStatus.ESCORTED) {
+            return false;
+        }
+        return prison != null
+                && ctx.prison().read().activeSentenceFor(h.prisonerUuid) != null;
+    }
+
+    /** Shared release: sentence ends, register flips PAROLED, conditions open. */
+    private boolean grantParole(ParoleStore store, HearingRecord h) {
+        if (!releasableNow(h)) {
             // Escaped or already out between filing and decision — the case
             // stays HEARING so an officer can still deny it on return.
             return false;
         }
-        if (prison == null || !prison.releaseForParole(h.prisonerUuid, h.id)) {
+        if (!prison.releaseForParole(h.prisonerUuid, h.id)) {
             return false;
         }
         var condition = new ParoleStore.ParoleCondition();
@@ -603,9 +768,7 @@ public final class ParoleService {
     }
 
     private boolean officerGate(PlayerGateway actor) {
-        if (players.isCommissioner(actor) || actor.isOp()
-                || players.permissionLevel(actor, players.state(actor)).atLeast(
-                        com.dwurdy.straja.domain.model.PermissionLevel.LIEUTENANT)) {
+        if (officerCapable(actor)) {
             return true;
         }
         actor.refuse("straja.parole.officer_only", "straja.remedy.jailer");

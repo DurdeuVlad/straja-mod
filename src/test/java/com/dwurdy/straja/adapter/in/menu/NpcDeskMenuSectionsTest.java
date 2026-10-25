@@ -79,7 +79,9 @@ class NpcDeskMenuSectionsTest {
             "delegation-window:AUDIENCE_REQUEST", "delegation-revoke:SO-1",
             "delegation-order-join_petition:ANY",
             "reputation-view", "reputation-correction", "arrest-record-admin",
-            "evidence-list"})
+            "evidence-list", "parole-docket", "parole-review:PH-1",
+            "parole-open:PH-1", "parole-decide-paroled:PH-1",
+            "parole-decide-denied:PH-1", "parole-decide-conditional:PH-1"})
     void commissionerConsoleClassifiesAsComisar(String actionId) {
         assertEquals(DeskSections.COMISAR, DeskSections.sectionFor(actionId));
     }
@@ -89,7 +91,12 @@ class NpcDeskMenuSectionsTest {
             "v2-campaign-status", "v2-professional-work", "v2-document-status",
             "v2-equipment-status", "v2-promotion-status", "reputation-self",
             "arrest-record", "faq:root_secretary", "main:secretary",
-            "more:secretary", "not-a-real-action", "", "parole-review:PH-1"})
+            "more:secretary", "not-a-real-action", "",
+            // The citizen side of parole — the prisoner's own desk rows and
+            // the victim/advocate answers — stays on the desk top.
+            "parole-status", "parole-file", "parole-appeal", "parole-advocate",
+            "parole-settle", "parole-checkin", "parole-object:PH-1",
+            "parole-advocate-answer:accept"})
     void everythingElseStaysOnTheRootPage(String actionId) {
         assertEquals(DeskSections.GENERAL, DeskSections.sectionFor(actionId),
                 actionId + " is not a drawer family");
