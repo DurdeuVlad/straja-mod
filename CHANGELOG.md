@@ -2,8 +2,9 @@
 
 ## 0.6.0 — 2026-10-24
 
-Polish + stability over 0.5.0: institution copy is consistent, and the
-army treadmill no longer bleeds unattended units.
+Polish + stability over 0.5.0, then the gendarmerie institution: native
+desk GUIs for police and army work, commissioner setup as a command,
+clickable consent links, and a full custody-to-bail loop.
 
 ### Institution surfaces & custody loop (rc.4)
 
@@ -36,6 +37,8 @@ and common paperwork stops needing typed commands.
   longer linger as a second, parallel grant.
 - Desk pages lead with urgent actions, questions sit behind FAQ, and
   every refusal explains the remedy.
+
+### Earlier release candidates (rc.1–rc.3)
 
 - **Idle operations resolve quietly**: auto-scheduled unit operations
   that nobody signed up for and nobody attended drop from the ledger
