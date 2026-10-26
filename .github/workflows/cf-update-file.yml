@@ -1,12 +1,12 @@
 name: CurseForge file metadata fix
 
-# One-shot repair for CurseForge file 9296761 (straja-0.5.0.jar on project
+# One-shot repair for CurseForge file 9325749 (straja-0.6.0.jar on project
 # 1693950): the RC pipeline published it as releaseType=beta with the
-# prerelease display name "Straja v0.5.0-rc.3", and the stable promotion
+# prerelease display name "Straja v0.6.0-rc.5", and the stable promotion
 # path uploads new bytes rather than editing metadata. The upload API's
 # update-file endpoint edits metadata in place — no byte re-upload — so
 # this dispatch flips releaseType to release and displayName to
-# "Straja v0.5.0".
+# "Straja v0.6.0".
 #
 # Manual only: Actions -> this workflow -> Run workflow on the default
 # branch. The job validates the file identity before mutating, sends the
@@ -24,13 +24,13 @@ concurrency:
 
 env:
   CF_PROJECT_ID: "1693950"
-  CF_FILE_ID: "9296761"
-  CF_EXPECTED_FILE_NAME: "straja-0.5.0.jar"
-  CF_TARGET_DISPLAY_NAME: "Straja v0.5.0"
+  CF_FILE_ID: "9325749"
+  CF_EXPECTED_FILE_NAME: "straja-0.6.0.jar"
+  CF_TARGET_DISPLAY_NAME: "Straja v0.6.0"
 
 jobs:
   update-file:
-    name: Flip file 9296761 to release
+    name: Flip file 9325749 to release
     # Never run from a branch/fork dispatch — protected default branch only.
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
