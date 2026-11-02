@@ -152,7 +152,7 @@ to hunt — escapes/unpaid fines alone leave blind spots).
 |---|---|---|
 | INST-1 | 0f13463 | done — rows not tiles; desk tests green; adversarial review findings remediated (driver geometry, header hover tooltip, dead-slot guard, adaptive row sizing). Live-client pass still open per §Verification. |
 | INST-2 | cf5b626 | done — consent-gated frisk; 12 service tests + wiring pin; P0 (unregistered action ids) + P2 (accept-time custody) remediated. |
-| INST-3 | pending | |
+| INST-3 | 58cf202 | done — kill→incident+system BOLO, state-bounty sweep with grace window; 11 tests green; P1s remediated (§15a lawful-force exemption shared with ReputationService incl. restrained/escort narrowing, cancel-repost suppression) + P2 funnel-guard + per-victim case files. |
 | INST-4 | pending | |
 
 ## Residual risks / decisions owned by the maintainer
