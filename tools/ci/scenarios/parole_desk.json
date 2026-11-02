@@ -1,0 +1,195 @@
+{
+  "name": "parole-desk",
+  "group": "justice",
+  "blocking": true,
+  "timeoutSeconds": 120,
+  "observable": "FUN-11 parole journey via the same service verbs the desk rows dispatch: eligibility -> file -> advocate link -> hearing -> victim objection link -> conditional -> settle link -> check-in",
+  "failure": "any expectation unmet, a gate refusal answered by a legit step, or a missing link:<actionId> in a tell-log",
+  "prerequisites": [
+    "testing.enableTestCommands=true",
+    "environment=local"
+  ],
+  "steps": [
+    {
+      "name": "create-officer",
+      "command": "straja test create-player par_com",
+      "expectNotContains": "disabled"
+    },
+    {
+      "name": "commissioner-officer",
+      "command": "straja test set-commissioner par_com",
+      "expectRegex": "commissioner"
+    },
+    {
+      "name": "create-inmate",
+      "command": "straja test create-player par_in",
+      "expectNotContains": "disabled"
+    },
+    {
+      "name": "create-advocate",
+      "command": "straja test create-player par_adv",
+      "expectNotContains": "disabled"
+    },
+    {
+      "name": "create-victim",
+      "command": "straja test create-player par_vic",
+      "expectNotContains": "disabled"
+    },
+    {
+      "name": "arrest-inmate",
+      "command": "straja test prison-arrest par_com par_in 30",
+      "expectRegex": "sentence="
+    },
+    {
+      "name": "inmate-standing",
+      "command": "straja test prison-record par_in standing 60",
+      "expectContains": "standing=60"
+    },
+    {
+      "name": "inmate-served",
+      "command": "straja test prison-record par_in servedPercent 60",
+      "expectContains": "servedPercent=60"
+    },
+    {
+      "name": "inmate-labor",
+      "command": "straja test prison-record par_in labor 500",
+      "expectContains": "labor=500"
+    },
+    {
+      "name": "status-before",
+      "command": "straja test parole-status par_in",
+      "expectNotContains": "disabled"
+    },
+    {
+      "name": "file-parole",
+      "command": "straja test parole-file par_in PAROLE Munca si linistea",
+      "expectContains": "file=true"
+    },
+    {
+      "name": "docket-shows-case",
+      "command": "straja test parole-docket par_com",
+      "expectRegex": "docket=PAR-\\d+ PAROLE FILED"
+    },
+    {
+      "name": "advocate-designated",
+      "command": "straja test parole-advocate par_in par_adv",
+      "expectContains": "advocate=true"
+    },
+    {
+      "name": "advocate-link-minted",
+      "command": "straja test tell-log par_adv",
+      "expectContains": "link:parole-advocate-answer:accept"
+    },
+    {
+      "name": "advocate-accepts",
+      "command": "straja test parole-advocate-answer par_adv accept",
+      "expectContains": "answer=true"
+    },
+    {
+      "name": "locations-at-officer",
+      "command": "straja test setup-here par_com",
+      "expectNotContains": "disabled"
+    },
+    {
+      "name": "victim-at-desk",
+      "command": "straja test teleport par_vic 0 0 0",
+      "expectContains": "teleported"
+    },
+    {
+      "name": "victim-complaint",
+      "command": "straja test complaint-submit par_vic par_in theft Stole my crops",
+      "expectContains": "submit=true"
+    },
+    {
+      "name": "hearing-opens",
+      "command": "straja test parole-dump",
+      "expectRegex": "hearing=PAR-\\d+ PAROLE FILED"
+    },
+    {
+      "name": "officer-opens-hearing",
+      "command": "straja test parole-open par_com PAR-1",
+      "expectContains": "open=true"
+    },
+    {
+      "name": "victim-link-minted",
+      "command": "straja test tell-log par_vic",
+      "expectContains": "link:parole-object:PAR-1"
+    },
+    {
+      "name": "victim-objects",
+      "command": "straja test parole-object par_vic PAR-1",
+      "expectContains": "object=true"
+    },
+    {
+      "name": "objection-recorded",
+      "command": "straja test parole-dump",
+      "expectContains": "objections=1"
+    },
+    {
+      "name": "create-inmate2",
+      "command": "straja test create-player par_in2",
+      "expectNotContains": "disabled"
+    },
+    {
+      "name": "arrest-inmate2",
+      "command": "straja test prison-arrest par_com par_in2 30",
+      "expectRegex": "sentence="
+    },
+    {
+      "name": "inmate2-standing",
+      "command": "straja test prison-record par_in2 standing 60",
+      "expectContains": "standing=60"
+    },
+    {
+      "name": "inmate2-served",
+      "command": "straja test prison-record par_in2 servedPercent 60",
+      "expectContains": "servedPercent=60"
+    },
+    {
+      "name": "inmate2-labor",
+      "command": "straja test prison-record par_in2 labor 500",
+      "expectContains": "labor=500"
+    },
+    {
+      "name": "file-parole-2",
+      "command": "straja test parole-file par_in2 PAROLE Linistea",
+      "expectContains": "file=true"
+    },
+    {
+      "name": "hearing-opens-2",
+      "command": "straja test parole-open par_com PAR-2",
+      "expectContains": "open=true"
+    },
+    {
+      "name": "conditional-decision",
+      "command": "straja test parole-decide par_com PAR-2 conditional",
+      "expectContains": "decide=true"
+    },
+    {
+      "name": "settle-link-minted",
+      "command": "straja test tell-log par_in2",
+      "expectContains": "link:parole-settle"
+    },
+    {
+      "name": "bail-settles",
+      "command": "straja test parole-settle par_in2",
+      "expectContains": "settle=true"
+    },
+    {
+      "name": "parole-active",
+      "command": "straja test parole-dump",
+      "expectRegex": "parole=[0-9a-f-]{36} ACTIVE"
+    },
+    {
+      "name": "checkin-records",
+      "command": "straja test parole-checkin par_in2",
+      "expectNotContains": "disabled"
+    },
+    {
+      "name": "cleanup-reset",
+      "command": "straja test reset-all",
+      "expectContains": "all virtual player state reset",
+      "cleanup": true
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 package com.dwurdy.straja.application.service;
 
+import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.domain.model.Complaint;
 import com.dwurdy.straja.domain.model.PrisonerStatus;
 import com.dwurdy.straja.support.Fakes;
@@ -7,6 +8,7 @@ import com.dwurdy.straja.support.Fakes.FixedClock;
 import com.dwurdy.straja.support.Fakes.TestPlayer;
 import com.dwurdy.straja.support.Fakes.TestServer;
 import com.dwurdy.straja.support.Fakes.TestWorld;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -207,6 +209,112 @@ class ParoleServiceTest {
         assertEquals("DENIED", ctx.paroles().read().hearing(h.id).status);
     }
 
+    @Test
+    void settleNeverConfiscatesBailForAFailedRelease() {
+        makeEligible();
+        var h = file();
+        parole.open(officer, h.id);
+        assertTrue(parole.decide(officer, h.id, "conditional"));
+        var reg = ctx.prisonerRegister().read();
+        var rec = reg.prisoner(inmate.uuid().toString());
+        rec.laborAccount = ctx.policies().paroleBailAmount + 5;
+        rec.status = PrisonerStatus.FUGITIVE;
+        ctx.prisonerRegister().write(reg);
+
+        assertFalse(parole.settle(inmate),
+                "a runner cannot buy release — and must not lose the bail");
+        assertEquals(ctx.policies().paroleBailAmount + 5,
+                ctx.prisonerRegister().read()
+                        .prisoner(inmate.uuid().toString()).laborAccount,
+                "the labor credit stays when the release cannot happen");
+        assertEquals("CONDITIONAL", ctx.paroles().read().hearing(h.id).status,
+                "the case stays open for an officer decision");
+    }
+
+    @Test
+    void expiredConditionalCannotShadowALiveRefile() {
+        makeEligible();
+        var first = file();
+        parole.open(officer, first.id);
+        assertTrue(parole.decide(officer, first.id, "conditional"));
+        clock.advance(25L * 3_600_000L);
+        parole.tick();
+        assertEquals("DENIED", ctx.paroles().read().hearing(first.id).status,
+                "the first offer lapses into denial past its window");
+        clock.advance(25L * 3_600_000L); // past the DENIED refile cooldown
+
+        var second = file();
+        parole.open(officer, second.id);
+        assertTrue(parole.decide(officer, second.id, "conditional"));
+        var reg = ctx.prisonerRegister().read();
+        reg.prisoner(inmate.uuid().toString()).laborAccount =
+                ctx.policies().paroleBailAmount;
+        ctx.prisonerRegister().write(reg);
+        assertTrue(parole.settle(inmate),
+                "the live offer settles even with a stale record ahead of it");
+        assertEquals("PAROLED", status(inmate));
+    }
+
+    @Test
+    void objectionRecordsOncePerVictim() {
+        makeEligible();
+        var victim = server.add("victim");
+        var complaints = ctx.complaints().read();
+        var c = new Complaint();
+        c.id = "C-1";
+        c.complainantUuid = victim.uuid().toString();
+        c.accusedUuid = inmate.uuid().toString();
+        c.status = "UNDER_REVIEW";
+        complaints.ensureComplaints().add(c);
+        ctx.complaints().write(complaints);
+
+        var h = file();
+        assertTrue(parole.open(officer, h.id));
+        assertTrue(parole.object(victim, h.id));
+        assertTrue(parole.object(victim, h.id),
+                "a repeat objection inside the window stays idempotent");
+        assertEquals(1, ctx.paroles().read().hearing(h.id).objections,
+                "one victim records one objection");
+        assertTrue(parole.openObjectionsFor(victim.uuid().toString()).isEmpty(),
+                "the desk row clears once the objection is recorded");
+    }
+
+    @Test
+    void noticeLinksLiveAsLongAsTheWindowTheyGate() {
+        makeEligible();
+        var victim = new RecordingPlayer("victim");
+        victim.register();
+        var complaints = ctx.complaints().read();
+        var c = new Complaint();
+        c.id = "C-1";
+        c.complainantUuid = victim.uuid().toString();
+        c.accusedUuid = inmate.uuid().toString();
+        c.status = "UNDER_REVIEW";
+        complaints.ensureComplaints().add(c);
+        ctx.complaints().write(complaints);
+
+        var h = file();
+        parole.open(officer, h.id);
+        assertEquals(ctx.policies().paroleObjectionMinutes * 60_000L,
+                victim.lastLinkTtl,
+                "the objection link expires with the objection window");
+
+        var adv = new RecordingPlayer("adv");
+        adv.register();
+        assertTrue(parole.advocate(inmate, "adv"));
+        assertEquals(24L * 3_600_000L, adv.lastLinkTtl,
+                "the advocate ask stands until answered");
+
+        // Take over the prisoner's online gateway so the offer's ttl shows.
+        var inmateRec = new RecordingPlayer("inmate", inmate.uuid());
+        inmateRec.register();
+        clock.advance(6L * 60_000L);
+        parole.decide(officer, h.id, "conditional");
+        assertEquals(ctx.policies().paroleConditionalHours * 3_600_000L,
+                inmateRec.lastLinkTtl,
+                "the bail link expires with the conditional window");
+    }
+
     // ------------------------------------------------------------ conditions
 
     @Test
@@ -360,5 +468,195 @@ class ParoleServiceTest {
         assertFalse(parole.decideDelegated("comisar-uuid", "Comisar", h.id),
                 "a victim exists to notify — the case waits for a human");
         assertEquals("FILED", ctx.paroles().read().hearing(h.id).status);
+    }
+
+    // ------------------------------------------------------------ desk reads
+
+    @Test
+    void surfaceFollowsThePrisonerThroughTheLoop() {
+        var s0 = parole.surface(inmate.uuid().toString());
+        assertTrue(s0.prisoner(), "sentenced custody registers as a prisoner row");
+        assertFalse(s0.eligible());
+        assertEquals("", s0.pendingId());
+        assertFalse(s0.parolee());
+        assertEquals("", s0.conditionalId());
+
+        makeEligible();
+        assertTrue(parole.surface(inmate.uuid().toString()).eligible());
+
+        var h = file();
+        var s1 = parole.surface(inmate.uuid().toString());
+        assertEquals(h.id, s1.pendingId());
+        assertEquals("PAROLE", s1.pendingKind());
+
+        parole.open(officer, h.id);
+        parole.decide(officer, h.id, "conditional");
+        var s2 = parole.surface(inmate.uuid().toString());
+        assertEquals(h.id, s2.conditionalId(), "the bail window surfaces for settle");
+        assertTrue(s2.bailAmount() > 0);
+        assertEquals("", s2.pendingId(), "a decided case is no longer pending");
+
+        var reg = ctx.prisonerRegister().read();
+        reg.prisoner(inmate.uuid().toString()).laborAccount =
+                ctx.policies().paroleBailAmount;
+        ctx.prisonerRegister().write(reg);
+        parole.settle(inmate);
+        var s3 = parole.surface(inmate.uuid().toString());
+        assertTrue(s3.parolee(), "post-release the check-in row appears");
+        assertFalse(s3.prisoner(), "released is no longer a prisoner row");
+    }
+
+    @Test
+    void officerCapableIsSilentAndScoped() {
+        assertTrue(parole.officerCapable(officer), "an op reviews the docket");
+        int messages = inmate.messages.size();
+        assertFalse(parole.officerCapable(inmate), "the prisoner never reviews");
+        assertFalse(parole.officerCapable(server.add("civil")),
+                "a civilian never reviews");
+        assertEquals(messages, inmate.messages.size(),
+                "the silent check must not spam refusals");
+    }
+
+    @Test
+    void reviewDocketListsOnlyOpenCases() {
+        makeEligible();
+        var h = file();
+        assertEquals(1, parole.reviewDocket().size());
+        parole.open(officer, h.id);
+        assertEquals(1, parole.reviewDocket().size(),
+                "a live hearing still sits on the docket");
+        parole.decide(officer, h.id, "denied");
+        assertTrue(parole.reviewDocket().isEmpty(),
+                "decided cases leave the review page");
+        assertEquals(h.id, parole.findHearing(h.id).id,
+                "the record stays findable after the decision");
+    }
+
+    @Test
+    void objectionWindowOpensOnlyForRealVictims() {
+        makeEligible();
+        var victim = server.add("victim");
+        var bystander = server.add("bystander");
+        var complaints = ctx.complaints().read();
+        var c = new Complaint();
+        c.id = "C-7";
+        c.complainantUuid = victim.uuid().toString();
+        c.accusedUuid = inmate.uuid().toString();
+        c.status = "UNDER_REVIEW";
+        complaints.ensureComplaints().add(c);
+        ctx.complaints().write(complaints);
+
+        var h = file();
+        assertTrue(parole.openObjectionsFor(victim.uuid().toString()).isEmpty(),
+                "no window before the hearing opens");
+        parole.open(officer, h.id);
+        assertEquals(java.util.List.of(h.id),
+                parole.openObjectionsFor(victim.uuid().toString()),
+                "the victim's desk row appears while the window runs");
+        assertTrue(parole.openObjectionsFor(bystander.uuid().toString()).isEmpty(),
+                "a non-victim never sees an objection row");
+        clock.advance(6L * 60_000L);
+        assertTrue(parole.openObjectionsFor(victim.uuid().toString()).isEmpty(),
+                "the row leaves when the window closes");
+    }
+
+    @Test
+    void advocacyAskTracksTheAskedHearing() {
+        makeEligible();
+        var h = file();
+        var advocate = server.add("avocat");
+        assertNull(parole.advocacyAskFor(advocate.uuid().toString()));
+        parole.advocate(inmate, "avocat");
+        assertEquals(h.id, parole.advocacyAskFor(advocate.uuid().toString()),
+                "the desk pair appears while consent is pending");
+        parole.advocateAnswer(advocate, false);
+        assertNull(parole.advocacyAskFor(advocate.uuid().toString()),
+                "an answered ask drops off the desk");
+    }
+
+    // ------------------------------------------------------------ action links
+
+    @Test
+    void victimNoticeCarriesAnObjectLink() {
+        makeEligible();
+        var victim = new RecordingPlayer("victim");
+        victim.register();
+        var complaints = ctx.complaints().read();
+        var c = new Complaint();
+        c.id = "C-8";
+        c.complainantUuid = victim.uuid().toString();
+        c.accusedUuid = inmate.uuid().toString();
+        c.status = "SUBMITTED";
+        complaints.ensureComplaints().add(c);
+        ctx.complaints().write(complaints);
+
+        var h = file();
+        parole.open(officer, h.id);
+        assertEquals("straja.parole.victim_notice", victim.lastActionKey);
+        assertEquals(java.util.List.of("parole-object:" + h.id), victim.lastLinks,
+                "the notice must hand the victim the objection click");
+    }
+
+    @Test
+    void advocateAskCarriesBothAnswers() {
+        makeEligible();
+        file();
+        var advocate = new RecordingPlayer("avocat");
+        advocate.register();
+        parole.advocate(inmate, "avocat");
+        assertEquals("straja.parole.advocate_asked", advocate.lastActionKey);
+        assertEquals(java.util.List.of(
+                        "parole-advocate-answer:accept", "parole-advocate-answer:decline"),
+                advocate.lastLinks, "the ask hands over the one-click answer");
+    }
+
+    @Test
+    void conditionalOfferCarriesTheSettleLink() {
+        makeEligible();
+        var h = file();
+        parole.open(officer, h.id);
+        var recording = new RecordingPlayer(inmate.name, inmate.uuid());
+        recording.register();
+        parole.decide(officer, h.id, "conditional");
+        assertEquals("straja.parole.conditional_offer", recording.lastActionKey);
+        assertEquals(java.util.List.of("parole-settle"), recording.lastLinks,
+                "the bail offer must carry its own payment click");
+    }
+
+    /** Captures tellAction deliveries — the TestPlayer default drops links. */
+    private final class RecordingPlayer extends TestPlayer {
+        private final UUID overrideUuid;
+        String lastActionKey;
+        java.util.List<String> lastLinks = java.util.List.of();
+        long lastLinkTtl = -1;
+
+        RecordingPlayer(String name) {
+            this(name, null);
+        }
+
+        RecordingPlayer(String name, UUID uuid) {
+            super(name, 36);
+            this.overrideUuid = uuid;
+            this.online = true;
+        }
+
+        void register() {
+            this.server = ParoleServiceTest.this.server;
+            ParoleServiceTest.this.server.players.put(uuid(), this);
+        }
+
+        @Override public UUID uuid() {
+            return overrideUuid != null ? overrideUuid : super.uuid();
+        }
+
+        @Override public void tellAction(String translationKey,
+                java.util.List<PlayerGateway.ActionLink> links, Object... args) {
+            lastActionKey = translationKey;
+            lastLinks = links == null ? java.util.List.of()
+                    : links.stream()
+                            .map(PlayerGateway.ActionLink::actionId).toList();
+            lastLinkTtl = links == null || links.isEmpty() || links.get(0) == null
+                    ? -1 : links.get(0).ttlMillis();
+        }
     }
 }

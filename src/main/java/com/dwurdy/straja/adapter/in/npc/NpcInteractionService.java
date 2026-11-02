@@ -27,7 +27,11 @@ public final class NpcInteractionService {
         return action.command(issueActionToken(player.getUUID(), action.actionId()));
     }
 
-    static String issueActionToken(UUID playerId, String actionId) {
+    /**
+     * Player-bound one-use token mint — public so gateway adapters can attach
+     * validated action links to service notices (same contract as desk clicks).
+     */
+    public static String issueActionToken(UUID playerId, String actionId) {
         return issueActionToken(playerId, actionId, ACTION_TOKEN_TTL_NANOS);
     }
 
@@ -36,8 +40,8 @@ public final class NpcInteractionService {
         return issueActionToken(playerId, actionId);
     }
 
-    /** Test seam: issues a token with an explicit TTL. */
-    static String issueActionToken(UUID playerId, String actionId, long ttlNanos) {
+    /** Issues a token with an explicit TTL — notice links pass the window they gate. */
+    public static String issueActionToken(UUID playerId, String actionId, long ttlNanos) {
         purgeExpiredTokens();
         String token;
         do {

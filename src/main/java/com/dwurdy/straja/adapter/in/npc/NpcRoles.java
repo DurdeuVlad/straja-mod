@@ -289,6 +289,16 @@ public final class NpcRoles {
             case "admin-emergency-end" -> runtime.adminRoleplay().emergencyEnd(gw);
             case "tool-cell-confirm" -> runtime.adminTools().cellConfirm(gw);
             case "tool-survey-all" -> runtime.adminTools().surveyStampAllMissing(gw);
+            // FUN-11 parole surface: the jailer desk covers the whole loop —
+            // status, filing, advocacy, bail and the parolee check-in. The
+            // desk renders status/docket as live pages; the chat path prints.
+            case "parole-status" -> runtime.parole().status(gw);
+            case "parole-file" -> openParoleFileForm(player, runtime, gw, "PAROLE");
+            case "parole-appeal" -> openParoleFileForm(player, runtime, gw, "APPEAL");
+            case "parole-advocate" -> openParoleAdvocateForm(player, runtime, gw);
+            case "parole-checkin" -> runtime.parole().checkIn(gw);
+            case "parole-settle" -> runtime.parole().settle(gw);
+            case "parole-docket" -> runtime.parole().docket(gw);
             // #248 — the native inspector booth: the clicked surface carried
             // no entity reference, so the nearest inspector NPC in range owns
             // the ceiling (its registry expertise tag + display name).
@@ -417,33 +427,46 @@ public final class NpcRoles {
     private static void tellV2ProfessionalWork(Player mcPlayer,
                                                com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
                                                com.dwurdy.straja.application.port.out.PlayerGateway player) {
+        var mission = publishV2Offer(runtime, player);
+        if (mission == null) return;
+        if (mcPlayer instanceof ServerPlayer serverPlayer) {
+            sendToolPrompt(serverPlayer,
+                    Component.literal("Ofertă profesională " + mission.id + " — " + mission.objective),
+                    Component.literal("Acceptă"),
+                    "v2-mission-claim:" + mission.id);
+        } else {
+            player.tell("Ofertă profesională V2: " + mission.id + " — " + mission.objective
+                    + " (scadentă la " + mission.dueAt + ").");
+        }
+    }
+
+    /**
+     * Publishes today's generated professional offer, or null after telling
+     * the refusal — shared by the chat prompt and the desk claim page so the
+     * publish gate lives in exactly one place.
+     */
+    public static com.dwurdy.straja.domain.model.Mission publishV2Offer(
+            com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+            com.dwurdy.straja.application.port.out.PlayerGateway player) {
         var personnel = runtime.v2Personnel().find(player.uuid().toString());
         if (personnel == null || personnel.professions == null || personnel.professions.isEmpty()) {
             player.refuse("straja.npc.no_profession", "straja.remedy.ask_comisar");
-            return;
+            return null;
         }
         String profession = personnel.professions.get(0).toUpperCase(java.util.Locale.ROOT);
         if (!runtime.v2Generators().professions().contains(profession)) {
             player.refuse("straja.npc.profession_inactive", "straja.remedy.ask_comisar", profession);
-            return;
+            return null;
         }
         try {
             long now = runtime.nowMillis();
-            var mission = runtime.v2Generators().publishFor(profession, player.uuid().toString(),
+            return runtime.v2Generators().publishFor(profession, player.uuid().toString(),
                     personnel.homeStationId, "", now,
                     "generator:" + profession + ":" + player.uuid() + ":" + (now / 86_400_000L),
                     runtime.v2Missions());
-            if (mcPlayer instanceof ServerPlayer serverPlayer) {
-                sendToolPrompt(serverPlayer,
-                        Component.literal("Ofertă profesională " + mission.id + " — " + mission.objective),
-                        Component.literal("Acceptă"),
-                        "v2-mission-claim:" + mission.id);
-            } else {
-                player.tell("Ofertă profesională V2: " + mission.id + " — " + mission.objective
-                        + " (scadentă la " + mission.dueAt + ").");
-            }
         } catch (RuntimeException error) {
             player.refuse("straja.npc.no_offer", "straja.remedy.wait", error.getMessage());
+            return null;
         }
     }
 
@@ -467,22 +490,9 @@ public final class NpcRoles {
     private static void tellTradesEnroll(Player player,
                                          com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
                                          com.dwurdy.straja.application.port.out.PlayerGateway gw) {
-        var personnel = runtime.v2Personnel().find(gw.uuid().toString());
-        if (personnel != null && personnel.active()
-                && personnel.careerGrade != null && !personnel.careerGrade.isProfessional()) {
-            gw.refuse("straja.trades.refused.sworn", "straja.remedy.ask_comisar");
-            return;
-        }
-        if (personnel != null && (personnel.membershipStatus
-                == com.dwurdy.straja.domain.model.PersonnelStatus.SUSPENDED
-                || personnel.membershipStatus
-                        == com.dwurdy.straja.domain.model.PersonnelStatus.TERMINATED)) {
-            gw.refuse("straja.trades.refused.status", "straja.remedy.ask_comisar");
-            return;
-        }
-        var professions = new java.util.TreeSet<>(runtime.v2Generators().professions());
-        if (professions.isEmpty()) {
-            gw.refuse("straja.trades.none", "straja.remedy.wait");
+        var professions = tradesFor(runtime, gw);
+        if (professions == null) {
+            tellTradesRefusal(runtime, gw);
             return;
         }
         if (!(player instanceof ServerPlayer serverPlayer)) {
@@ -502,6 +512,50 @@ public final class NpcRoles {
             serverPlayer.sendSystemMessage(Component.translatable(
                     "straja.trades.pending", open.requestId));
         }
+    }
+
+    /**
+     * The professions this player may enrol in — null when the enrolment gate
+     * refuses (sworn members transfer through the Comisar; suspended and
+     * terminated members stay out). The desk renders the list as tiles; the
+     * refusal here stays silent so the caller picks tell-vs-render.
+     */
+    public static List<String> tradesFor(
+            com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+            com.dwurdy.straja.application.port.out.PlayerGateway gw) {
+        var personnel = runtime.v2Personnel().find(gw.uuid().toString());
+        if (personnel != null && personnel.active()
+                && personnel.careerGrade != null && !personnel.careerGrade.isProfessional()) {
+            return null;
+        }
+        if (personnel != null && (personnel.membershipStatus
+                == com.dwurdy.straja.domain.model.PersonnelStatus.SUSPENDED
+                || personnel.membershipStatus
+                        == com.dwurdy.straja.domain.model.PersonnelStatus.TERMINATED)) {
+            return null;
+        }
+        var professions = new java.util.TreeSet<>(runtime.v2Generators().professions());
+        return professions.isEmpty() ? null : List.copyOf(professions);
+    }
+
+    /** The refusal {@link #tradesFor} stays silent about — told once per path. */
+    private static void tellTradesRefusal(
+            com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+            com.dwurdy.straja.application.port.out.PlayerGateway gw) {
+        var personnel = runtime.v2Personnel().find(gw.uuid().toString());
+        if (personnel != null && personnel.active()
+                && personnel.careerGrade != null && !personnel.careerGrade.isProfessional()) {
+            gw.refuse("straja.trades.refused.sworn", "straja.remedy.ask_comisar");
+            return;
+        }
+        if (personnel != null && (personnel.membershipStatus
+                == com.dwurdy.straja.domain.model.PersonnelStatus.SUSPENDED
+                || personnel.membershipStatus
+                        == com.dwurdy.straja.domain.model.PersonnelStatus.TERMINATED)) {
+            gw.refuse("straja.trades.refused.status", "straja.remedy.ask_comisar");
+            return;
+        }
+        gw.refuse("straja.trades.none", "straja.remedy.wait");
     }
 
     /**
@@ -697,6 +751,17 @@ public final class NpcRoles {
             case "delegation-mode" -> runtime.delegation().cycleMode(gw, id);
             case "delegation-window" -> runtime.delegation().cycleTimeout(gw, id);
             case "delegation-revoke" -> runtime.delegation().revokeOrder(gw, id);
+            // FUN-11 parole ops — the digest row finally lands somewhere real:
+            // review opens the hearing page (desk) or the case summary (chat),
+            // the officer verbs re-verify inside the service on every click.
+            case "parole-review" -> paroleReview(player, runtime, gw, id);
+            case "parole-open" -> runtime.parole().open(gw, id);
+            case "parole-decide-paroled" -> runtime.parole().decide(gw, id, "PAROLED");
+            case "parole-decide-denied" -> runtime.parole().decide(gw, id, "DENIED");
+            case "parole-decide-conditional" -> runtime.parole().decide(gw, id, "CONDITIONAL");
+            case "parole-object" -> runtime.parole().object(gw, id);
+            case "parole-advocate-answer" -> runtime.parole()
+                    .advocateAnswer(gw, "accept".equals(id));
             case "admin-dossier" -> runtime.adminRoleplay().dossier(gw, id);
             case "admin-promote" -> runtime.adminRoleplay().promote(gw, id);
             case "admin-demote" -> runtime.adminRoleplay().demote(gw, id);
@@ -1497,6 +1562,81 @@ public final class NpcRoles {
         return true;
     }
 
+    // ------------------------------------------------------------ parole forms
+
+    /**
+     * The filing form: re-checks the same gates {@code file()} applies so a
+     * stale desk row gets the service's own refusal, then opens the native
+     * reason form. recordId carries PAROLE | APPEAL into the submission.
+     */
+    private static boolean openParoleFileForm(Player player,
+                                              com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                              com.dwurdy.straja.application.port.out.PlayerGateway gw,
+                                              String kind) {
+        var surface = runtime.parole().surface(
+                gw.uuid() == null ? "" : gw.uuid().toString());
+        if (!surface.prisoner() || !surface.eligible()
+                || !surface.pendingId().isEmpty() || !surface.conditionalId().isEmpty()) {
+            player.sendSystemMessage(refusal("straja.npc.action_stale", "straja.remedy.retry"));
+            return true;
+        }
+        if (!(player instanceof ServerPlayer serverPlayer)) return true;
+        boolean appeal = "APPEAL".equals(kind);
+        FormSessionBridge.open(serverPlayer, new FormSessionUseCase.Request(
+                FormSessionUseCase.Action.PAROLE_FILE,
+                appeal ? "APPEAL" : "PAROLE",
+                appeal ? "Contestație" : "Cerere de eliberare",
+                appeal ? "Scrie motivele contestației (opțional)."
+                        : "Scrie motivele cererii (opțional).",
+                java.util.List.of(new FormSessionUseCase.Field(
+                        FormField.REASON, "Motiv",
+                        com.dwurdy.straja.domain.model.Text.REASON_LIMIT, true, false))));
+        return true;
+    }
+
+    /** The advocate designation form — one name field, pending-case gated. */
+    private static boolean openParoleAdvocateForm(Player player,
+                                                  com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                                  com.dwurdy.straja.application.port.out.PlayerGateway gw) {
+        var surface = runtime.parole().surface(
+                gw.uuid() == null ? "" : gw.uuid().toString());
+        if (surface.pendingId().isEmpty() || "AGREED".equals(surface.advocateStatus())) {
+            player.sendSystemMessage(refusal("straja.npc.action_stale", "straja.remedy.retry"));
+            return true;
+        }
+        if (!(player instanceof ServerPlayer serverPlayer)) return true;
+        FormSessionBridge.open(serverPlayer, new FormSessionUseCase.Request(
+                FormSessionUseCase.Action.PAROLE_ADVOCATE, "",
+                "Avocat", "Numele jucătorului care vorbește pentru tine.",
+                java.util.List.of(new FormSessionUseCase.Field(
+                        FormField.NAME, "Jucător", 40, false))));
+        return true;
+    }
+
+    /**
+     * The digest/docket row: on a real client the hearing opens as a desk
+     * page (a fresh session rooted at the case); elsewhere the case summary
+     * prints so the click never lands on nothing.
+     */
+    private static void paroleReview(Player player,
+                                     com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+                                     com.dwurdy.straja.application.port.out.PlayerGateway gw,
+                                     String id) {
+        var hearing = runtime.parole().findHearing(id);
+        if (hearing == null) {
+            player.sendSystemMessage(refusal("straja.npc.action_stale", "straja.remedy.retry"));
+            return;
+        }
+        if (player instanceof ServerPlayer serverPlayer
+                && com.dwurdy.straja.adapter.in.menu.DeskMenuService.openDynamic(
+                        serverPlayer,
+                        com.dwurdy.straja.adapter.in.menu.DeskDynamicPages.PAROLE_HEARING, id)) {
+            return;
+        }
+        gw.tell("Dosar " + hearing.id + " · " + hearing.kind + " · "
+                + hearing.prisonerName + " · " + hearing.status);
+    }
+
     /** Hands the reviewer a written book with the petition text + advisory stats. */
     private static boolean readPetition(Player player,
                                         com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
@@ -1812,6 +1952,33 @@ public final class NpcRoles {
                     .anyMatch(o -> !o.reserve() && id.equals(o.key()));
             case "armory-reserve" -> runtime.armory().offers(player).stream()
                     .anyMatch(o -> o.reserve() && id.equals(o.key()));
+            // FUN-11 parole rows re-verify the live docket — a decided or
+            // lapsed hearing can never be clicked twice.
+            case "parole-review" -> {
+                var hearing = runtime.parole().findHearing(id);
+                yield hearing != null && runtime.parole().officerCapable(player)
+                        && ("FILED".equals(hearing.status) || "HEARING".equals(hearing.status));
+            }
+            case "parole-open" -> {
+                var hearing = runtime.parole().findHearing(id);
+                yield hearing != null && "FILED".equals(hearing.status)
+                        && runtime.parole().officerCapable(player);
+            }
+            case "parole-decide-paroled", "parole-decide-denied",
+                    "parole-decide-conditional" -> {
+                var hearing = runtime.parole().findHearing(id);
+                yield hearing != null && "HEARING".equals(hearing.status)
+                        && runtime.parole().officerCapable(player);
+            }
+            case "parole-object" -> {
+                String victim = player.uuid() == null ? "" : player.uuid().toString();
+                yield runtime.parole().openObjectionsFor(victim).contains(id);
+            }
+            case "parole-advocate-answer" -> {
+                String advocate = player.uuid() == null ? "" : player.uuid().toString();
+                yield ("accept".equals(id) || "decline".equals(id))
+                        && runtime.parole().advocacyAskFor(advocate) != null;
+            }
             default -> false;
         };
     }
@@ -1974,6 +2141,13 @@ public final class NpcRoles {
                     actions.add(new NpcPlayerSurface.ChatAction("Dosare de arest", "arrest-record-admin"));
                     actions.add(new NpcPlayerSurface.ChatAction("Probe și lanțul custodiei", "evidence-list"));
                 }
+                // FUN-11: the parole docket row for every reviewing officer —
+                // the digest's parole-review rows already reach the Comisar
+                // through the delegation console below.
+                if (runtime.parole().officerCapable(gateway)) {
+                    actions.add(new NpcPlayerSurface.ChatAction(
+                            "Dosare de eliberare", "parole-docket"));
+                }
                 // FUN-1 parity (NPCDM-4): the delegation console joins the
                 // native surface. The service itself gates the view to
                 // delegation authorities — the Comisar today — so viewers
@@ -1981,9 +2155,19 @@ public final class NpcRoles {
                 actions.addAll(NpcPlayerSurface.delegationActions(
                         runtime.delegation().surface(gateway)));
             }
-            case JAILER -> actions.addAll(NpcPlayerSurface.custodyActions(
-                    runtime.custodyRoleplay().availableActions(gateway),
-                    runtime.playerQueries()::displayName));
+            case JAILER -> {
+                actions.addAll(NpcPlayerSurface.custodyActions(
+                        runtime.custodyRoleplay().availableActions(gateway),
+                        runtime.playerQueries()::displayName));
+                // FUN-11: the jailer desk is the prisoner's parole window —
+                // filing, advocacy, bail and check-in rows ride the same
+                // snapshot the status page shows.
+                String paroleUuid = gateway.uuid() == null
+                        ? "" : gateway.uuid().toString();
+                actions.addAll(NpcPlayerSurface.paroleActions(
+                        runtime.parole().surface(paroleUuid),
+                        runtime.parole().officerCapable(gateway)));
+            }
             case ARCHIVIST -> {
                 actions.addAll(NpcPlayerSurface.archiveActions(
                         runtime.archiveRoleplay().availableActions(gateway)));
@@ -2063,6 +2247,14 @@ public final class NpcRoles {
                                 ? runtime.v2JoinRequests().pending()
                                 : java.util.List.of(),
                         runtime.playerQueries()::displayName));
+                // FUN-11: the civil seat of the parole loop — victims see an
+                // objection row per open hearing, asked advocates get their
+                // accept/decline pair on the desk instead of a typed command.
+                String civilUuid = gateway.uuid() == null
+                        ? "" : gateway.uuid().toString();
+                actions.addAll(NpcPlayerSurface.paroleCivilActions(
+                        runtime.parole().openObjectionsFor(civilUuid),
+                        runtime.parole().advocacyAskFor(civilUuid)));
             }
             default -> {}
         }

@@ -64,4 +64,17 @@ public sealed interface DeskPageSource {
      * id, so clicks mint/submit provider action tokens — never chat tokens.
      */
     record SurfacePage(NpcBinding binding, int page) implements DeskPageSource {}
+
+    /**
+     * A live-data page resolved fresh from services on every render —
+     * parole dockets/hearings, the dispatch board, trades enrolment, army
+     * views. {@code kind} is a {@link DeskDynamicPages} constant; {@code id}
+     * carries the record id when the page is record-scoped.
+     */
+    record DynamicPage(String kind, String id, int page) implements DeskPageSource {
+        public DynamicPage {
+            kind = kind == null ? "" : kind;
+            id = id == null ? "" : id;
+        }
+    }
 }

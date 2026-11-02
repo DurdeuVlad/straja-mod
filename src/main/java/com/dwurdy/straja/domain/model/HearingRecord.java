@@ -21,6 +21,8 @@ public class HearingRecord {
     /** Bounded victim window — decision blocked until this passes. */
     public long objectionUntil;
     public int objections;
+    /** Victims who already objected — a repeat click records nothing twice. */
+    public java.util.List<String> objectorUuids;
     public String advocateUuid = "";
     public String advocateName = "";
     /** "" | ASKED | AGREED | DECLINED — consensual, no authority. */

@@ -70,6 +70,8 @@ public interface FormSessionUseCase {
         ARREST_HANDOFF("arrest-handoff"),
         REPUTATION_VIEW("reputation-view"),
         REPUTATION_CORRECTION("reputation-correction"),
+        PAROLE_FILE("parole-file"),
+        PAROLE_ADVOCATE("parole-advocate"),
         OTHER_REQUEST("other-request");
 
         private final String id;

@@ -32,6 +32,7 @@ public final class FormSubmissionRouter {
     private final com.dwurdy.straja.application.port.in.RoleplayExpansionUseCase expansion;
     private final com.dwurdy.straja.application.port.in.PromotionV2UseCase v2Promotions;
     private final com.dwurdy.straja.application.port.in.JoinRequestUseCase v2JoinRequests;
+    private final com.dwurdy.straja.application.port.in.ParoleUseCase parole;
 
     public FormSubmissionRouter(GuardRecruitmentUseCase guards, MissionRoleplayUseCase missions,
             ComplaintRoleplayUseCase complaints, FineRoleplayUseCase fines,
@@ -43,7 +44,8 @@ public final class FormSubmissionRouter {
             com.dwurdy.straja.application.port.in.CustodyRoleplayUseCase custody,
             com.dwurdy.straja.application.port.in.RoleplayExpansionUseCase expansion,
             com.dwurdy.straja.application.port.in.PromotionV2UseCase v2Promotions,
-            com.dwurdy.straja.application.port.in.JoinRequestUseCase v2JoinRequests) {
+            com.dwurdy.straja.application.port.in.JoinRequestUseCase v2JoinRequests,
+            com.dwurdy.straja.application.port.in.ParoleUseCase parole) {
         this.guards = guards;
         this.missions = missions;
         this.complaints = complaints;
@@ -57,6 +59,7 @@ public final class FormSubmissionRouter {
         this.expansion = expansion;
         this.v2Promotions = v2Promotions;
         this.v2JoinRequests = v2JoinRequests;
+        this.parole = parole;
     }
 
     public void submit(ServerPlayer player, FormSessionUseCase.Submission submission) {
@@ -378,6 +381,13 @@ public final class FormSubmissionRouter {
                 }
                 expansion.correctReputation(gateway, values.get(FormField.SUBJECT), delta, values.get(FormField.REASON));
             }
+            // FUN-11: the recordId carries the filing kind the opener chose;
+            // file() and advocate() re-verify every gate at consume time.
+            case PAROLE_FILE ->
+                    parole.file(gateway, submission.recordId(),
+                            values.getOrDefault(FormField.REASON, ""));
+            case PAROLE_ADVOCATE ->
+                    parole.advocate(gateway, values.getOrDefault(FormField.NAME, ""));
             default -> {}
         }
     }

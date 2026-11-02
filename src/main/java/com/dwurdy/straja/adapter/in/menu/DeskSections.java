@@ -65,6 +65,14 @@ public final class DeskSections {
                 || "reputation-correction".equals(actionId)
                 || "arrest-record-admin".equals(actionId)
                 || "evidence-list".equals(actionId)) return COMISAR;
+        // Parole officer work — the docket and every hearing-scoped verb —
+        // lands in the Comisar drawer. The prisoner's own rows (status,
+        // filing, advocacy, bail, check-in) stay on the desk top: they are
+        // the citizen's justice path, not officer tooling.
+        if ("parole-docket".equals(actionId)
+                || actionId.startsWith("parole-review")
+                || actionId.startsWith("parole-open")
+                || actionId.startsWith("parole-decide-")) return COMISAR;
         return GENERAL;
     }
 

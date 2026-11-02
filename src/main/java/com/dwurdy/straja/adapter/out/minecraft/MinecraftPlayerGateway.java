@@ -76,6 +76,36 @@ public class MinecraftPlayerGateway implements PlayerGateway {
         if (p != null) p.sendSystemMessage(Component.translatable(translationKey, args));
     }
 
+    @Override public void tellAction(String translationKey,
+                                     java.util.List<ActionLink> links, Object... args) {
+        ServerPlayer p = entity();
+        if (p == null) return;
+        var message = Component.translatable(translationKey, args);
+        if (links != null) {
+            for (ActionLink link : links) {
+                if (link == null || link.actionId() == null
+                        || link.actionId().isBlank()) continue;
+                String token = link.ttlMillis() > 0
+                        ? com.dwurdy.straja.adapter.in.npc.NpcInteractionService
+                                .issueActionToken(uuid, link.actionId(),
+                                        link.ttlMillis() * 1_000_000L)
+                        : com.dwurdy.straja.adapter.in.npc.NpcInteractionService
+                                .issueActionToken(uuid, link.actionId());
+                message = message.append(Component.literal(" [" + link.label() + "]")
+                        .withStyle(style -> style
+                                .withColor(net.minecraft.ChatFormatting.AQUA)
+                                .withUnderlined(true)
+                                .withHoverEvent(new net.minecraft.network.chat.HoverEvent(
+                                        net.minecraft.network.chat.HoverEvent.Action.SHOW_TEXT,
+                                        Component.literal(link.label())))
+                                .withClickEvent(new net.minecraft.network.chat.ClickEvent(
+                                        net.minecraft.network.chat.ClickEvent.Action.RUN_COMMAND,
+                                        "/straja npc-action " + token))));
+            }
+        }
+        p.sendSystemMessage(message);
+    }
+
     @Override public void refuse(String reasonKey, String remedyKey, Object... reasonArgs) {
         ServerPlayer p = entity();
         if (p == null) return;

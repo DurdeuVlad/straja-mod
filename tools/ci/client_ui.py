@@ -107,9 +107,13 @@ def preflight(manifest: dict, env: dict, log) -> str:
     npm = _which("npm")
     java = _which(manifest["client"].get("java", "java"))
     xvfb = _which("Xvfb")
+    # A host display (local X session, WSLg) substitutes for the virtual
+    # framebuffer — Xvfb is only mandatory when no DISPLAY exists at all.
     missing = [name for name, p in (("node", node), ("npm", npm),
-                                    ("java", java), ("Xvfb", xvfb))
+                                    ("java", java))
                if not p]
+    if not xvfb and not (env.get("DISPLAY") or os.environ.get("DISPLAY")):
+        missing.append("Xvfb")
     if missing:
         raise ClientUiError(
             "no_tool", "missing required binaries: " + ", ".join(missing))
@@ -1044,7 +1048,10 @@ def run_client_ui(args, log=print) -> dict:
         env = _mct_env(args, manifest)
         mct_bin = preflight(manifest, env, log)
         seed_client_mod(manifest, env, log)
-        xvfb = start_xvfb(manifest, env, log)
+        if env.get("DISPLAY"):
+            log(f"host DISPLAY {env['DISPLAY']} present — skipping Xvfb")
+        else:
+            xvfb = start_xvfb(manifest, env, log)
 
         server_dir = os.path.join(args.work_root, "client-server")
         server_log = os.path.join(server_dir, "logs", "server.log")
