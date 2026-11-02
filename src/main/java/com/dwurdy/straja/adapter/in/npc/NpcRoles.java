@@ -33,10 +33,11 @@ public final class NpcRoles {
     public static final String RECRUITER = "recruiter";
     public static final String ARMORER = "armorer";
     public static final String COMMANDER = "comandant";
+    public static final String PATRULIER = "patrulier";
 
     private static final Set<String> KNOWN =
             Set.of(RECEPTIONIST, SECRETARY, JAILER, ARCHIVIST, TRAINER, RECRUITER,
-                    ARMORER, INSPECTOR, COMMANDER);
+                    ARMORER, INSPECTOR, COMMANDER, PATRULIER);
 
     private NpcRoles() {}
 
@@ -2695,19 +2696,24 @@ public final class NpcRoles {
     }
 
     public static boolean onHurt(String roleId, StrajaNpcEntity npc, DamageSource source, float amount) {
-        // Generic NPCs stay immune. The jailer takes real damage when
-        // jailerMayTakeDamage allows it so LivingDamage/Death events fire.
-        return !(JAILER.equals(roleId) && jailerMayTakeDamage(npc, source));
+        // Desk NPCs stay immune. Officer roles take real damage when
+        // officerMayTakeDamage allows it so LivingDamage/Death events fire.
+        return !(isOfficerRole(roleId) && officerMayTakeDamage(npc, source));
+    }
+
+    /** Institutional officers: attacking one is assault on the institution. */
+    public static boolean isOfficerRole(String roleId) {
+        return JAILER.equals(roleId) || PATRULIER.equals(roleId);
     }
 
     /**
-     * True when the source should damage the jailer. Damage must pass for
+     * True when the source should damage the officer. Damage must pass for
      * {@code LivingDamageEvent.Post}/{@code LivingDeathEvent} to reach the
      * civic assault service; when {@code jailerGuardImmunity} is on, on-duty
      * guards deal no damage (matching the service-level activeGuard filter).
      */
-    public static boolean jailerMayTakeDamage(StrajaNpcEntity npc, DamageSource source) {
-        if (!JAILER.equals(npc.getRoleId())) return false;
+    public static boolean officerMayTakeDamage(StrajaNpcEntity npc, DamageSource source) {
+        if (!isOfficerRole(npc.getRoleId())) return false;
         var runtime = com.dwurdy.straja.bootstrap.StrajaRuntime.get();
         if (runtime == null || !(npc.level() instanceof ServerLevel level)) return false;
         boolean onDutyGuard = false;

@@ -372,6 +372,46 @@ public class PrisonService implements PrisonRoleplayUseCase {
     public Sentence arrest(PlayerGateway target, String fineId, int days,
                            PlayerGateway actor, String missionId,
                            String reason, String siteId) {
+        return arrestInternal(target, fineId, days, actor, missionId, reason,
+                siteId, this::firstFree);
+    }
+
+    /**
+     * INST-4 institutional booking: the patrol officer books the prisoner
+     * into the nearest free station cell to the arrest point, falling back
+     * to the first free bunk when none sits in the prisoner's dimension.
+     */
+    public Sentence arrestNearest(PlayerGateway target, int days, String reason) {
+        return arrestInternal(target, "", days, null, "", reason, "",
+                data -> nearestFree(data, target.dimension(),
+                        target.x(), target.y(), target.z()));
+    }
+
+    /** The free cell closest to the arrest point, else first-free. */
+    private Cell nearestFree(PrisonStore data, String dimension,
+                             double x, double y, double z) {
+        Cell best = null;
+        double bestSq = Double.MAX_VALUE;
+        for (Cell c : data.cells) {
+            if (c == null || c.id == null || c.id.isBlank()
+                    || data.assignments.containsKey(c.id)
+                    || c.dimension == null || !c.dimension.equals(dimension)) continue;
+            double dx = (c.minX + c.maxX) / 2.0 - x;
+            double dy = (c.minY + c.maxY) / 2.0 - y;
+            double dz = (c.minZ + c.maxZ) / 2.0 - z;
+            double d = dx * dx + dy * dy + dz * dz;
+            if (d < bestSq) {
+                bestSq = d;
+                best = c;
+            }
+        }
+        return best != null ? best : firstFree(data);
+    }
+
+    private Sentence arrestInternal(PlayerGateway target, String fineId, int days,
+                           PlayerGateway actor, String missionId,
+                           String reason, String siteId,
+                           java.util.function.Function<PrisonStore, Cell> cellPicker) {
         if (!ctx.policies().prisonEnabled) {
             if (actor != null) actor.refuse("straja.prison.disabled", "straja.remedy.ask_comisar");
             audit.record(AuditActions.PRISON_ARREST, actor == null ? "" : actor.name(),
@@ -414,7 +454,7 @@ public class PrisonService implements PrisonRoleplayUseCase {
         sentence.lastTickAt = now();
         sentence.lastActivityAt = now();
         data.sentences.add(sentence);
-        var cell = firstFree(data);
+        var cell = cellPicker.apply(data);
         if (camp != null) {
             // Camp sentences are ACTIVE without a bunk — camp bounds replace
             // the cell box and camp prisoners never sit on the waitlist.

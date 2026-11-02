@@ -949,7 +949,7 @@ public final class StrajaEvents {
     /**
      * On-duty guards must not damage the jailer when
      * {@code jailerGuardImmunity} is on. Native Straja NPCs enforce that in
-     * {@code jailerMayTakeDamage}; a registry-bound foreign NPC never runs
+     * {@code officerMayTakeDamage}; a registry-bound foreign NPC never runs
      * those overrides, so the same rule is applied here. Non-jailer bound
      * NPCs keep the host mod's damage rules untouched.
      */
@@ -959,7 +959,8 @@ public final class StrajaEvents {
         StrajaRuntime runtime = StrajaRuntime.get();
         if (runtime == null || event.getEntity().level().isClientSide()
                 || event.getEntity() instanceof StrajaNpcEntity) return;
-        if (!"jailer".equals(npcRoleOf(runtime, event.getEntity()))) return;
+        if (!com.dwurdy.straja.adapter.in.npc.NpcRoles.isOfficerRole(
+                npcRoleOf(runtime, event.getEntity()))) return;
         if (!(event.getSource().getEntity() instanceof net.minecraft.server.level.ServerPlayer attacker)) return;
         var gateway = new MinecraftPlayerGateway(attacker.getServer(), attacker.getUUID());
         if (!runtime.policies().jailerDamageAllowed(
@@ -994,12 +995,13 @@ public final class StrajaEvents {
         }
     }
 
-    /** Hurting or killing the jailer NPC spawns a JAILER_ASSAULT arrest mission. */
+    /** Hurting or killing an institutional officer spawns an assault mission. */
     @SubscribeEvent
     public void onNpcDamage(net.neoforged.neoforge.event.entity.living.LivingDamageEvent.Post event) {
         StrajaRuntime runtime = StrajaRuntime.get();
         if (runtime == null || event.getEntity().level().isClientSide()
-                || !"jailer".equals(npcRoleOf(runtime, event.getEntity()))) return;
+                || !com.dwurdy.straja.adapter.in.npc.NpcRoles.isOfficerRole(
+                        npcRoleOf(runtime, event.getEntity()))) return;
         if (!(event.getSource().getEntity() instanceof net.minecraft.server.level.ServerPlayer attacker)) return;
         var gateway = new MinecraftPlayerGateway(attacker.getServer(), attacker.getUUID());
         String outcome = event.getEntity().getHealth() <= 0.5f ? "KILLED" : "WOUNDED";
@@ -1044,7 +1046,8 @@ public final class StrajaEvents {
         }
         if (attacker == null) return;
         var gateway = new MinecraftPlayerGateway(attacker.getServer(), attacker.getUUID());
-        if ("jailer".equals(npcRoleOf(runtime, event.getEntity()))) {
+        if (com.dwurdy.straja.adapter.in.npc.NpcRoles.isOfficerRole(
+                npcRoleOf(runtime, event.getEntity()))) {
             runtime.reputation().recordJailerAssault(gateway,
                     event.getEntity().getStringUUID(), true);
             runtime.fineRoleplay().createJailerAssaultMission(gateway,

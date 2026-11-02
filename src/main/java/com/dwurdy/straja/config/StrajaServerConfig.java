@@ -86,6 +86,10 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.DoubleValue FRISK_RANGE;
     public static final ModConfigSpec.IntValue FRISK_OFFER_SECONDS;
     public static final ModConfigSpec.IntValue FRISK_COOLDOWN_SECONDS;
+    public static final ModConfigSpec.BooleanValue PATROL_ENABLED;
+    public static final ModConfigSpec.DoubleValue PATROL_POST_RADIUS;
+    public static final ModConfigSpec.DoubleValue PATROL_SCAN_RANGE;
+    public static final ModConfigSpec.IntValue PATROL_ENGAGE_COOLDOWN_SECONDS;
 
     public static final ModConfigSpec.IntValue CUFF_REQUEST_TIMEOUT_SECONDS;
     public static final ModConfigSpec.IntValue SURRENDER_TIMEOUT_SECONDS;
@@ -626,6 +630,13 @@ public final class StrajaServerConfig {
         FRISK_RANGE = B.defineInRange("range", defaults.friskRange, 1.0, 32.0);
         FRISK_OFFER_SECONDS = B.defineInRange("offerSeconds", defaults.friskOfferSeconds, 5, 300);
         FRISK_COOLDOWN_SECONDS = B.defineInRange("cooldownSeconds", defaults.friskCooldownSeconds, 0, 600);
+        B.pop();
+
+        B.push("patrol");
+        PATROL_ENABLED = B.define("enabled", defaults.patrolOfficerEnabled);
+        PATROL_POST_RADIUS = B.defineInRange("postRadius", defaults.patrolPostRadius, 4.0, 128.0);
+        PATROL_SCAN_RANGE = B.defineInRange("scanRange", defaults.patrolScanRange, 4.0, 128.0);
+        PATROL_ENGAGE_COOLDOWN_SECONDS = B.defineInRange("engageCooldownSeconds", defaults.patrolEngageCooldownSeconds, 1, 60);
         B.pop();
 
         B.push("cuffs");
@@ -1614,6 +1625,11 @@ public final class StrajaServerConfig {
         p.friskRange = FRISK_RANGE.get();
         p.friskOfferSeconds = FRISK_OFFER_SECONDS.get();
         p.friskCooldownSeconds = FRISK_COOLDOWN_SECONDS.get();
+
+        p.patrolOfficerEnabled = PATROL_ENABLED.get();
+        p.patrolPostRadius = PATROL_POST_RADIUS.get();
+        p.patrolScanRange = PATROL_SCAN_RANGE.get();
+        p.patrolEngageCooldownSeconds = PATROL_ENGAGE_COOLDOWN_SECONDS.get();
 
         p.cuffRequestTimeoutSeconds = CUFF_REQUEST_TIMEOUT_SECONDS.get();
         p.surrenderTimeoutSeconds = SURRENDER_TIMEOUT_SECONDS.get();

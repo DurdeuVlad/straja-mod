@@ -108,6 +108,6 @@ public final class NpcInteractionService {
 
     /** @return true when a jailer-role NPC should take vanilla damage. */
     public static boolean jailerMayTakeDamage(StrajaNpcEntity npc, DamageSource source) {
-        return NpcRoles.jailerMayTakeDamage(npc, source);
+        return NpcRoles.officerMayTakeDamage(npc, source);
     }
 }

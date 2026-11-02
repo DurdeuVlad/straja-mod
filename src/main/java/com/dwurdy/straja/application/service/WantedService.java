@@ -93,7 +93,8 @@ public final class WantedService
     public boolean guardDamageBlocked(UUID attackerEntityId, String attackerRole,
                                       PlayerGateway target) {
         if (!isUnderEscort(target)) return false;
-        if ("guard".equals(attackerRole) || "jailer".equals(attackerRole)) return true;
+        if ("guard".equals(attackerRole) || "jailer".equals(attackerRole)
+                || "patrulier".equals(attackerRole)) return true;
         return attackerEntityId != null && ctx.npcGuards().isGuardOf(
                 attackerEntityId, ctx.policies().storageFactionId);
     }

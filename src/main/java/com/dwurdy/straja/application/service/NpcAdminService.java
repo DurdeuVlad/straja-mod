@@ -25,9 +25,10 @@ public class NpcAdminService implements NpcRegistryUseCase {
     public static final String ARMORER = "armorer";
     public static final String INSPECTOR = "inspector";
     public static final String COMMANDER = "comandant";
+    public static final String PATRULIER = "patrulier";
     public static final Set<String> KNOWN_ROLES =
             Set.of(RECEPTIONIST, SECRETARY, JAILER, ARCHIVIST, TRAINER, RECRUITER,
-                    ARMORER, INSPECTOR, COMMANDER);
+                    ARMORER, INSPECTOR, COMMANDER, PATRULIER);
     /**
      * Deterministic order for the five physical officials in the current
      * headquarters layout. Recruiter remains accepted as a legacy alias for

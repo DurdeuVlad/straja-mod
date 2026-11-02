@@ -133,6 +133,12 @@ public class StrajaPolicies {
     public int friskOfferSeconds = 30;
     public int friskCooldownSeconds = 45;
 
+    // patrulier (the institution's physical force — no humans required)
+    public boolean patrolOfficerEnabled = true;
+    public double patrolPostRadius = 24.0;   // post jurisdiction
+    public double patrolScanRange = 24.0;    // how far the officer notices
+    public int patrolEngageCooldownSeconds = 3;
+
     // cuffs
     public int cuffRequestTimeoutSeconds = 60;
     public int surrenderTimeoutSeconds = 15;

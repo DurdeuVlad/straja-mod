@@ -150,6 +150,11 @@ public final class PolicyRegistry {
         k("frisk.range", "friskRange", Kind.DOUBLE);
         k("frisk.offerSeconds", "friskOfferSeconds", Kind.INT);
         k("frisk.cooldownSeconds", "friskCooldownSeconds", Kind.INT);
+        // patrulier (institutional force)
+        k("patrol.enabled", "patrolOfficerEnabled", Kind.BOOL);
+        k("patrol.postRadius", "patrolPostRadius", Kind.DOUBLE);
+        k("patrol.scanRange", "patrolScanRange", Kind.DOUBLE);
+        k("patrol.engageCooldownSeconds", "patrolEngageCooldownSeconds", Kind.INT);
         // cuffs
         k("cuffs.requestTimeoutSeconds", "cuffRequestTimeoutSeconds", Kind.INT);
         k("cuffs.surrenderTimeoutSeconds", "surrenderTimeoutSeconds", Kind.INT);

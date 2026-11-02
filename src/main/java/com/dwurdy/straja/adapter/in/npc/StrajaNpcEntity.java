@@ -48,6 +48,8 @@ public class StrajaNpcEntity extends PathfinderMob {
         return PathfinderMob.createMobAttributes()
                 .add(Attributes.MAX_HEALTH, 20.0)
                 .add(Attributes.MOVEMENT_SPEED, 0.0)
+                .add(Attributes.ATTACK_DAMAGE, 4.0)
+                .add(Attributes.FOLLOW_RANGE, 48.0)
                 .add(Attributes.KNOCKBACK_RESISTANCE, 1.0);
     }
 
@@ -61,11 +63,35 @@ public class StrajaNpcEntity extends PathfinderMob {
         var entity = new StrajaNpcEntity(NPC.get(), level);
         entity.setPos(x, y, z);
         entity.setRoleId(role);
+        if (NpcRoles.PATRULIER.equals(role)) {
+            // The spawn point IS the declared patrol post — persisted in the
+            // entity's own save data so it survives restart.
+            entity.setPost(x, y, z);
+        }
         if (skin != null) entity.setSkin(skin);
         if (displayName != null) entity.setCustomName(Component.literal(displayName));
         level.addFreshEntity(entity);
         return entity;
     }
+
+    /** The bound patrol post — NaN when the NPC was never assigned one. */
+    private double postX = Double.NaN;
+    private double postY = Double.NaN;
+    private double postZ = Double.NaN;
+
+    public void setPost(double x, double y, double z) {
+        this.postX = x;
+        this.postY = y;
+        this.postZ = z;
+    }
+
+    public boolean hasPost() {
+        return !Double.isNaN(postX);
+    }
+
+    public double postX() { return hasPost() ? postX : getX(); }
+    public double postY() { return hasPost() ? postY : getY(); }
+    public double postZ() { return hasPost() ? postZ : getZ(); }
 
     @Override
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
@@ -80,6 +106,17 @@ public class StrajaNpcEntity extends PathfinderMob {
 
     public void setRoleId(String roleId) {
         this.entityData.set(ROLE_ID, roleId == null ? "" : roleId);
+        // The patrulier is the institution's force: it thinks and moves.
+        // Every desk role stays the deliberate motionless surface.
+        boolean patrol = NpcRoles.PATRULIER.equals(roleId);
+        setNoAi(!patrol);
+        var speed = getAttribute(Attributes.MOVEMENT_SPEED);
+        if (speed != null) speed.setBaseValue(patrol ? 0.3 : 0.0);
+        // Assigning the role binds the post where the officer stands — a
+        // patrol officer without a post must never gain a mobile
+        // jurisdiction. A persisted post (readAdditionalSaveData) overwrites
+        // this right after, so the binding is only the default.
+        if (patrol && !hasPost()) setPost(getX(), getY(), getZ());
     }
 
     public String getSkin() {
@@ -95,6 +132,11 @@ public class StrajaNpcEntity extends PathfinderMob {
         super.addAdditionalSaveData(tag);
         tag.putString("StrajaRole", getRoleId());
         tag.putString("StrajaSkin", getSkin());
+        if (hasPost()) {
+            tag.putDouble("StrajaPostX", postX);
+            tag.putDouble("StrajaPostY", postY);
+            tag.putDouble("StrajaPostZ", postZ);
+        }
     }
 
     @Override
@@ -102,8 +144,18 @@ public class StrajaNpcEntity extends PathfinderMob {
         super.readAdditionalSaveData(tag);
         setRoleId(tag.getString("StrajaRole"));
         setSkin(tag.getString("StrajaSkin"));
-        setNoAi(true);
+        if (tag.contains("StrajaPostX")) {
+            setPost(tag.getDouble("StrajaPostX"), tag.getDouble("StrajaPostY"),
+                    tag.getDouble("StrajaPostZ"));
+        }
         setPersistenceRequired();
+    }
+
+    @Override
+    protected void registerGoals() {
+        super.registerGoals();
+        // The goal self-gates on the patrulier role; desk roles never run it.
+        this.goalSelector.addGoal(0, new PatrolDutyGoal(this));
     }
 
     @Override
@@ -116,9 +168,11 @@ public class StrajaNpcEntity extends PathfinderMob {
 
     @Override
     public boolean isInvulnerable() {
-        // The jailer must be damageable for the assault lifecycle (damage/death
-        // events → FineService); every other NPC role stays immune.
-        return !NpcRoles.JAILER.equals(getRoleId());
+        // Officer roles must be damageable for the assault lifecycle
+        // (damage/death events → institutional assault records); every desk
+        // role stays immune.
+        return !(NpcRoles.JAILER.equals(getRoleId())
+                || NpcRoles.PATRULIER.equals(getRoleId()));
     }
 
     @Override
@@ -142,6 +196,18 @@ public class StrajaNpcEntity extends PathfinderMob {
     @Override
     public boolean removeWhenFarAway(double distance) {
         return false;
+    }
+
+    @Override
+    public void remove(RemovalReason reason) {
+        // A dead or despawned officer releases its beat state — engagement,
+        // cooldown and any held prisoner — so the service never leaks it.
+        if (reason != RemovalReason.UNLOADED_TO_CHUNK
+                && reason != RemovalReason.UNLOADED_WITH_PLAYER) {
+            var runtime = com.dwurdy.straja.bootstrap.StrajaRuntime.get();
+            if (runtime != null) runtime.patrols().release(getStringUUID());
+        }
+        super.remove(reason);
     }
 
     // ---- registration ----

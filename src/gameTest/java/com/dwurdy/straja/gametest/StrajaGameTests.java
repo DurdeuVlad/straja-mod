@@ -4,6 +4,7 @@ import com.dwurdy.straja.adapter.in.event.StrajaEvents;
 import com.dwurdy.straja.adapter.in.npc.NpcInteractionService;
 import com.dwurdy.straja.adapter.in.npc.NpcRoles;
 import com.dwurdy.straja.adapter.in.npc.StrajaNpcEntity;
+import com.dwurdy.straja.adapter.in.npc.PatrolOfficerFacade;
 import com.dwurdy.straja.adapter.in.test.VirtualPlayerGateway;
 import com.dwurdy.straja.adapter.out.minecraft.MinecraftPlayerGateway;
 import com.dwurdy.straja.adapter.out.minecraft.WhipItem;
@@ -205,6 +206,59 @@ public final class StrajaGameTests {
                 "a reloaded NPC must keep its role");
         helper.assertTrue("skin_a".equals(reloaded.getSkin()),
                 "a reloaded NPC must keep its skin");
+        helper.succeed();
+    }
+
+    /**
+     * INST-4 live smoke: a bound patrulier restrains a wanted player inside
+     * cuff range and books them into the nearest free station cell — the
+     * full spawn→engage→cuff→book loop with zero humans on duty.
+     */
+    @GameTest(template = "empty")
+    public static void patrolOfficerCuffsAndBooksWanted(GameTestHelper helper) {
+        var runtime = runtime(helper);
+        ServerLevel level = helper.getLevel();
+        var post = helper.absolutePos(new BlockPos(1, 1, 1));
+        var npc = StrajaNpcEntity.spawn(level, post.getX() + 0.5, post.getY(),
+                post.getZ() + 0.5, NpcRoles.PATRULIER, null, null);
+        runtime.npcs().register(npc.getStringUUID(), NpcRoles.PATRULIER);
+        helper.assertTrue(npc.hasPost(),
+                "the patrol officer must bind its spawn point as the post");
+        helper.assertTrue(!npc.isNoAi(),
+                "the patrol officer must have AI enabled to enforce the law");
+        var suspect = mockPlayer(helper);
+        suspect.setPos(post.getX() + 1.5, post.getY(), post.getZ() + 0.5);
+        runtime.bolos().flagSystem(suspect.getStringUUID(),
+                suspect.getName().getString(), "fugar");
+        // A free station cell in the suspect's dimension.
+        var data = runtime.context().prison().read();
+        var cell = new Cell();
+        cell.id = "patrol_cell";
+        cell.dimension = level.dimension().location().toString();
+        cell.minX = post.getX() - 2;
+        cell.maxX = post.getX() + 2;
+        cell.minY = post.getY() - 2;
+        cell.maxY = post.getY() + 4;
+        cell.minZ = post.getZ() + 8;
+        cell.maxZ = post.getZ() + 12;
+        data.cells.add(cell);
+        runtime.context().prison().write(data);
+        // The officer stands at the suspect's shoulder — inside cuff range.
+        npc.setPos(suspect.getX() - 1.0, suspect.getY(), suspect.getZ());
+        runtime.patrols().tick(new PatrolOfficerFacade(npc, level));
+        helper.assertTrue(runtime.context().custody().read().cuffed
+                        .containsKey(suspect.getStringUUID()),
+                "the patrol officer must restrain a wanted suspect in cuff range");
+        var booked = runtime.context().prison().read().sentences.stream()
+                .anyMatch(s -> suspect.getStringUUID().equals(s.targetUuid));
+        helper.assertTrue(booked, "the suspect must be booked into a cell");
+        // And an innocent bystander is never touched.
+        var bystander = mockPlayer(helper);
+        bystander.setPos(post.getX() + 1.5, post.getY(), post.getZ() + 0.5);
+        runtime.patrols().tick(new PatrolOfficerFacade(npc, level));
+        helper.assertFalse(runtime.context().custody().read().cuffed
+                        .containsKey(bystander.getStringUUID()),
+                "an innocent must never be restrained");
         helper.succeed();
     }
 
