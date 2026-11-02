@@ -37,13 +37,13 @@ class NpcDeskMenuLayoutTest {
     void pageCountCoversTheBoundaries() {
         assertEquals(1, DeskLayout.pageCount(0));
         assertEquals(1, DeskLayout.pageCount(1));
-        assertEquals(1, DeskLayout.pageCount(44));
-        assertEquals(1, DeskLayout.pageCount(45));
-        assertEquals(2, DeskLayout.pageCount(46));
-        assertEquals(2, DeskLayout.pageCount(89));
-        assertEquals(2, DeskLayout.pageCount(90));
-        assertEquals(3, DeskLayout.pageCount(91));
-        assertEquals(3, DeskLayout.pageCount(135));
+        assertEquals(1, DeskLayout.pageCount(7));
+        assertEquals(1, DeskLayout.pageCount(8));
+        assertEquals(2, DeskLayout.pageCount(9));
+        assertEquals(2, DeskLayout.pageCount(15));
+        assertEquals(2, DeskLayout.pageCount(16));
+        assertEquals(3, DeskLayout.pageCount(17));
+        assertEquals(3, DeskLayout.pageCount(24));
     }
 
     @Test
@@ -55,29 +55,29 @@ class NpcDeskMenuLayoutTest {
     }
 
     @Test
-    void contentFillsRowMajorFromSlotZero() {
-        var page = DeskLayout.grid("Recepție", header(), items(12), 0, false);
-        for (int i = 0; i < 12; i++) {
+    void contentFillsSequentiallyFromSlotZero() {
+        var page = DeskLayout.grid("Recepție", header(), items(8), 0, false);
+        for (int i = 0; i < 8; i++) {
             var button = page.buttonAt(i);
             assertNotNull(button, "slot " + i + " must hold a content button");
             assertEquals("action-" + i, button.actionId());
         }
-        assertNull(page.buttonAt(12), "first free content slot stays empty");
+        assertNull(page.buttonAt(8), "first free content slot stays empty");
     }
 
     @Test
-    void fortyFiveItemsFillOnePageWithoutArrows() {
-        var page = DeskLayout.grid("Recepție", header(), items(45), 0, false);
+    void fullPageOfRowsNeedsNoArrows() {
+        var page = DeskLayout.grid("Recepție", header(), items(8), 0, false);
         assertEquals("Recepție", page.title(), "single page keeps the bare title");
-        for (int i = 0; i < 45; i++) assertNotNull(page.buttonAt(i));
+        for (int i = 0; i < 8; i++) assertNotNull(page.buttonAt(i));
         assertNull(page.buttonAt(DeskLayout.PREV_SLOT));
         assertNull(page.buttonAt(DeskLayout.NEXT_SLOT));
         assertNotNull(page.buttonAt(DeskLayout.INFO_SLOT));
     }
 
     @Test
-    void fortySixItemsSplitOntoTwoPages() {
-        var all = items(46);
+    void ninthItemSplitsOntoTwoPages() {
+        var all = items(9);
         var first = DeskLayout.grid("Recepție", header(), all, 0, false);
         var second = DeskLayout.grid("Recepție", header(), all, 1, false);
 
@@ -87,18 +87,18 @@ class NpcDeskMenuLayoutTest {
         assertNotNull(first.buttonAt(DeskLayout.NEXT_SLOT));
         assertNotNull(second.buttonAt(DeskLayout.PREV_SLOT));
         assertNull(second.buttonAt(DeskLayout.NEXT_SLOT));
-        assertEquals("action-45", second.buttonAt(0).actionId());
+        assertEquals("action-8", second.buttonAt(0).actionId());
         assertTrue(slots(first).stream().allMatch(s -> s < DeskLayout.CONTENT_SLOTS
-                || s >= DeskLayout.BACK_SLOT), "content never leaks into the footer row");
+                || s >= DeskLayout.BACK_SLOT), "content never leaks into the chrome range");
     }
 
     @Test
-    void ninetyItemsFitTwoFullPages() {
-        var all = items(90);
+    void sixteenItemsFitTwoFullPages() {
+        var all = items(16);
         var second = DeskLayout.grid("Recepție", header(), all, 1, false);
-        for (int i = 0; i < 45; i++) {
+        for (int i = 0; i < 8; i++) {
             assertNotNull(second.buttonAt(i), "second page slot " + i);
-            assertEquals("action-" + (45 + i), second.buttonAt(i).actionId());
+            assertEquals("action-" + (8 + i), second.buttonAt(i).actionId());
         }
         assertNotNull(second.buttonAt(DeskLayout.PREV_SLOT));
         assertNull(second.buttonAt(DeskLayout.NEXT_SLOT));
@@ -106,12 +106,12 @@ class NpcDeskMenuLayoutTest {
 
     @Test
     void pageIndexClampsIntoRange() {
-        var all = items(46);
+        var all = items(9);
         var under = DeskLayout.grid("Recepție", header(), all, -3, false);
         var over = DeskLayout.grid("Recepție", header(), all, 99, false);
         assertEquals("Recepție — 1/2", under.title());
         assertEquals("Recepție — 2/2", over.title());
-        assertEquals("action-45", over.buttonAt(0).actionId());
+        assertEquals("action-8", over.buttonAt(0).actionId());
     }
 
     @Test
@@ -128,7 +128,7 @@ class NpcDeskMenuLayoutTest {
 
     @Test
     void pagedHeaderCarriesThePageCounter() {
-        var all = items(46);
+        var all = items(9);
         var info = DeskLayout.grid("Recepție", header(), all, 1, false)
                 .buttonAt(DeskLayout.INFO_SLOT).icon();
         assertTrue(info.lore().contains("Pagina 2 din 2."));

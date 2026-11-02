@@ -183,7 +183,7 @@ class NpcDeskMenuSectionsTest {
     }
 
     @Test
-    void sectionContentPagesAtFortyFiveLikeEveryGrid() {
+    void sectionContentPagesLikeEveryGrid() {
         // The Comisar drawer is the dense case: five admin ids per member.
         var ids = new ArrayList<String>();
         for (int i = 0; i < 18; i++) {
@@ -203,8 +203,9 @@ class NpcDeskMenuSectionsTest {
                 DeskSections.header(DeskSections.COMISAR, comisar.size()), items, 0, true);
         var second = DeskLayout.grid("Secretariat — Comisar",
                 DeskSections.header(DeskSections.COMISAR, comisar.size()), items, 1, true);
-        assertEquals("Secretariat — Comisar — 1/2", first.title());
-        assertEquals("admin-dossier:member-9", second.buttonAt(0).actionId());
+        assertEquals("Secretariat — Comisar — 1/" + DeskLayout.pageCount(90), first.title());
+        // Page 2 opens on the row after the first page's eight.
+        assertEquals("admin-suspend:member-1", second.buttonAt(0).actionId());
         assertTrue(first.buttonAt(DeskLayout.NEXT_SLOT) != null);
         assertTrue(second.buttonAt(DeskLayout.PREV_SLOT) != null);
     }

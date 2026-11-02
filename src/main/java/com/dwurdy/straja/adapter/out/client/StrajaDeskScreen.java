@@ -8,7 +8,6 @@ import com.dwurdy.straja.adapter.in.menu.DeskPayloads;
 import com.dwurdy.straja.adapter.out.theme.GuiTheme;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -29,62 +28,81 @@ import net.neoforged.neoforge.network.PacketDistributor;
 
 /**
  * The purpose-built desk screen. Renders the server's {@link DeskWire.View}
- * as real widgets — icon tiles with instant hover info and tooltips, a live
- * title, the guidance header, the detail body on confirm/info pages, and the
- * footer nav row. A press sends only the widget's slot back; the server
- * resolves the action against the page it rendered, so this screen never sees
- * an action id.
+ * as a readable menu — one full-width labeled row per action (icon, name,
+ * one-line hint), the same row treatment for footer nav («Înapoi», page
+ * arrows), and DA/NU confirm buttons on confirm pages. A press sends only
+ * the row's slot back; the server resolves the action against the page it
+ * rendered, so this screen never sees an action id.
  */
 public class StrajaDeskScreen extends AbstractContainerScreen<DeskGuiMenu> {
     private static final int PAD = GuiTheme.MARGIN;
-    private static final int CONTENT_Y = 60;
-    private static final int INFOBAR_GAP = 24;
-    private static final int BG_TILE = 0xFF1E1E38;
-    private static final int BG_TILE_HOVER = 0xFF2E2E50;
+    private static final int PANEL_W = 252;
+    private static final int CONTENT_Y = 58;
+    private static final int CONFIRM_BODY_H = 74;
+    private static final int CONFIRM_BTN_Y = CONTENT_Y + CONFIRM_BODY_H + 4;
+    private static final int FOOTER_GAP = 4;
+    private static final int BG_ROW = 0xFF1E1E38;
+    private static final int BG_ROW_HOVER = 0xFF2E2E50;
 
     private final Map<String, ItemStack> iconCache = new HashMap<>();
-    private final List<DeskTile> deskTiles = new ArrayList<>();
-    private int tile = 24;
-    private int infoBarY;
+    private int rowH = 22;
     private int footerY;
     private DeskWire.Tile headerTile;
     private DeskWire.Tile detailTile;
 
     public StrajaDeskScreen(DeskGuiMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
-        this.imageWidth = DeskLayout.COLUMNS * tile + PAD * 2;
+        this.imageWidth = PANEL_W;
     }
 
     @Override
     protected void init() {
-        // Grid rows like the chest desk it replaces; shrink tiles on short
-        // viewports so the footer never falls off the bottom edge.
-        this.tile = height >= 250 ? 26 : (height >= 232 ? 24 : 22);
-        this.imageWidth = DeskLayout.COLUMNS * tile + PAD * 2;
-        // Size the panel to the page: the info bar hugs the last used content
-        // row and the footer row exists only when nav tiles are present, so
-        // small pages never show a dead band at the bottom.
-        int rows = 1;
-        boolean footer = false;
+        // Labeled rows replace the chest-grid tiles; rows shrink on short
+        // viewports and dense pages so the footer rows stay on screen.
+        this.imageWidth = PANEL_W;
+        // Size the panel to the page: list pages hug the last used content
+        // row; confirm/info pages reserve the body block (and the DA/NU row
+        // on confirms); footer rows exist only when nav tiles are present.
+        int contentRows = 0;
+        int footerRows = 0;
+        boolean confirm = false;
+        boolean detail = false;
         DeskWire.View view = getMenu().view();
         if (view != null) {
             for (DeskWire.Tile cell : view.tiles()) {
-                if (cell.slot() == DeskLayout.INFO_SLOT
-                        || cell.slot() == DeskLayout.DETAIL_SLOT) continue;
-                if (cell.slot() < DeskLayout.CONTENT_SLOTS) {
-                    rows = Math.max(rows, cell.slot() / DeskLayout.COLUMNS + 1);
-                } else {
-                    footer = true;
+                if (cell.slot() == DeskLayout.INFO_SLOT) continue;
+                if (cell.slot() == DeskLayout.DETAIL_SLOT) {
+                    detail = true;
+                    continue;
+                }
+                if (cell.slot() == DeskLayout.YES_SLOT
+                        || cell.slot() == DeskLayout.NO_SLOT) {
+                    confirm = true;
+                } else if (cell.slot() >= 0 && cell.slot() < DeskLayout.CONTENT_SLOTS) {
+                    contentRows = Math.max(contentRows, cell.slot() + 1);
+                } else if (cell.slot() >= DeskLayout.BACK_SLOT) {
+                    footerRows++;
                 }
             }
         }
-        this.infoBarY = CONTENT_Y + rows * tile + 4;
-        this.footerY = infoBarY + INFOBAR_GAP;
-        this.imageHeight = footer
-                ? footerY + tile + 8
-                : infoBarY + 2 * font.lineHeight + 10;
+        int contentH;
+        if (confirm || detail) {
+            contentH = confirm ? CONFIRM_BODY_H + 26 : CONFIRM_BODY_H;
+            // The body is a fixed block — only footer rows share the row math.
+            int avail = height - CONTENT_Y - contentH - FOOTER_GAP - 6;
+            this.rowH = footerRows > 0
+                    ? Math.min(22, Math.max(16, avail / footerRows)) : 22;
+        } else {
+            // Every visible band is a row: distribute the viewport budget.
+            int rowUnits = Math.max(contentRows, 1) + footerRows;
+            this.rowH = Math.min(22, Math.max(16,
+                    (height - CONTENT_Y - FOOTER_GAP - 6) / rowUnits));
+            contentH = Math.max(contentRows, 1) * rowH;
+        }
+        this.footerY = CONTENT_Y + contentH + FOOTER_GAP;
+        this.imageHeight = footerY + footerRows * rowH + 6;
         super.init();
-        rebuildTiles();
+        rebuildRows();
     }
 
     /**
@@ -101,12 +119,14 @@ public class StrajaDeskScreen extends AbstractContainerScreen<DeskGuiMenu> {
                 mc.getWindow().getGuiScaledHeight());
     }
 
-    private void rebuildTiles() {
+    private void rebuildRows() {
         clearWidgets();
-        deskTiles.clear();
         iconCache.clear();
         headerTile = null;
         detailTile = null;
+        DeskWire.Tile yesTile = null;
+        DeskWire.Tile noTile = null;
+        var footerTiles = new ArrayList<DeskWire.Tile>();
         DeskWire.View view = getMenu().view();
         if (view == null) return;
         for (DeskWire.Tile cell : view.tiles()) {
@@ -120,14 +140,51 @@ public class StrajaDeskScreen extends AbstractContainerScreen<DeskGuiMenu> {
                 detailTile = cell;
                 continue;
             }
-            int col = cell.slot() % DeskLayout.COLUMNS;
-            int row = cell.slot() / DeskLayout.COLUMNS;
-            int x = leftPos + PAD + col * tile;
-            int y = topPos + (cell.slot() < DeskLayout.CONTENT_SLOTS
-                    ? CONTENT_Y + row * tile : footerY);
-            DeskTile widget = new DeskTile(x, y, cell);
-            addRenderableWidget(widget);
-            deskTiles.add(widget);
+            if (cell.slot() == DeskLayout.YES_SLOT) {
+                yesTile = cell;
+                continue;
+            }
+            if (cell.slot() == DeskLayout.NO_SLOT) {
+                noTile = cell;
+                continue;
+            }
+            if (cell.slot() >= 0 && cell.slot() < DeskLayout.CONTENT_SLOTS) {
+                int x = leftPos + PAD;
+                int y = topPos + CONTENT_Y + cell.slot() * rowH;
+                addRenderableWidget(new DeskRow(x, y,
+                        imageWidth - PAD * 2, rowH - 2, cell));
+            } else if (cell.slot() >= DeskLayout.BACK_SLOT) {
+                footerTiles.add(cell);
+            }
+            // Anything else — a dead-range slot — is dropped, not rendered:
+            // the client fails closed on a malformed wire view.
+        }
+        // Footer nav rows share the content row treatment («Înapoi», page
+        // arrows) — same labeled-row affordance, laid in view order.
+        for (int j = 0; j < footerTiles.size(); j++) {
+            DeskWire.Tile cell = footerTiles.get(j);
+            int y = topPos + footerY + j * rowH;
+            addRenderableWidget(new DeskRow(leftPos + PAD, y,
+                    imageWidth - PAD * 2, rowH - 2, cell));
+        }
+        // Confirm row: two labeled buttons centered under the body —
+        // DA carries the authority color, NU stays steel.
+        if (yesTile != null || noTile != null) {
+            int bw = 64, gap = 12;
+            int bx = leftPos + (imageWidth - 2 * bw - gap) / 2;
+            int by = topPos + CONFIRM_BTN_Y;
+            if (yesTile != null) {
+                addRenderableWidget(new DeskButton(bx, by, bw, 20, yesTile));
+            }
+            if (noTile != null) {
+                addRenderableWidget(new DeskButton(bx + bw + gap, by, bw, 20, noTile));
+            }
+        }
+        // The header band keeps the full guidance on hover — the two visible
+        // lines are a preview, the tooltip carries every lore line.
+        if (headerTile != null) {
+            addRenderableWidget(new HeaderInfo(leftPos + PAD, topPos + 2,
+                    imageWidth - PAD * 2, CONTENT_Y - 6, headerTile));
         }
     }
 
@@ -162,9 +219,6 @@ public class StrajaDeskScreen extends AbstractContainerScreen<DeskGuiMenu> {
                 0xFF_000000 | GuiTheme.COLOR_LEATHER);
         graphics.fill(leftPos + PAD, topPos + GuiTheme.RULE_Y,
                 leftPos + imageWidth - PAD, topPos + GuiTheme.RULE_Y + 1,
-                0xFF_000000 | GuiTheme.COLOR_LEATHER);
-        graphics.fill(leftPos + PAD, topPos + infoBarY,
-                leftPos + imageWidth - PAD, topPos + infoBarY + 1,
                 0xFF_000000 | GuiTheme.COLOR_LEATHER);
     }
 
@@ -202,7 +256,6 @@ public class StrajaDeskScreen extends AbstractContainerScreen<DeskGuiMenu> {
         if (detailTile != null) {
             renderDetailBody(graphics);
         }
-        renderInfoBar(graphics);
     }
 
     /** The confirm/FAQ body: subject icon + name + lore, always visible. */
@@ -219,7 +272,7 @@ public class StrajaDeskScreen extends AbstractContainerScreen<DeskGuiMenu> {
         for (String line : detailTile.lore()) {
             for (var wrapped : font.split(Component.literal(line),
                     imageWidth - GuiTheme.MARGIN * 2)) {
-                if (y > CONTENT_Y + 2 * tile - font.lineHeight) return;
+                if (y > CONTENT_Y + CONFIRM_BODY_H - font.lineHeight) return;
                 graphics.drawString(font, wrapped, GuiTheme.MARGIN, y,
                         0xFF_000000 | GuiTheme.COLOR_PAPER_DIM, false);
                 y += font.lineHeight;
@@ -227,46 +280,27 @@ public class StrajaDeskScreen extends AbstractContainerScreen<DeskGuiMenu> {
         }
     }
 
-    /** Instant readout: hovered tile's name + first lore line. */
-    private void renderInfoBar(GuiGraphics graphics) {
-        DeskTile hovered = null;
-        for (DeskTile widget : deskTiles) {
-            if (widget.isHovered()) { hovered = widget; break; }
+    /** Name first, then lore — one MutableComponent joined with newlines. */
+    private static Tooltip rowTooltip(DeskWire.Tile data) {
+        MutableComponent tip = null;
+        if (!data.name().isBlank()) tip = Component.literal(data.name());
+        for (String lore : data.lore()) {
+            MutableComponent line = Component.literal(lore).withStyle(
+                    Style.EMPTY.withColor(GuiTheme.COLOR_PAPER_DIM));
+            tip = tip == null ? line : tip.append("\n").append(line);
         }
-        int barY = infoBarY + 5;
-        if (hovered == null) return;
-        graphics.drawString(font,
-                font.plainSubstrByWidth(hovered.data.name(),
-                        imageWidth - GuiTheme.MARGIN * 2),
-                GuiTheme.MARGIN, barY,
-                0xFF_000000 | GuiTheme.COLOR_PAPER_BRIGHT, false);
-        if (!hovered.data.lore().isEmpty()) {
-            graphics.drawString(font,
-                    font.plainSubstrByWidth(hovered.data.lore().get(0),
-                            imageWidth - GuiTheme.MARGIN * 2),
-                    GuiTheme.MARGIN, barY + font.lineHeight,
-                    0xFF_000000 | GuiTheme.COLOR_PAPER_DIM, false);
-        }
+        return tip == null ? null : Tooltip.create(tip);
     }
 
-    /** One clickable cell of the desk grid. */
-    private final class DeskTile extends AbstractWidget {
+    /** One labeled row of the desk list — the action's name is always visible. */
+    private final class DeskRow extends AbstractWidget {
         private final DeskWire.Tile data;
         private ItemStack stack;
 
-        DeskTile(int x, int y, DeskWire.Tile data) {
-            super(x, y, tile, tile, Component.literal(data.name()));
+        DeskRow(int x, int y, int w, int h, DeskWire.Tile data) {
+            super(x, y, w, h, Component.literal(data.name()));
             this.data = data;
-            // Tooltip.create splits the component on newlines into lines —
-            // name first, then lore, one MutableComponent joined with "\n".
-            MutableComponent tip = null;
-            if (!data.name().isBlank()) tip = Component.literal(data.name());
-            for (String lore : data.lore()) {
-                MutableComponent line = Component.literal(lore).withStyle(
-                        Style.EMPTY.withColor(GuiTheme.COLOR_PAPER_DIM));
-                tip = tip == null ? line : tip.append("\n").append(line);
-            }
-            if (tip != null) setTooltip(Tooltip.create(tip));
+            setTooltip(rowTooltip(data));
         }
 
         @Override
@@ -277,15 +311,37 @@ public class StrajaDeskScreen extends AbstractContainerScreen<DeskGuiMenu> {
         @Override
         protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY,
                                     float partialTick) {
+            boolean lit = isHovered() || isFocused();
             graphics.fill(getX(), getY(), getX() + width, getY() + height,
-                    isHovered() ? BG_TILE_HOVER : BG_TILE);
+                    lit ? BG_ROW_HOVER : BG_ROW);
             graphics.renderOutline(getX(), getY(), width, height,
-                    0xFF_000000 | (isHovered()
+                    0xFF_000000 | (lit
                             ? GuiTheme.COLOR_BRASS : GuiTheme.COLOR_LEATHER));
             if (stack == null) stack = iconFor(data.itemId());
+            int iconSize = 16;
             if (!stack.isEmpty()) {
                 graphics.renderFakeItem(stack,
-                        getX() + (width - 16) / 2, getY() + (height - 16) / 2);
+                        getX() + 3, getY() + (height - iconSize) / 2);
+            }
+            int textX = getX() + 3 + iconSize + 5;
+            int textW = getX() + width - 4 - textX;
+            String hint = data.lore().isEmpty() ? "" : data.lore().get(0);
+            // Two text lines need ~20px of row; shorter rows show the name only
+            // (the tooltip still carries every lore line).
+            if (hint.isBlank() || height < 20) {
+                graphics.drawString(font,
+                        font.plainSubstrByWidth(data.name(), textW),
+                        textX, getY() + (height - font.lineHeight) / 2 + 1,
+                        0xFF_000000 | GuiTheme.COLOR_PAPER_BRIGHT, false);
+            } else {
+                graphics.drawString(font,
+                        font.plainSubstrByWidth(data.name(), textW),
+                        textX, getY() + 1,
+                        0xFF_000000 | GuiTheme.COLOR_PAPER_BRIGHT, false);
+                graphics.drawString(font,
+                        font.plainSubstrByWidth(hint, textW),
+                        textX, getY() + height - font.lineHeight - 1,
+                        0xFF_000000 | GuiTheme.COLOR_PAPER_DIM, false);
             }
         }
 
@@ -293,5 +349,63 @@ public class StrajaDeskScreen extends AbstractContainerScreen<DeskGuiMenu> {
         protected void updateWidgetNarration(NarrationElementOutput output) {
             defaultButtonNarrationText(output);
         }
+    }
+
+    /** A labeled DA/NU button — text on the theme frame, centered under the body. */
+    private final class DeskButton extends AbstractWidget {
+        private final DeskWire.Tile data;
+
+        DeskButton(int x, int y, int w, int h, DeskWire.Tile data) {
+            super(x, y, w, h, Component.literal(data.name()));
+            this.data = data;
+            setTooltip(rowTooltip(data));
+        }
+
+        @Override
+        public void onClick(double mouseX, double mouseY) {
+            press(data);
+        }
+
+        @Override
+        protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY,
+                                    float partialTick) {
+            boolean lit = isHovered() || isFocused();
+            graphics.fill(getX(), getY(), getX() + width, getY() + height,
+                    lit ? BG_ROW_HOVER : BG_ROW);
+            graphics.renderOutline(getX(), getY(), width, height,
+                    0xFF_000000 | (lit
+                            ? GuiTheme.COLOR_BRASS : GuiTheme.COLOR_LEATHER));
+            graphics.drawCenteredString(font,
+                    font.plainSubstrByWidth(data.name(), width - 6),
+                    getX() + width / 2, getY() + (height - font.lineHeight) / 2 + 1,
+                    0xFF_000000 | GuiTheme.COLOR_PAPER_BRIGHT);
+        }
+
+        @Override
+        protected void updateWidgetNarration(NarrationElementOutput output) {
+            defaultButtonNarrationText(output);
+        }
+    }
+
+    /**
+     * Invisible header band: hovering anywhere in the title/guidance area
+     * shows the complete guidance (name + every lore line), so the two
+     * visible lines are a preview, never a loss.
+     */
+    private static final class HeaderInfo extends AbstractWidget {
+        HeaderInfo(int x, int y, int w, int h, DeskWire.Tile data) {
+            super(x, y, w, h, Component.literal(data.name()));
+            setTooltip(rowTooltip(data));
+        }
+
+        @Override
+        public void onClick(double mouseX, double mouseY) {}
+
+        @Override
+        protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY,
+                                    float partialTick) {}
+
+        @Override
+        protected void updateWidgetNarration(NarrationElementOutput output) {}
     }
 }

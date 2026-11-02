@@ -17,7 +17,7 @@ import net.neoforged.neoforge.network.PacketDistributor;
 
 /**
  * One desk-menu session — lifetime equals the container's. Owns the nav stack
- * and renders {@link DeskPage}s into the menu's grid; page turns reuse the
+ * and renders {@link DeskPage}s into the menu; page turns reuse the
  * same container via {@code broadcastChanges} (no reopen packets), and every
  * action click dispatches {@code NpcRoles.performAction} directly — no chat
  * tokens are minted inside an open menu.
@@ -274,7 +274,7 @@ final class DeskMenuSession {
      * the provider bridge — the token is minted and consumed by
      * {@code NpcSurfaceActionService}, never by the chat-token service.
      * Actions carrying input fields ride the native form screen via
-     * {@code performAction}: a chest grid cannot collect fields.
+     * {@code performAction}: a desk menu cannot collect fields.
      */
     private void dispatchSurface(String actionId) {
         if (!(nav.current() instanceof DeskPageSource.SurfacePage surface)
@@ -371,7 +371,7 @@ final class DeskMenuSession {
     }
 
     /**
-     * The role grid — every content action ordered, paged at 45. Only the
+     * The role grid — every content action ordered, paged per DeskLayout. Only the
      * Secretary desk (Issue 4) swaps the flat grid for section drawers: its
      * surface is too dense to scan — every other role keeps this path
      * unchanged.
@@ -446,7 +446,7 @@ final class DeskMenuSession {
 
     /**
      * One section drawer page: only the actions {@link DeskSections}
-     * classifies under {@code section}, paged at 45 — the Comisar drawer
+     * classifies under {@code section}, paged per DeskLayout — the Comisar drawer
      * pages the personnel roster the same way. The duty drawer additionally
      * carries the live duty line in its header lore.
      */

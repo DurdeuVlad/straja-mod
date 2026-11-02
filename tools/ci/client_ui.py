@@ -567,10 +567,11 @@ def _desk_snapshot(ctx: ClientContext):
 
 def _npc_action_desk(label: str, step: dict, ctx: ClientContext):
     """Desk-surface fallback for npc-action: `straja test desk-actions` maps
-    the open page's labels to wire slots; the click lands on the tile's
-    screen-center, mirroring StrajaDeskScreen.rebuildTiles geometry
-    (PAD=12, CONTENT_Y=60, COLUMNS=9, INFOBAR_GAP=24, tile from scaled
-    height, footer slots anchored under the last content row)."""
+    the open page's labels to wire slots; the click lands on the row/button's
+    screen-center, mirroring StrajaDeskScreen geometry (PAD=12, CONTENT_Y=58,
+    CONFIRM_BODY_H=74, FOOTER_GAP=4, PANEL_W=252; content slots 0..7 are
+    labeled rows, YES=21/NO=23 are centered DA/NU buttons, nav slots >=45 are
+    footer rows, INFO=49/DETAIL=51 are text bands)."""
     snap = _desk_snapshot(ctx)
     if snap is None:
         raise ClientUiError(
@@ -591,22 +592,45 @@ def _npc_action_desk(label: str, step: dict, ctx: ClientContext):
     if match is None:
         raise ClientUiError(
             "assertion",
-            f"no desk tile {label!r} on the open page "
+            f"no desk row {label!r} on the open page "
             f"({[n for _, _, n in buttons][:12]})")
     slot = match[0]
+    top = int(snap["guiTop"])
+    left = int(snap["guiLeft"])
     height = int(snap.get("height", 240))
-    tile = 26 if height >= 250 else (24 if height >= 232 else 22)
-    col, row = slot % 9, slot // 9
-    x = int(snap["guiLeft"]) + 12 + col * tile + tile // 2
-    if slot < 45:
-        y = int(snap["guiTop"]) + 60 + row * tile + tile // 2
+    if slot in (21, 23):
+        # DA/NU buttons: 64x20 centered under the body, 12px apart.
+        x = left + 88 if slot == 21 else left + 164
+        y = top + 58 + 74 + 4 + 10
     else:
-        rows = 1
+        content_rows = 0
+        footer_rows = 0
+        confirm = any(s in (21, 23) for s, _, _ in buttons)
+        detail = any(s == 51 for s, _, _ in buttons)
         for other, _, _ in buttons:
-            if other < 45:
-                rows = max(rows, other // 9 + 1)
-        footer_y = 60 + rows * tile + 4 + 24
-        y = int(snap["guiTop"]) + footer_y + tile // 2
+            if 0 <= other < 8:
+                content_rows = max(content_rows, other + 1)
+            elif other >= 45 and other not in (49, 51):
+                footer_rows += 1
+        if confirm or detail:
+            content_h = 100 if confirm else 74
+            avail = height - 58 - content_h - 4 - 6
+            row_h = min(22, max(16, avail // footer_rows)) \
+                if footer_rows > 0 else 22
+        else:
+            row_units = max(content_rows, 1) + footer_rows
+            row_h = min(22, max(16,
+                                (height - 58 - 4 - 6) // row_units))
+            content_h = max(content_rows, 1) * row_h
+        footer_y = 58 + content_h + 4
+        x = left + 12 + 114  # row center: full-width rows are 228px wide
+        if 0 <= slot < 8:
+            y = top + 58 + slot * row_h + row_h // 2
+        else:
+            # Footer nav rows stack at footer_y in page order.
+            index = [s for s, _, _ in buttons
+                     if s >= 45 and s not in (49, 51)].index(slot)
+            y = top + footer_y + index * row_h + row_h // 2
     out = ctx.mct(["input", "click", str(x), str(y)], timeout=15)
     _expect_text(out, step, f"npc-action {label} (desk)")
 

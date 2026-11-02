@@ -23,13 +23,13 @@ public sealed interface DeskPageSource {
      */
     String SURFACE_PREFIX = "desk:surface:";
 
-    /** One page of the NPC's role surface grid (paged at 45 items). */
+    /** One page of the NPC's role surface grid (paged per DeskLayout items). */
     record RolePage(int page) implements DeskPageSource {}
 
     /**
      * One section drawer of the Secretary desk (Issue 4): renders only the
      * actions {@link DeskSections} classifies under {@code section}, paged at
-     * 45 like the role grid. Reached via {@code desk:section:<key>} nav ids.
+     * like every role page. Reached via {@code desk:section:<key>} nav ids.
      */
     record SectionPage(String section, int page) implements DeskPageSource {}
 

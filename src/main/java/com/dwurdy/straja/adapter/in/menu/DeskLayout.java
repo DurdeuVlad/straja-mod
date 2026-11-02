@@ -4,38 +4,42 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Pure page builder: turns ordered content items into a 6-row desk page —
- * content fills row-major from slot 0, the last row is reserved for chrome
- * («Înapoi», page arrows, the guidance/info item). Max 45 content items per
- * page; page-turn and back buttons only appear when applicable.
+ * Pure page builder: turns ordered content items into a paged desk page —
+ * content occupies sequential slots from 0 (the client renders each as one
+ * labeled row), chrome slots sit above the content range («Înapoi», page
+ * arrows, the guidance/info item). Max {@link #CONTENT_SLOTS} items per page;
+ * page-turn and back buttons only appear when applicable.
  */
 public final class DeskLayout {
     private DeskLayout() {}
 
+    /** Logical page rows carried on the wire view (bounded by DeskWire.MAX_ROWS). */
     public static final int ROWS = 6;
     // Slot indices are the wire contract between server page and client screen.
-    public static final int COLUMNS = 9;
-    public static final int CONTENT_SLOTS = (ROWS - 1) * COLUMNS; // 45
+    // Content slots 0..CONTENT_SLOTS-1 are sequential; the client lays them out
+    // as a vertical labeled list — the old 9-column chest-grid look is gone.
+    public static final int CONTENT_SLOTS = 8;
     public static final int BACK_SLOT = 45;
     public static final int PREV_SLOT = 48;
     public static final int INFO_SLOT = 49;
     public static final int NEXT_SLOT = 50;
-    // The detail body tile must not collide with content: slot 51 sits in the
-    // unused tail of the footer row, outside the 0–44 content grid.
+    // The detail body tile sits above the content range, outside the
+    // 0..CONTENT_SLOTS-1 list — it can never collide with a row.
     public static final int DETAIL_SLOT = 51;
     public static final int YES_SLOT = 21;
     public static final int NO_SLOT = 23;
     static final int LORE_WRAP = 35;
 
-    /** Page count for {@code items} content buttons at 45 per page (≥1). */
+    /** Page count for {@code items} content buttons at {@link #CONTENT_SLOTS} per page (≥1). */
     public static int pageCount(int items) {
         return Math.max(1, (items + CONTENT_SLOTS - 1) / CONTENT_SLOTS);
     }
 
     /**
-     * Builds a paged grid: slots 0–44 carry content row-major; the footer row
-     * carries «Înapoi» (when a nav trail exists), «Pagina x/y» arrows (when a
-     * page exists in that direction) and the header info item (always).
+     * Builds a paged list: slots 0..CONTENT_SLOTS-1 carry content in order;
+     * the chrome slots carry «Înapoi» (when a nav trail exists), «Pagina x/y»
+     * arrows (when a page exists in that direction) and the header info item
+     * (always).
      */
     public static DeskPage grid(String title, DeskIcon header, List<DeskButton> items,
                                 int page, boolean hasBack) {
