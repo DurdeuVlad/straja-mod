@@ -76,6 +76,11 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.DoubleValue SEARCH_RANGE_BLOCKS;
     public static final ModConfigSpec.IntValue EVIDENCE_MAX_REASON_LENGTH;
 
+    public static final ModConfigSpec.BooleanValue FRISK_ENABLED;
+    public static final ModConfigSpec.DoubleValue FRISK_RANGE;
+    public static final ModConfigSpec.IntValue FRISK_OFFER_SECONDS;
+    public static final ModConfigSpec.IntValue FRISK_COOLDOWN_SECONDS;
+
     public static final ModConfigSpec.IntValue CUFF_REQUEST_TIMEOUT_SECONDS;
     public static final ModConfigSpec.IntValue SURRENDER_TIMEOUT_SECONDS;
     public static final ModConfigSpec.IntValue CUFF_SLOWNESS_TICKS;
@@ -600,6 +605,13 @@ public final class StrajaServerConfig {
                 "searchRangeBlocks", defaults.searchRangeBlocks, 1.0, 32.0);
         EVIDENCE_MAX_REASON_LENGTH = B.defineInRange(
                 "maxReasonLength", defaults.evidenceMaxReasonLength, 1, 4000);
+        B.pop();
+
+        B.push("frisk");
+        FRISK_ENABLED = B.define("enabled", defaults.friskEnabled);
+        FRISK_RANGE = B.defineInRange("range", defaults.friskRange, 1.0, 32.0);
+        FRISK_OFFER_SECONDS = B.defineInRange("offerSeconds", defaults.friskOfferSeconds, 5, 300);
+        FRISK_COOLDOWN_SECONDS = B.defineInRange("cooldownSeconds", defaults.friskCooldownSeconds, 0, 600);
         B.pop();
 
         B.push("cuffs");
@@ -1577,6 +1589,11 @@ public final class StrajaServerConfig {
         p.evidenceEnabled = EVIDENCE_ENABLED.get();
         p.searchRangeBlocks = SEARCH_RANGE_BLOCKS.get();
         p.evidenceMaxReasonLength = EVIDENCE_MAX_REASON_LENGTH.get();
+
+        p.friskEnabled = FRISK_ENABLED.get();
+        p.friskRange = FRISK_RANGE.get();
+        p.friskOfferSeconds = FRISK_OFFER_SECONDS.get();
+        p.friskCooldownSeconds = FRISK_COOLDOWN_SECONDS.get();
 
         p.cuffRequestTimeoutSeconds = CUFF_REQUEST_TIMEOUT_SECONDS.get();
         p.surrenderTimeoutSeconds = SURRENDER_TIMEOUT_SECONDS.get();

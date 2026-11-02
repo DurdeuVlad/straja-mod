@@ -150,7 +150,7 @@ to hunt — escapes/unpaid fines alone leave blind spots).
 
 | Issue | Commit | Outcome |
 |---|---|---|
-| INST-1 | pending | |
+| INST-1 | 0f13463 | done — rows not tiles; desk tests green; adversarial review findings remediated (driver geometry, header hover tooltip, dead-slot guard, adaptive row sizing). Live-client pass still open per §Verification. |
 | INST-2 | pending | |
 | INST-3 | pending | |
 | INST-4 | pending | |

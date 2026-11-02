@@ -596,6 +596,30 @@ public final class StrajaCommands {
         root.then(bookNode());
         // #248 officer-parity: manual document inspection — perm-0 root, the
         // use case refuses anyone who is not an on-duty officer.
+        // INST-2 verificare corporală — consented inventory check, open to
+        // anyone; the target's Acceptă/Refuză links carry the consent.
+        var frisk = Commands.literal("verificare")
+                .then(Commands.argument("player", EntityArgument.player())
+                        .executes(c -> player(c, requester -> {
+                            var runtime = StrajaRuntime.get();
+                            if (runtime == null) return;
+                            var target = target(c, "player");
+                            if (target == null) {
+                                requester.refuse("straja.cmd.unknown_target",
+                                        "straja.remedy.fix_retry");
+                                return;
+                            }
+                            runtime.frisks().request(requester, target);
+                        })))
+                .then(Commands.literal("accept")
+                        .executes(c -> player(c, target ->
+                                StrajaRuntime.get().frisks().acceptLatest(target))))
+                .then(Commands.literal("decline")
+                        .executes(c -> player(c, target ->
+                                StrajaRuntime.get().frisks().declineLatest(target))));
+        root.then(frisk);
+        root.then(Commands.literal("frisk").redirect(frisk.build()));
+
         root.then(Commands.literal("inspect")
                 .then(Commands.argument("player", EntityArgument.player())
                         .executes(c -> player(c, officer -> {
@@ -2871,6 +2895,8 @@ public final class StrajaCommands {
                 new PlayerHelpEntry("/straja regulament", "straja.help.player.cmd.regulament"),
                 new PlayerHelpEntry("/straja license", "straja.help.player.cmd.license"),
                 new PlayerHelpEntry("/straja inspect", "straja.help.player.cmd.inspect"),
+                new PlayerHelpEntry("/straja verificare", "straja.help.player.cmd.verificare"),
+                new PlayerHelpEntry("/straja frisk", "straja.help.player.cmd.frisk"),
                 new PlayerHelpEntry("/straja dispatch", "straja.help.player.cmd.dispatch"),
                 new PlayerHelpEntry("/straja manhunt", "straja.help.player.cmd.manhunt"),
                 new PlayerHelpEntry("/straja transfer", "straja.help.player.cmd.transfer"),

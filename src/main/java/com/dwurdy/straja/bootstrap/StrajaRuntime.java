@@ -45,6 +45,7 @@ public final class StrajaRuntime {
     private final com.dwurdy.straja.application.service.NpcAdminService npcs;
     private final com.dwurdy.straja.application.service.MissionService missions;
     private final com.dwurdy.straja.application.service.CustodyService custody;
+    private final com.dwurdy.straja.application.service.FriskService frisks;
     private final com.dwurdy.straja.application.service.PrisonService prison;
     private final com.dwurdy.straja.application.service.FineService fines;
     private final com.dwurdy.straja.application.service.DebtService debt;
@@ -357,6 +358,8 @@ public final class StrajaRuntime {
         this.npcs = new com.dwurdy.straja.application.service.NpcAdminService(ctx);
         this.missions = new com.dwurdy.straja.application.service.MissionService(ctx, players, audit);
         this.custody = new com.dwurdy.straja.application.service.CustodyService(ctx, players, audit);
+        this.frisks = new com.dwurdy.straja.application.service.FriskService(ctx, audit);
+        this.frisks.useCustody(custody);
         this.prison = new com.dwurdy.straja.application.service.PrisonService(ctx, players, audit, custody);
         this.seizure = new com.dwurdy.straja.application.service.SeizureService(ctx, audit);
         this.prison.useSeizure(seizure);
@@ -689,6 +692,7 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.port.in.AdminToolsUseCase adminTools() { return adminTools; }
     public com.dwurdy.straja.application.port.in.FineRoleplayUseCase fineRoleplay() { return fines; }
     public com.dwurdy.straja.application.port.in.CustodyRoleplayUseCase custodyRoleplay() { return custody; }
+    public com.dwurdy.straja.application.service.FriskService frisks() { return frisks; }
     public com.dwurdy.straja.application.port.in.PrisonRoleplayUseCase prisonRoleplay() { return prison; }
     public com.dwurdy.straja.application.port.in.RoomRoleplayUseCase roomRoleplay() { return rooms; }
     public com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase archiveRoleplay() { return archive; }

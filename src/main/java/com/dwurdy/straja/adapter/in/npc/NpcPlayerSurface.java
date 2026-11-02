@@ -18,6 +18,7 @@ public final class NpcPlayerSurface {
             "mission-complete", "mission-reward", "mission-reward-recover", "mission-template-issue",
             "mission-invite", "v2-mission-claim",
             "custody-accept", "custody-refuse", "custody-release",
+            "frisk-accept", "frisk-decline",
             "complaint-claim", "complaint-join", "complaint-leave", "complaint-report",
             "complaint-review", "complaint-confirm", "complaint-withdraw",
             "fine-pay", "fine-refuse", "fine-task-accept", "fine-task-complete", "fine-task-arrest",

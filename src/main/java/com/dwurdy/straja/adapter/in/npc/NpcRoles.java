@@ -736,6 +736,8 @@ public final class NpcRoles {
                     com.dwurdy.straja.application.port.in.ComplaintRoleplayUseCase.Action.WITHDRAW, id);
             case "custody-accept" -> runtime.custodyRoleplay().accept(gw, id);
             case "custody-refuse" -> runtime.custodyRoleplay().refuse(gw, id);
+            case "frisk-accept" -> runtime.frisks().accept(gw, id);
+            case "frisk-decline" -> runtime.frisks().decline(gw, id);
             case "custody-release" -> runtime.custodyRoleplay().releaseById(gw, id);
             case "complaint-claim" -> runtime.complaintRoleplay().claim(gw, id);
             case "complaint-join" -> runtime.complaintRoleplay().join(gw, id);
@@ -2042,6 +2044,8 @@ public final class NpcRoles {
                 yield expected != null && runtime.custodyRoleplay().availableActions(player)
                         .stream().anyMatch(a -> a.action() == expected && id.equals(a.recordId()));
             }
+            case "frisk-accept", "frisk-decline" ->
+                runtime.frisks().hasPending(player, id);
             case "complaint-claim", "complaint-join", "complaint-leave", "complaint-report",
                     "complaint-review", "complaint-confirm", "complaint-withdraw" -> {
                 var expected = complaintActionFor(operation);

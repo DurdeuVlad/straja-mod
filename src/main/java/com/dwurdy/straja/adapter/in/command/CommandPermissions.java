@@ -95,6 +95,8 @@ final class CommandPermissions {
             Map.entry("status", 0),
             Map.entry("rules", 0),
             Map.entry("regulament", 0),
+            Map.entry("verificare", 0),
+            Map.entry("frisk", 0),
             Map.entry("npc-action", 0));
 
     private CommandPermissions() {}

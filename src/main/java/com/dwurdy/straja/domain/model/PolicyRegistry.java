@@ -139,6 +139,11 @@ public final class PolicyRegistry {
         k("forgery.anvilXpUnlicensed", "forgeryAnvilXpUnlicensed", Kind.INT);
         k("forgery.exemplarRequired", "forgeryExemplarRequired", Kind.BOOL);
         k("forgery.scanAtGates", "artifactScanAtGates", Kind.BOOL);
+        // frisk (verificare corporală)
+        k("frisk.enabled", "friskEnabled", Kind.BOOL);
+        k("frisk.range", "friskRange", Kind.DOUBLE);
+        k("frisk.offerSeconds", "friskOfferSeconds", Kind.INT);
+        k("frisk.cooldownSeconds", "friskCooldownSeconds", Kind.INT);
         // cuffs
         k("cuffs.requestTimeoutSeconds", "cuffRequestTimeoutSeconds", Kind.INT);
         k("cuffs.surrenderTimeoutSeconds", "surrenderTimeoutSeconds", Kind.INT);

@@ -119,6 +119,12 @@ public class StrajaPolicies {
     public double searchRangeBlocks = 4;
     public int evidenceMaxReasonLength = 200;
 
+    // frisk (verificare corporală — consented inventory check)
+    public boolean friskEnabled = true;
+    public double friskRange = 5.0;
+    public int friskOfferSeconds = 30;
+    public int friskCooldownSeconds = 45;
+
     // cuffs
     public int cuffRequestTimeoutSeconds = 60;
     public int surrenderTimeoutSeconds = 15;
