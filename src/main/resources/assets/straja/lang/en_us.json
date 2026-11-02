@@ -724,6 +724,7 @@
   "straja.frisk.result_header": "§e%s's inventory §7(consented search, entry %s):",
   "straja.frisk.result_empty": "%s's inventory is empty.",
   "straja.frisk.result_more": "§7… %d more items — the ledger holds everything (entry %s).",
+  "straja.mark.recorded": "§cStraja opened a case on you: the killing of %s is on record.",
   "straja.incident.already_taken": "The incident is already handled by %s.",
   "straja.incident.close_rank": "Only the lead Străjer or a superior can close the incident.",
   "straja.incident.code_unknown": "Unknown resolution code.",

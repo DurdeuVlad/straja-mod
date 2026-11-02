@@ -46,6 +46,7 @@ public final class StrajaRuntime {
     private final com.dwurdy.straja.application.service.MissionService missions;
     private final com.dwurdy.straja.application.service.CustodyService custody;
     private final com.dwurdy.straja.application.service.FriskService frisks;
+    private final com.dwurdy.straja.application.service.MarkService marks;
     private final com.dwurdy.straja.application.service.PrisonService prison;
     private final com.dwurdy.straja.application.service.FineService fines;
     private final com.dwurdy.straja.application.service.DebtService debt;
@@ -500,6 +501,10 @@ public final class StrajaRuntime {
         this.bounties.useDispatch(this.dispatch);
         // DEBT-2: bail lands on the debt ledger; in-custody issue levies.
         this.bounties.useDebt(this.debt);
+        // INST-3: the law records crimes without a clerk — auto-marks and
+        // the state bounty sweep for unpriced wanted players.
+        this.marks = new com.dwurdy.straja.application.service.MarkService(
+                ctx, audit, incidents, bolos, bounties, wanted, reputation);
         // #242: guided tester protocol — scripted state beats + fake suspect.
         this.protocol = new com.dwurdy.straja.application.service.ProtocolService(
                 ctx, new SavedStores.Protocol(stores), players, audit);
@@ -693,6 +698,7 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.port.in.FineRoleplayUseCase fineRoleplay() { return fines; }
     public com.dwurdy.straja.application.port.in.CustodyRoleplayUseCase custodyRoleplay() { return custody; }
     public com.dwurdy.straja.application.service.FriskService frisks() { return frisks; }
+    public com.dwurdy.straja.application.service.MarkService marks() { return marks; }
     public com.dwurdy.straja.application.port.in.PrisonRoleplayUseCase prisonRoleplay() { return prison; }
     public com.dwurdy.straja.application.port.in.RoomRoleplayUseCase roomRoleplay() { return rooms; }
     public com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase archiveRoleplay() { return archive; }

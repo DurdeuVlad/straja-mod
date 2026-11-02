@@ -139,6 +139,12 @@ public final class PolicyRegistry {
         k("forgery.anvilXpUnlicensed", "forgeryAnvilXpUnlicensed", Kind.INT);
         k("forgery.exemplarRequired", "forgeryExemplarRequired", Kind.BOOL);
         k("forgery.scanAtGates", "artifactScanAtGates", Kind.BOOL);
+        // auto-mark (institution writes its own criminal record)
+        k("automark.kills", "autoMarkKills", Kind.BOOL);
+        k("automark.witnessOnly", "autoMarkWitnessOnly", Kind.BOOL);
+        k("automark.bountyEnabled", "autoBountyEnabled", Kind.BOOL);
+        k("automark.bountyAmount", "autoBountyAmount", Kind.INT);
+        k("automark.bountyAfterHours", "autoBountyAfterHours", Kind.INT);
         // frisk (verificare corporală)
         k("frisk.enabled", "friskEnabled", Kind.BOOL);
         k("frisk.range", "friskRange", Kind.DOUBLE);

@@ -66,6 +66,7 @@ public final class StrajaEvents {
         runtime.storage().tick();
         runtime.checkpoints().tick();
         runtime.bounties().tick();
+        runtime.marks().tick();
         // FUN-1: the delegation engine sweeps pending request queues at its own
         // configured cadence (delegation.sweepSeconds); the call itself is cheap.
         runtime.delegation().tick();
@@ -1026,8 +1027,11 @@ public final class StrajaEvents {
         if (event.getEntity() instanceof net.minecraft.server.level.ServerPlayer victim) {
             var victimGateway = new MinecraftPlayerGateway(victim.getServer(), victim.getUUID());
             if (attacker != null) {
-                runtime.expansionRoleplay().recordFinalDeath(
-                        new MinecraftPlayerGateway(attacker.getServer(), attacker.getUUID()), victimGateway);
+                var killerGateway = new MinecraftPlayerGateway(attacker.getServer(), attacker.getUUID());
+                runtime.expansionRoleplay().recordFinalDeath(killerGateway, victimGateway);
+                // INST-3: the mark is written while the victim's wanted state
+                // is still live — a lawful kill reads as lawful.
+                runtime.marks().recordKill(killerGateway, victimGateway);
             }
             runtime.custodyRoleplay().recoverAfterDeath(victimGateway);
             // FUN-8: an escort's death breaks the chain anywhere; a prisoner's

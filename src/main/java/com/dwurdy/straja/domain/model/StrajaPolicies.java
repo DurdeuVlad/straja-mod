@@ -119,6 +119,14 @@ public class StrajaPolicies {
     public double searchRangeBlocks = 4;
     public int evidenceMaxReasonLength = 200;
 
+    // auto-mark (the law records crimes without a clerk)
+    public boolean autoMarkKills = true;
+    public boolean autoMarkWitnessOnly = false;
+    public boolean autoBountyEnabled = true;
+    public int autoBountyAmount = 200;
+    public int autoBountyAfterHours = 0; // 0 = priced on the next sweep; >0
+        // needs the mark's own TTL to outlive the grace window
+
     // frisk (verificare corporală — consented inventory check)
     public boolean friskEnabled = true;
     public double friskRange = 5.0;

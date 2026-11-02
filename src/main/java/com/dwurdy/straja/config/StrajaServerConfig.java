@@ -76,6 +76,12 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.DoubleValue SEARCH_RANGE_BLOCKS;
     public static final ModConfigSpec.IntValue EVIDENCE_MAX_REASON_LENGTH;
 
+    public static final ModConfigSpec.BooleanValue AUTO_MARK_KILLS;
+    public static final ModConfigSpec.BooleanValue AUTO_MARK_WITNESS_ONLY;
+    public static final ModConfigSpec.BooleanValue AUTO_BOUNTY_ENABLED;
+    public static final ModConfigSpec.IntValue AUTO_BOUNTY_AMOUNT;
+    public static final ModConfigSpec.IntValue AUTO_BOUNTY_AFTER_HOURS;
+
     public static final ModConfigSpec.BooleanValue FRISK_ENABLED;
     public static final ModConfigSpec.DoubleValue FRISK_RANGE;
     public static final ModConfigSpec.IntValue FRISK_OFFER_SECONDS;
@@ -605,6 +611,14 @@ public final class StrajaServerConfig {
                 "searchRangeBlocks", defaults.searchRangeBlocks, 1.0, 32.0);
         EVIDENCE_MAX_REASON_LENGTH = B.defineInRange(
                 "maxReasonLength", defaults.evidenceMaxReasonLength, 1, 4000);
+        B.pop();
+
+        B.push("automark");
+        AUTO_MARK_KILLS = B.define("kills", defaults.autoMarkKills);
+        AUTO_MARK_WITNESS_ONLY = B.define("witnessOnly", defaults.autoMarkWitnessOnly);
+        AUTO_BOUNTY_ENABLED = B.define("bountyEnabled", defaults.autoBountyEnabled);
+        AUTO_BOUNTY_AMOUNT = B.defineInRange("bountyAmount", defaults.autoBountyAmount, 0, 1000000);
+        AUTO_BOUNTY_AFTER_HOURS = B.defineInRange("bountyAfterHours", defaults.autoBountyAfterHours, 0, 720);
         B.pop();
 
         B.push("frisk");
@@ -1589,6 +1603,12 @@ public final class StrajaServerConfig {
         p.evidenceEnabled = EVIDENCE_ENABLED.get();
         p.searchRangeBlocks = SEARCH_RANGE_BLOCKS.get();
         p.evidenceMaxReasonLength = EVIDENCE_MAX_REASON_LENGTH.get();
+
+        p.autoMarkKills = AUTO_MARK_KILLS.get();
+        p.autoMarkWitnessOnly = AUTO_MARK_WITNESS_ONLY.get();
+        p.autoBountyEnabled = AUTO_BOUNTY_ENABLED.get();
+        p.autoBountyAmount = AUTO_BOUNTY_AMOUNT.get();
+        p.autoBountyAfterHours = AUTO_BOUNTY_AFTER_HOURS.get();
 
         p.friskEnabled = FRISK_ENABLED.get();
         p.friskRange = FRISK_RANGE.get();

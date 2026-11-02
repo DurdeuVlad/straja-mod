@@ -724,6 +724,7 @@
   "straja.frisk.result_header": "§eInventarul lui %s §7(verificare corporală, intrarea %s):",
   "straja.frisk.result_empty": "Inventarul lui %s este gol.",
   "straja.frisk.result_more": "§7… încă %d obiecte — registrul păstrează tot (intrarea %s).",
+  "straja.mark.recorded": "§cStraja a deschis un dosar pe numele tău: uciderea lui %s este înregistrată.",
   "straja.incident.already_taken": "Incidentul este deja preluat de %s.",
   "straja.incident.close_rank": "Doar Străjerul principal sau un superior poate încheia incidentul.",
   "straja.incident.code_unknown": "Cod de rezolvare necunoscut.",
