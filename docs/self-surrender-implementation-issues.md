@@ -8,8 +8,8 @@ penalty, violent offences cost prison time — mitigated for volunteering.
 ## Design
 
 - `SurrenderService` (headless, Minecraft-free) owns the decision:
-  assess → resolve. `SurrenderUseCase` is the inbound port the command
-  and the chat action dispatch call.
+  assess → resolve. The command and the chat action dispatch call the
+  concrete service, same convention as `FriskService`.
 - **Eligibility:** wanted per `WantedService` truth (live BOLO, register
   FUGITIVE, unexpired legacy mark), online, not already restrained,
   escorted or jailed. Policy gate `surrender.enabled`.
@@ -30,20 +30,23 @@ penalty, violent offences cost prison time — mitigated for volunteering.
 - **Mitigation:** voluntary surrender discounts the sentence by
   `surrender.discountPercent` (default 25%) — turning yourself in is
   always cheaper than being dragged in.
-- **Notice surface:** the wanted-mark write offers `[Predă-te]`; a
-  wanted login re-offers it (links do not survive restart); `/straja
-  predare` is the typed fallback. The `surrender` action registers in
-  `PARAMETERIZED_ACTIONS`, gates in `isStillValidForPlayer` (wanted at
-  click time), and dispatches in `performParameterizedAction`.
+- **Notice surface:** a once-per-second tick re-notices every wanted
+  online player with `[Predă-te]` at most once per
+  `surrender.offerSeconds` — every mark source surfaces the offer
+  without touching mark write paths. `/straja predare` (alias
+  `/straja surrender`) is the typed fallback. The `surrender` action
+  registers in `PARAMETERIZED_ACTIONS`, gates in
+  `isStillValidForPlayer` (wanted at click time), and dispatches in
+  `performParameterizedAction`.
 
 ## Issues
 
 | # | Issue | Status | Commit | Notes |
 |---|-------|--------|--------|-------|
-| SURR-1 | Self-surrender: chat button + `/straja predare`, offence assessment, penalty-or-prison resolution, mitigation | pending | | |
+| SURR-1 | Self-surrender: chat button + `/straja predare`, offence assessment, penalty-or-prison resolution, mitigation | done | b850cbc | Adversarial review remediated: dead `surrender` alias (Brigadier merge kept the bounty capture-flag — repointed, flag preserved as `/straja bounty surrender`); debt classifier traces the links producers actually write (linkedFineId / linkedArrestTaskId→task.fineId / linkedIncidentId→incident.linkedFineId); `settleAllFor` routes through the DEBT-1 ledger, gates `finesEnabled`, flags partial debits PAYMENT_REVIEW; offer tick inside the 1Hz gate on a `wantedUuids()` snapshot |
 
 ## Execution receipt
 
 | Issue | Commit | State |
 |---|---|---|
-| SURR-1 | | |
+| SURR-1 | b850cbc | done — 11/11 service tests, 48/48 live GameTests (`surrenderBooksViolentOffender` proves cuff→book→resolve with clemency pricing) |
