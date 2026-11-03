@@ -673,6 +673,12 @@ public class StrajaPolicies {
     // player target they acquire (CustomNPCs retaliation) is vetoed live.
     public boolean storageUnarmedGuardsPassive = true;
 
+    // predarea voluntară — a wanted player turns themselves in: debts settle,
+    // violent marks book a discounted sentence, offers re-notice on a cooldown.
+    public boolean surrenderEnabled = true;
+    public int surrenderDiscountPercent = 25;
+    public int surrenderOfferSeconds = 300;
+
     // food/kits/equipment — kits are permanent owned gear granted at rank-up;
     // the former per-shift lease was removed (see docs/guard-gear-*).
     public String foodItem = "minecraft:bread";

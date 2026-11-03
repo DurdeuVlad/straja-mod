@@ -262,6 +262,48 @@ public final class StrajaGameTests {
         helper.succeed();
     }
 
+    @GameTest(template = "empty")
+    public static void surrenderBooksViolentOffender(GameTestHelper helper) {
+        var runtime = runtime(helper);
+        ServerLevel level = helper.getLevel();
+        var suspect = mockPlayer(helper);
+        var post = helper.absolutePos(new BlockPos(1, 1, 1));
+        suspect.setPos(post.getX() + 0.5, post.getY(), post.getZ() + 0.5);
+        runtime.bolos().flagSystem(suspect.getStringUUID(),
+                suspect.getName().getString(), "fugar");
+        var data = runtime.context().prison().read();
+        var cell = new Cell();
+        cell.id = "surrender_cell";
+        cell.dimension = level.dimension().location().toString();
+        cell.minX = post.getX() - 2;
+        cell.maxX = post.getX() + 2;
+        cell.minY = post.getY() - 2;
+        cell.maxY = post.getY() + 4;
+        cell.minZ = post.getZ() + 8;
+        cell.maxZ = post.getZ() + 12;
+        data.cells.add(cell);
+        runtime.context().prison().write(data);
+        helper.assertTrue(runtime.surrenders().surrender(gateway(suspect)),
+                "a wanted player must be able to turn themselves in");
+        var booked = runtime.context().prison().read().sentences.stream()
+                .filter(s -> suspect.getStringUUID().equals(s.targetUuid))
+                .findFirst().orElse(null);
+        helper.assertTrue(booked != null, "the surrender must produce a sentence");
+        helper.assertFalse(booked.cellId.isBlank(),
+                "a free cell must be claimed, not waitlisted");
+        int expectedDays = Math.max(1,
+                runtime.context().policies().prisonDefaultSentenceDays * 75 / 100);
+        helper.assertTrue(booked.sentenceDays == expectedDays,
+                "voluntary clemency prices " + expectedDays + " days, got "
+                        + booked.sentenceDays);
+        helper.assertFalse(runtime.wantedRoleplay().isWanted(suspect.getUUID()),
+                "the wanted mark must resolve on booking");
+        helper.assertTrue(runtime.context().custody().read().cuffed
+                        .containsKey(suspect.getStringUUID()),
+                "restraints ride the sentence — releaseFromJail cleans them");
+        helper.succeed();
+    }
+
     /** Damage-boundary semantics: deny unauthorized, cap non-lethal, down on lethal, pass vanilla hits. */
     @GameTest(template = "empty")
     public static void batonDamageRouting(GameTestHelper helper) {

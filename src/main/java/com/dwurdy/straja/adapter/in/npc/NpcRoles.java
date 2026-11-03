@@ -739,6 +739,7 @@ public final class NpcRoles {
             case "custody-refuse" -> runtime.custodyRoleplay().refuse(gw, id);
             case "frisk-accept" -> runtime.frisks().accept(gw, id);
             case "frisk-decline" -> runtime.frisks().decline(gw, id);
+            case "surrender" -> runtime.surrenders().surrender(gw);
             case "custody-release" -> runtime.custodyRoleplay().releaseById(gw, id);
             case "complaint-claim" -> runtime.complaintRoleplay().claim(gw, id);
             case "complaint-join" -> runtime.complaintRoleplay().join(gw, id);
@@ -2047,6 +2048,7 @@ public final class NpcRoles {
             }
             case "frisk-accept", "frisk-decline" ->
                 runtime.frisks().hasPending(player, id);
+            case "surrender" -> runtime.surrenders().canSurrender(player);
             case "complaint-claim", "complaint-join", "complaint-leave", "complaint-report",
                     "complaint-review", "complaint-confirm", "complaint-withdraw" -> {
                 var expected = complaintActionFor(operation);

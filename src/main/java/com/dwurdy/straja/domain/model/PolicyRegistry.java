@@ -150,6 +150,10 @@ public final class PolicyRegistry {
         k("frisk.range", "friskRange", Kind.DOUBLE);
         k("frisk.offerSeconds", "friskOfferSeconds", Kind.INT);
         k("frisk.cooldownSeconds", "friskCooldownSeconds", Kind.INT);
+        // predare (voluntary self-surrender)
+        k("surrender.enabled", "surrenderEnabled", Kind.BOOL);
+        k("surrender.discountPercent", "surrenderDiscountPercent", Kind.INT);
+        k("surrender.offerSeconds", "surrenderOfferSeconds", Kind.INT);
         // patrulier (institutional force)
         k("patrol.enabled", "patrolOfficerEnabled", Kind.BOOL);
         k("patrol.postRadius", "patrolPostRadius", Kind.DOUBLE);

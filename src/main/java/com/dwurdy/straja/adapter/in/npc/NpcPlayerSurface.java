@@ -49,7 +49,7 @@ public final class NpcPlayerSurface {
             "parole-decide-denied", "parole-decide-conditional",
             "parole-object", "parole-advocate-answer",
             "manhunt-calloff", "transfer-join", "transfer-pickup",
-            "transfer-cancel", "bounty-cancel");
+            "transfer-cancel", "bounty-cancel", "surrender");
 
     public enum RoleRoute { RECEPTIONIST, SECRETARY, JAILER, ARCHIVIST, TRAINER, RECRUITER, ARMORER, INSPECTOR, COMMANDER, UNKNOWN }
 

@@ -47,6 +47,7 @@ public final class StrajaRuntime {
     private final com.dwurdy.straja.application.service.CustodyService custody;
     private final com.dwurdy.straja.application.service.FriskService frisks;
     private final com.dwurdy.straja.application.service.MarkService marks;
+    private final com.dwurdy.straja.application.service.SurrenderService surrenders;
     private final com.dwurdy.straja.application.service.PatrolService patrols;
     private final com.dwurdy.straja.application.service.PrisonService prison;
     private final com.dwurdy.straja.application.service.FineService fines;
@@ -511,6 +512,10 @@ public final class StrajaRuntime {
         this.patrols = new com.dwurdy.straja.application.service.PatrolService(
                 ctx, audit, wanted, custody, prison, reputation);
         this.patrols.useDispatch(this.dispatch);
+        // SURR-1: the wanted turn themselves in — debts settle, violent
+        // marks book a discounted sentence, no officer required.
+        this.surrenders = new com.dwurdy.straja.application.service.SurrenderService(
+                ctx, audit, wanted, custody, prison, fines, bolos);
         // #242: guided tester protocol — scripted state beats + fake suspect.
         this.protocol = new com.dwurdy.straja.application.service.ProtocolService(
                 ctx, new SavedStores.Protocol(stores), players, audit);
@@ -704,6 +709,7 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.port.in.FineRoleplayUseCase fineRoleplay() { return fines; }
     public com.dwurdy.straja.application.port.in.CustodyRoleplayUseCase custodyRoleplay() { return custody; }
     public com.dwurdy.straja.application.service.FriskService frisks() { return frisks; }
+    public com.dwurdy.straja.application.service.SurrenderService surrenders() { return surrenders; }
     public com.dwurdy.straja.application.service.MarkService marks() { return marks; }
     public com.dwurdy.straja.application.service.PatrolService patrols() { return patrols; }
     public com.dwurdy.straja.application.port.in.PrisonRoleplayUseCase prisonRoleplay() { return prison; }

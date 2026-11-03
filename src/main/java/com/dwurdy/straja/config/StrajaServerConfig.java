@@ -90,6 +90,9 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.DoubleValue PATROL_POST_RADIUS;
     public static final ModConfigSpec.DoubleValue PATROL_SCAN_RANGE;
     public static final ModConfigSpec.IntValue PATROL_ENGAGE_COOLDOWN_SECONDS;
+    public static final ModConfigSpec.BooleanValue SURRENDER_ENABLED;
+    public static final ModConfigSpec.IntValue SURRENDER_DISCOUNT_PERCENT;
+    public static final ModConfigSpec.IntValue SURRENDER_OFFER_SECONDS;
 
     public static final ModConfigSpec.IntValue CUFF_REQUEST_TIMEOUT_SECONDS;
     public static final ModConfigSpec.IntValue SURRENDER_TIMEOUT_SECONDS;
@@ -638,6 +641,20 @@ public final class StrajaServerConfig {
         PATROL_POST_RADIUS = B.defineInRange("postRadius", defaults.patrolPostRadius, 4.0, 128.0);
         PATROL_SCAN_RANGE = B.defineInRange("scanRange", defaults.patrolScanRange, 4.0, 128.0);
         PATROL_ENGAGE_COOLDOWN_SECONDS = B.defineInRange("engageCooldownSeconds", defaults.patrolEngageCooldownSeconds, 1, 60);
+        B.pop();
+
+        B.push("surrender");
+        SURRENDER_ENABLED = B.comment(
+                        "A wanted player may turn themselves in — debts settle,",
+                        "violent marks book a sentence, no officer required.")
+                .define("enabled", defaults.surrenderEnabled);
+        SURRENDER_DISCOUNT_PERCENT = B.comment(
+                        "Sentence reduction for voluntary surrender — turning",
+                        "yourself in is always cheaper than being dragged in.")
+                .defineInRange("discountPercent", defaults.surrenderDiscountPercent, 0, 90);
+        SURRENDER_OFFER_SECONDS = B.comment(
+                        "Cooldown between [Predă-te] chat offers to wanted players.")
+                .defineInRange("offerSeconds", defaults.surrenderOfferSeconds, 60, 86400);
         B.pop();
 
         B.push("cuffs");
@@ -1635,6 +1652,9 @@ public final class StrajaServerConfig {
         p.patrolPostRadius = PATROL_POST_RADIUS.get();
         p.patrolScanRange = PATROL_SCAN_RANGE.get();
         p.patrolEngageCooldownSeconds = PATROL_ENGAGE_COOLDOWN_SECONDS.get();
+        p.surrenderEnabled = SURRENDER_ENABLED.get();
+        p.surrenderDiscountPercent = SURRENDER_DISCOUNT_PERCENT.get();
+        p.surrenderOfferSeconds = SURRENDER_OFFER_SECONDS.get();
 
         p.cuffRequestTimeoutSeconds = CUFF_REQUEST_TIMEOUT_SECONDS.get();
         p.surrenderTimeoutSeconds = SURRENDER_TIMEOUT_SECONDS.get();

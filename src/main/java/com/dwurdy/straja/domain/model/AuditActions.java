@@ -233,6 +233,7 @@ public final class AuditActions {
     public static final String SURRENDER_ACCEPT = "surrender_accept";
     public static final String SURRENDER_REFUSE = "surrender_refuse";
     public static final String SURRENDER_REQUEST = "surrender_request";
+    public static final String SURRENDER_SELF = "surrender_self";
     public static final String SUSPECT_KILLED = "suspect_killed";
     public static final String SUSPEND = "suspend";
     public static final String TRAINING_MANUAL = "training_manual";

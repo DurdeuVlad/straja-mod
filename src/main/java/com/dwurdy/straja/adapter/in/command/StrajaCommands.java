@@ -448,9 +448,16 @@ public final class StrajaCommands {
                 .then(Commands.argument("target", StringArgumentType.word())
                         .executes(c -> player(c, p -> StrajaRuntime.get().bounties()
                                 .cancel(p, StringArgumentType.getString(c, "target"))))));
+        // The bounty capture-flag stays reachable under the bounty node —
+        // the bare `surrender` literal belongs to SURR-1 predarea voluntară.
+        bounty.then(Commands.literal("surrender")
+                .executes(c -> player(c, StrajaRuntime.get().bounties()::surrender)));
         root.then(bounty);
         root.then(Commands.literal("surrender")
-                .executes(c -> player(c, StrajaRuntime.get().bounties()::surrender)));
+                .executes(c -> player(c, requester -> {
+                    var runtime = StrajaRuntime.get();
+                    if (runtime != null) runtime.surrenders().surrender(requester);
+                })));
         root.then(Commands.literal("bail")
                 .then(Commands.argument("player", StringArgumentType.word())
                         .executes(c -> player(c, p -> StrajaRuntime.get().bounties()
@@ -619,6 +626,15 @@ public final class StrajaCommands {
                                 StrajaRuntime.get().frisks().declineLatest(target))));
         root.then(frisk);
         root.then(Commands.literal("frisk").redirect(frisk.build()));
+
+        // SURR-1 predarea voluntară — a wanted player turns themselves in;
+        // the [Predă-te] chat link carries the same action id.
+        var predare = Commands.literal("predare")
+                .executes(c -> player(c, requester -> {
+                    var runtime = StrajaRuntime.get();
+                    if (runtime != null) runtime.surrenders().surrender(requester);
+                }));
+        root.then(predare);
 
         root.then(Commands.literal("inspect")
                 .then(Commands.argument("player", EntityArgument.player())
@@ -2897,6 +2913,8 @@ public final class StrajaCommands {
                 new PlayerHelpEntry("/straja inspect", "straja.help.player.cmd.inspect"),
                 new PlayerHelpEntry("/straja verificare", "straja.help.player.cmd.verificare"),
                 new PlayerHelpEntry("/straja frisk", "straja.help.player.cmd.frisk"),
+                new PlayerHelpEntry("/straja predare", "straja.help.player.cmd.predare"),
+                new PlayerHelpEntry("/straja surrender", "straja.help.player.cmd.surrender"),
                 new PlayerHelpEntry("/straja dispatch", "straja.help.player.cmd.dispatch"),
                 new PlayerHelpEntry("/straja manhunt", "straja.help.player.cmd.manhunt"),
                 new PlayerHelpEntry("/straja transfer", "straja.help.player.cmd.transfer"),

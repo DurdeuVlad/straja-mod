@@ -444,7 +444,7 @@ public class FineService implements FineRoleplayUseCase {
         }
         FineStore data = ctx.fines().read();
         Fine fine = data.find(id);
-        if (fine == null || !List.of("ISSUED", "ESCALATED", "ARREST_PENDING", "IN_SENTENCE", "GRACE_AFTER_SENTENCE").contains(fine.status)) {
+        if (fine == null || !PAYABLE_STATUSES.contains(fine.status)) {
             player.refuse("straja.fine.missing", "straja.remedy.reception");
             return false;
         }
@@ -509,6 +509,104 @@ public class FineService implements FineRoleplayUseCase {
         player.tell("Amenda " + fine.id + " a fost plătită la recepționistă.");
         finePaidHook.accept(fine);
         return true;
+    }
+
+    /** The fine statuses a debtor can still pay — shared by {@link #pay} and bulk settlement. */
+    private static final java.util.Set<String> PAYABLE_STATUSES = java.util.Set.of(
+            "ISSUED", "ESCALATED", "ARREST_PENDING", "IN_SENTENCE", "GRACE_AFTER_SENTENCE");
+
+    /** Every fine the player still owes, in issue order — the surrender assessment input. */
+    public java.util.List<Fine> outstandingFor(PlayerGateway target) {
+        if (target == null) return java.util.List.of();
+        var out = new java.util.ArrayList<Fine>();
+        for (Fine fine : ctx.fines().read().fines) {
+            if (fine == null || !PAYABLE_STATUSES.contains(fine.status)
+                    || !PlayerService.identityMatches(target, fine.targetUuid, fine.target)
+                    || fine.remaining() <= 0) continue;
+            out.add(fine);
+        }
+        return out;
+    }
+
+    public record SettleResult(boolean ok, int settled, int total, String reason) {}
+
+    /**
+     * Bulk settlement for voluntary surrender: one balance check, one
+     * withdrawal, then every payable fine settles through the same ledger
+     * {@link #pay} uses — DEBT-1 contribution records when the pooled
+     * ledger is wired, recovery tasks completed, paid hooks fired. A
+     * withdrawal that fails after removing value flags the fines for
+     * commissioner review instead of silently keeping the debit.
+     */
+    public SettleResult settleAllFor(PlayerGateway target) {
+        if (!p().finesEnabled) return new SettleResult(false, 0, 0, "fines_disabled");
+        FineStore data = ctx.fines().read();
+        var outstanding = new java.util.ArrayList<Fine>();
+        for (Fine fine : data.fines) {
+            if (fine == null || !PAYABLE_STATUSES.contains(fine.status)
+                    || target == null
+                    || !PlayerService.identityMatches(target, fine.targetUuid, fine.target)
+                    || fine.remaining() <= 0) continue;
+            outstanding.add(fine);
+        }
+        if (outstanding.isEmpty()) return new SettleResult(true, 0, 0, "");
+        int total = outstanding.stream().mapToInt(Fine::remaining).sum();
+        if (!ctx.currency().available() || ctx.currency().balanceOf(target) < total) {
+            return new SettleResult(false, 0, total, "insufficient_funds");
+        }
+        var withdrawal = ctx.currency().withdraw(target, total);
+        if (!withdrawal.ok()) {
+            // The provider contract permits a partial debit on failure —
+            // park every unpaid fine in review so no coins vanish unseen.
+            if (withdrawal.removed() > 0) {
+                for (Fine fine : outstanding) {
+                    var attempt = new Fine.PaymentAttempt();
+                    attempt.amount = fine.remaining();
+                    attempt.player = target.name();
+                    attempt.playerUuid = target.uuid().toString();
+                    attempt.startedAt = now();
+                    attempt.previousStatus = fine.status;
+                    attempt.removedValue = withdrawal.removed();
+                    attempt.error = withdrawal.error() == null ? "" : withdrawal.error();
+                    attempt.sideEffectUnknown = true;
+                    fine.paymentAttempt = attempt;
+                    fine.status = "PAYMENT_REVIEW";
+                }
+                ctx.fines().write(data);
+            }
+            audit.record(AuditActions.FINE_PAY, target.name(), target.uuid().toString(),
+                    target.name(), target.uuid().toString(), AuditResults.FAILED,
+                    "surrender_settle no_settle removedValue=" + withdrawal.removed());
+            return new SettleResult(false, 0, total, "withdraw_failed");
+        }
+        for (Fine fine : outstanding) {
+            int due = fine.remaining();
+            if (debt != null) {
+                debt.applyPayment(fine, due, target.name(), target.uuid().toString(), "SURRENDER");
+            } else {
+                fine.status = "PAID";
+                fine.paidAt = now();
+            }
+            fine.paymentAttempt = null;
+            for (FineTask task : data.tasks) {
+                if (fine.id.equals(task.fineId) && List.of("OPEN", "PRESENTED", "REFUSED",
+                        "ARREST_PENDING", "ARRESTED").contains(task.status)) {
+                    task.status = "COMPLETED";
+                    task.completedAt = now();
+                }
+            }
+            audit.record(AuditActions.FINE_PAY, target.name(), target.uuid().toString(),
+                    target.name(), target.uuid().toString(), AuditResults.SUCCESS,
+                    "surrender_settle fineId=" + fine.id + " amount=" + due);
+        }
+        ctx.fines().write(data);
+        for (Fine fine : outstanding) finePaidHook.accept(fine);
+        return new SettleResult(true, outstanding.size(), total, "");
+    }
+
+    /** The fine-amount → sentence mapping, shared with the surrender severity read. */
+    public int sentenceDaysFor(int amount) {
+        return sentenceDays(amount);
     }
 
     public boolean recoverPayment(PlayerGateway player, String id, String decision) {

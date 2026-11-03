@@ -72,6 +72,8 @@ public final class StrajaEvents {
         runtime.delegation().tick();
         if (runtime.serverGateway().tickCount() % 20 != 0) return;
         // FUN-6: unanswered calls widen through the band ladder or expire.
+        // Once per second: re-notice wanted players with the [Predă-te] link.
+        runtime.surrenders().tick();
         runtime.dispatch().tick();
         runtime.transfers().tick();
         runtime.escapes().tick();
