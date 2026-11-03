@@ -99,6 +99,7 @@ final class CommandPermissions {
             Map.entry("frisk", 0),
             Map.entry("predare", 0),
             Map.entry("surrender", 0),
+            Map.entry("denunt", 0),
             Map.entry("npc-action", 0));
 
     private CommandPermissions() {}

@@ -28,6 +28,7 @@ class EscapeServiceTest {
     private PrisonService prison;
     private DispatchService dispatch;
     private ManhuntService manhunts;
+    private CorruptionService corruptions;
     private EscapeService escapes;
     private TestPlayer admin;
     private TestPlayer inmate;
@@ -57,6 +58,8 @@ class EscapeServiceTest {
         escapes.useCustody(custody);
         escapes.useDispatch(dispatch);
         escapes.useManhunts(manhunts);
+        corruptions = new CorruptionService(ctx, audit, players, bolos);
+        escapes.useCorruptions(corruptions);
         prison.useEscapes(escapes);
         prison.useRolls(new RollSource() { // always the top of the range — jam fires
             @Override public int nextInt(int bound) { return 0; }
@@ -295,6 +298,24 @@ class EscapeServiceTest {
         var cell = ctx.prison().read().cell("celula_1");
         assertTrue(cell.brokenUntil > clock.nowMillis(), "the corrupt guard opens the door");
         assertTrue(g.told("§6Ai luat") || g.told("B"), "the guard is paid");
+        assertEquals(1, corruptions.trailFor(g.uuid().toString()).size(),
+                "a taken bribe lands once on the guard's money trail");
+        assertTrue(ctx.bolos().read().records.stream()
+                        .noneMatch(r -> g.uuid().toString().equals(r.subjectUuid)),
+                "an unwitnessed bribe leaves no warrant yet");
+    }
+
+    @Test
+    void witnessedBribeMarksTheCorruptGuard() {
+        var g = guard("corupt", inmate.x + 2, inmate.z);
+        guard("martor", inmate.x + 3, inmate.z);
+        ((TestCurrency) ctx.currency()).balance = 100;
+        assertTrue(escapes.bribe(inmate));
+        assertTrue(escapes.bribeAnswer(g, true));
+        assertTrue(ctx.bolos().read().records.stream().anyMatch(r ->
+                        r.status == com.dwurdy.straja.domain.model.BoloStatus.ACTIVE
+                                && g.uuid().toString().equals(r.subjectUuid)),
+                "a watched exchange marks the guard on the spot");
     }
 
     @Test

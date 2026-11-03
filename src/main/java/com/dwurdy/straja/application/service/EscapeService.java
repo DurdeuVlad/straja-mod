@@ -28,6 +28,7 @@ public final class EscapeService {
     private CustodyService custody;
     private DispatchService dispatch;
     private ManhuntService manhunts;
+    private CorruptionService corruptions;
     private PrisonJobService jobs;
     private RollSource rolls = RollSource.system();
 
@@ -50,6 +51,7 @@ public final class EscapeService {
     public void useCustody(CustodyService custody) { this.custody = custody; }
     public void useDispatch(DispatchService dispatch) { this.dispatch = dispatch; }
     public void useManhunts(ManhuntService manhunts) { this.manhunts = manhunts; }
+    public void useCorruptions(CorruptionService corruptions) { this.corruptions = corruptions; }
     public void useRolls(RollSource rolls) { this.rolls = rolls == null ? RollSource.system() : rolls; }
     /** FUN-10: inspection searches settle standing hits and close quota calls. */
     public void useJobs(PrisonJobService jobs) { this.jobs = jobs; }
@@ -198,7 +200,8 @@ public final class EscapeService {
         prisoner.tell("§6Postul " + post.id + " a luat " + price + " B — ușa e deschisă o clipă. Du-te.");
         audit.record(AuditActions.PRISON_BREAK, prisoner.name(), uuidOf(prisoner), post.id, "",
                 AuditResults.SUCCESS, "bribe_post price=" + price);
-        if (witnessNear(prisoner, post.x, post.y, post.z)) {
+        if (witnessNear(prisoner, null, post.x, post.y, post.z,
+                Math.max(1.0, ctx.policies().manhuntGuardDetectRadius))) {
             notice("bribe:" + post.id + ":" + uuidOf(prisoner), "Mită la postul " + post.id,
                     "un străjer a văzut plata",
                     post.dimension, post.x, post.y, post.z, post.id,
@@ -287,7 +290,11 @@ public final class EscapeService {
         audit.record(AuditActions.PRISON_BREAK, offer.prisonerName, offer.prisonerUuid,
                 guard.name(), offer.guardUuid, AuditResults.SUCCESS,
                 "bribe_accepted corrupt_guard price=" + price);
-        if (witnessNear(guard, guard.x(), guard.y(), guard.z())) {
+        // COR-1: the money trail — a witnessed exchange marks on the spot.
+        boolean witnessed = witnessNear(guard, prisoner, guard.x(), guard.y(), guard.z(),
+                Math.max(1.0, ctx.policies().corruptionWitnessRadius));
+        if (corruptions != null) corruptions.recordBribe(guard, prisoner, price, witnessed);
+        if (witnessed) {
             notice("bribe:" + offer.guardUuid + ":" + offer.prisonerUuid,
                     "Mită prinsă: " + offer.prisonerName + " ↔ " + guard.name(),
                     "un al doilea străjer a văzut schimbul",
@@ -308,7 +315,7 @@ public final class EscapeService {
         PlayerGateway best = null;
         double bestD = radius * radius;
         for (PlayerGateway p : ctx.server().onlinePlayers()) {
-            if (p == null || p == near || !players.isOnDutyGuard(p)) continue;
+            if (p == null || samePlayer(p, near) || !players.isOnDutyGuard(p)) continue;
             if (!p.dimension().equals(near.dimension())) continue;
             double dx = p.x() - near.x(), dy = p.y() - near.y(), dz = p.z() - near.z();
             double d = dx * dx + dy * dy + dz * dz;
@@ -318,15 +325,22 @@ public final class EscapeService {
     }
 
     /** A second on-duty guard watching the exchange makes it witnessed. */
-    private boolean witnessNear(PlayerGateway involved, double x, double y, double z) {
-        double radius = Math.max(1.0, ctx.policies().manhuntGuardDetectRadius);
+    private boolean witnessNear(PlayerGateway involved, PlayerGateway otherParty,
+                                double x, double y, double z, double radius) {
         for (PlayerGateway p : ctx.server().onlinePlayers()) {
-            if (p == null || p == involved || !players.isOnDutyGuard(p)) continue;
+            if (p == null || samePlayer(p, involved) || samePlayer(p, otherParty)
+                    || !players.isOnDutyGuard(p)) continue;
             if (!p.dimension().equals(involved.dimension())) continue;
             double dx = p.x() - x, dy = p.y() - y, dz = p.z() - z;
             if (dx * dx + dy * dy + dz * dz <= radius * radius) return true;
         }
         return false;
+    }
+
+    /** Gateways are re-minted per call — identity compares uuid, not ==. */
+    private static boolean samePlayer(PlayerGateway a, PlayerGateway b) {
+        return a == b || (a != null && b != null && a.uuid() != null
+                && a.uuid().equals(b.uuid()));
     }
 
     // ------------------------------------------------------------ blend

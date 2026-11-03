@@ -48,6 +48,7 @@ public final class StrajaRuntime {
     private final com.dwurdy.straja.application.service.FriskService frisks;
     private final com.dwurdy.straja.application.service.MarkService marks;
     private final com.dwurdy.straja.application.service.SurrenderService surrenders;
+    private final com.dwurdy.straja.application.service.CorruptionService corruptions;
     private final com.dwurdy.straja.application.service.PatrolService patrols;
     private final com.dwurdy.straja.application.service.PrisonService prison;
     private final com.dwurdy.straja.application.service.FineService fines;
@@ -516,6 +517,11 @@ public final class StrajaRuntime {
         // marks book a discounted sentence, no officer required.
         this.surrenders = new com.dwurdy.straja.application.service.SurrenderService(
                 ctx, audit, wanted, custody, prison, fines, bolos);
+        // COR-1: corrupt guards answer to the same institution — bribe money
+        // leaves a trail, reports check it, evidence writes the warrant.
+        this.corruptions = new com.dwurdy.straja.application.service.CorruptionService(
+                ctx, audit, players, bolos);
+        this.escapes.useCorruptions(this.corruptions);
         // #242: guided tester protocol — scripted state beats + fake suspect.
         this.protocol = new com.dwurdy.straja.application.service.ProtocolService(
                 ctx, new SavedStores.Protocol(stores), players, audit);
@@ -710,6 +716,7 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.port.in.CustodyRoleplayUseCase custodyRoleplay() { return custody; }
     public com.dwurdy.straja.application.service.FriskService frisks() { return frisks; }
     public com.dwurdy.straja.application.service.SurrenderService surrenders() { return surrenders; }
+    public com.dwurdy.straja.application.service.CorruptionService corruptions() { return corruptions; }
     public com.dwurdy.straja.application.service.MarkService marks() { return marks; }
     public com.dwurdy.straja.application.service.PatrolService patrols() { return patrols; }
     public com.dwurdy.straja.application.port.in.PrisonRoleplayUseCase prisonRoleplay() { return prison; }

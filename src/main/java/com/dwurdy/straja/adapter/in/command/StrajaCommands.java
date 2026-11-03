@@ -636,6 +636,17 @@ public final class StrajaCommands {
                 }));
         root.then(predare);
 
+        // COR-1 denunț — accuse a corrupt guard; the money trail decides.
+        // String arg (not EntityArgument) — a logged-off guard stays reportable.
+        root.then(Commands.literal("denunt")
+                .then(Commands.argument("suspect", StringArgumentType.word())
+                        .executes(c -> player(c, reporter -> {
+                            var runtime = StrajaRuntime.get();
+                            if (runtime == null) return;
+                            runtime.corruptions().denunt(reporter,
+                                    StringArgumentType.getString(c, "suspect"));
+                        }))));
+
         root.then(Commands.literal("inspect")
                 .then(Commands.argument("player", EntityArgument.player())
                         .executes(c -> player(c, officer -> {
@@ -2915,6 +2926,7 @@ public final class StrajaCommands {
                 new PlayerHelpEntry("/straja frisk", "straja.help.player.cmd.frisk"),
                 new PlayerHelpEntry("/straja predare", "straja.help.player.cmd.predare"),
                 new PlayerHelpEntry("/straja surrender", "straja.help.player.cmd.surrender"),
+                new PlayerHelpEntry("/straja denunt", "straja.help.player.cmd.denunt"),
                 new PlayerHelpEntry("/straja dispatch", "straja.help.player.cmd.dispatch"),
                 new PlayerHelpEntry("/straja manhunt", "straja.help.player.cmd.manhunt"),
                 new PlayerHelpEntry("/straja transfer", "straja.help.player.cmd.transfer"),

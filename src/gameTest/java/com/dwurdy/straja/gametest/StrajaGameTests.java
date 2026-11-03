@@ -17,6 +17,7 @@ import com.dwurdy.straja.domain.model.Cell;
 import com.dwurdy.straja.domain.model.ItemSpec;
 import com.dwurdy.straja.domain.model.NpcRegistry;
 import com.dwurdy.straja.domain.model.PrisonStore;
+import com.dwurdy.straja.domain.model.BoloStatus;
 import com.dwurdy.straja.domain.model.Rank;
 import com.dwurdy.straja.domain.model.SetupData;
 import com.google.gson.GsonBuilder;
@@ -301,6 +302,28 @@ public final class StrajaGameTests {
         helper.assertTrue(runtime.context().custody().read().cuffed
                         .containsKey(suspect.getStringUUID()),
                 "restraints ride the sentence — releaseFromJail cleans them");
+        helper.succeed();
+    }
+
+    /** COR-1 smoke: a pocketed bribe leaves a trail; a citizen denunț turns it into a warrant. */
+    @GameTest(template = "empty")
+    public static void denuntFindsTheMoneyTrail(GameTestHelper helper) {
+        var runtime = runtime(helper);
+        var reporter = mockPlayer(helper);
+        var guard = mockPlayer(helper);
+        var payer = mockPlayer(helper);
+        var state = runtime.players().state(guard.getUUID());
+        state.rank = Rank.GUARD.level();
+        state.duty = true;
+        runtime.players().save(guard.getUUID(), state);
+        runtime.corruptions().recordBribe(gateway(guard), gateway(payer), 120, false);
+        helper.assertTrue(runtime.corruptions().denunt(gateway(reporter),
+                        guard.getStringUUID()),
+                "a citizen report must run");
+        helper.assertTrue(runtime.context().bolos().read().records.stream().anyMatch(
+                        r -> guard.getStringUUID().equals(r.subjectUuid)
+                                && r.status == BoloStatus.ACTIVE),
+                "the money trail must write the warrant");
         helper.succeed();
     }
 

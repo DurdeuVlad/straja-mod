@@ -93,6 +93,9 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.BooleanValue SURRENDER_ENABLED;
     public static final ModConfigSpec.IntValue SURRENDER_DISCOUNT_PERCENT;
     public static final ModConfigSpec.IntValue SURRENDER_OFFER_SECONDS;
+    public static final ModConfigSpec.BooleanValue CORRUPTION_ENABLED;
+    public static final ModConfigSpec.IntValue CORRUPTION_REPORT_COOLDOWN;
+    public static final ModConfigSpec.DoubleValue CORRUPTION_WITNESS_RADIUS;
 
     public static final ModConfigSpec.IntValue CUFF_REQUEST_TIMEOUT_SECONDS;
     public static final ModConfigSpec.IntValue SURRENDER_TIMEOUT_SECONDS;
@@ -655,6 +658,19 @@ public final class StrajaServerConfig {
         SURRENDER_OFFER_SECONDS = B.comment(
                         "Cooldown between [Predă-te] chat offers to wanted players.")
                 .defineInRange("offerSeconds", defaults.surrenderOfferSeconds, 60, 86400);
+        B.pop();
+
+        B.push("corruption");
+        CORRUPTION_ENABLED = B.comment(
+                        "Corrupt guards are accountable: bribe income leaves a",
+                        "money trail, reports check it, evidence writes the warrant.")
+                .define("enabled", defaults.corruptionEnabled);
+        CORRUPTION_REPORT_COOLDOWN = B.comment(
+                        "Cooldown between a reporter's corruption accusations.")
+                .defineInRange("reportCooldownSeconds", defaults.corruptionReportCooldownSeconds, 0, 86400);
+        CORRUPTION_WITNESS_RADIUS = B.comment(
+                        "How close a second on-duty guard must stand to witness a bribe.")
+                .defineInRange("witnessRadius", defaults.corruptionWitnessRadius, 1.0, 64.0);
         B.pop();
 
         B.push("cuffs");
@@ -1655,6 +1671,9 @@ public final class StrajaServerConfig {
         p.surrenderEnabled = SURRENDER_ENABLED.get();
         p.surrenderDiscountPercent = SURRENDER_DISCOUNT_PERCENT.get();
         p.surrenderOfferSeconds = SURRENDER_OFFER_SECONDS.get();
+        p.corruptionEnabled = CORRUPTION_ENABLED.get();
+        p.corruptionReportCooldownSeconds = CORRUPTION_REPORT_COOLDOWN.get();
+        p.corruptionWitnessRadius = CORRUPTION_WITNESS_RADIUS.get();
 
         p.cuffRequestTimeoutSeconds = CUFF_REQUEST_TIMEOUT_SECONDS.get();
         p.surrenderTimeoutSeconds = SURRENDER_TIMEOUT_SECONDS.get();

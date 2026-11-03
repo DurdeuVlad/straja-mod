@@ -679,6 +679,12 @@ public class StrajaPolicies {
     public int surrenderDiscountPercent = 25;
     public int surrenderOfferSeconds = 300;
 
+    // corupție — a bribe leaves a money trail; a denunț checks it and the
+    // evidence writes the warrant, witnessed exchanges mark on the spot.
+    public boolean corruptionEnabled = true;
+    public int corruptionReportCooldownSeconds = 300;
+    public double corruptionWitnessRadius = 8.0;
+
     // food/kits/equipment — kits are permanent owned gear granted at rank-up;
     // the former per-shift lease was removed (see docs/guard-gear-*).
     public String foodItem = "minecraft:bread";

@@ -154,6 +154,10 @@ public final class PolicyRegistry {
         k("surrender.enabled", "surrenderEnabled", Kind.BOOL);
         k("surrender.discountPercent", "surrenderDiscountPercent", Kind.INT);
         k("surrender.offerSeconds", "surrenderOfferSeconds", Kind.INT);
+        // corupție (denunț + money trail → warrant)
+        k("corruption.enabled", "corruptionEnabled", Kind.BOOL);
+        k("corruption.reportCooldownSeconds", "corruptionReportCooldownSeconds", Kind.INT);
+        k("corruption.witnessRadius", "corruptionWitnessRadius", Kind.DOUBLE);
         // patrulier (institutional force)
         k("patrol.enabled", "patrolOfficerEnabled", Kind.BOOL);
         k("patrol.postRadius", "patrolPostRadius", Kind.DOUBLE);
