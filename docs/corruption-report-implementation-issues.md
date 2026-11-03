@@ -36,10 +36,41 @@ same patrol pipeline that arrests anyone arrests them.
 
 | # | Issue | Status | Commit | Notes |
 |---|-------|--------|--------|-------|
-| COR-1 | Bribe money-trail record + witnessed auto-mark + `/straja denunt` report→trail→warrant | pending | | |
+| COR-1 | Bribe money-trail record + witnessed auto-mark + `/straja denunt` report→trail→warrant | done | `a8f56e4` | 13 service tests, 49/49 GameTests |
 
 ## Execution receipt
 
 | Issue | Commit | State |
 |---|---|---|
-| COR-1 | | |
+| COR-1 | `a8f56e4` | done — planned `eebddc7`, implemented, adversarially reviewed (1 P0, 4 P1s remediated), re-verified: 13/13 CorruptionServiceTest, full unit suite, 49/49 live GameTests (`denuntFindsTheMoneyTrail`) |
+
+### Review findings remediated
+
+- **P0:** `witnessNear`/`nearestGuard` excluded the involved player by
+  `==` reference — production gateways are re-minted per call, so every
+  bribe self-witnessed. Now compares uuid identity; the payer is also
+  excluded from the witness pool.
+- **P1:** one bribe counted twice (new `kind=bribe` + legacy
+  `corrupt_guard` twin) — `trailFor` dedupes by same-tick pairing.
+- **P1:** `/straja denunt` only reached online suspects — now resolves
+  offline guards by uuid or by the name on the money trail.
+- **P1:** `corruption.enabled=false` still issued witnessed warrants —
+  the mark is now policy-gated (the ledger record stays).
+- **P1:** "Mandat emis" was claimed before the warrant existed —
+  `mark()` returns the outcome; bolos-off reports file as
+  `trail_found`.
+- **P2:** witness radius decoupled to `corruption.witnessRadius`
+  (default 8.0); unproven reports audit as `PENDING` not `REFUSED`;
+  `CORRUPTION` constant re-alphabetized.
+
+### Accepted limitations
+
+- Report cooldown defaults to 300s (anti-spam, tunable via
+  `corruption.reportCooldownSeconds`); refused `not_staff` reports do
+  not consume it, so name-guessing can't lock out a real report.
+- `audit.enabled=false` silently degrades the feature (no trail → all
+  reports unproven) while witnessed marking still works — audit and
+  corruption are independent toggles by design.
+- An already-wanted guard re-flagged by a report reuses the active
+  BOLO; the `kind=warrant` audit line still records each substantiated
+  report as its own event.
