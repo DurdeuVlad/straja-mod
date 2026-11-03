@@ -263,6 +263,42 @@ class StorageServiceTest {
         assertNull(npcGuards.guards.get(guardId).target);
     }
 
+    @Test
+    void unarmedGuardIsNeverSteeredAtAThief() {
+        configureZone();
+        var guardId = npcGuards.addGuard(3, 60, 3, 12);
+        npcGuards.guards.get(guardId).armed = false;
+        storage.onBlockBroken(civ, DIM, 2, 60, 2, "minecraft:gold_block");
+        npcGuards.guards.get(guardId).lineOfSight.add(civ.uuid());
+        storage.tick();
+        assertNull(npcGuards.guards.get(guardId).target);
+    }
+
+    @Test
+    void unarmedGuardSelfAcquiredTargetIsStrippedByTheSweep() {
+        configureZone();
+        var guardId = npcGuards.addGuard(3, 60, 3, 12);
+        storage.onBlockBroken(civ, DIM, 2, 60, 2, "minecraft:gold_block");
+        // The NPC retaliated on its own before the sweep saw it disarmed.
+        npcGuards.guards.get(guardId).target = civ.uuid();
+        npcGuards.guards.get(guardId).armed = false;
+        npcGuards.guards.get(guardId).lineOfSight.add(civ.uuid());
+        storage.tick();
+        assertNull(npcGuards.guards.get(guardId).target);
+    }
+
+    @Test
+    void unarmedGuardsSteerWhenPolicyDisabled() {
+        ctx.policies().storageUnarmedGuardsPassive = false;
+        configureZone();
+        var guardId = npcGuards.addGuard(3, 60, 3, 12);
+        npcGuards.guards.get(guardId).armed = false;
+        storage.onBlockBroken(civ, DIM, 2, 60, 2, "minecraft:gold_block");
+        npcGuards.guards.get(guardId).lineOfSight.add(civ.uuid());
+        storage.tick();
+        assertEquals(civ.uuid(), npcGuards.guards.get(guardId).target);
+    }
+
     // ------------------------------------------------------------------ misc
 
     @Test

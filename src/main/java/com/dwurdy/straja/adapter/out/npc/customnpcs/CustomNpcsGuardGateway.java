@@ -180,4 +180,21 @@ public final class CustomNpcsGuardGateway implements NpcGuardGateway {
         Entity npc = npc(entityId);
         return npc != null && factionOf(npc) == factionId;
     }
+
+    @Override public boolean armed(UUID entityId) {
+        Entity npc = npc(entityId);
+        return npc instanceof LivingEntity living && isWeapon(living.getMainHandItem());
+    }
+
+    /** "Weapon in hand" means a real combat item, not any held block or tool —
+     *  a lantern-carrying clerk stays a non-combatant. */
+    private static boolean isWeapon(net.minecraft.world.item.ItemStack stack) {
+        if (stack.isEmpty()) return false;
+        var item = stack.getItem();
+        return item instanceof net.minecraft.world.item.SwordItem
+                || item instanceof net.minecraft.world.item.AxeItem
+                || item instanceof net.minecraft.world.item.ProjectileWeaponItem
+                || item instanceof net.minecraft.world.item.TridentItem
+                || item instanceof net.minecraft.world.item.MaceItem;
+    }
 }

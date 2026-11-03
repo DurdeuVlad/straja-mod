@@ -187,6 +187,7 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.IntValue STORAGE_ENFORCE_PERIOD_TICKS;
     public static final ModConfigSpec.IntValue STORAGE_SUSPECT_RANGE;
     public static final ModConfigSpec.IntValue STORAGE_AGGRO_RANGE;
+    public static final ModConfigSpec.BooleanValue STORAGE_UNARMED_GUARDS_PASSIVE;
 
     public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> SALARY_PER_HOUR;
     public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> SALARY_PER_GRADE;
@@ -889,6 +890,10 @@ public final class StrajaServerConfig {
         STORAGE_ENFORCE_PERIOD_TICKS = B.defineInRange("enforcePeriodTicks", 200, 1, 20000);
         STORAGE_SUSPECT_RANGE = B.defineInRange("suspectRange", 8, 1, 128);
         STORAGE_AGGRO_RANGE = B.defineInRange("aggroRange", 16, 1, 256);
+        STORAGE_UNARMED_GUARDS_PASSIVE = B.comment(
+                        "Faction NPCs holding no weapon never fight: the",
+                        "aggro sweep ignores them and retaliation is vetoed.")
+                .define("unarmedGuardsPassive", true);
         B.pop();
 
         B.push("salary");
@@ -1733,6 +1738,7 @@ public final class StrajaServerConfig {
         p.storageEnforcePeriodTicks = STORAGE_ENFORCE_PERIOD_TICKS.get();
         p.storageSuspectRange = STORAGE_SUSPECT_RANGE.get();
         p.storageAggroRange = STORAGE_AGGRO_RANGE.get();
+        p.storageUnarmedGuardsPassive = STORAGE_UNARMED_GUARDS_PASSIVE.get();
 
         p.salaryPerHour = mapOrDefault(StrajaPolicies.parseIntMap(SALARY_PER_HOUR.get()),
                 defaults().salaryPerHour);

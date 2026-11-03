@@ -669,6 +669,9 @@ public class StrajaPolicies {
     public int storageEnforcePeriodTicks = 200;
     public int storageSuspectRange = 8;
     public int storageAggroRange = 16;
+    // Unarmed faction NPCs never fight: the aggro sweep skips them and any
+    // player target they acquire (CustomNPCs retaliation) is vetoed live.
+    public boolean storageUnarmedGuardsPassive = true;
 
     // food/kits/equipment — kits are permanent owned gear granted at rank-up;
     // the former per-shift lease was removed (see docs/guard-gear-*).

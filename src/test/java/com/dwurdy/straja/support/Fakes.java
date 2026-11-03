@@ -398,6 +398,7 @@ public final class Fakes {
             public int aggroRange = 0;
             public UUID target;
             public boolean dead;
+            public boolean armed = true;
             public final Set<UUID> lineOfSight = new HashSet<>();
         }
 
@@ -466,6 +467,10 @@ public final class Fakes {
         @Override public boolean isGuardOf(UUID entityId, int factionId) {
             Guard g = guards.get(entityId);
             return g != null && !g.dead && g.factionId == factionId;
+        }
+        @Override public boolean armed(UUID entityId) {
+            Guard g = guards.get(entityId);
+            return g == null || g.armed;
         }
     }
 

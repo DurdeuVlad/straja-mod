@@ -970,6 +970,24 @@ public final class StrajaEvents {
     }
 
     /**
+     * Armament is the engagement license: an unarmed faction NPC never picks
+     * a fight. Canceling the target acquisition in the setTarget hook covers
+     * CustomNPCs' own retaliation AI — the periodic aggro sweep alone would
+     * leave up to a full sweep of fight-back after every hit taken.
+     */
+    @SubscribeEvent
+    public void onUnarmedGuardTarget(
+            net.neoforged.neoforge.event.entity.living.LivingChangeTargetEvent event) {
+        StrajaRuntime runtime = StrajaRuntime.get();
+        if (runtime == null || event.getEntity().level().isClientSide()
+                || !(event.getNewAboutToBeSetTarget()
+                        instanceof net.minecraft.world.entity.player.Player)) return;
+        if (runtime.wantedRoleplay().unarmedGuardTargetBlocked(event.getEntity().getUUID())) {
+            event.setCanceled(true);
+        }
+    }
+
+    /**
      * LAW-007 escort protection: a wanted suspect cuffed and tethered to a
      * reachable officer is already caught — guard NPCs (CustomNPCs faction
      * members or native guard-role entities) must never damage them. This is

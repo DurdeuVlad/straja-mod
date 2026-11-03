@@ -100,6 +100,20 @@ public final class WantedService
     }
 
     /**
+     * Armament is the engagement license: an unarmed faction NPC must never
+     * hold a player target. The event layer vetoes CustomNPCs' own
+     * retaliation through this predicate — the sweep alone would leave a
+     * full aggro-period of fight-back after every hit.
+     */
+    public boolean unarmedGuardTargetBlocked(UUID entityId) {
+        if (entityId == null || !ctx.policies().storageUnarmedGuardsPassive) return false;
+        var guards = ctx.npcGuards();
+        return guards.available()
+                && guards.isGuardOf(entityId, ctx.policies().storageFactionId)
+                && !guards.armed(entityId);
+    }
+
+    /**
      * Clears any guard currently targeting the player — invoked the moment a
      * restraint lands so escort suspension does not wait for the periodic
      * aggro scan.

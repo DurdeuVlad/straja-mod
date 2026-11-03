@@ -405,7 +405,10 @@ public final class StorageService {
                 continue;
             }
             for (var npc : near) {
-                if (!hostile) {
+                // Unarmed guards never join the hunt — and any target they
+                // self-acquired is stripped so a dropped weapon stands them down.
+                if (!hostile || (ctx.policies().storageUnarmedGuardsPassive
+                        && !guards.armed(npc.id()))) {
                     guards.clearTargetIfTargeting(npc.id(), p.uuid());
                     continue;
                 }

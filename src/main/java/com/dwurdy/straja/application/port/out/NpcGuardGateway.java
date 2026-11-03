@@ -47,6 +47,11 @@ public interface NpcGuardGateway {
      *  identify guard-side damage sources for escort protection. */
     boolean isGuardOf(UUID entityId, int factionId);
 
+    /** True while the guard holds a weapon in its main hand — unarmed faction
+     *  members are non-combatants: never steered and never allowed to acquire
+     *  a player target through their own retaliation AI. */
+    boolean armed(UUID entityId);
+
     /** No-op implementation for environments without a guard NPC provider. */
     static NpcGuardGateway disabled() {
         return DisabledNpcGuardGateway.INSTANCE;
@@ -71,4 +76,5 @@ final class DisabledNpcGuardGateway implements NpcGuardGateway {
     @Override public void setTarget(UUID guardId, UUID playerId) {}
     @Override public void clearTargetIfTargeting(UUID guardId, UUID playerId) {}
     @Override public boolean isGuardOf(UUID entityId, int factionId) { return false; }
+    @Override public boolean armed(UUID entityId) { return true; }
 }
