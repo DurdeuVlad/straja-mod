@@ -327,6 +327,60 @@ public final class StrajaGameTests {
         helper.succeed();
     }
 
+    /** ITEM-1: denunț against a registered officer with no native entity relieves it — no BOLO a patrol could never serve. */
+    @GameTest(template = "empty")
+    public static void denuntDismissesRegisteredNpc(GameTestHelper helper) {
+        var runtime = runtime(helper);
+        var reporter = mockPlayer(helper);
+        var payer = mockPlayer(helper);
+        String npcUuid = java.util.UUID.randomUUID().toString();
+        runtime.npcs().register(npcUuid, NpcRoles.PATRULIER);
+        runtime.corruptions().recordBribe(npcUuid, "Oficerul Legat",
+                gateway(payer), 120, false);
+        helper.assertTrue(runtime.corruptions().denunt(gateway(reporter), npcUuid),
+                "a citizen report must run");
+        helper.assertTrue(runtime.npcs().registration(npcUuid) == null,
+                "the convicted officer must lose the badge");
+        helper.assertTrue(runtime.context().bolos().read().records.stream()
+                        .noneMatch(r -> npcUuid.equals(r.subjectUuid)),
+                "an NPC never carries a player warrant");
+        helper.succeed();
+    }
+
+    /** DROP-1 smoke: a fallen officer pays its own bounty — brass coins and experience. */
+    @GameTest(template = "empty")
+    public static void soldierDropsCoinsAndXp(GameTestHelper helper) {
+        var runtime = runtime(helper);
+        ServerLevel level = helper.getLevel();
+        var post = helper.absolutePos(new BlockPos(1, 1, 1));
+        var npc = StrajaNpcEntity.spawn(level, post.getX() + 0.5, post.getY(),
+                post.getZ() + 0.5, NpcRoles.PATRULIER, null, null);
+        runtime.npcs().register(npc.getStringUUID(), NpcRoles.PATRULIER);
+        var killer = mockPlayer(helper);
+        killer.setPos(npc.getX() + 1.0, npc.getY(), npc.getZ());
+        npc.hurt(level.damageSources().playerAttack(killer), 500.0f);
+        helper.assertTrue(!npc.isAlive(), "the officer must die to the attack");
+        var area = net.minecraft.world.phys.AABB.ofSize(
+                net.minecraft.world.phys.Vec3.atCenterOf(post), 6, 4, 6);
+        var policies = runtime.context().policies();
+        String brass = policies.coinItemIds.get(policies.coinTierRatio);
+        helper.assertTrue(brass != null, "the brass tier must resolve");
+        boolean coins = level.getEntitiesOfClass(
+                        net.minecraft.world.entity.item.ItemEntity.class, area)
+                .stream().anyMatch(ie -> {
+                    String id = net.minecraft.core.registries.BuiltInRegistries.ITEM
+                            .getKey(ie.getItem().getItem()).toString();
+                    return brass.equals(id)
+                            && ie.getItem().getCount()
+                                    >= runtime.context().policies().npcSoldierCoinsMin;
+                });
+        helper.assertTrue(coins, "the fallen officer must drop brass coins");
+        boolean orb = !level.getEntitiesOfClass(
+                net.minecraft.world.entity.ExperienceOrb.class, area).isEmpty();
+        helper.assertTrue(orb, "the fallen officer must drop experience");
+        helper.succeed();
+    }
+
     /** Damage-boundary semantics: deny unauthorized, cap non-lethal, down on lethal, pass vanilla hits. */
     @GameTest(template = "empty")
     public static void batonDamageRouting(GameTestHelper helper) {
@@ -459,7 +513,8 @@ public final class StrajaGameTests {
             var npc = StrajaNpcEntity.spawn(level, pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5,
                     "secretary", null, "Secretara");
             player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.WRITTEN_BOOK));
-            NpcInteractionService.interact(npc, player, level);
+            NpcInteractionService.interact(npc, player, level,
+                    InteractionHand.MAIN_HAND);
             helper.assertTrue(countItems(player, Items.WRITTEN_BOOK) == 2,
                     "the held book must still produce a Secretary copy");
             helper.assertTrue(NpcInteractionService.pendingActionsFor(player.getUUID()) > 0,

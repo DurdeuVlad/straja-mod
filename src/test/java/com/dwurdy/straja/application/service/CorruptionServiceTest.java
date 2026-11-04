@@ -126,7 +126,12 @@ class CorruptionServiceTest {
     @Test
     void offlineGuardByUuidStillAnswerable() {
         // The corrupt guard logged off — the uuid argument resolves anyway.
+        // A real guard always has persisted state; that's what separates a
+        // player warrant from an entity uuid nobody can arrest.
         var ghost = java.util.UUID.randomUUID();
+        var ghostState = players.state(ghost);
+        ghostState.rank = Rank.GUARD.level();
+        players.save(ghost, ghostState);
         var entry = new AuditEntry();
         entry.action = AuditActions.CORRUPTION;
         entry.actor = prisoner.name();
@@ -147,6 +152,9 @@ class CorruptionServiceTest {
     @Test
     void offlineGuardByTrailNameResolves() {
         var ghost = java.util.UUID.randomUUID();
+        var ghostState = players.state(ghost);
+        ghostState.rank = Rank.GUARD.level();
+        players.save(ghost, ghostState);
         var entry = new AuditEntry();
         entry.action = AuditActions.CORRUPTION;
         entry.actor = prisoner.name();
@@ -203,6 +211,61 @@ class CorruptionServiceTest {
         assertFalse(corruptions.denunt(reporter, guard.name()), "immediate re-report is blocked");
         clock.advance(ctx.policies().corruptionReportCooldownSeconds * 1000L + 1);
         assertTrue(corruptions.denunt(reporter, guard.name()), "cooldown expiry restores the right");
+    }
+
+    @Test
+    void npcOfficerGetsDismissedNotWarranted() {
+        // ITEM-1: NPC officers can't serve a player warrant — the
+        // institution relieves them through the discipline hook instead.
+        var dismissed = new java.util.ArrayList<String>();
+        corruptions.useNpcDiscipline(u -> { dismissed.add(u); return true; });
+        var npcId = java.util.UUID.randomUUID().toString();
+        corruptions.recordBribe(npcId, "Oficerul NPC", prisoner, 80, false);
+        assertTrue(corruptions.denunt(reporter, npcId));
+        assertTrue(dismissed.contains(npcId), "the corrupt officer was relieved");
+        assertTrue(ctx.bolos().read().records.stream()
+                        .noneMatch(r -> npcId.equals(r.subjectUuid)),
+                "an NPC never carries a player BOLO");
+        assertTrue(reporter.lastMessage().contains("destituit"));
+    }
+
+    @Test
+    void witnessedNpcBribeDismissesOnTheSpot() {
+        var dismissed = new java.util.ArrayList<String>();
+        corruptions.useNpcDiscipline(u -> { dismissed.add(u); return true; });
+        corruptions.recordBribe("npc-5", "Oficerul", prisoner, 80, true);
+        assertTrue(dismissed.contains("npc-5"), "seen taking money = relieved");
+    }
+
+    @Test
+    void repeatDenuntOnDismissedNpcNeverWritesBolo() {
+        // The second report re-reads the same trail — the discipline record
+        // makes it idempotent and no player warrant can ever land on an
+        // entity identity.
+        var reporter2 = server.add("al doilea");
+        corruptions.useNpcDiscipline(u -> true);
+        var npcId = java.util.UUID.randomUUID().toString();
+        corruptions.recordBribe(npcId, "Oficerul", prisoner, 80, false);
+        assertTrue(corruptions.denunt(reporter, npcId));
+        assertTrue(corruptions.denunt(reporter2, npcId),
+                "a different reporter still reaches the same trail");
+        assertTrue(ctx.bolos().read().records.stream()
+                        .noneMatch(r -> npcId.equals(r.subjectUuid)),
+                "a dismissed officer can never become a BOLO");
+    }
+
+    @Test
+    void npcSuspectWithoutHandlerGetsNoBolo() {
+        // Discipline hook declines (dead/foreign entity) — the evidence
+        // stays filed but no unservable warrant is written.
+        corruptions.useNpcDiscipline(u -> false);
+        var npcId = java.util.UUID.randomUUID().toString();
+        corruptions.recordBribe(npcId, "Oficerul", prisoner, 80, false);
+        assertTrue(corruptions.denunt(reporter, npcId));
+        assertTrue(ctx.bolos().read().records.stream()
+                        .noneMatch(r -> npcId.equals(r.subjectUuid)),
+                "an identity with no player file gets no warrant");
+        assertTrue(reporter.lastMessage().contains("Dovada rămâne"));
     }
 
     @Test

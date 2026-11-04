@@ -522,6 +522,32 @@ public final class StrajaRuntime {
         this.corruptions = new com.dwurdy.straja.application.service.CorruptionService(
                 ctx, audit, players, bolos);
         this.escapes.useCorruptions(this.corruptions);
+        // ITEM-1: a convicted NPC officer can't serve a player warrant —
+        // the institution relieves it on the spot. A native officer is
+        // dismissed outright; a bound/registered entity keeps its body but
+        // loses the badge — the entity belongs to its provider.
+        this.corruptions.useNpcDiscipline(uuid -> {
+            boolean dismissed = false;
+            try {
+                var id = java.util.UUID.fromString(uuid);
+                for (var level : server.getAllLevels()) {
+                    var entity = level.getEntity(id);
+                    if (entity instanceof com.dwurdy.straja.adapter.in.npc.StrajaNpcEntity npc) {
+                        npc.discard();
+                        dismissed = true;
+                    }
+                }
+            } catch (IllegalArgumentException ignored) {}
+            try {
+                if (NpcPresentationRuntime.unbindHost(uuid)) dismissed = true;
+            } catch (RuntimeException ignored) {}
+            try {
+                if (npcs.registration(uuid) != null && npcs.remove(uuid).ok()) {
+                    dismissed = true;
+                }
+            } catch (RuntimeException ignored) {}
+            return dismissed;
+        });
         // #242: guided tester protocol — scripted state beats + fake suspect.
         this.protocol = new com.dwurdy.straja.application.service.ProtocolService(
                 ctx, new SavedStores.Protocol(stores), players, audit);

@@ -187,10 +187,53 @@ public class StrajaNpcEntity extends PathfinderMob {
     @Override
     protected InteractionResult mobInteract(Player player, InteractionHand hand) {
         if (level() instanceof ServerLevel serverLevel) {
-            NpcInteractionService.interact(this, player, serverLevel);
+            NpcInteractionService.interact(this, player, serverLevel, hand);
             return InteractionResult.CONSUME;
         }
         return InteractionResult.SUCCESS;
+    }
+
+    /** DROP-1: officer roles are the institution's soldiers — killing one pays. */
+    private boolean isSoldierRole() {
+        return NpcRoles.PATRULIER.equals(getRoleId()) || NpcRoles.JAILER.equals(getRoleId());
+    }
+
+    /** The brass denomination item id — keyed by the tier ratio, never ordinal. */
+    private static String brassCoinItemId(com.dwurdy.straja.domain.model.StrajaPolicies p) {
+        String id = p.coinItemIds.get(p.coinTierRatio);
+        if (id != null) return id;
+        var tiers = new java.util.ArrayList<>(p.coinItemIds.keySet());
+        java.util.Collections.sort(tiers);
+        return tiers.isEmpty() ? null
+                : p.coinItemIds.get(tiers.get(Math.min(1, tiers.size() - 1)));
+    }
+
+    @Override
+    protected void dropCustomDeathLoot(ServerLevel level, DamageSource source, boolean recentlyHit) {
+        super.dropCustomDeathLoot(level, source, recentlyHit);
+        if (!isSoldierRole()) return;
+        // The officer's pay goes to whoever actually fought it — a soldier
+        // dying to lava or a zombie pays the institution nothing.
+        if (!recentlyHit) return;
+        var runtime = com.dwurdy.straja.bootstrap.StrajaRuntime.get();
+        if (runtime == null) return;
+        var policies = runtime.context().policies();
+        String brass = brassCoinItemId(policies);
+        if (brass == null) return;
+        var id = net.minecraft.resources.ResourceLocation.tryParse(brass);
+        if (id == null) return;
+        var item = net.minecraft.core.registries.BuiltInRegistries.ITEM
+                .getOptional(id).orElse(null);
+        if (item == null) return;
+        int min = Math.max(0, policies.npcSoldierCoinsMin);
+        int max = Math.max(min, policies.npcSoldierCoinsMax);
+        int count = min + (max > min ? this.random.nextInt(max - min + 1) : 0);
+        if (count > 0) this.spawnAtLocation(new net.minecraft.world.item.ItemStack(item, count));
+        int xp = Math.max(0, policies.npcSoldierXp);
+        if (xp > 0) {
+            level.addFreshEntity(new net.minecraft.world.entity.ExperienceOrb(
+                    level, getX(), getY() + 0.5, getZ(), xp));
+        }
     }
 
     @Override

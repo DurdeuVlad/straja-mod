@@ -23,6 +23,11 @@ public class StrajaPolicies {
     public String npcProviderMode = "customnpcs";
     /** Explicit second gate for the diagnostic text provider. */
     public boolean npcDebugTextEnabled = false;
+    /** Brass coins a fallen officer drops — farming soldiers pays. */
+    public int npcSoldierCoinsMin = 1;
+    public int npcSoldierCoinsMax = 3;
+    /** Experience a fallen officer yields. */
+    public int npcSoldierXp = 8;
     /** Optional secret; never included in diagnostics or persisted domain data. */
     public String discordWebhookUrl = "";
 
@@ -449,6 +454,8 @@ public class StrajaPolicies {
     public int bribeDoorOpenSeconds = 90;
     /** Offer expires without an answer — the prisoner keeps the coins. */
     public int bribeOfferMs = 60_000;
+    /** Percent of NPC officers whose trait accepts a coin bribe. */
+    public int npcBribeAcceptPercent = 40;
     /** Seconds a blending prisoner walks free before the alarm fires. */
     public int blendGraceSeconds = 45;
     /** Contraband item ids confiscated on inspection or detection. */

@@ -23,6 +23,9 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.ConfigValue<String> ENVIRONMENT;
     public static final ModConfigSpec.ConfigValue<String> NPC_PROVIDER_MODE;
     public static final ModConfigSpec.BooleanValue NPC_DEBUG_TEXT_ENABLED;
+    public static final ModConfigSpec.IntValue NPC_SOLDIER_COINS_MIN;
+    public static final ModConfigSpec.IntValue NPC_SOLDIER_COINS_MAX;
+    public static final ModConfigSpec.IntValue NPC_SOLDIER_XP;
     public static final ModConfigSpec.BooleanValue NPC_MENUS_ENABLED;
     public static final ModConfigSpec.BooleanValue NPC_DESK_PROVIDER_ENABLED;
     public static final ModConfigSpec.ConfigValue<String> DISCORD_WEBHOOK_URL;
@@ -373,6 +376,7 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.DoubleValue BRIBE_RADIUS;
     public static final ModConfigSpec.IntValue BRIBE_DOOR_OPEN_SECONDS;
     public static final ModConfigSpec.IntValue BRIBE_OFFER_MS;
+    public static final ModConfigSpec.IntValue BRIBE_NPC_ACCEPT_PERCENT;
     public static final ModConfigSpec.IntValue BLEND_GRACE_SECONDS;
     public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> CONTRABAND_ITEMS;
     public static final ModConfigSpec.IntValue TUNNEL_FOUND_PENALTY_MINUTES;
@@ -449,6 +453,12 @@ public final class StrajaServerConfig {
         NPC_DEBUG_TEXT_ENABLED = B.comment(
                         "Explicitly permits the debug-text provider; it never becomes a normal player surface.")
                 .define("debugTextEnabled", defaults.npcDebugTextEnabled);
+        NPC_SOLDIER_COINS_MIN = B.comment(
+                        "Brass coins a fallen officer drops — farming soldiers pays.")
+                .defineInRange("soldierCoinsMin", defaults.npcSoldierCoinsMin, 0, 640);
+        NPC_SOLDIER_COINS_MAX = B.defineInRange("soldierCoinsMax", defaults.npcSoldierCoinsMax, 0, 640);
+        NPC_SOLDIER_XP = B.comment("Experience a fallen officer yields.")
+                .defineInRange("soldierXp", defaults.npcSoldierXp, 0, 1000);
         B.pop();
 
         B.push("npcMenus");
@@ -1448,6 +1458,10 @@ public final class StrajaServerConfig {
         BRIBE_OFFER_MS = B.comment(
                         "Milliseconds a player-guard bribe offer stays pending.")
                 .defineInRange("bribeOfferMs", defaults.bribeOfferMs, 5000, 600000);
+        BRIBE_NPC_ACCEPT_PERCENT = B.comment(
+                        "Percent of NPC officers whose trait accepts a coin bribe —",
+                        "honesty is a stable per-officer trait, not a roll.")
+                .defineInRange("npcBribeAcceptPercent", defaults.npcBribeAcceptPercent, 0, 100);
         BLEND_GRACE_SECONDS = B.comment(
                         "Seconds a uniformed walk-out stays unflagged before",
                         "the alarm fires — real guards in radius blow it.")
@@ -1604,6 +1618,9 @@ public final class StrajaServerConfig {
         p.environment = ENVIRONMENT.get();
         p.npcProviderMode = NPC_PROVIDER_MODE.get();
         p.npcDebugTextEnabled = NPC_DEBUG_TEXT_ENABLED.get();
+        p.npcSoldierCoinsMin = NPC_SOLDIER_COINS_MIN.get();
+        p.npcSoldierCoinsMax = NPC_SOLDIER_COINS_MAX.get();
+        p.npcSoldierXp = NPC_SOLDIER_XP.get();
         p.discordWebhookUrl = DISCORD_WEBHOOK_URL.get();
 
         p.checkpointUnlockMinutes = CHECKPOINT_UNLOCK_MINUTES.get();
@@ -1956,6 +1973,7 @@ public final class StrajaServerConfig {
         p.bribeRadius = BRIBE_RADIUS.get();
         p.bribeDoorOpenSeconds = BRIBE_DOOR_OPEN_SECONDS.get();
         p.bribeOfferMs = BRIBE_OFFER_MS.get();
+        p.npcBribeAcceptPercent = BRIBE_NPC_ACCEPT_PERCENT.get();
         p.blendGraceSeconds = BLEND_GRACE_SECONDS.get();
         p.contrabandItems = new ArrayList<>(CONTRABAND_ITEMS.get());
         p.tunnelFoundPenaltyMinutes = TUNNEL_FOUND_PENALTY_MINUTES.get();

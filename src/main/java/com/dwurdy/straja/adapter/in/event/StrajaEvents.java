@@ -1,6 +1,7 @@
 package com.dwurdy.straja.adapter.in.event;
 
 import com.dwurdy.straja.StrajaMod;
+import com.dwurdy.straja.adapter.in.npc.NpcInteractionService;
 import com.dwurdy.straja.adapter.in.npc.NpcRoles;
 import com.dwurdy.straja.adapter.in.npc.StrajaNpcEntity;
 import com.dwurdy.straja.adapter.in.compat.OptionalCustodyProvider;
@@ -500,6 +501,26 @@ public final class StrajaEvents {
         // StrajaNpcEntity still reaches mobInteract.
         if (!(event.getTarget() instanceof net.minecraft.server.level.ServerPlayer target)) {
             String boundHostId = event.getTarget().getStringUUID();
+            // ITEM-1: the coin gesture outranks every desk surface — a
+            // jailed prisoner holding coins on a sworn officer is a bribe,
+            // not a menu click. The role resolves through the canonical
+            // binding first, then the legacy registry record.
+            if (event.getHand() == net.minecraft.world.InteractionHand.MAIN_HAND) {
+                String officerRole = NpcPresentationRuntime
+                        .assignedRoleForHost(boundHostId).orElse(null);
+                if (officerRole == null || officerRole.isBlank()) {
+                    var reg = runtime.npcRegistry().registration(boundHostId);
+                    officerRole = reg == null ? null : reg.role();
+                }
+                if (NpcInteractionService.coinBribeGesture(gateway, boundHostId,
+                        event.getTarget().getName().getString(), officerRole,
+                        gateway.mainHand().id())) {
+                    event.setCanceled(true);
+                    toolClickHandledAt.put(player.getUUID(),
+                            player.level().getGameTime());
+                    return;
+                }
+            }
             // desk-menu-bound hosts have no provider event bus of their own —
             // the vanilla right-click opens the chest surface here, ahead of
             // the generic binding check that would otherwise swallow the
@@ -566,6 +587,20 @@ public final class StrajaEvents {
         }
         if ("straja:fine_book".equals(held)) {
             if (runtime.fineRoleplay().issueFromDraft(gateway, targetGateway)) event.setCanceled(true);
+            return;
+        }
+        // ITEM-1: coins in hand on an on-duty guard = the bribe gesture.
+        // Only a jailed player can make it — everyone else just hands over
+        // nothing and keeps the normal interact surface. MAIN_HAND only —
+        // the off-hand packet must not re-fire the same offer.
+        if (event.getHand() == net.minecraft.world.InteractionHand.MAIN_HAND
+                && held != null && runtime.policies().coinItemIds.containsValue(held)
+                && runtime.playerQueries().isOnDutyGuard(targetGateway)) {
+            if (runtime.prisonRoleplay().registerStatus(gateway)
+                    == com.dwurdy.straja.domain.model.PrisonerStatus.IN_CELL
+                    && runtime.escapes().bribeAt(gateway, targetGateway)) {
+                event.setCanceled(true);
+            }
             return;
         }
         boolean handled = switch (held) {

@@ -54,6 +54,16 @@ public class CorruptionService {
     public record BribeEvidence(long at, String prisoner, String prisonerUuid,
                                 int amount, boolean witnessed) {}
 
+    /** How a substantiated accusation ends: warrant, dismissal, or a filed trail. */
+    public enum Conviction { WARRANT, DISMISSED, NONE }
+
+    /** Late-bound: removes a corrupt NPC officer — returns true when handled. */
+    public void useNpcDiscipline(java.util.function.Predicate<String> discipline) {
+        this.npcDiscipline = discipline;
+    }
+
+    private java.util.function.Predicate<String> npcDiscipline;
+
     /**
      * Called by the escape flow the moment a guard pockets a bribe.
      * The trail lands in the append-only ledger first — a witnessed
@@ -63,11 +73,23 @@ public class CorruptionService {
                                          PlayerGateway prisoner,
                                          int amount, boolean witnessed) {
         if (guard == null || guard.uuid() == null) return;
+        recordBribe(uuid(guard), guard.name(), prisoner, amount, witnessed);
+    }
+
+    /**
+     * The money trail for officer identities that aren't players —
+     * NPC officers pocket bribes under their entity uuid.
+     */
+    public synchronized void recordBribe(String guardUuid, String guardName,
+                                         PlayerGateway prisoner,
+                                         int amount, boolean witnessed) {
+        if (guardUuid == null || guardUuid.isBlank()) return;
         audit.record(AuditActions.CORRUPTION, prisoner == null ? "" : prisoner.name(),
-                uuid(prisoner), guard.name(), uuid(guard), AuditResults.SUCCESS,
+                uuid(prisoner), guardName == null ? "" : guardName, guardUuid,
+                AuditResults.SUCCESS,
                 "kind=bribe amount=" + amount + " witnessed=" + witnessed);
         if (witnessed && ctx.policies().corruptionEnabled)
-            mark(uuid(guard), guard.name(), "witnessed_bribe");
+            mark(guardUuid, guardName, "witnessed_bribe");
     }
 
     /**
@@ -124,14 +146,17 @@ public class CorruptionService {
             return true;
         }
         int total = trail.stream().mapToInt(BribeEvidence::amount).sum();
-        boolean flagged = mark(resolved.uuid(), resolved.name(), "denunt:" + reporter.name());
+        var conviction = mark(resolved.uuid(), resolved.name(), "denunt:" + reporter.name());
         audit.record(AuditActions.CORRUPTION, reporter.name(), uuid(reporter),
                 resolved.name(), resolved.uuid(), AuditResults.SUCCESS,
-                "kind=denunt outcome=" + (flagged ? "warrant" : "trail_found")
+                "kind=denunt outcome=" + (conviction == Conviction.WARRANT ? "warrant"
+                        : conviction == Conviction.DISMISSED ? "dismissed" : "trail_found")
                         + " evidence=" + trail.size() + " total=" + total);
         reporter.tell("Denunț confirmat — dosarul arată " + trail.size()
                 + " plăți de mită (" + total + " B) pentru " + resolved.name()
-                + (flagged ? ". Mandat emis." : ". Dovada rămâne la dosar."));
+                + (conviction == Conviction.WARRANT ? ". Mandat emis."
+                        : conviction == Conviction.DISMISSED ? ". Oficerul a fost destituit."
+                        : ". Dovada rămâne la dosar."));
         return true;
     }
 
@@ -204,14 +229,55 @@ public class CorruptionService {
         catch (IllegalArgumentException e) { return null; }
     }
 
-    private boolean mark(String suspectUuid, String suspectName, String basis) {
+    private Conviction mark(String suspectUuid, String suspectName, String basis) {
+        // Dismissal is idempotent — a second denunț re-reads the same
+        // trail and must never fall through to a player warrant.
+        if (disciplined(suspectUuid)) return Conviction.DISMISSED;
+        // NPC officers can't serve a player warrant — the institution
+        // relieves them on the spot instead.
+        if (npcDiscipline != null && npcDiscipline.test(suspectUuid)) {
+            audit.record(AuditActions.CORRUPTION, "system", "", suspectName,
+                    suspectUuid, AuditResults.SUCCESS,
+                    "kind=discipline basis=" + basis);
+            return Conviction.DISMISSED;
+        }
+        // A uuid with no player identity can never serve a warrant — a
+        // dead, foreign or already-relieved officer stays out of the BOLO
+        // pipeline entirely; the evidence remains filed.
+        if (!isPlayerIdentity(suspectUuid)) return Conviction.NONE;
         var bolo = bolos.flagSystem(suspectUuid, suspectName,
                 "corupție — mită prinsă");
-        if (bolo == null) return false;
+        if (bolo == null) return Conviction.NONE;
         audit.record(AuditActions.CORRUPTION, "system", "", suspectName,
                 suspectUuid, AuditResults.SUCCESS,
                 "kind=warrant bolo=" + bolo.id + " basis=" + basis);
-        return true;
+        return Conviction.WARRANT;
+    }
+
+    /** The suspect already carries an institutional dismissal record. */
+    private boolean disciplined(String suspectUuid) {
+        for (var e : ctx.audit().entries()) {
+            if (e != null && suspectUuid.equals(e.targetUuid)
+                    && AuditActions.CORRUPTION.equals(e.action)
+                    && e.details != null && e.details.startsWith("kind=discipline"))
+                return true;
+        }
+        return false;
+    }
+
+    /**
+     * A suspect can carry a warrant only when a real player identity exists —
+     * a persisted player state or an online session. Entity uuids of NPC
+     * officers never qualify.
+     */
+    private boolean isPlayerIdentity(String suspectUuid) {
+        var uuid = parseUuid(suspectUuid);
+        if (uuid == null) return false;
+        if (ctx.players().knownIds().contains(uuid)) return true;
+        for (var p : ctx.server().onlinePlayers()) {
+            if (p != null && uuid.equals(p.uuid())) return true;
+        }
+        return false;
     }
 
     private static int readInt(String details, String key) {

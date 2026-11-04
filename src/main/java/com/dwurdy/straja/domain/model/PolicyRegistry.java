@@ -77,7 +77,11 @@ public final class PolicyRegistry {
         k("escape.bribeRadius", "bribeRadius", Kind.DOUBLE);
         k("escape.bribeDoorOpenSeconds", "bribeDoorOpenSeconds", Kind.INT);
         k("escape.bribeOfferMs", "bribeOfferMs", Kind.INT);
+        k("escape.npcBribeAcceptPercent", "npcBribeAcceptPercent", Kind.INT);
         k("escape.blendGraceSeconds", "blendGraceSeconds", Kind.INT);
+        k("npc.soldierCoinsMin", "npcSoldierCoinsMin", Kind.INT);
+        k("npc.soldierCoinsMax", "npcSoldierCoinsMax", Kind.INT);
+        k("npc.soldierXp", "npcSoldierXp", Kind.INT);
         k("escape.tunnelFoundPenaltyMinutes", "tunnelFoundPenaltyMinutes", Kind.INT);
         k("escape.inspectionRadius", "inspectionRadius", Kind.DOUBLE);
         k("escape.retentionLimit", "escapeRetentionLimit", Kind.INT);

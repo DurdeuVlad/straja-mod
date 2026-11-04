@@ -217,6 +217,35 @@ public final class EscapeService {
             prisoner.refuse("straja.escape.bribe_none", "straja.remedy.travel");
             return false;
         }
+        return createOffer(prisoner, guard);
+    }
+
+    /**
+     * ITEM-1: the coin-click gesture — a jailed player holding coins
+     * right-clicks a specific on-duty guard. The offer binds that
+     * guard, not whoever happens to be nearest.
+     */
+    public synchronized boolean bribeAt(PlayerGateway prisoner, PlayerGateway guard) {
+        if (prisoner == null || prisoner.uuid() == null
+                || guard == null || guard.uuid() == null) return false;
+        var rec = ctx.prisonerRegister().read().prisoner(uuidOf(prisoner));
+        if (rec == null || rec.status != PrisonerStatus.IN_CELL) {
+            prisoner.refuse("straja.escape.bribe_not_jailed", "straja.remedy.wait");
+            return false;
+        }
+        if (custody != null && custody.actionBlocked(prisoner, "bribe")) return false;
+        if (!unlockable(uuidOf(prisoner))) {
+            prisoner.refuse("straja.escape.bribe_no_cell", "straja.remedy.wait");
+            return false;
+        }
+        if (!players.isOnDutyGuard(guard)) {
+            prisoner.refuse("straja.escape.bribe_none", "straja.remedy.travel");
+            return false;
+        }
+        return createOffer(prisoner, guard);
+    }
+
+    private boolean createOffer(PlayerGateway prisoner, PlayerGateway guard) {
         String gkey = uuidOf(guard);
         if (offers.containsKey(gkey)) {
             prisoner.refuse("straja.escape.bribe_busy", "straja.remedy.wait");
@@ -237,6 +266,83 @@ public final class EscapeService {
                 prisoner.name(), Math.max(1, ctx.policies().bribePostPrice),
                 Math.max(5_000, ctx.policies().bribeOfferMs) / 1000);
         return true;
+    }
+
+    /**
+     * ITEM-1: coins in hand on an NPC officer. The answer is instant —
+     * each officer's honesty is a stable trait, never a prompt.
+     * Corrupt: the coins move, the door opens, the trail lands.
+     * Honest: the offer is declined and reported, like a guard refusal.
+     *
+     * @return outcome for the adapter — witnessed acceptances let the
+     *         institution relieve the officer on the spot.
+     */
+    public enum NpcBribeOutcome { ACCEPTED_UNSEEN, ACCEPTED_SEEN, DECLINED_REPORTED, REFUSED, IGNORED }
+
+    public synchronized NpcBribeOutcome bribeNpc(PlayerGateway prisoner,
+                                               String npcUuid, String npcName,
+                                               boolean corruptible) {
+        if (prisoner == null || prisoner.uuid() == null
+                || npcUuid == null || npcUuid.isBlank()) return NpcBribeOutcome.IGNORED;
+        var rec = ctx.prisonerRegister().read().prisoner(uuidOf(prisoner));
+        if (rec == null || rec.status != PrisonerStatus.IN_CELL) {
+            prisoner.refuse("straja.escape.bribe_not_jailed", "straja.remedy.wait");
+            return NpcBribeOutcome.REFUSED;
+        }
+        if (custody != null && custody.actionBlocked(prisoner, "bribe"))
+            return NpcBribeOutcome.REFUSED;
+        if (!unlockable(uuidOf(prisoner))) {
+            prisoner.refuse("straja.escape.bribe_no_cell", "straja.remedy.wait");
+            return NpcBribeOutcome.REFUSED;
+        }
+        String name = npcName == null || npcName.isBlank() ? "oficerul" : npcName;
+        if (!corruptible) {
+            prisoner.tell("§c" + name + " a refuzat mita — ești raportat.");
+            notice("bribe:" + npcUuid + ":" + uuidOf(prisoner),
+                    "Tentativă de mită: " + prisoner.name(),
+                    "oficerul a refuzat și a raportat",
+                    prisoner.dimension(), prisoner.x(), prisoner.y(), prisoner.z(),
+                    "penitenciar", uuidOf(prisoner), prisoner.name());
+            audit.record(AuditActions.PRISON_BREAK, prisoner.name(), uuidOf(prisoner),
+                    name, npcUuid, AuditResults.REFUSED, "bribe_declined");
+            return NpcBribeOutcome.DECLINED_REPORTED;
+        }
+        int price = Math.max(1, ctx.policies().bribePostPrice);
+        var pay = ctx.currency().withdraw(prisoner, price);
+        if (!pay.ok() || pay.removed() < price) {
+            prisoner.refuse("straja.escape.bribe_funds", "straja.remedy.wait", price);
+            return NpcBribeOutcome.REFUSED;
+        }
+        if (prison != null)
+            prison.bribeUnlock(uuidOf(prisoner), ctx.policies().bribeDoorOpenSeconds);
+        prisoner.tell("§6" + name + " a luat " + price
+                + " B — ușa celulei s-a deschis. Du-te.");
+        audit.record(AuditActions.PRISON_BREAK, prisoner.name(), uuidOf(prisoner),
+                name, npcUuid, AuditResults.SUCCESS,
+                "bribe_accepted corrupt_guard price=" + price);
+        // A second sworn member watching the exchange is conviction-ready —
+        // the institution relieves the officer, not marks a player file.
+        boolean witnessed = witnessNear(prisoner, null,
+                prisoner.x(), prisoner.y(), prisoner.z(),
+                Math.max(1.0, ctx.policies().corruptionWitnessRadius));
+        if (corruptions != null)
+            corruptions.recordBribe(npcUuid, name, prisoner, price, witnessed);
+        if (witnessed) {
+            notice("bribe:" + npcUuid + ":" + uuidOf(prisoner),
+                    "Mită prinsă: " + prisoner.name() + " ↔ " + name,
+                    "un al doilea străjer a văzut schimbul",
+                    prisoner.dimension(), prisoner.x(), prisoner.y(), prisoner.z(),
+                    "penitenciar", uuidOf(prisoner), prisoner.name());
+            return NpcBribeOutcome.ACCEPTED_SEEN;
+        }
+        return NpcBribeOutcome.ACCEPTED_UNSEEN;
+    }
+
+    /** Deterministic honesty trait: a spawned officer stays corrupt or clean. */
+    public static boolean corruptible(String entityUuid, double acceptPercent) {
+        if (entityUuid == null || entityUuid.isBlank()) return false;
+        return Math.floorMod(entityUuid.hashCode(), 100)
+                < Math.max(0, Math.min(100, acceptPercent));
     }
 
     /** True while a live bribe offer awaits this guard's answer. */

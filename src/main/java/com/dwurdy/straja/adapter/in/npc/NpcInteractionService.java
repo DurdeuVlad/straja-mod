@@ -90,15 +90,76 @@ public final class NpcInteractionService {
 
     private record PendingAction(UUID playerId, String actionId, long expiresAtNanos) {}
 
-    public static void interact(StrajaNpcEntity npc, Player player, ServerLevel level) {
+    public static void interact(StrajaNpcEntity npc, Player player, ServerLevel level,
+                                net.minecraft.world.InteractionHand hand) {
         // A held book still earns its copy, but the copy is an affordance, not
         // a gate: the desk/chat surface must always open so institution tasks
         // stay reachable through the GUI while holding a book.
+        var runtime = com.dwurdy.straja.bootstrap.StrajaRuntime.get();
         if (player instanceof net.minecraft.server.level.ServerPlayer serverPlayer) {
-            NpcRoles.trySecretaryBookCopy(npc.getRoleId(),
-                    new MinecraftPlayerGateway(serverPlayer.getServer(), serverPlayer.getUUID()));
+            var gateway = new MinecraftPlayerGateway(
+                    serverPlayer.getServer(), serverPlayer.getUUID());
+            NpcRoles.trySecretaryBookCopy(npc.getRoleId(), gateway);
+            // ITEM-1: the coin gesture — the clicked hand first, then the
+            // other hand: the off-hand packet may never arrive, but a
+            // prisoner holding coins anywhere is still offering them.
+            var clicked = player.getItemInHand(hand);
+            var other = player.getItemInHand(
+                    hand == net.minecraft.world.InteractionHand.MAIN_HAND
+                            ? net.minecraft.world.InteractionHand.OFF_HAND
+                            : net.minecraft.world.InteractionHand.MAIN_HAND);
+            if (coinBribeGesture(gateway, npc.getStringUUID(),
+                    npc.getName().getString(), npc.getRoleId(), itemId(clicked))
+                    || coinBribeGesture(gateway, npc.getStringUUID(),
+                            npc.getName().getString(), npc.getRoleId(),
+                            itemId(other))) {
+                return;
+            }
         }
         NpcRoles.interact(npc.getRoleId(), player, level);
+    }
+
+    /**
+     * ITEM-1: coins in hand + an officer is the bribe gesture, shared by the
+     * native entity and bound-officer surfaces. The NPC answers by its own
+     * honesty trait; a witnessed acceptance relieves the officer through the
+     * runtime discipline hook — the adapter never touches application types.
+     *
+     * @return true when the click was consumed (gesture resolved, including
+     *         refused gestures that sent the prisoner a message).
+     */
+    public static boolean coinBribeGesture(
+            com.dwurdy.straja.application.port.out.PlayerGateway gateway,
+            String npcUuid, String npcName, String roleId, String heldItemId) {
+        var runtime = com.dwurdy.straja.bootstrap.StrajaRuntime.get();
+        if (runtime == null || !isOfficerRole(roleId)) return false;
+        if (heldItemId == null
+                || !runtime.policies().coinItemIds.containsValue(heldItemId)) {
+            return false;
+        }
+        // The gesture only exists for a jailed player — a civilian carrying
+        // coins still gets the officer's normal desk.
+        if (runtime.prisonRoleplay().registerStatus(gateway)
+                != com.dwurdy.straja.domain.model.PrisonerStatus.IN_CELL) {
+            return false;
+        }
+        return runtime.escapes().bribeNpc(gateway, npcUuid, npcName,
+                com.dwurdy.straja.application.service.EscapeService.corruptible(
+                        npcUuid, runtime.policies().npcBribeAcceptPercent))
+                != com.dwurdy.straja.application.service.EscapeService
+                        .NpcBribeOutcome.IGNORED;
+    }
+
+    /** Registry id of a held stack — null-safe. */
+    private static String itemId(net.minecraft.world.item.ItemStack stack) {
+        return stack == null || stack.isEmpty() ? null
+                : net.minecraft.core.registries.BuiltInRegistries.ITEM
+                        .getKey(stack.getItem()).toString();
+    }
+
+    /** Officer roles are the bribeable surface — the force, not the desks. */
+    private static boolean isOfficerRole(String roleId) {
+        return NpcRoles.PATRULIER.equals(roleId) || NpcRoles.JAILER.equals(roleId);
     }
 
     /** @return true when the damage is fully handled/denied by the Straja layer. */
