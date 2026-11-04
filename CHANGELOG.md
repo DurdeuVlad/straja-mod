@@ -1,5 +1,57 @@
 # Changelog
 
+## 0.6.1 — 2026-11-04
+
+The institution runs itself: automatic criminal marking, an NPC patrol
+force, voluntary surrender, consented frisks, corruption reporting and
+item-first bribery — everything below works with zero admins online.
+
+### Autonomous institution (INST-1..4)
+
+- **Desk GUIs read as menus, not chests**: labeled desk actions replace
+  icon grids so the institution's surfaces explain themselves.
+- **Verificare corporală**: officers can request a consented inventory
+  check; refusing costs nothing, and the check never runs without a DA.
+- **Automatic criminal marking**: an unlawful kill writes the incident,
+  the BOLO and the wanted mark without a clerk — the state also posts
+  the bounty itself after the grace window.
+- **Patrulier — the institution's force**: patrol NPCs scan their post,
+  engage wanted players, apply system cuffs and book them into free
+  cells. No human officer required; desk NPCs stay at their desks.
+- **Unarmed faction NPCs never fight**: a CustomNPC with empty hands
+  stays passive — armament is the engagement license.
+
+### Predarea voluntară (SURR-1)
+
+- Wanted players get a clickable `[Predă-te]` in chat, re-offered on a
+  cooldown. Debt offences settle through one pooled payment and clear;
+  violent offenders take system cuffs and a discounted sentence through
+  the same booking path a patrol uses — no admin needed.
+
+### Corupția se plătește (COR-1)
+
+- Every pocketed bribe writes an auditable money trail. Any citizen can
+  run `/straja denunt <nume|uuid>` — the report checks the ledger, not
+  the accusation: a proven trail writes a system warrant a patrol will
+  serve, a clean file stays unproven. A witnessed exchange convicts on
+  the spot. Reporter cooldown prevents spam; offline guards stay
+  answerable through uuid and trail-name resolution.
+
+### Mită cu monede & soldați plătitori (ITEM-1 + DROP-1)
+
+- **Bribery is an item, not a command**: a jailed prisoner holding any
+  coin denomination right-clicks an officer — human guards get the
+  `[Acceptă]`/`[Refuză]` prompt; NPC officers answer by a stable
+  honesty trait (`escape.npcBribeAcceptPercent`, default 40%). Honest
+  refusals report the attempt; a witnessed acceptance relieves the
+  officer on the spot — natives are dismissed, bound CustomNPCs lose
+  the binding, registered entities lose the badge. No BOLO is ever
+  written on an identity a patrol cannot serve.
+- **Soldiers pay their own bounty**: killing a patrulier or jailer on
+  a player-attributed kill drops ~2 brass (`npc.soldierCoinsMin..Max`)
+  plus `npc.soldierXp` experience — farming the force is a real
+  criminal income. Desk roles and environmental kills drop nothing.
+
 ## 0.6.0 — 2026-10-24
 
 Polish + stability over 0.5.0, then the gendarmerie institution: native
