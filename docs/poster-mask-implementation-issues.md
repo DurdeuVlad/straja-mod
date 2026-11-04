@@ -38,12 +38,12 @@ hides it back. Two issues, one identity pipeline.
 
 | # | Issue | Status | Commit | Notes |
 |---|-------|--------|--------|-------|
-| POSTER-1 | Display-entity poster spots, unobserved cycling, bounty feed, admin wand | pending | | |
-| MASK-1 | Full-face items suppress patrol recognition within policy radius | pending | | |
+| POSTER-1 | Display-entity poster spots, unobserved cycling, bounty feed, admin wand | done | 78f1f04 | 53/53 GameTests; captured face comes down next sweep |
+| MASK-1 | Full-face items suppress patrol recognition within policy radius | done | 78f1f04 | Binary masking + 3-block recognition radius; heat meter deferred |
 
 ## Execution receipt
 
 | Issue | Commit | State |
 |---|---|---|
-| POSTER-1 | | |
-| MASK-1 | | |
+| POSTER-1 | 78f1f04 | verified — `wantedPosterShowsAndClearsFace` live smoke + `PosterServiceTest` |
+| MASK-1 | 78f1f04 | verified — `maskedWantedEvadesPatrolScan` live smoke + `PatrolServiceTest` mask cases |
