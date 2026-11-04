@@ -1,6 +1,7 @@
 package com.dwurdy.straja.application.service;
 
 import com.dwurdy.straja.application.StrajaContext;
+import com.dwurdy.straja.application.port.out.ItemView;
 import com.dwurdy.straja.application.port.out.PlayerGateway;
 import com.dwurdy.straja.domain.model.Cell;
 import com.dwurdy.straja.support.Fakes;
@@ -252,6 +253,63 @@ class PatrolServiceTest {
         patrols.tick(officer);
         assertTrue(officer.calls.contains("melee:fighter"),
                 "the strike repeats once the cooldown lapses");
+    }
+
+    @Test
+    void maskHidesWantedPlayerFromCasualScan() {
+        var officer = new FakeOfficer(0, 0, 0);
+        var suspect = server.add("hooded");
+        flagWanted(suspect);
+        place(suspect, 8, 0, 0);
+        suspect.headItem = new ItemView("minecraft:carved_pumpkin", 1, 1,
+                java.util.Map.of());
+        patrols.tick(officer);
+        assertTrue(officer.calls.stream().noneMatch(c -> c.contains("hooded")),
+                "a covered face is not recognized by the casual scan");
+        // Same suspect, bare head — instantly engaged.
+        suspect.headItem = ItemView.EMPTY;
+        patrols.tick(officer);
+        assertTrue(officer.calls.contains("moveTo:hooded"));
+    }
+
+    @Test
+    void maskFailsInsideRecognitionRadius() {
+        var officer = new FakeOfficer(0, 0, 0);
+        var suspect = server.add("close");
+        flagWanted(suspect);
+        place(suspect, 8, 0, 0);
+        officer.x = 5.4; // distanceTo ≈ 2.6 — inside the 3.0 reveal band
+        suspect.headItem = new ItemView("minecraft:carved_pumpkin", 1, 1,
+                java.util.Map.of());
+        patrols.tick(officer);
+        assertTrue(officer.calls.contains("melee:close"),
+                "the officer sees through the mask up close");
+    }
+
+    @Test
+    void nonMaskHeadwearDoesNotHide() {
+        var officer = new FakeOfficer(0, 0, 0);
+        var suspect = server.add("helmed");
+        flagWanted(suspect);
+        place(suspect, 8, 0, 0);
+        suspect.headItem = new ItemView("minecraft:iron_helmet", 1, 1,
+                java.util.Map.of());
+        patrols.tick(officer);
+        assertTrue(officer.calls.contains("moveTo:helmed"),
+                "ordinary armor leaves the face visible");
+    }
+
+    @Test
+    void maskPolicyOffDisablesDisguise() {
+        ctx.policies().maskEnabled = false;
+        var officer = new FakeOfficer(0, 0, 0);
+        var suspect = server.add("exposed");
+        flagWanted(suspect);
+        place(suspect, 8, 0, 0);
+        suspect.headItem = new ItemView("minecraft:carved_pumpkin", 1, 1,
+                java.util.Map.of());
+        patrols.tick(officer);
+        assertTrue(officer.calls.contains("moveTo:exposed"));
     }
 
     @Test

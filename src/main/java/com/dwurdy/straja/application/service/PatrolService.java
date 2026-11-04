@@ -107,7 +107,7 @@ public class PatrolService {
     public void tick(Officer officer) {
         try {
             beat(officer);
-        } catch (RuntimeException e) {
+        } catch (RuntimeException ignored) {
             // A patrol tick must never break the entity's goal loop.
         }
     }
@@ -217,9 +217,18 @@ public class PatrolService {
      * left to the mark and the bounty hunters.
      */
     private boolean huntable(PlayerGateway t, Officer officer) {
-        if (t == null || t.uuid() == null || !wanted.isWanted(t.uuid())) return false;
+        if (t == null || t.uuid() == null) return false;
+        if (!wanted.isWanted(t.uuid())) return false;
         if (reputation.isRestrained(t) || wanted.isUnderEscort(t)) return false;
         if (!officer.dimension().equals(t.dimension())) return false;
+        // MASK-1: a covered face beats casual recognition — the officer must
+        // close in to see through it. Marks and BOLOs are untouched; only
+        // the hunt is fooled.
+        if (ctx.policies().maskEnabled && isMasked(t)
+                && officer.distanceTo(t)
+                        > Math.max(0.5, ctx.policies().maskRecognitionRadius)) {
+            return false;
+        }
         double leash = Math.max(1, ctx.policies().patrolPostRadius)
                 + Math.max(1, ctx.policies().patrolScanRange);
         return distSq(t, officer.postX(), officer.postY(), officer.postZ())
@@ -229,6 +238,14 @@ public class PatrolService {
     private static double distSq(PlayerGateway p, double x, double y, double z) {
         double dx = p.x() - x, dy = p.y() - y, dz = p.z() - z;
         return dx * dx + dy * dy + dz * dz;
+    }
+
+    /** A full-face cover from the policy mask set hides the player's identity. */
+    private boolean isMasked(PlayerGateway t) {
+        var head = t.headItem();
+        return head != null && !head.isEmpty()
+                && ctx.policies().maskItemIds != null
+                && ctx.policies().maskItemIds.contains(head.id());
     }
 
     /**

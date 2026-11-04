@@ -98,6 +98,9 @@ public interface PlayerGateway {
 
     ItemView mainHand();
 
+    /** The head-slot item (helmet/mask); EMPTY for fakes and bare heads. */
+    default ItemView headItem() { return ItemView.EMPTY; }
+
     /**
      * Copies one book from the main hand without consuming the original.
      * Concrete adapters must preserve the complete native item stack data.

@@ -87,6 +87,7 @@ final class CommandPermissions {
             Map.entry("bribe", 0),
             Map.entry("search", 0),
             Map.entry("post", ADMIN),
+            Map.entry("poster", ADMIN),
             Map.entry("job", 0),
             Map.entry("jobpost", ADMIN),
             Map.entry("trade", 0),

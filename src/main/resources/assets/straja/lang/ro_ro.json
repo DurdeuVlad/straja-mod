@@ -172,6 +172,7 @@
   "straja.bounty.amount_range": "Suma recompensei trebuie să fie între %s și %s monede.",
   "straja.bounty.disabled": "Sistemul de recompense este dezactivat.",
   "straja.bounty.list_empty": "Panoul recompenselor este gol.",
+  "straja.poster.list_empty": "Niciun panou de căutați declarat.",
   "straja.bounty.needs_reason": "Ținta nu are dosar penal — motivul este obligatoriu.",
   "straja.bounty.no_bail": "%s nu are o cauțiune de recompensă de plătit.",
   "straja.bounty.not_found": "Nu există recompensă activă pentru %s.",

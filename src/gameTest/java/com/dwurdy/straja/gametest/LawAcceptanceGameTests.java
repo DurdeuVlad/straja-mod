@@ -457,6 +457,7 @@ public final class LawAcceptanceGameTests {
         cell.maxX = anchor.getX() - 25; cell.maxY = anchor.getY() + 5;
         cell.maxZ = anchor.getZ() - 25;
         cell.doorX = anchor.getX() - 27; cell.doorY = anchor.getY(); cell.doorZ = anchor.getZ() - 27;
+        prison.cells.removeIf(c -> cell.id.equalsIgnoreCase(c.id));
         prison.cells.add(cell);
         runtime.context().prison().write(prison);
 
@@ -890,6 +891,7 @@ public final class LawAcceptanceGameTests {
         cell.maxX = anchor.getX() - 24; cell.maxY = anchor.getY() + 5;
         cell.maxZ = anchor.getZ() - 24;
         cell.doorX = anchor.getX() - 27; cell.doorY = anchor.getY(); cell.doorZ = anchor.getZ() - 27;
+        prison.cells.removeIf(c -> cell.id.equalsIgnoreCase(c.id));
         prison.cells.add(cell);
         runtime.context().prison().write(prison);
 
@@ -1173,6 +1175,7 @@ public final class LawAcceptanceGameTests {
         cell.maxZ = anchor.getZ() - 25;
         cell.doorX = anchor.getX() - 27; cell.doorY = anchor.getY() + 94;
         cell.doorZ = anchor.getZ() - 27;
+        prison.cells.removeIf(c -> cell.id.equalsIgnoreCase(c.id));
         prison.cells.add(cell);
         runtime.context().prison().write(prison);
 
@@ -1364,6 +1367,7 @@ public final class LawAcceptanceGameTests {
             cell.maxZ = anchor.getZ() - 25;
             cell.doorX = anchor.getX() - 27; cell.doorY = anchor.getY() + 106;
             cell.doorZ = anchor.getZ() - 27;
+            prison.cells.removeIf(c -> cell.id.equalsIgnoreCase(c.id));
             prison.cells.add(cell);
             // The locker pool feeds routeLocker — arrest seizure pours the
             // prisoner's coins into this chest like a live booking would.
@@ -1582,6 +1586,7 @@ public final class LawAcceptanceGameTests {
             var cell = new Cell();
             cell.id = "at11_cell";
             cell.dimension = fixtureDim;
+            seededPrison.cells.removeIf(c -> cell.id.equalsIgnoreCase(c.id));
             seededPrison.cells.add(cell);
             runtime.context().prison().write(seededPrison);
             var seededCamps = runtime.context().laborCamps().read();

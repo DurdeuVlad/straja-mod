@@ -144,6 +144,21 @@ public class StrajaPolicies {
     public double patrolScanRange = 24.0;    // how far the officer notices
     public int patrolEngageCooldownSeconds = 3;
 
+    // poster — the public face board cycling active bounties
+    public boolean posterEnabled = true;
+    public double posterHoldRadius = 14.0;    // a watcher inside this freezes the swap
+    public int posterCycleSeconds = 15;       // cadence between faces while unobserved
+
+    // mask — a full-face cover beats casual recognition, never close scrutiny
+    public boolean maskEnabled = true;
+    public double maskRecognitionRadius = 3.0; // the officer sees through this close
+    public java.util.Set<String> maskItemIds = new java.util.LinkedHashSet<>(java.util.Set.of(
+            "minecraft:carved_pumpkin", "straja:head_sack",
+            "minecraft:zombie_head", "minecraft:creeper_head",
+            "minecraft:skeleton_skull", "minecraft:wither_skeleton_skull",
+            "minecraft:piglin_head", "minecraft:dragon_head",
+            "minecraft:player_head"));
+
     // cuffs
     public int cuffRequestTimeoutSeconds = 60;
     public int surrenderTimeoutSeconds = 15;

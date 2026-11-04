@@ -119,6 +119,8 @@ public final class Fakes {
         public final List<String> books = new ArrayList<>();
         /** Items that did not fit the inventory on giveStack — spilled drops. */
         public final List<String> spilled = new ArrayList<>();
+        /** Equipped head item — EMPTY by default; set to simulate a mask. */
+        public ItemView headItem = ItemView.EMPTY;
 
         public TestPlayer(String name, int slots) {
             this.uuid = UUID.nameUUIDFromBytes(name.getBytes());
@@ -172,6 +174,7 @@ public final class Fakes {
         @Override public ItemView mainHand() {
             return selectedSlot >= 0 && selectedSlot < inventory.slots() ? inventory.stackAt(selectedSlot) : ItemView.EMPTY;
         }
+        @Override public ItemView headItem() { return headItem; }
         @Override public PlayerGateway.BookCopyResult copyMainHandBook() {
             ItemView held = mainHand();
             if (held.isEmpty() || switch (held.id()) {

@@ -93,6 +93,12 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.DoubleValue PATROL_POST_RADIUS;
     public static final ModConfigSpec.DoubleValue PATROL_SCAN_RANGE;
     public static final ModConfigSpec.IntValue PATROL_ENGAGE_COOLDOWN_SECONDS;
+    public static final ModConfigSpec.BooleanValue POSTER_ENABLED;
+    public static final ModConfigSpec.DoubleValue POSTER_HOLD_RADIUS;
+    public static final ModConfigSpec.IntValue POSTER_CYCLE_SECONDS;
+    public static final ModConfigSpec.BooleanValue MASK_ENABLED;
+    public static final ModConfigSpec.DoubleValue MASK_RECOGNITION_RADIUS;
+    public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> MASK_ITEM_IDS;
     public static final ModConfigSpec.BooleanValue SURRENDER_ENABLED;
     public static final ModConfigSpec.IntValue SURRENDER_DISCOUNT_PERCENT;
     public static final ModConfigSpec.IntValue SURRENDER_OFFER_SECONDS;
@@ -654,6 +660,32 @@ public final class StrajaServerConfig {
         PATROL_POST_RADIUS = B.defineInRange("postRadius", defaults.patrolPostRadius, 4.0, 128.0);
         PATROL_SCAN_RANGE = B.defineInRange("scanRange", defaults.patrolScanRange, 4.0, 128.0);
         PATROL_ENGAGE_COOLDOWN_SECONDS = B.defineInRange("engageCooldownSeconds", defaults.patrolEngageCooldownSeconds, 1, 60);
+        B.pop();
+
+        B.push("poster");
+        POSTER_ENABLED = B.comment(
+                        "Wanted posters: declared spots cycle active bounties on",
+                        "display entities, swapping only while nobody watches.")
+                .define("enabled", defaults.posterEnabled);
+        POSTER_HOLD_RADIUS = B.comment(
+                        "A watcher inside this radius freezes the face swap.")
+                .defineInRange("holdRadius", defaults.posterHoldRadius, 1.0, 64.0);
+        POSTER_CYCLE_SECONDS = B.comment(
+                        "Cadence between faces while the spot is unobserved.")
+                .defineInRange("cycleSeconds", defaults.posterCycleSeconds, 1, 3600);
+        B.pop();
+
+        B.push("mask");
+        MASK_ENABLED = B.comment(
+                        "A covered face beats casual recognition — patrols must",
+                        "close in to see through it. Marks and BOLOs unaffected.")
+                .define("enabled", defaults.maskEnabled);
+        MASK_RECOGNITION_RADIUS = B.comment(
+                        "Inside this distance the engaging officer sees through the mask.")
+                .defineInRange("recognitionRadius", defaults.maskRecognitionRadius, 0.5, 32.0);
+        MASK_ITEM_IDS = B.defineListAllowEmpty(List.of("itemIds"),
+                new java.util.ArrayList<>(defaults.maskItemIds),
+                () -> "minecraft:carved_pumpkin", StrajaServerConfig::isNonBlankString);
         B.pop();
 
         B.push("surrender");
@@ -1685,6 +1717,12 @@ public final class StrajaServerConfig {
         p.patrolPostRadius = PATROL_POST_RADIUS.get();
         p.patrolScanRange = PATROL_SCAN_RANGE.get();
         p.patrolEngageCooldownSeconds = PATROL_ENGAGE_COOLDOWN_SECONDS.get();
+        p.posterEnabled = POSTER_ENABLED.get();
+        p.posterHoldRadius = POSTER_HOLD_RADIUS.get();
+        p.posterCycleSeconds = POSTER_CYCLE_SECONDS.get();
+        p.maskEnabled = MASK_ENABLED.get();
+        p.maskRecognitionRadius = MASK_RECOGNITION_RADIUS.get();
+        p.maskItemIds = new java.util.LinkedHashSet<>(MASK_ITEM_IDS.get());
         p.surrenderEnabled = SURRENDER_ENABLED.get();
         p.surrenderDiscountPercent = SURRENDER_DISCOUNT_PERCENT.get();
         p.surrenderOfferSeconds = SURRENDER_OFFER_SECONDS.get();

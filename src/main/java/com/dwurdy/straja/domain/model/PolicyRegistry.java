@@ -166,6 +166,12 @@ public final class PolicyRegistry {
         k("patrol.enabled", "patrolOfficerEnabled", Kind.BOOL);
         k("patrol.postRadius", "patrolPostRadius", Kind.DOUBLE);
         k("patrol.scanRange", "patrolScanRange", Kind.DOUBLE);
+        k("poster.enabled", "posterEnabled", Kind.BOOL);
+        k("poster.holdRadius", "posterHoldRadius", Kind.DOUBLE);
+        k("poster.cycleSeconds", "posterCycleSeconds", Kind.INT);
+        k("mask.enabled", "maskEnabled", Kind.BOOL);
+        k("mask.recognitionRadius", "maskRecognitionRadius", Kind.DOUBLE);
+        k("mask.itemIds", "maskItemIds", Kind.STRING_LIST);
         k("patrol.engageCooldownSeconds", "patrolEngageCooldownSeconds", Kind.INT);
         // cuffs
         k("cuffs.requestTimeoutSeconds", "cuffRequestTimeoutSeconds", Kind.INT);

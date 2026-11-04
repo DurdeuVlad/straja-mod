@@ -78,6 +78,8 @@ public final class StrajaEvents {
         runtime.dispatch().tick();
         runtime.transfers().tick();
         runtime.escapes().tick();
+        // POSTER-1: wanted faces cycle while nobody reads the board.
+        runtime.posters().tick();
         runtime.prisonJobs().tick();
         runtime.parole().tick();
         // FUN-7: hunts decay to warrants; hunters get fading hints.

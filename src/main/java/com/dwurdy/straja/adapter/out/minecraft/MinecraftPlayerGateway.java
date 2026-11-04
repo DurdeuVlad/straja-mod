@@ -228,6 +228,13 @@ public class MinecraftPlayerGateway implements PlayerGateway {
         return p != null ? MinecraftInventoryView.view(p.getMainHandItem()) : ItemView.EMPTY;
     }
 
+    @Override public ItemView headItem() {
+        ServerPlayer p = entity();
+        return p != null ? MinecraftInventoryView.view(
+                p.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD))
+                : ItemView.EMPTY;
+    }
+
     @Override public BookCopyResult copyMainHandBook() {
         ServerPlayer p = entity();
         if (p == null) return BookCopyResult.NOT_A_BOOK;

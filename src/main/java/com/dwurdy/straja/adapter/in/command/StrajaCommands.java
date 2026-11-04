@@ -193,6 +193,18 @@ public final class StrajaCommands {
                         .postRemove(p, StringArgumentType.getString(c, "id"))))));
         root.then(post);
 
+        // POSTER-1 admin: declared face boards cycling active bounties.
+        var poster = adminOnly(Commands.literal("poster"));
+        poster.then(Commands.literal("list")
+                .executes(c -> player(c, StrajaRuntime.get().posters()::posterList)));
+        poster.then(Commands.literal("add").then(Commands.argument("id", StringArgumentType.word())
+                .executes(c -> player(c, p -> StrajaRuntime.get().posters()
+                        .posterAdd(p, StringArgumentType.getString(c, "id"))))));
+        poster.then(Commands.literal("remove").then(Commands.argument("id", StringArgumentType.word())
+                .executes(c -> player(c, p -> StrajaRuntime.get().posters()
+                        .posterRemove(p, StringArgumentType.getString(c, "id"))))));
+        root.then(poster);
+
         // FUN-10: prison economy — job board, labor-credit market trades,
         // and signed favor notes between prisoners.
         root.then(Commands.literal("job")
@@ -2977,7 +2989,7 @@ public final class StrajaCommands {
                     "/straja report|message|request <text> | inbox",
                     "/straja mission|cuffs|prison|fine|complaint|room|archive|identity",
                     "/straja inspector|transporter grant|revoke|list | artifact check|revoke [OP 3]",
-                    "/straja emergency ...",
+                    "/straja emergency ... | poster add|remove|list [OP 3]",
                     "/straja checkpoint add|remove ... | set-checkpoint | set-mission-time | set-location [OP 4]",
                     "/straja setup ... | policy ... | migrate ... | npc ... | debug ... | test ... [OP 4]");
         }

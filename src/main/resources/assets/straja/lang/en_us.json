@@ -172,6 +172,7 @@
   "straja.bounty.amount_range": "The bounty amount must be between %s and %s coins.",
   "straja.bounty.disabled": "The bounty system is disabled.",
   "straja.bounty.list_empty": "The bounty board is empty.",
+  "straja.poster.list_empty": "No wanted posters are posted.",
   "straja.bounty.needs_reason": "The target has no criminal record — a reason is required.",
   "straja.bounty.no_bail": "%s has no bounty bail to pay.",
   "straja.bounty.not_found": "No active bounty found for %s.",

@@ -83,6 +83,7 @@ public final class StrajaRuntime {
     private com.dwurdy.straja.application.service.ParoleService parole;
     private final com.dwurdy.straja.application.service.BoloService bolos;
     private final com.dwurdy.straja.application.service.BountyService bounties;
+    private final com.dwurdy.straja.application.service.PosterService posters;
     private final com.dwurdy.straja.application.service.ProtocolService protocol;
     private final com.dwurdy.straja.application.service.StorageService storage;
     private final com.dwurdy.straja.application.service.CheckpointService checkpoints;
@@ -504,6 +505,12 @@ public final class StrajaRuntime {
         this.bounties.useDispatch(this.dispatch);
         // DEBT-2: bail lands on the debt ledger; in-custody issue levies.
         this.bounties.useDebt(this.debt);
+        // POSTER-1: the public face board — declared spots cycle active
+        // bounties on display entities, swapping only while unobserved.
+        this.posters = new com.dwurdy.straja.application.service.PosterService(
+                ctx, bounties, audit);
+        this.posters.useBoard(
+                new com.dwurdy.straja.adapter.out.minecraft.MinecraftPosterBoard(server));
         // INST-3: the law records crimes without a clerk — auto-marks and
         // the state bounty sweep for unpriced wanted players.
         this.marks = new com.dwurdy.straja.application.service.MarkService(
@@ -767,6 +774,7 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.service.BoloService bolos() { return bolos; }
 
     public com.dwurdy.straja.application.service.BountyService bounties() { return bounties; }
+    public com.dwurdy.straja.application.service.PosterService posters() { return posters; }
     public com.dwurdy.straja.application.service.ProtocolService protocol() { return protocol; }
     public com.dwurdy.straja.application.service.StorageService storage() { return storage; }
     public com.dwurdy.straja.application.service.CheckpointService checkpoints() { return checkpoints; }
