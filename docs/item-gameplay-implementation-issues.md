@@ -47,12 +47,12 @@ them is a real criminal income.
 
 | # | Issue | Status | Commit | Notes |
 |---|-------|--------|--------|-------|
-| ITEM-1 | Coin-click bribe on human + NPC officers, corruptibility trait, witnessed discipline, NPC denunt | pending | | |
-| DROP-1 | Officer-role NPCs drop ~2 brass + XP on death | pending | | |
+| ITEM-1 | Coin-click bribe on human + NPC officers, corruptibility trait, witnessed discipline, NPC denunt | done | `91b8f5c` | Adversarial review remediated: idempotent dismissal, player-identity warrant gate, provider-bound officers included, hand-gated gestures |
+| DROP-1 | Officer-role NPCs drop ~2 brass + XP on death | done | `91b8f5c` | Player-attributed kills only (recentlyHit); brass resolves by coinTierRatio, never ordinal |
 
 ## Execution receipt
 
 | Issue | Commit | State |
 |---|---|---|
-| ITEM-1 | | |
-| DROP-1 | | |
+| ITEM-1 | `91b8f5c` | verified — 2037 unit tests green, 51/51 live GameTests incl. `denuntDismissesRegisteredNpc` |
+| DROP-1 | `91b8f5c` | verified — `soldierDropsCoinsAndXp` passes on the live GameTest server |
