@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.7.0 — 2026-11-04
+
+The institution advertises its hunts, and criminals can hide their faces:
+physical wanted posters that update themselves, and a disguise mechanic
+that turns patrol recognition into a real chase.
+
+### Afișe de căutare (POSTER-1)
+
+- **The board that updates itself**: an admin runs `/straja poster add
+  <id>` at a wall and the spot materializes a floating player head over
+  a caption — `CĂUTAT`, the target's name, the reward. The face cycles
+  through every active bounty on the feed.
+- **No mid-look flicker**: a poster only swaps its face while nobody
+  stands inside `poster.holdRadius` (default 14 blocks) — the board
+  waits for the reader to walk away. An empty feed shows "Nimic de
+  căutat" instead of going dark.
+- **Captured means down**: the moment a bounty resolves, its face stops
+  being advertised — the board shows the next hunt or the idle face on
+  the next sweep.
+- **Offline faces still post**: the wanted head resolves the target's
+  skin through the player list and the server profile cache — a logged-
+  out criminal keeps their face; an unresolvable profile degrades to a
+  plain head while name and reward still read.
+- Boards persist across restarts (`SetupData.posterSpots`), entities are
+  tagged `strajaPoster` and adopted-or-cleared on reload — never
+  duplicated. `/straja poster remove <id>` tears the spot down.
+
+### Masca (MASK-1)
+
+- **A covered face beats the scan**: a wanted player wearing a full-face
+  item from `mask.itemIds` — carved pumpkin, head sack, mob or player
+  heads — is unrecognized by patrol scan. The officer walks past.
+- **Not immunity**: the mask only defeats casual recognition. An officer
+  inside `mask.recognitionRadius` (default 3 blocks) still makes you,
+  checkpoints demand ID regardless, and the mark itself never clears —
+  remove the cover and the hunt resumes instantly.
+- The pumpkin's tunnel-vision cost is the balance the mechanic needed:
+  evasion you pay for in awareness.
+
 ## 0.6.1 — 2026-11-04
 
 The institution runs itself: automatic criminal marking, an NPC patrol
