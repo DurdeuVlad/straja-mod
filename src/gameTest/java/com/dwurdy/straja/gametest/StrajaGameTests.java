@@ -357,6 +357,23 @@ public final class StrajaGameTests {
     @GameTest(template = "empty")
     public static void soldierDropsCoinsAndXp(GameTestHelper helper) {
         var runtime = runtime(helper);
+        var policies = runtime.context().policies();
+        // The pack's currency comes from adys_decorations, which the bare
+        // gametest env cannot load — pin the brass tier to a vanilla item so
+        // the drop contract is exercised in any world.
+        int brassKey = policies.coinTierRatio;
+        String originalCoin = policies.coinItemIds.put(brassKey, "minecraft:emerald");
+        try {
+            soldierDropsCoinsAndXpBody(helper, runtime, policies);
+        } finally {
+            if (originalCoin == null) policies.coinItemIds.remove(brassKey);
+            else policies.coinItemIds.put(brassKey, originalCoin);
+        }
+    }
+
+    private static void soldierDropsCoinsAndXpBody(GameTestHelper helper,
+            com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+            com.dwurdy.straja.domain.model.StrajaPolicies policies) {
         ServerLevel level = helper.getLevel();
         var post = helper.absolutePos(new BlockPos(1, 1, 1));
         var npc = StrajaNpcEntity.spawn(level, post.getX() + 0.5, post.getY(),
@@ -368,7 +385,6 @@ public final class StrajaGameTests {
         helper.assertTrue(!npc.isAlive(), "the officer must die to the attack");
         var area = net.minecraft.world.phys.AABB.ofSize(
                 net.minecraft.world.phys.Vec3.atCenterOf(post), 6, 4, 6);
-        var policies = runtime.context().policies();
         String brass = policies.coinItemIds.get(policies.coinTierRatio);
         helper.assertTrue(brass != null, "the brass tier must resolve");
         boolean coins = level.getEntitiesOfClass(
