@@ -394,13 +394,17 @@ public class CustodyService implements CustodyRoleplayUseCase {
         request.expiresAt = now() + timeoutSec * 1000;
         store.cuffRequests.put(request.id, request);
         ctx.custody().write(store);
+        long linkTtl = Math.max(0, request.expiresAt - now());
+        var links = List.of(
+                new PlayerGateway.ActionLink("Acceptă", "custody-accept:" + request.id, linkTtl),
+                new PlayerGateway.ActionLink("Refuză", "custody-refuse:" + request.id, linkTtl));
         if ("SURRENDER".equals(kind)) {
-            target.tell(Text.STRAJA_PREFIX + issuer.name() + " îți cere predarea. Alege Acceptă sau Refuză "
-                    + "în cererea din chat (" + request.id + ").");
+            target.tellAction("straja.custody.request_surrender", links,
+                    issuer.name(), request.id);
             issuer.tell("Cererea de predare a fost trimisă lui " + target.name() + ".");
         } else {
-            target.tell(Text.STRAJA_PREFIX + issuer.name() + " vrea să te încătușeze. Alege Acceptă sau Refuză "
-                    + "în cererea din chat (" + request.id + ").");
+            target.tellAction("straja.custody.request_cuffs", links,
+                    issuer.name(), request.id);
             issuer.tell("Cererea de încătușare a fost trimisă lui " + target.name()
                     + ". Așteaptă acceptarea sau refuzul.");
         }
@@ -419,10 +423,22 @@ public class CustodyService implements CustodyRoleplayUseCase {
     }
 
     /**
+     * Reserved issuer identity for institutional restraints — the patrol
+     * officer's cuffs are backed by the institution itself, not a player's
+     * rank. Deliberately not a parseable UUID: it can never collide with a
+     * player identity and {@code findStored} resolves it to null through the
+     * uuid path, so no online player is ever mistaken for the issuer.
+     */
+    public static final String SYSTEM_CUFF_ISSUER = "straja:system";
+
+    /**
      * Persisted issuer authority: the UUID must be present, parseable, and still
      * belong to an enforcement-capable member (commissioner or active Străjer+).
+     * Institutional restraints carry the system sentinel instead — the
+     * institution's authority never decays.
      */
     private boolean issuerEligible(String issuer, String issuerUuid) {
+        if (SYSTEM_CUFF_ISSUER.equals(issuerUuid)) return true;
         if (issuerUuid == null || issuerUuid.isBlank()) return false;
         UUID uuid;
         try {
@@ -590,6 +606,31 @@ public class CustodyService implements CustodyRoleplayUseCase {
                 + (keyDelivered ? "" : " Cheia a fost pusă în așteptare până când inventarul permite."));
         audit.record(AuditActions.CUFF_APPLY, issuer.name(), uuidOf(issuer),
                 target.name(), uuidOf(target), AuditResults.SUCCESS, reason == null ? "direct" : reason);
+        return new ApplyResult(true, "");
+    }
+
+    /**
+     * Institutional restraint: the institution's cuffs need no on-duty issuer
+     * or cuff item — a patrol officer restrains by authority. Mirrors
+     * {@link #applyCuffsDirect} minus the issuer requirements; the canonical
+     * transition engine still validates the state change.
+     */
+    public ApplyResult applyCuffsSystem(PlayerGateway target, String reason) {
+        if (target == null) return new ApplyResult(false, "no_target");
+        var store = store();
+        if (store.cuffed.containsKey(key(target))) {
+            return new ApplyResult(true, "already_cuffed");
+        }
+        String appliedReason = reason == null ? "institutional" : reason;
+        if (!applyRecord(store, target, "Straja", SYSTEM_CUFF_ISSUER, appliedReason)) {
+            return new ApplyResult(false, "canonical_state_invalid");
+        }
+        store.cuffRequests.values().removeIf(r -> matches(target, r.targetUuid, r.target));
+        ctx.custody().write(store);
+        applyCuffSlowness(target);
+        target.tell("Forța instituției te-a încătușat.");
+        audit.record(AuditActions.CUFF_APPLY, "Straja", "", target.name(), uuidOf(target),
+                AuditResults.SUCCESS, appliedReason);
         return new ApplyResult(true, "");
     }
 

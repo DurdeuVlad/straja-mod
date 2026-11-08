@@ -77,7 +77,11 @@ public final class PolicyRegistry {
         k("escape.bribeRadius", "bribeRadius", Kind.DOUBLE);
         k("escape.bribeDoorOpenSeconds", "bribeDoorOpenSeconds", Kind.INT);
         k("escape.bribeOfferMs", "bribeOfferMs", Kind.INT);
+        k("escape.npcBribeAcceptPercent", "npcBribeAcceptPercent", Kind.INT);
         k("escape.blendGraceSeconds", "blendGraceSeconds", Kind.INT);
+        k("npc.soldierCoinsMin", "npcSoldierCoinsMin", Kind.INT);
+        k("npc.soldierCoinsMax", "npcSoldierCoinsMax", Kind.INT);
+        k("npc.soldierXp", "npcSoldierXp", Kind.INT);
         k("escape.tunnelFoundPenaltyMinutes", "tunnelFoundPenaltyMinutes", Kind.INT);
         k("escape.inspectionRadius", "inspectionRadius", Kind.DOUBLE);
         k("escape.retentionLimit", "escapeRetentionLimit", Kind.INT);
@@ -139,6 +143,36 @@ public final class PolicyRegistry {
         k("forgery.anvilXpUnlicensed", "forgeryAnvilXpUnlicensed", Kind.INT);
         k("forgery.exemplarRequired", "forgeryExemplarRequired", Kind.BOOL);
         k("forgery.scanAtGates", "artifactScanAtGates", Kind.BOOL);
+        // auto-mark (institution writes its own criminal record)
+        k("automark.kills", "autoMarkKills", Kind.BOOL);
+        k("automark.witnessOnly", "autoMarkWitnessOnly", Kind.BOOL);
+        k("automark.bountyEnabled", "autoBountyEnabled", Kind.BOOL);
+        k("automark.bountyAmount", "autoBountyAmount", Kind.INT);
+        k("automark.bountyAfterHours", "autoBountyAfterHours", Kind.INT);
+        // frisk (verificare corporală)
+        k("frisk.enabled", "friskEnabled", Kind.BOOL);
+        k("frisk.range", "friskRange", Kind.DOUBLE);
+        k("frisk.offerSeconds", "friskOfferSeconds", Kind.INT);
+        k("frisk.cooldownSeconds", "friskCooldownSeconds", Kind.INT);
+        // predare (voluntary self-surrender)
+        k("surrender.enabled", "surrenderEnabled", Kind.BOOL);
+        k("surrender.discountPercent", "surrenderDiscountPercent", Kind.INT);
+        k("surrender.offerSeconds", "surrenderOfferSeconds", Kind.INT);
+        // corupție (denunț + money trail → warrant)
+        k("corruption.enabled", "corruptionEnabled", Kind.BOOL);
+        k("corruption.reportCooldownSeconds", "corruptionReportCooldownSeconds", Kind.INT);
+        k("corruption.witnessRadius", "corruptionWitnessRadius", Kind.DOUBLE);
+        // patrulier (institutional force)
+        k("patrol.enabled", "patrolOfficerEnabled", Kind.BOOL);
+        k("patrol.postRadius", "patrolPostRadius", Kind.DOUBLE);
+        k("patrol.scanRange", "patrolScanRange", Kind.DOUBLE);
+        k("poster.enabled", "posterEnabled", Kind.BOOL);
+        k("poster.holdRadius", "posterHoldRadius", Kind.DOUBLE);
+        k("poster.cycleSeconds", "posterCycleSeconds", Kind.INT);
+        k("mask.enabled", "maskEnabled", Kind.BOOL);
+        k("mask.recognitionRadius", "maskRecognitionRadius", Kind.DOUBLE);
+        k("mask.itemIds", "maskItemIds", Kind.STRING_LIST);
+        k("patrol.engageCooldownSeconds", "patrolEngageCooldownSeconds", Kind.INT);
         // cuffs
         k("cuffs.requestTimeoutSeconds", "cuffRequestTimeoutSeconds", Kind.INT);
         k("cuffs.surrenderTimeoutSeconds", "surrenderTimeoutSeconds", Kind.INT);

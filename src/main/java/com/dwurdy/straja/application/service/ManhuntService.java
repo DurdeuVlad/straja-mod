@@ -8,6 +8,7 @@ import com.dwurdy.straja.domain.model.ManhuntRecord;
 import com.dwurdy.straja.domain.model.ManhuntStore;
 import com.dwurdy.straja.domain.model.PermissionLevel;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -222,6 +223,32 @@ public final class ManhuntService {
     /** Active hunts a member is a runner in — the pursuit status surface. */
     public synchronized ManhuntRecord huntFor(String uuid) {
         return store().activeForRunner(uuid);
+    }
+
+    /** Live hunts for board surfaces — the read-only snapshot a desk page renders. */
+    public synchronized List<ManhuntRecord> activeHunts() {
+        var out = new ArrayList<ManhuntRecord>();
+        for (ManhuntRecord h : store().hunts) {
+            if (h != null && "ACTIVE".equals(h.status)) out.add(h);
+        }
+        return out;
+    }
+
+    /** Chat fallback for the jailer's hunt board — the same rows the desk page shows. */
+    public synchronized void board(PlayerGateway player) {
+        if (player == null) return;
+        var hunts = activeHunts();
+        if (hunts.isEmpty()) {
+            player.tell("Liniște — toate dosarele de vânătoare sunt închise.");
+            return;
+        }
+        for (ManhuntRecord h : hunts) {
+            long left = Math.max(0, h.coolAt - now()) / 60_000L;
+            player.tell("Vânătoare " + h.id + " — " + h.runners.size()
+                    + " fugitiv" + (h.runners.size() == 1 ? "" : "i")
+                    + ", ~" + left + " min până la mandat"
+                    + (h.originLabel.isBlank() ? "" : " — origine: " + h.originLabel));
+        }
     }
 
     /** Runner-facing pursuit status for the bare {@code /straja manhunt}. */

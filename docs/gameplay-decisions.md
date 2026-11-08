@@ -471,6 +471,17 @@ orders matching `CLEAN` (no victim complainants, eligibility still
 green) resolve routine approvals under the order's authority — the
 hearing record remains the artifact. Contested cases wait for humans.
 
+**Desk surface.** The same flow is native on desks: the jailer desk shows
+the prisoner a status/file/appeal/advocate/settle/check-in row per their
+live surface state, and shows capable officers a live docket. Each
+`parole-review` row opens a hearing page with facts and the
+state-appropriate verbs (`open`, `decide`), confirmation-gated. Victim
+objection and advocate accept/decline links land as clickable notices
+and as rows on the receptionist desk while their windows are open; the
+conditional offer carries a `parole-settle` link. Every click revalidates
+authority and record state server-side, so a stale tile fails closed.
+The `/straja parole` commands remain as the fallback surface.
+
 **Conditions.** A PAROLED register status marks the parolee until
 `paroleLengthHours` elapse. Check-ins (`/straja parole checkin`) are due
 every `paroleCheckInHours`; parole clocks freeze while the parolee is

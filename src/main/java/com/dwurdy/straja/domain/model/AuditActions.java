@@ -70,6 +70,8 @@ public final class AuditActions {
     public static final String COMPLAINT_SATISFIED = "complaint_satisfied";
     public static final String COMPLAINT_SUBMIT = "complaint_submit";
     public static final String COMPLAINT_WITHDRAW = "complaint_withdraw";
+    public static final String COMMISSIONER_PIN = "commissioner_pin";
+    public static final String CORRUPTION = "corruption";
     public static final String CRATE_SEAL = "crate_seal";
     public static final String CRATE_UNSEAL = "crate_unseal";
     public static final String CUFF_ACCEPT = "cuff_accept";
@@ -232,6 +234,7 @@ public final class AuditActions {
     public static final String SURRENDER_ACCEPT = "surrender_accept";
     public static final String SURRENDER_REFUSE = "surrender_refuse";
     public static final String SURRENDER_REQUEST = "surrender_request";
+    public static final String SURRENDER_SELF = "surrender_self";
     public static final String SUSPECT_KILLED = "suspect_killed";
     public static final String SUSPEND = "suspend";
     public static final String TRAINING_MANUAL = "training_manual";

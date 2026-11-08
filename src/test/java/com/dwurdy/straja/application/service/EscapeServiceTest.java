@@ -28,6 +28,7 @@ class EscapeServiceTest {
     private PrisonService prison;
     private DispatchService dispatch;
     private ManhuntService manhunts;
+    private CorruptionService corruptions;
     private EscapeService escapes;
     private TestPlayer admin;
     private TestPlayer inmate;
@@ -57,6 +58,8 @@ class EscapeServiceTest {
         escapes.useCustody(custody);
         escapes.useDispatch(dispatch);
         escapes.useManhunts(manhunts);
+        corruptions = new CorruptionService(ctx, audit, players, bolos);
+        escapes.useCorruptions(corruptions);
         prison.useEscapes(escapes);
         prison.useRolls(new RollSource() { // always the top of the range — jam fires
             @Override public int nextInt(int bound) { return 0; }
@@ -295,6 +298,82 @@ class EscapeServiceTest {
         var cell = ctx.prison().read().cell("celula_1");
         assertTrue(cell.brokenUntil > clock.nowMillis(), "the corrupt guard opens the door");
         assertTrue(g.told("§6Ai luat") || g.told("B"), "the guard is paid");
+        assertEquals(1, corruptions.trailFor(g.uuid().toString()).size(),
+                "a taken bribe lands once on the guard's money trail");
+        assertTrue(ctx.bolos().read().records.stream()
+                        .noneMatch(r -> g.uuid().toString().equals(r.subjectUuid)),
+                "an unwitnessed bribe leaves no warrant yet");
+    }
+
+    @Test
+    void witnessedBribeMarksTheCorruptGuard() {
+        var g = guard("corupt", inmate.x + 2, inmate.z);
+        guard("martor", inmate.x + 3, inmate.z);
+        ((TestCurrency) ctx.currency()).balance = 100;
+        assertTrue(escapes.bribe(inmate));
+        assertTrue(escapes.bribeAnswer(g, true));
+        assertTrue(ctx.bolos().read().records.stream().anyMatch(r ->
+                        r.status == com.dwurdy.straja.domain.model.BoloStatus.ACTIVE
+                                && g.uuid().toString().equals(r.subjectUuid)),
+                "a watched exchange marks the guard on the spot");
+    }
+
+    @Test
+    void coinClickOffersThatSpecificGuard() {
+        var g = guard("direct", inmate.x + 2, inmate.z);
+        assertTrue(escapes.bribeAt(inmate, g));
+        assertEquals(1, escapes.pendingOffers());
+        assertTrue(inmate.lastMessage().contains("Ai oferit mită"));
+    }
+
+    @Test
+    void coinClickOnNonGuardRefuses() {
+        var civ = server.add("trece");
+        assertFalse(escapes.bribeAt(inmate, civ));
+    }
+
+    @Test
+    void coinBribeToHonestNpcReports() {
+        ((TestCurrency) ctx.currency()).balance = 100;
+        var outcome = escapes.bribeNpc(inmate, "npc-1", "Străjerul Ion", false);
+        assertEquals(EscapeService.NpcBribeOutcome.DECLINED_REPORTED, outcome);
+        assertEquals(100, ((TestCurrency) ctx.currency()).balance, "no coins moved");
+        assertTrue(ctx.dispatch().read().calls.stream()
+                        .anyMatch(c -> "ESCAPE".equals(c.sourceType)),
+                "an honest refusal reports the attempt");
+    }
+
+    @Test
+    void coinBribeToCorruptNpcOpensDoorAndTrails() {
+        ((TestCurrency) ctx.currency()).balance = 100;
+        var outcome = escapes.bribeNpc(inmate, "npc-1", "Străjerul Ion", true);
+        assertEquals(EscapeService.NpcBribeOutcome.ACCEPTED_UNSEEN, outcome);
+        var cell = ctx.prison().read().cell("celula_1");
+        assertTrue(cell.brokenUntil > clock.nowMillis(), "the corrupt officer opens the door");
+        assertFalse(corruptions.trailFor("npc-1").isEmpty(),
+                "the npc's pocket is on the money trail");
+        assertTrue(((TestCurrency) ctx.currency()).balance < 100, "coins left the pocket");
+    }
+
+    @Test
+    void witnessedCoinBribeToNpcReportsSeen() {
+        guard("martor", inmate.x + 2, inmate.z);
+        ((TestCurrency) ctx.currency()).balance = 100;
+        var outcome = escapes.bribeNpc(inmate, "npc-1", "Străjerul Ion", true);
+        assertEquals(EscapeService.NpcBribeOutcome.ACCEPTED_SEEN, outcome,
+                "a watching guard makes the exchange conviction-ready");
+        assertTrue(ctx.dispatch().read().calls.stream()
+                        .anyMatch(c -> "ESCAPE".equals(c.sourceType)),
+                "the witnessed exchange pings the board");
+    }
+
+    @Test
+    void corruptibleTraitIsStablePerOfficer() {
+        String u = "5f1f1d3a-7c2e-4b9a-8f6d-3e2c1b0a9f8e";
+        assertEquals(EscapeService.corruptible(u, 40), EscapeService.corruptible(u, 40),
+                "the same officer always answers the same way");
+        assertFalse(EscapeService.corruptible(u, 0), "0% means everyone is honest");
+        assertTrue(EscapeService.corruptible(u, 100), "100% means everyone takes it");
     }
 
     @Test

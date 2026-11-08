@@ -30,4 +30,12 @@ public interface WantedRoleplayUseCase {
      */
     boolean guardDamageBlocked(UUID attackerEntityId, String attackerRole,
                                PlayerGateway target);
+
+    /**
+     * Unarmed faction NPCs are non-combatants: true when the entity is a
+     * configured-faction guard holding no weapon. Event handlers cancel any
+     * player target such an NPC tries to acquire — including its own
+     * retaliation — so only visibly armed guards ever fight.
+     */
+    boolean unarmedGuardTargetBlocked(UUID entityId);
 }

@@ -162,6 +162,19 @@ class FormSessionServiceTest {
     }
 
     @Test
+    void detentionLoopFormsOpenRecordless() {
+        for (Action action : List.of(Action.TRADE_OFFER, Action.IOU_ISSUE,
+                Action.BAIL_PAY, Action.BOUNTY_POST, Action.INSPECT_PLAYER,
+                Action.ABSENCE_DECLARE, Action.PAROLE_ADVOCATE,
+                Action.PETITION_REQUEST)) {
+            assertTrue(forms.open(owner, request(action, "")).isPresent(),
+                    action + " opens with an empty record id");
+            assertTrue(forms.open(owner, request(action, "R-1")).isEmpty(),
+                    action + " must not accept a record id");
+        }
+    }
+
+    @Test
     void quizAnswerBindsServerQuestionId() {
         var view = forms.open(owner, request(Action.QUIZ_ANSWER, "comisar")).orElseThrow();
         var submission = forms.submit(owner, view.sessionId(), Map.of("details", "x")).orElseThrow();

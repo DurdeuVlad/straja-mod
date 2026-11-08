@@ -68,8 +68,6 @@ class RefusalConventionTest {
             "Dosarul nu are foi",
             "au fost returnate",
             "eliberat cât era offline",
-            "îți cere predarea",
-            "vrea să te încătușeze",
             "va fi livrată când revine",
             "Ți s-a pus Sacul",
             "nu mai sunt posibile",
@@ -80,6 +78,7 @@ class RefusalConventionTest {
             "Demisia este în așteptare",
             "mărfuri interzise au fost confiscate", // camp-exit confiscation notice, follows the repel title
             "Nu există lagăre de muncă",            // admin listing of an empty registry
+            "Niciun panou de căutați declarat",     // poster listing of an empty registry
             "este deja repartizat în lagărul",      // idempotent-transfer notice
             "livrat parțial",
             "nu ai nimic ilegal", // checkpoint pass notice — no remedy applies

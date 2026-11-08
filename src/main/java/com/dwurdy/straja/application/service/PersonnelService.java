@@ -87,6 +87,23 @@ public final class PersonnelService implements com.dwurdy.straja.application.por
     }
 
     /**
+     * The sitting Comisar: the first active record holding a live COMMISSIONER
+     * appointment. This is the in-world selection made by
+     * {@code /straja setup commissioner} — authoritative alongside (and
+     * preferred over) the config pins, so an appointee survives a restart
+     * without any TOML edit.
+     */
+    public synchronized PersonnelRecord commissioner() {
+        PersonnelStore store = repository.read();
+        for (PersonnelRecord record : store.ensureRecords().values()) {
+            if (record != null && record.active()
+                    && record.hasAppointment(AppointmentType.COMMISSIONER, clock.nowMillis()))
+                return record;
+        }
+        return null;
+    }
+
+    /**
      * Announced minimum-activity signal: a login or an on-duty tick stamps
      * {@code lastActiveAt} on the member's record. Throttled to one write
      * per minute — the weekly contract never needs finer resolution and a
@@ -348,6 +365,19 @@ public final class PersonnelService implements com.dwurdy.straja.application.por
     }
 
     /**
+     * Trusted-setup path used by {@code /straja setup commissioner}: the
+     * command's gate ({@code isCommissioner || isOp}) has already authorized
+     * the actor — a cold-start op holds no personnel record, so the service
+     * AUTHORIZE_PERSONNEL check would refuse the very bootstrap it exists
+     * to perform. The appointing uuid is still recorded for audit.
+     */
+    public synchronized AppointmentRecord appointInternal(String actorUuid, String subjectUuid,
+                                                          AppointmentType type, String stationId,
+                                                          String jurisdiction, Long expiresAt) {
+        return appoint(actorUuid, subjectUuid, type, stationId, jurisdiction, expiresAt, true, "");
+    }
+
+    /**
      * Officer-corps posting (announced structures): assigns an officer to a
      * section or specialist desk — police section, garrison, prison/mine,
      * industry, investigations, logistics, construction, smithing — with
@@ -409,9 +439,25 @@ public final class PersonnelService implements com.dwurdy.straja.application.por
      *  record version and the caller's command context. */
     public synchronized AppointmentRecord revokeAppointment(String actorUuid, String subjectUuid,
                                                             String appointmentId) {
+        return revokeAppointment(actorUuid, subjectUuid, appointmentId, false);
+    }
+
+    /**
+     * Trusted-setup revocation, paired with {@link #appointInternal}: the
+     * setup command needs to clear a superseded Comisar's appointment while
+     * the operator holds no personnel record of their own.
+     */
+    public synchronized AppointmentRecord revokeAppointmentInternal(String actorUuid,
+                                                                    String subjectUuid,
+                                                                    String appointmentId) {
+        return revokeAppointment(actorUuid, subjectUuid, appointmentId, true);
+    }
+
+    private AppointmentRecord revokeAppointment(String actorUuid, String subjectUuid,
+                                                String appointmentId, boolean internal) {
         PersonnelStore store = repository.read();
         PersonnelRecord record = require(store, subjectUuid);
-        if (authorization != null) {
+        if (authorization != null && !internal) {
             AuthorizationContext context = AuthorizationContext.of(actorUuid, "AUTHORIZE_PERSONNEL");
             context.subjectUuid = subjectUuid;
             context.beneficiaryUuid = subjectUuid;

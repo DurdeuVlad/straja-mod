@@ -69,6 +69,9 @@ final class DeskNavigation {
             current = new DeskPageSource.ListPage(list.title(), list.items(), Math.max(0, page));
         } else if (current instanceof DeskPageSource.SurfacePage surface) {
             current = new DeskPageSource.SurfacePage(surface.binding(), Math.max(0, page));
+        } else if (current instanceof DeskPageSource.DynamicPage dynamic) {
+            current = new DeskPageSource.DynamicPage(
+                    dynamic.kind(), dynamic.id(), Math.max(0, page));
         }
         return current;
     }

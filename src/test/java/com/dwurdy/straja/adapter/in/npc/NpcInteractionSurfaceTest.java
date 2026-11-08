@@ -651,6 +651,68 @@ class NpcInteractionSurfaceTest {
                         null), id -> id).isEmpty());
     }
 
+    /**
+     * The jailer's parole drawer mirrors the prisoner's parole state:
+     * eligible → file-or-appeal, filed → advocate, conditional → settle,
+     * paroled → check-in; officers always get the docket row.
+     */
+    @Test
+    void paroleActionsFollowThePrisonerState() {
+        var none = new com.dwurdy.straja.application.port.in.ParoleUseCase.ParoleSurface(
+                false, false, "", "", "", false, "", 0);
+        var eligible = new com.dwurdy.straja.application.port.in.ParoleUseCase.ParoleSurface(
+                true, true, "", "", "", false, "", 0);
+        var filed = new com.dwurdy.straja.application.port.in.ParoleUseCase.ParoleSurface(
+                true, false, "PAR-1", "PAROLE", "", false, "", 0);
+        var represented = new com.dwurdy.straja.application.port.in.ParoleUseCase.ParoleSurface(
+                true, false, "PAR-1", "PAROLE", "AGREED", false, "", 0);
+        var conditional = new com.dwurdy.straja.application.port.in.ParoleUseCase.ParoleSurface(
+                true, false, "", "", "", false, "PAR-2", 500);
+        var paroled = new com.dwurdy.straja.application.port.in.ParoleUseCase.ParoleSurface(
+                false, false, "", "", "", true, "", 0);
+
+        assertTrue(NpcPlayerSurface.paroleActions(none, false).isEmpty(),
+                "a player with no parole relationship sees no prisoner rows");
+        assertEquals(java.util.List.of("parole-status", "parole-file",
+                        "parole-appeal"),
+                ids(NpcPlayerSurface.paroleActions(eligible, false)));
+        assertEquals(java.util.List.of("parole-status", "parole-advocate"),
+                ids(NpcPlayerSurface.paroleActions(filed, false)));
+        assertEquals(java.util.List.of("parole-status"),
+                ids(NpcPlayerSurface.paroleActions(represented, false)),
+                "an agreed advocate suppresses the designation row");
+        assertEquals(java.util.List.of("parole-status", "parole-settle"),
+                ids(NpcPlayerSurface.paroleActions(conditional, false)));
+        assertEquals(java.util.List.of("parole-status", "parole-checkin"),
+                ids(NpcPlayerSurface.paroleActions(paroled, false)));
+        assertEquals(java.util.List.of("parole-docket"),
+                ids(NpcPlayerSurface.paroleActions(none, true)),
+                "the officer row must not depend on prisoner state");
+    }
+
+    private static java.util.List<String> ids(
+            java.util.List<NpcPlayerSurface.ChatAction> actions) {
+        return actions.stream().map(NpcPlayerSurface.ChatAction::actionId).toList();
+    }
+
+    /**
+     * Civilian desk rows come from the live objection window and the pending
+     * advocacy ask — never from a stale rendered list.
+     */
+    @Test
+    void paroleCivilActionsEmitRealRowsOnly() {
+        var actions = NpcPlayerSurface.paroleCivilActions(
+                java.util.List.of("PAR-1", "PAR-2"), "PAR-3");
+        assertEquals(java.util.List.of(
+                        "parole-object:PAR-1", "parole-object:PAR-2",
+                        "parole-advocate-answer:accept",
+                        "parole-advocate-answer:decline"),
+                ids(actions));
+        assertTrue(NpcPlayerSurface.paroleCivilActions(
+                java.util.List.of(), null).isEmpty(),
+                "no live window and no ask means no civil parole rows");
+    }
+
     private static com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase.AvailableAction
             archiveAction(com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase.Action action,
                           String recordId) {

@@ -10,6 +10,7 @@ import com.dwurdy.straja.domain.model.BountyStore;
 import com.dwurdy.straja.domain.model.Fine;
 import com.dwurdy.straja.domain.model.Sentence;
 import java.util.ArrayList;
+import java.util.List;
 import com.dwurdy.straja.domain.model.AuditActions;
 import com.dwurdy.straja.domain.model.AuditResults;
 
@@ -158,6 +159,68 @@ public final class BountyService {
         return record;
     }
 
+    /**
+     * INST-3 — a state-posted bounty ("emisa de Straja") for a wanted player
+     * nobody priced. No issuer exists: the record names the institution and
+     * links any live BOLO on the subject. Idempotent while one is active.
+     */
+    public synchronized BountyRecord postSystem(String targetUuid, String targetName,
+                                                int amount, String reason) {
+        if (!ctx.policies().bountyEnabled || targetUuid == null
+                || targetUuid.isBlank()) return null;
+        var store = store();
+        if (store.activeFor(targetUuid) != null) return null;
+        var record = new BountyRecord();
+        record.id = store.nextBountyId();
+        record.targetUuid = targetUuid;
+        record.targetName = targetName == null || targetName.isBlank()
+                ? targetUuid : targetName;
+        record.amount = Math.max(ctx.policies().bountyMinAmount,
+                Math.min(amount, ctx.policies().bountyMaxAmount));
+        record.postedBy = "Straja";
+        record.postedByUuid = "";
+        record.postedByRank = 0;
+        record.reason = reason == null ? "" : reason.trim();
+        record.postedAt = now();
+        record.expiresAt = now() + ctx.policies().bountyTtlDays * 86_400_000L;
+        // The state bounty carries its own warrant — the mark that priced it
+        // may lapse on its own TTL while the hunt is still open.
+        var boloStore = ctx.bolos().read();
+        var bolo = new BoloRecord();
+        bolo.id = boloStore.nextBoloId();
+        bolo.subjectUuid = record.targetUuid;
+        bolo.subjectName = record.targetName;
+        bolo.reason = "bounty:" + record.id + (record.reason.isBlank()
+                ? "" : " " + record.reason);
+        bolo.issuerUuid = "";
+        bolo.issuerName = "Straja";
+        bolo.issuerRank = 0;
+        bolo.createdAt = now();
+        bolo.status = BoloStatus.ACTIVE;
+        // expiresAt stays 0: the warrant stands until the bounty resolves.
+        boloStore.records.add(bolo);
+        ctx.bolos().write(boloStore);
+        record.linkedBoloId = bolo.id;
+        store.records.add(record);
+        ctx.bounties().write(store);
+        audit.record(AuditActions.BOUNTY_POST, "system", "", record.targetName,
+                record.targetUuid, AuditResults.SUCCESS,
+                record.id + " amount=" + record.amount + " auto_state");
+        if (dispatch != null) {
+            try {
+                dispatch.raise(DispatchService.SOURCE_BOUNTY, record.id,
+                        "Recompensă: " + record.targetName,
+                        record.reason.isBlank() ? "recompensă activă" : record.reason,
+                        "", 0, 0, 0, "",
+                        record.targetUuid, record.targetName,
+                        "", "URGENT", "OFFICER");
+            } catch (RuntimeException e) {
+                // Dispatch is a notification layer — never drop the posting.
+            }
+        }
+        return record;
+    }
+
     /** Cancels an ACTIVE bounty (rank >= Inspector). The linked BOLO resolves. */
     public synchronized boolean cancel(PlayerGateway actor, String targetIdOrBountyId) {
         if (actor == null) return false;
@@ -209,6 +272,15 @@ public final class BountyService {
 
     public BountyRecord activeFor(String targetUuidOrName) {
         return store().activeFor(targetUuidOrName);
+    }
+
+    /** Every ACTIVE bounty — the read-only snapshot a desk board renders. */
+    public List<BountyRecord> activeBounties() {
+        var out = new ArrayList<BountyRecord>();
+        for (BountyRecord record : store().records) {
+            if (record != null && record.status == BountyStatus.ACTIVE) out.add(record);
+        }
+        return out;
     }
 
     public boolean isBountied(PlayerGateway target) {

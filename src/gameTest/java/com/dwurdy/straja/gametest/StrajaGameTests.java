@@ -1,8 +1,10 @@
 package com.dwurdy.straja.gametest;
 
 import com.dwurdy.straja.adapter.in.event.StrajaEvents;
+import com.dwurdy.straja.adapter.in.npc.NpcInteractionService;
 import com.dwurdy.straja.adapter.in.npc.NpcRoles;
 import com.dwurdy.straja.adapter.in.npc.StrajaNpcEntity;
+import com.dwurdy.straja.adapter.in.npc.PatrolOfficerFacade;
 import com.dwurdy.straja.adapter.in.test.VirtualPlayerGateway;
 import com.dwurdy.straja.adapter.out.minecraft.MinecraftPlayerGateway;
 import com.dwurdy.straja.adapter.out.minecraft.WhipItem;
@@ -15,6 +17,7 @@ import com.dwurdy.straja.domain.model.Cell;
 import com.dwurdy.straja.domain.model.ItemSpec;
 import com.dwurdy.straja.domain.model.NpcRegistry;
 import com.dwurdy.straja.domain.model.PrisonStore;
+import com.dwurdy.straja.domain.model.BoloStatus;
 import com.dwurdy.straja.domain.model.Rank;
 import com.dwurdy.straja.domain.model.SetupData;
 import com.google.gson.GsonBuilder;
@@ -25,6 +28,7 @@ import java.util.Map;
 import net.minecraft.commands.CommandSource;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -35,12 +39,15 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.Display;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec2;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.common.NeoForge;
@@ -69,6 +76,18 @@ public final class StrajaGameTests {
         var runtime = StrajaRuntime.get();
         helper.assertTrue(runtime != null, "StrajaRuntime is not initialised on the game-test server");
         return runtime;
+    }
+
+    /**
+     * The test commissioner holds the personnel appointment — the same
+     * in-world selection {@code /straja setup commissioner} performs. No
+     * identity ships as a config default, so fixtures grant the mandate.
+     */
+    private static VirtualPlayerGateway appointCommissioner(StrajaRuntime runtime) {
+        var commissioner = new VirtualPlayerGateway("gt_commissioner");
+        commissioner.setOp(true); // the cold-start op path /straja setup commissioner allows
+        runtime.guards().setupCommissioner(commissioner, commissioner.uuid().toString());
+        return commissioner;
     }
 
     private static ResourceLocation straja(String path) {
@@ -195,6 +214,195 @@ public final class StrajaGameTests {
         helper.succeed();
     }
 
+    /**
+     * INST-4 live smoke: a bound patrulier restrains a wanted player inside
+     * cuff range and books them into the nearest free station cell — the
+     * full spawn→engage→cuff→book loop with zero humans on duty.
+     */
+    @GameTest(template = "empty")
+    public static void patrolOfficerCuffsAndBooksWanted(GameTestHelper helper) {
+        var runtime = runtime(helper);
+        ServerLevel level = helper.getLevel();
+        var post = helper.absolutePos(new BlockPos(1, 1, 1));
+        var npc = StrajaNpcEntity.spawn(level, post.getX() + 0.5, post.getY(),
+                post.getZ() + 0.5, NpcRoles.PATRULIER, null, null);
+        runtime.npcs().register(npc.getStringUUID(), NpcRoles.PATRULIER);
+        helper.assertTrue(npc.hasPost(),
+                "the patrol officer must bind its spawn point as the post");
+        helper.assertTrue(!npc.isNoAi(),
+                "the patrol officer must have AI enabled to enforce the law");
+        var suspect = mockPlayer(helper);
+        suspect.setPos(post.getX() + 1.5, post.getY(), post.getZ() + 0.5);
+        runtime.bolos().flagSystem(suspect.getStringUUID(),
+                suspect.getName().getString(), "fugar");
+        // A free station cell in the suspect's dimension.
+        var data = runtime.context().prison().read();
+        var cell = new Cell();
+        cell.id = "patrol_cell";
+        cell.dimension = level.dimension().location().toString();
+        cell.minX = post.getX() - 2;
+        cell.maxX = post.getX() + 2;
+        cell.minY = post.getY() - 2;
+        cell.maxY = post.getY() + 4;
+        cell.minZ = post.getZ() + 8;
+        cell.maxZ = post.getZ() + 12;
+        data.cells.removeIf(c -> cell.id.equalsIgnoreCase(c.id));
+        data.cells.add(cell);
+        runtime.context().prison().write(data);
+        // The officer stands at the suspect's shoulder — inside cuff range.
+        npc.setPos(suspect.getX() - 1.0, suspect.getY(), suspect.getZ());
+        runtime.patrols().tick(new PatrolOfficerFacade(npc, level));
+        helper.assertTrue(runtime.context().custody().read().cuffed
+                        .containsKey(suspect.getStringUUID()),
+                "the patrol officer must restrain a wanted suspect in cuff range");
+        var booked = runtime.context().prison().read().sentences.stream()
+                .anyMatch(s -> suspect.getStringUUID().equals(s.targetUuid));
+        helper.assertTrue(booked, "the suspect must be booked into a cell");
+        // And an innocent bystander is never touched.
+        var bystander = mockPlayer(helper);
+        bystander.setPos(post.getX() + 1.5, post.getY(), post.getZ() + 0.5);
+        runtime.patrols().tick(new PatrolOfficerFacade(npc, level));
+        helper.assertFalse(runtime.context().custody().read().cuffed
+                        .containsKey(bystander.getStringUUID()),
+                "an innocent must never be restrained");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void surrenderBooksViolentOffender(GameTestHelper helper) {
+        var runtime = runtime(helper);
+        ServerLevel level = helper.getLevel();
+        var suspect = mockPlayer(helper);
+        var post = helper.absolutePos(new BlockPos(1, 1, 1));
+        suspect.setPos(post.getX() + 0.5, post.getY(), post.getZ() + 0.5);
+        runtime.bolos().flagSystem(suspect.getStringUUID(),
+                suspect.getName().getString(), "fugar");
+        var data = runtime.context().prison().read();
+        var cell = new Cell();
+        cell.id = "surrender_cell";
+        cell.dimension = level.dimension().location().toString();
+        cell.minX = post.getX() - 2;
+        cell.maxX = post.getX() + 2;
+        cell.minY = post.getY() - 2;
+        cell.maxY = post.getY() + 4;
+        cell.minZ = post.getZ() + 8;
+        cell.maxZ = post.getZ() + 12;
+        data.cells.removeIf(c -> cell.id.equalsIgnoreCase(c.id));
+        data.cells.add(cell);
+        runtime.context().prison().write(data);
+        helper.assertTrue(runtime.surrenders().surrender(gateway(suspect)),
+                "a wanted player must be able to turn themselves in");
+        var booked = runtime.context().prison().read().sentences.stream()
+                .filter(s -> suspect.getStringUUID().equals(s.targetUuid))
+                .findFirst().orElse(null);
+        helper.assertTrue(booked != null, "the surrender must produce a sentence");
+        helper.assertFalse(booked.cellId.isBlank(),
+                "a free cell must be claimed, not waitlisted");
+        int expectedDays = Math.max(1,
+                runtime.context().policies().prisonDefaultSentenceDays * 75 / 100);
+        helper.assertTrue(booked.sentenceDays == expectedDays,
+                "voluntary clemency prices " + expectedDays + " days, got "
+                        + booked.sentenceDays);
+        helper.assertFalse(runtime.wantedRoleplay().isWanted(suspect.getUUID()),
+                "the wanted mark must resolve on booking");
+        helper.assertTrue(runtime.context().custody().read().cuffed
+                        .containsKey(suspect.getStringUUID()),
+                "restraints ride the sentence — releaseFromJail cleans them");
+        helper.succeed();
+    }
+
+    /** COR-1 smoke: a pocketed bribe leaves a trail; a citizen denunț turns it into a warrant. */
+    @GameTest(template = "empty")
+    public static void denuntFindsTheMoneyTrail(GameTestHelper helper) {
+        var runtime = runtime(helper);
+        var reporter = mockPlayer(helper);
+        var guard = mockPlayer(helper);
+        var payer = mockPlayer(helper);
+        var state = runtime.players().state(guard.getUUID());
+        state.rank = Rank.GUARD.level();
+        state.duty = true;
+        runtime.players().save(guard.getUUID(), state);
+        runtime.corruptions().recordBribe(gateway(guard), gateway(payer), 120, false);
+        helper.assertTrue(runtime.corruptions().denunt(gateway(reporter),
+                        guard.getStringUUID()),
+                "a citizen report must run");
+        helper.assertTrue(runtime.context().bolos().read().records.stream().anyMatch(
+                        r -> guard.getStringUUID().equals(r.subjectUuid)
+                                && r.status == BoloStatus.ACTIVE),
+                "the money trail must write the warrant");
+        helper.succeed();
+    }
+
+    /** ITEM-1: denunț against a registered officer with no native entity relieves it — no BOLO a patrol could never serve. */
+    @GameTest(template = "empty")
+    public static void denuntDismissesRegisteredNpc(GameTestHelper helper) {
+        var runtime = runtime(helper);
+        var reporter = mockPlayer(helper);
+        var payer = mockPlayer(helper);
+        String npcUuid = java.util.UUID.randomUUID().toString();
+        runtime.npcs().register(npcUuid, NpcRoles.PATRULIER);
+        runtime.corruptions().recordBribe(npcUuid, "Oficerul Legat",
+                gateway(payer), 120, false);
+        helper.assertTrue(runtime.corruptions().denunt(gateway(reporter), npcUuid),
+                "a citizen report must run");
+        helper.assertTrue(runtime.npcs().registration(npcUuid) == null,
+                "the convicted officer must lose the badge");
+        helper.assertTrue(runtime.context().bolos().read().records.stream()
+                        .noneMatch(r -> npcUuid.equals(r.subjectUuid)),
+                "an NPC never carries a player warrant");
+        helper.succeed();
+    }
+
+    /** DROP-1 smoke: a fallen officer pays its own bounty — brass coins and experience. */
+    @GameTest(template = "empty")
+    public static void soldierDropsCoinsAndXp(GameTestHelper helper) {
+        var runtime = runtime(helper);
+        var policies = runtime.context().policies();
+        // The pack's currency comes from adys_decorations, which the bare
+        // gametest env cannot load — pin the brass tier to a vanilla item so
+        // the drop contract is exercised in any world.
+        int brassKey = policies.coinTierRatio;
+        String originalCoin = policies.coinItemIds.put(brassKey, "minecraft:emerald");
+        try {
+            soldierDropsCoinsAndXpBody(helper, runtime, policies);
+        } finally {
+            if (originalCoin == null) policies.coinItemIds.remove(brassKey);
+            else policies.coinItemIds.put(brassKey, originalCoin);
+        }
+    }
+
+    private static void soldierDropsCoinsAndXpBody(GameTestHelper helper,
+            com.dwurdy.straja.bootstrap.StrajaRuntime runtime,
+            com.dwurdy.straja.domain.model.StrajaPolicies policies) {
+        ServerLevel level = helper.getLevel();
+        var post = helper.absolutePos(new BlockPos(1, 1, 1));
+        var npc = StrajaNpcEntity.spawn(level, post.getX() + 0.5, post.getY(),
+                post.getZ() + 0.5, NpcRoles.PATRULIER, null, null);
+        runtime.npcs().register(npc.getStringUUID(), NpcRoles.PATRULIER);
+        var killer = mockPlayer(helper);
+        killer.setPos(npc.getX() + 1.0, npc.getY(), npc.getZ());
+        npc.hurt(level.damageSources().playerAttack(killer), 500.0f);
+        helper.assertTrue(!npc.isAlive(), "the officer must die to the attack");
+        var area = net.minecraft.world.phys.AABB.ofSize(
+                net.minecraft.world.phys.Vec3.atCenterOf(post), 6, 4, 6);
+        String brass = policies.coinItemIds.get(policies.coinTierRatio);
+        helper.assertTrue(brass != null, "the brass tier must resolve");
+        boolean coins = level.getEntitiesOfClass(
+                        net.minecraft.world.entity.item.ItemEntity.class, area)
+                .stream().anyMatch(ie -> {
+                    String id = net.minecraft.core.registries.BuiltInRegistries.ITEM
+                            .getKey(ie.getItem().getItem()).toString();
+                    return brass.equals(id)
+                            && ie.getItem().getCount()
+                                    >= runtime.context().policies().npcSoldierCoinsMin;
+                });
+        helper.assertTrue(coins, "the fallen officer must drop brass coins");
+        boolean orb = !level.getEntitiesOfClass(
+                net.minecraft.world.entity.ExperienceOrb.class, area).isEmpty();
+        helper.assertTrue(orb, "the fallen officer must drop experience");
+        helper.succeed();
+    }
+
     /** Damage-boundary semantics: deny unauthorized, cap non-lethal, down on lethal, pass vanilla hits. */
     @GameTest(template = "empty")
     public static void batonDamageRouting(GameTestHelper helper) {
@@ -303,6 +511,129 @@ public final class StrajaGameTests {
         });
     }
 
+    /**
+     * rc.4 regression (report-form journey): a held bookshelf book earns its
+     * Secretary copy, but the copy is an affordance, not a gate — the
+     * desk/chat surface must still dispatch so common institution tasks stay
+     * reachable through the GUI instead of an item-only flow. A mock player's
+     * connection cannot carry the advanced-open payload, so the surface
+     * resolves through the chat fallback here: dispatched surfaces mint one
+     * action token per row, which is the observable contract.
+     */
+    @GameTest(template = "empty")
+    public static void secretaryBookCopyKeepsSurfaceReachable(GameTestHelper helper) {
+        var runtime = runtime(helper);
+        ServerLevel level = helper.getLevel();
+        var player = mockPlayer(helper);
+        var pos = helper.absolutePos(new BlockPos(2, 1, 2));
+        // Keep the assertion about the fix, not the environment's flag state.
+        boolean menusBefore = com.dwurdy.straja.config.StrajaServerConfig.NPC_MENUS_ENABLED
+                .getAsBoolean();
+        com.dwurdy.straja.config.StrajaServerConfig.NPC_MENUS_ENABLED.set(true);
+        try {
+            // Unregistered native entity — the mobInteract leg.
+            var npc = StrajaNpcEntity.spawn(level, pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5,
+                    "secretary", null, "Secretara");
+            player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.WRITTEN_BOOK));
+            NpcInteractionService.interact(npc, player, level,
+                    InteractionHand.MAIN_HAND);
+            helper.assertTrue(countItems(player, Items.WRITTEN_BOOK) == 2,
+                    "the held book must still produce a Secretary copy");
+            helper.assertTrue(NpcInteractionService.pendingActionsFor(player.getUUID()) > 0,
+                    "the NPC surface must still dispatch while the player holds a book (mobInteract leg)");
+
+            // Registry-bound entity — the EntityInteract leg real clients take.
+            runtime.npcRegistry().adopt(npc.getStringUUID(), "secretary");
+            long issued = NpcInteractionService.pendingActionsFor(player.getUUID());
+            var interactEvent = new PlayerInteractEvent.EntityInteract(
+                    player, InteractionHand.MAIN_HAND, npc);
+            NeoForge.EVENT_BUS.post(interactEvent);
+            helper.assertTrue(countItems(player, Items.WRITTEN_BOOK) == 3,
+                    "the registry-bound interact must still copy the held book");
+            helper.assertTrue(NpcInteractionService.pendingActionsFor(player.getUUID()) > issued,
+                    "the NPC surface must still dispatch while the player holds a book (event leg)");
+            npc.discard();
+        } finally {
+            com.dwurdy.straja.config.StrajaServerConfig.NPC_MENUS_ENABLED.set(menusBefore);
+        }
+        helper.succeed();
+    }
+
+    private static int countItems(net.minecraft.server.level.ServerPlayer player,
+                                  net.minecraft.world.item.Item item) {
+        int count = 0;
+        var inventory = player.getInventory();
+        for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
+            count += inventory.getItem(slot).is(item)
+                    ? inventory.getItem(slot).getCount() : 0;
+        }
+        return count;
+    }
+
+    /**
+     * rc.4 regression (physical-items journey): reset-all must leave real
+     * players inventory-empty as well — an arrest's proces-verbal used to
+     * survive into the next scenario's held slot and block the give check.
+     * Other batch tests hold items across ticks, so their inventories are
+     * snapshotted and restored around the command — the suite never observes
+     * the global clear.
+     */
+    @GameTest(template = "empty")
+    public static void resetAllClearsOnlineInventories(GameTestHelper helper) {
+        var runtime = runtime(helper);
+        var server = helper.getLevel().getServer();
+        var dispatcher = server.getCommands().getDispatcher();
+        List<String> lines = new ArrayList<>();
+        var admin = capturingSource(helper, lines);
+        var player = mockPlayer(helper);
+        player.getInventory().setItem(0, new ItemStack(Items.WRITTEN_BOOK));
+
+        var snapshots = new java.util.HashMap<net.minecraft.server.level.ServerPlayer,
+                java.util.List<net.minecraft.core.NonNullList<ItemStack>>>();
+        for (var other : server.getPlayerList().getPlayers()) {
+            if (other == player) continue;
+            var inv = other.getInventory();
+            var compartments = new ArrayList<net.minecraft.core.NonNullList<ItemStack>>();
+            for (var compartment : java.util.List.of(inv.items, inv.armor, inv.offhand)) {
+                var copy = net.minecraft.core.NonNullList.withSize(
+                        compartment.size(), ItemStack.EMPTY);
+                for (int i = 0; i < compartment.size(); i++) {
+                    copy.set(i, compartment.get(i).copy());
+                }
+                compartments.add(copy);
+            }
+            snapshots.put(other, compartments);
+        }
+        var testStoreBefore = runtime.context().test().read();
+
+        boolean previous = runtime.policies().testCommandsEnabled;
+        runtime.policies().testCommandsEnabled = true;
+        try {
+            run(helper, dispatcher, admin, "straja test reset-all");
+            helper.assertTrue(player.getInventory().isEmpty(),
+                    "reset-all must clear online player inventories");
+            for (var other : snapshots.keySet()) {
+                helper.assertTrue(other.getInventory().isEmpty(),
+                        "reset-all must clear every online player's inventory");
+            }
+        } finally {
+            runtime.policies().testCommandsEnabled = previous;
+            runtime.context().test().write(testStoreBefore);
+            snapshots.forEach((other, compartments) -> {
+                var inv = other.getInventory();
+                var targets = java.util.List.of(inv.items, inv.armor, inv.offhand);
+                for (int c = 0; c < compartments.size(); c++) {
+                    var source = compartments.get(c);
+                    var target = targets.get(c);
+                    for (int i = 0; i < source.size(); i++) {
+                        target.set(i, source.get(i));
+                    }
+                }
+            });
+        }
+        helper.succeed();
+    }
+
     /** A confirmed cell protects its blocks from non-admin players only. */
     @GameTest(template = "empty")
     public static void cellProtection(GameTestHelper helper) {
@@ -326,8 +657,7 @@ public final class StrajaGameTests {
         helper.setBlock(new BlockPos(2, 2, 0), Blocks.OAK_DOOR.defaultBlockState()
                 .setValue(DoorBlock.HALF, DoubleBlockHalf.UPPER));
 
-        var commissioner = new VirtualPlayerGateway("dwurdy");
-        commissioner.setOp(true);
+        var commissioner = appointCommissioner(runtime);
         commissioner.setDimension(dimension);
         var cornerA = helper.absolutePos(new BlockPos(1, 1, 1));
         var cornerB = helper.absolutePos(new BlockPos(3, 3, 3));
@@ -374,8 +704,7 @@ public final class StrajaGameTests {
     @GameTest(template = "empty")
     public static void recoveryIdempotent(GameTestHelper helper) {
         var runtime = runtime(helper);
-        var commissioner = new VirtualPlayerGateway("dwurdy");
-        commissioner.setOp(true);
+        var commissioner = appointCommissioner(runtime);
         commissioner.giveVerified(ItemSpec.of("straja:rope", 1));
         commissioner.selectSlot(0);
         var victim = new VirtualPlayerGateway("victim");
@@ -899,8 +1228,7 @@ public final class StrajaGameTests {
         ServerLevel level = helper.getLevel();
         String dim = level.dimension().location().toString();
 
-        var commissioner = new VirtualPlayerGateway("dwurdy");
-        commissioner.setOp(true);
+        var commissioner = appointCommissioner(runtime);
         commissioner.setDimension(dim);
 
         var min = helper.absolutePos(new BlockPos(0, -60, 0));
@@ -1000,8 +1328,7 @@ public final class StrajaGameTests {
         helper.assertTrue(runtime.wanted().isWanted(prisoner.getUUID()),
                 "an ACTIVE bolo must make the player wanted");
 
-        var commissioner = new VirtualPlayerGateway("dwurdy");
-        commissioner.setOp(true);
+        var commissioner = appointCommissioner(runtime);
         commissioner.setDimension(prisoner.level().dimension().location().toString());
         runtime.prison().arrest(pg, null, 1, commissioner, "gt-wanted");
 
@@ -1422,5 +1749,156 @@ public final class StrajaGameTests {
             bolos.clearFor(travelerEntity.getUUID());
         }
         helper.succeed();
+    }
+
+    /**
+     * POSTER-1 live smoke: a declared spot materializes its display pair,
+     * the wanted head carries the skin profile, and a resolved hunt comes
+     * down — the whole flow rides the real 1 Hz server tick.
+     */
+    @GameTest(template = "empty", timeoutTicks = 200)
+    public static void wantedPosterShowsAndClearsFace(GameTestHelper helper) {
+        var runtime = runtime(helper);
+        ServerLevel level = helper.getLevel();
+        var pos = helper.absolutePos(new BlockPos(1, 1, 1));
+        var admin = mockPlayer(helper);
+        admin.setPos(pos.getX() + 1.5, pos.getY(), pos.getZ() + 0.5);
+        var target = mockPlayer(helper);
+        // The game-test world persists between runs — clear any stale spot.
+        runtime.posters().posterRemove(gateway(admin), "afisaj");
+        helper.assertTrue(runtime.posters().posterAdd(gateway(admin), "afisaj"),
+                "the admin must declare a poster spot");
+        var store = runtime.context().bounties().read();
+        // The shared world churns its feed — other tests' hunts post and
+        // resolve constantly — so ours is seated first in feed order and
+        // the cycling index lands on it; stale copies of this record from
+        // previous runs are dropped without touching anyone else's hunts.
+        store.records.removeIf(r -> r != null && "gt-bounty".equals(r.id));
+        var bounty = new com.dwurdy.straja.domain.model.BountyRecord();
+        bounty.id = "gt-bounty";
+        bounty.targetUuid = target.getStringUUID();
+        bounty.targetName = target.getName().getString();
+        bounty.amount = 120;
+        bounty.postedAt = System.currentTimeMillis();
+        bounty.expiresAt = bounty.postedAt + 7L * 24 * 60 * 60 * 1000;
+        store.records.add(0, bounty);
+        runtime.context().bounties().write(store);
+        helper.startSequence()
+                .thenIdle(30) // at least one poster sweep of the 1 Hz tick
+                .thenExecute(() -> {
+                    var spot = runtime.context().setup().read().posterSpots.get("afisaj");
+                    var displays = level.getEntitiesOfClass(Display.class,
+                            AABB.ofSize(new Vec3(spot.x, spot.y, spot.z), 6, 6, 6),
+                            e -> "afisaj".equals(e.getPersistentData()
+                                    .getString("strajaPoster")));
+                    helper.assertTrue(displays.size() >= 2,
+                            "the spot must materialize head + caption displays");
+                    var head = displays.stream()
+                            .filter(Display.ItemDisplay.class::isInstance)
+                            .map(Display.ItemDisplay.class::cast)
+                            .findFirst().orElse(null);
+                    helper.assertTrue(head != null, "an ItemDisplay carries the face");
+                    var stack = head.getSlot(0).get();
+                    helper.assertTrue(stack.is(Items.PLAYER_HEAD),
+                            "the poster wears a player head");
+                    var profile = stack.get(DataComponents.PROFILE);
+                    helper.assertTrue(profile != null && profile.id()
+                                    .map(target.getUUID()::equals).orElse(false),
+                            "the wanted skin must ride the head — offline-safe");
+                    var resolve = runtime.context().bounties().read();
+                    resolve.records.stream()
+                            .filter(r -> r != null && "gt-bounty".equals(r.id))
+                            .forEach(r -> r.status =
+                            com.dwurdy.straja.domain.model.BountyStatus.CAPTURED);
+                    runtime.context().bounties().write(resolve);
+                })
+                .thenIdle(30)
+                .thenExecute(() -> {
+                    var spot = runtime.context().setup().read().posterSpots.get("afisaj");
+                    var heads = level.getEntitiesOfClass(Display.ItemDisplay.class,
+                            AABB.ofSize(new Vec3(spot.x, spot.y, spot.z), 6, 6, 6),
+                            e -> "afisaj".equals(e.getPersistentData()
+                                    .getString("strajaPoster")));
+                    helper.assertTrue(!heads.isEmpty(),
+                            "the idle board still materializes");
+                    // The hunt resolved — the board shows the next face or
+                    // the idle state, but never the captured one.
+                    helper.assertTrue(heads.stream().noneMatch(d -> {
+                        var p = d.getSlot(0).get().get(DataComponents.PROFILE);
+                        return p != null && p.id()
+                                .map(target.getUUID()::equals).orElse(false);
+                    }), "a captured face must come down at once");
+                })
+                .thenSucceed();
+    }
+
+    /**
+     * MASK-1 live smoke: a wanted player in a carved pumpkin is invisible
+     * to the patrol scan — the bare face on the same spot is hunted. The
+     * NPC's own duty goal drives the service over real ticks; distance
+     * closed is the observable, not navigation internals.
+     */
+    @GameTest(template = "empty", timeoutTicks = 200)
+    public static void maskedWantedEvadesPatrolScan(GameTestHelper helper) {
+        var runtime = runtime(helper);
+        ServerLevel level = helper.getLevel();
+        var post = helper.absolutePos(new BlockPos(1, 1, 1));
+        // The empty template is air — pathfinding needs a floor under the route.
+        for (int fx = post.getX() - 1; fx <= post.getX() + 10; fx++) {
+            for (int fz = post.getZ() - 1; fz <= post.getZ() + 1; fz++) {
+                level.setBlock(new BlockPos(fx, post.getY() - 1, fz),
+                        Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        var npc = StrajaNpcEntity.spawn(level, post.getX() + 0.5, post.getY(),
+                post.getZ() + 0.5, NpcRoles.PATRULIER, null, null);
+        runtime.npcs().register(npc.getStringUUID(), NpcRoles.PATRULIER);
+        var suspect = mockPlayer(helper);
+        // ~4.5 blocks out — past the mask recognition radius but the
+        // nearest wanted mark to the post, so the duty goal picks this
+        // suspect over wanted players bleeding in from neighbour tests.
+        suspect.setPos(post.getX() + 4.5, post.getY(), post.getZ() + 0.5);
+        suspect.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.CARVED_PUMPKIN));
+        // A fugitive mark never expires, and the unique alias keeps it
+        // alive when a neighbour test resolves every "test-mock-player"
+        // BOLO by name — shared-world hygiene, not flavour.
+        runtime.bolos().markFugitive(suspect.getStringUUID(),
+                "gt-mask-suspect", "fugar", "");
+        var data = runtime.context().prison().read();
+        var cell = new Cell();
+        cell.id = "mask_patrol_cell";
+        cell.dimension = level.dimension().location().toString();
+        cell.minX = post.getX() - 2; cell.maxX = post.getX() + 2;
+        cell.minY = post.getY() - 2; cell.maxY = post.getY() + 4;
+        cell.minZ = post.getZ() + 8; cell.maxZ = post.getZ() + 12;
+        data.cells.removeIf(c -> cell.id.equalsIgnoreCase(c.id));
+        data.cells.add(cell);
+        runtime.context().prison().write(data);
+        helper.startSequence()
+                .thenIdle(60) // masked: the duty goal scans, never hunts
+                .thenExecute(() -> helper.assertTrue(
+                        !runtime.context().custody().read().cuffed
+                                .containsKey(suspect.getStringUUID())
+                                && suspect.getHealth() >= suspect.getMaxHealth(),
+                        "a covered face is never struck or seized — the scan "
+                                + "doesn't see the person"))
+                .thenExecute(() -> {
+                    suspect.setItemSlot(EquipmentSlot.HEAD, ItemStack.EMPTY);
+                    // A fresh officer carries no locked engagement — its
+                    // first scan picks this suspect over wanted marks
+                    // bleeding in from neighbour tests.
+                    var second = StrajaNpcEntity.spawn(level,
+                            post.getX() + 0.5, post.getY(), post.getZ() + 0.5,
+                            NpcRoles.PATRULIER, null, null);
+                    runtime.npcs().register(second.getStringUUID(),
+                            NpcRoles.PATRULIER);
+                })
+                .thenIdle(60) // unmasked: the same suspect is closed on
+                .thenExecute(() -> helper.assertTrue(
+                        runtime.context().custody().read().cuffed
+                                .containsKey(suspect.getStringUUID())
+                                || suspect.getHealth() < suspect.getMaxHealth(),
+                        "the bare face is hunted — struck or seized"))
+                .thenSucceed();
     }
 }

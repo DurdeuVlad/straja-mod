@@ -27,6 +27,7 @@ public final class DispatchService {
     public static final String SOURCE_TRANSFER = "TRANSFER";
     /** FUN-9: escape-prep detections — tunnels, jams, witnessed bribes. */
     public static final String SOURCE_ESCAPE = "ESCAPE";
+    public static final String SOURCE_PATROL = "PATROL";
 
     private final StrajaContext ctx;
     private final PlayerService players;

@@ -1,0 +1,95 @@
+{
+  "name": "custody-desk",
+  "group": "custody-prison",
+  "blocking": true,
+  "timeoutSeconds": 120,
+  "observable": "data-first commissioner selection through the setupCommissioner service path (/straja setup commissioner) + clickable custody consent links minted on cuff/surrender requests — no typed answers",
+  "failure": "any expectation unmet, or a missing link:custody-accept:/link:custody-refuse: in a tell-log",
+  "prerequisites": [
+    "testing.enableTestCommands=true",
+    "environment=local"
+  ],
+  "steps": [
+    {
+      "name": "create-admin",
+      "command": "straja test create-player cd_com",
+      "expectNotContains": "disabled"
+    },
+    {
+      "name": "debug-commissioner",
+      "command": "straja test set-commissioner cd_com",
+      "expectRegex": "commissioner"
+    },
+    {
+      "name": "create-successor",
+      "command": "straja test create-player cd_new",
+      "expectNotContains": "disabled"
+    },
+    {
+      "name": "appoint-by-command-path",
+      "command": "straja test appoint-commissioner cd_com cd_new",
+      "expectNotContains": "disabled"
+    },
+    {
+      "name": "appoint-confirmation-in-log",
+      "command": "straja test tell-log cd_com",
+      "expectContains": "Comisar numit"
+    },
+    {
+      "name": "checklist-query",
+      "command": "straja test setup cd_com",
+      "expectNotContains": "disabled"
+    },
+    {
+      "name": "checklist-shows-appointment",
+      "command": "straja test tell-log cd_com",
+      "expectContains": "Comisar: numit"
+    },
+    {
+      "name": "create-civilian",
+      "command": "straja test create-player cd_civ",
+      "expectNotContains": "disabled"
+    },
+    {
+      "name": "issuer-gets-cuffs",
+      "command": "straja test cuffs-item cd_com",
+      "expectNotContains": "disabled"
+    },
+    {
+      "name": "cuff-request-mints-links",
+      "command": "straja test cuffs-request cd_com cd_civ",
+      "expectNotContains": "disabled"
+    },
+    {
+      "name": "civilian-sees-accept-link",
+      "command": "straja test tell-log cd_civ",
+      "expectContains": "link:custody-accept:"
+    },
+    {
+      "name": "civilian-sees-refuse-link",
+      "command": "straja test tell-log cd_civ",
+      "expectContains": "link:custody-refuse:"
+    },
+    {
+      "name": "create-second-civilian",
+      "command": "straja test create-player cd_civ2",
+      "expectNotContains": "disabled"
+    },
+    {
+      "name": "surrender-request-mints-links",
+      "command": "straja test surrender-request cd_com cd_civ2",
+      "expectNotContains": "disabled"
+    },
+    {
+      "name": "surrender-links-in-log",
+      "command": "straja test tell-log cd_civ2",
+      "expectRegex": "link:custody-accept:S\\d+"
+    },
+    {
+      "name": "cleanup-reset",
+      "command": "straja test reset-all",
+      "expectContains": "all virtual player state reset",
+      "cleanup": true
+    }
+  ]
+}

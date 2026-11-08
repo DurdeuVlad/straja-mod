@@ -314,6 +314,29 @@ public final class NpcPresentationRuntime {
                 : NpcBindingRoleResolver.assignedRoleForHost(state.lifecycle(), hostEntityUuid);
     }
 
+    /**
+     * ITEM-1 discipline: relieves a bound host of every institutional role —
+     * the entity keeps its provider, the institution takes back the badge.
+     * Returns true when at least one binding was removed.
+     */
+    public static boolean unbindHost(String hostEntityUuid) {
+        RuntimeState state = STATE.get();
+        if (state == null || state.lifecycle() == null || hostEntityUuid == null) return false;
+        boolean removed = false;
+        for (var inspection : state.lifecycle().inspections().values()) {
+            var binding = inspection.binding();
+            if (binding != null && hostEntityUuid.equals(binding.hostEntityUuid())) {
+                var result = state.lifecycle().unbind(binding.bindingId());
+                if (result != null
+                        && result.status() == com.dwurdy.straja.domain.model
+                                .NpcProviderResult.Status.ACCEPTED) {
+                    removed = true;
+                }
+            }
+        }
+        return removed;
+    }
+
     private static NpcProviderResult toProviderResult(
             com.dwurdy.straja.application.port.in.NpcProvisioningUseCase.ProvisioningResult result) {
         return switch (result.status()) {

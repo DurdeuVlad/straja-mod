@@ -1,6 +1,7 @@
 package com.dwurdy.straja.adapter.in.event;
 
 import com.dwurdy.straja.StrajaMod;
+import com.dwurdy.straja.adapter.in.npc.NpcInteractionService;
 import com.dwurdy.straja.adapter.in.npc.NpcRoles;
 import com.dwurdy.straja.adapter.in.npc.StrajaNpcEntity;
 import com.dwurdy.straja.adapter.in.compat.OptionalCustodyProvider;
@@ -66,14 +67,19 @@ public final class StrajaEvents {
         runtime.storage().tick();
         runtime.checkpoints().tick();
         runtime.bounties().tick();
+        runtime.marks().tick();
         // FUN-1: the delegation engine sweeps pending request queues at its own
         // configured cadence (delegation.sweepSeconds); the call itself is cheap.
         runtime.delegation().tick();
         if (runtime.serverGateway().tickCount() % 20 != 0) return;
         // FUN-6: unanswered calls widen through the band ladder or expire.
+        // Once per second: re-notice wanted players with the [Predă-te] link.
+        runtime.surrenders().tick();
         runtime.dispatch().tick();
         runtime.transfers().tick();
         runtime.escapes().tick();
+        // POSTER-1: wanted faces cycle while nobody reads the board.
+        runtime.posters().tick();
         runtime.prisonJobs().tick();
         runtime.parole().tick();
         // FUN-7: hunts decay to warrants; hunters get fading hints.
@@ -85,8 +91,10 @@ public final class StrajaEvents {
         runtime.v2Missions().expireDue();
         // Armata: unit operations schedule, muster, complete and pay themselves.
         runtime.army().tick();
-        String commissioner = runtime.policies().commissionerUuid == null
-                || runtime.policies().commissionerUuid.isBlank()
+        var appointed = runtime.v2Personnel().commissioner();
+        String commissioner = appointed != null ? appointed.playerUuid
+                : runtime.policies().commissionerUuid == null
+                        || runtime.policies().commissionerUuid.isBlank()
                 ? "commissioner" : runtime.policies().commissionerUuid;
         runtime.v2ComplaintEscalation().escalateDue(commissioner, "");
         runtime.dispatchOutbox();
@@ -163,6 +171,7 @@ public final class StrajaEvents {
     public void onNameFormat(PlayerEvent.NameFormat event) {
         StrajaRuntime runtime = StrajaRuntime.get();
         if (runtime == null || !runtime.policies().rankPrefixChat) return;
+        if (event.getEntity().getServer() == null) return; // client-side Player (e.g. rendering), no server to query
         var gateway = new MinecraftPlayerGateway(event.getEntity().getServer(), event.getEntity().getUUID());
         String prefix = runtime.playerQueries().rankPrefixFor(gateway);
         if (prefix != null) {
@@ -175,6 +184,7 @@ public final class StrajaEvents {
     public void onTabListNameFormat(PlayerEvent.TabListNameFormat event) {
         StrajaRuntime runtime = StrajaRuntime.get();
         if (runtime == null || !runtime.policies().rankPrefixTab) return;
+        if (event.getEntity().getServer() == null) return; // client-side Player (e.g. rendering), no server to query
         var gateway = new MinecraftPlayerGateway(event.getEntity().getServer(), event.getEntity().getUUID());
         String prefix = runtime.playerQueries().rankPrefixFor(gateway);
         if (prefix != null) {
@@ -495,6 +505,26 @@ public final class StrajaEvents {
         // StrajaNpcEntity still reaches mobInteract.
         if (!(event.getTarget() instanceof net.minecraft.server.level.ServerPlayer target)) {
             String boundHostId = event.getTarget().getStringUUID();
+            // ITEM-1: the coin gesture outranks every desk surface — a
+            // jailed prisoner holding coins on a sworn officer is a bribe,
+            // not a menu click. The role resolves through the canonical
+            // binding first, then the legacy registry record.
+            if (event.getHand() == net.minecraft.world.InteractionHand.MAIN_HAND) {
+                String officerRole = NpcPresentationRuntime
+                        .assignedRoleForHost(boundHostId).orElse(null);
+                if (officerRole == null || officerRole.isBlank()) {
+                    var reg = runtime.npcRegistry().registration(boundHostId);
+                    officerRole = reg == null ? null : reg.role();
+                }
+                if (NpcInteractionService.coinBribeGesture(gateway, boundHostId,
+                        event.getTarget().getName().getString(), officerRole,
+                        gateway.mainHand().id())) {
+                    event.setCanceled(true);
+                    toolClickHandledAt.put(player.getUUID(),
+                            player.level().getGameTime());
+                    return;
+                }
+            }
             // desk-menu-bound hosts have no provider event bus of their own —
             // the vanilla right-click opens the chest surface here, ahead of
             // the generic binding check that would otherwise swallow the
@@ -521,7 +551,11 @@ public final class StrajaEvents {
                     // Same trailing-packet guard as the tool claim: a held
                     // patrol wand must not see this click as an air gesture.
                     toolClickHandledAt.put(player.getUUID(), player.level().getGameTime());
-                    if (NpcRoles.trySecretaryBookCopy(registration.role(), gateway)) return;
+                    // A held book still earns its copy, but the copy is an
+                    // affordance, not a gate — the desk/chat surface must
+                    // always open so institution tasks stay reachable through
+                    // the GUI while holding a book.
+                    NpcRoles.trySecretaryBookCopy(registration.role(), gateway);
                     NpcRoles.interact(registration.role(), player, level);
                 }
             }
@@ -557,6 +591,20 @@ public final class StrajaEvents {
         }
         if ("straja:fine_book".equals(held)) {
             if (runtime.fineRoleplay().issueFromDraft(gateway, targetGateway)) event.setCanceled(true);
+            return;
+        }
+        // ITEM-1: coins in hand on an on-duty guard = the bribe gesture.
+        // Only a jailed player can make it — everyone else just hands over
+        // nothing and keeps the normal interact surface. MAIN_HAND only —
+        // the off-hand packet must not re-fire the same offer.
+        if (event.getHand() == net.minecraft.world.InteractionHand.MAIN_HAND
+                && held != null && runtime.policies().coinItemIds.containsValue(held)
+                && runtime.playerQueries().isOnDutyGuard(targetGateway)) {
+            if (runtime.prisonRoleplay().registerStatus(gateway)
+                    == com.dwurdy.straja.domain.model.PrisonerStatus.IN_CELL
+                    && runtime.escapes().bribeAt(gateway, targetGateway)) {
+                event.setCanceled(true);
+            }
             return;
         }
         boolean handled = switch (held) {
@@ -942,7 +990,7 @@ public final class StrajaEvents {
     /**
      * On-duty guards must not damage the jailer when
      * {@code jailerGuardImmunity} is on. Native Straja NPCs enforce that in
-     * {@code jailerMayTakeDamage}; a registry-bound foreign NPC never runs
+     * {@code officerMayTakeDamage}; a registry-bound foreign NPC never runs
      * those overrides, so the same rule is applied here. Non-jailer bound
      * NPCs keep the host mod's damage rules untouched.
      */
@@ -952,11 +1000,30 @@ public final class StrajaEvents {
         StrajaRuntime runtime = StrajaRuntime.get();
         if (runtime == null || event.getEntity().level().isClientSide()
                 || event.getEntity() instanceof StrajaNpcEntity) return;
-        if (!"jailer".equals(npcRoleOf(runtime, event.getEntity()))) return;
+        if (!com.dwurdy.straja.adapter.in.npc.NpcRoles.isOfficerRole(
+                npcRoleOf(runtime, event.getEntity()))) return;
         if (!(event.getSource().getEntity() instanceof net.minecraft.server.level.ServerPlayer attacker)) return;
         var gateway = new MinecraftPlayerGateway(attacker.getServer(), attacker.getUUID());
         if (!runtime.policies().jailerDamageAllowed(
                 runtime.playerQueries().isOnDutyGuard(gateway))) {
+            event.setCanceled(true);
+        }
+    }
+
+    /**
+     * Armament is the engagement license: an unarmed faction NPC never picks
+     * a fight. Canceling the target acquisition in the setTarget hook covers
+     * CustomNPCs' own retaliation AI — the periodic aggro sweep alone would
+     * leave up to a full sweep of fight-back after every hit taken.
+     */
+    @SubscribeEvent
+    public void onUnarmedGuardTarget(
+            net.neoforged.neoforge.event.entity.living.LivingChangeTargetEvent event) {
+        StrajaRuntime runtime = StrajaRuntime.get();
+        if (runtime == null || event.getEntity().level().isClientSide()
+                || !(event.getNewAboutToBeSetTarget()
+                        instanceof net.minecraft.world.entity.player.Player)) return;
+        if (runtime.wantedRoleplay().unarmedGuardTargetBlocked(event.getEntity().getUUID())) {
             event.setCanceled(true);
         }
     }
@@ -987,12 +1054,13 @@ public final class StrajaEvents {
         }
     }
 
-    /** Hurting or killing the jailer NPC spawns a JAILER_ASSAULT arrest mission. */
+    /** Hurting or killing an institutional officer spawns an assault mission. */
     @SubscribeEvent
     public void onNpcDamage(net.neoforged.neoforge.event.entity.living.LivingDamageEvent.Post event) {
         StrajaRuntime runtime = StrajaRuntime.get();
         if (runtime == null || event.getEntity().level().isClientSide()
-                || !"jailer".equals(npcRoleOf(runtime, event.getEntity()))) return;
+                || !com.dwurdy.straja.adapter.in.npc.NpcRoles.isOfficerRole(
+                        npcRoleOf(runtime, event.getEntity()))) return;
         if (!(event.getSource().getEntity() instanceof net.minecraft.server.level.ServerPlayer attacker)) return;
         var gateway = new MinecraftPlayerGateway(attacker.getServer(), attacker.getUUID());
         String outcome = event.getEntity().getHealth() <= 0.5f ? "KILLED" : "WOUNDED";
@@ -1020,8 +1088,11 @@ public final class StrajaEvents {
         if (event.getEntity() instanceof net.minecraft.server.level.ServerPlayer victim) {
             var victimGateway = new MinecraftPlayerGateway(victim.getServer(), victim.getUUID());
             if (attacker != null) {
-                runtime.expansionRoleplay().recordFinalDeath(
-                        new MinecraftPlayerGateway(attacker.getServer(), attacker.getUUID()), victimGateway);
+                var killerGateway = new MinecraftPlayerGateway(attacker.getServer(), attacker.getUUID());
+                runtime.expansionRoleplay().recordFinalDeath(killerGateway, victimGateway);
+                // INST-3: the mark is written while the victim's wanted state
+                // is still live — a lawful kill reads as lawful.
+                runtime.marks().recordKill(killerGateway, victimGateway);
             }
             runtime.custodyRoleplay().recoverAfterDeath(victimGateway);
             // FUN-8: an escort's death breaks the chain anywhere; a prisoner's
@@ -1034,7 +1105,8 @@ public final class StrajaEvents {
         }
         if (attacker == null) return;
         var gateway = new MinecraftPlayerGateway(attacker.getServer(), attacker.getUUID());
-        if ("jailer".equals(npcRoleOf(runtime, event.getEntity()))) {
+        if (com.dwurdy.straja.adapter.in.npc.NpcRoles.isOfficerRole(
+                npcRoleOf(runtime, event.getEntity()))) {
             runtime.reputation().recordJailerAssault(gateway,
                     event.getEntity().getStringUUID(), true);
             runtime.fineRoleplay().createJailerAssaultMission(gateway,

@@ -94,8 +94,9 @@ doar informațiile publice ale biroului.
 Un deținut în lagăr minează și vinde minereul la intendent — încasările nu vin
 în mână, ci în **contul de muncă**. Când contul atinge prețul libertății
 (`flat` sau un multiplicator al amenzilor tale), ești eliberat automat și îți
-recuperezi lucrurile. `/straja camp status` îți arată progresul. Nu ieși din
-perimetru fără escortă — devii fugitiv căutat.
+recuperezi lucrurile. Biroul deținerii (Paznicul) îți arată progresul ca
+acțiune «Statutul taberei de muncă» — `/straja camp status` rămâne ca rezervă.
+Nu ieși din perimetru fără escortă — devii fugitiv căutat.
 
 ## Datorii în custodie (amenzi neplătite)
 
@@ -113,7 +114,10 @@ O amendă neachitată nu dispare la arest — devine **datorie de deținut**:
   refuzată și — în configurația implicită — ești **mutat în lagărul de
   muncă**, unde contul de muncă merge spre prețul libertății. Primești un
   „Ordin de transfer"; la blocare în celulă primești „Refuz de eliberare".
-- **Oricine poate plăti pentru tine.** `/straja debt <nume>` arată soldul;
+- **Oricine poate plăti pentru tine.** La biroul deținerii ai rândurile
+  «Datoriile tale», «Plătește din datorie» și «Plătește cauțiunea» —
+  fiecare cere confirmare DA/NU înainte să miște bani. Comenzile rămân ca
+  rezervă: `/straja debt <nume>` arată soldul;
   `/straja debt pay <nume> [sumă]` virează monedele plătitorului pe
   amenzile tale — fără sumă se acoperă tot restul. Cauțiunea e tot o
   contribuție: `/straja bail <nume>` plătește întâi amenda de captură, apoi

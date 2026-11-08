@@ -179,4 +179,32 @@ class NpcDeskMenuNavigationTest {
         assertEquals(root, nav.home(),
                 "home lands on the bound surface, not a role grid");
     }
+
+    /**
+     * Live pages behave like every other source: they push/pop through the
+     * trail, re-page in place and keep their record id — a paging click on
+     * the parole docket must never lose which hearing was open.
+     */
+    @Test
+    void dynamicPagesTrailAndRepageWithTheirId() {
+        var nav = new DeskNavigation();
+        var docket = new DeskPageSource.DynamicPage("parole-docket", "", 0);
+        nav.open(docket);
+        assertEquals(1, nav.depth());
+        nav.goToPage(1);
+        assertEquals(new DeskPageSource.DynamicPage("parole-docket", "", 1),
+                nav.current(), "the docket re-pages like a section drawer");
+
+        var hearing = new DeskPageSource.DynamicPage("parole-hearing", "PAR-4", 0);
+        nav.open(hearing);
+        assertEquals(new DeskPageSource.DynamicPage("parole-docket", "", 1),
+                nav.back(), "the trail keeps the paged docket under the hearing");
+        assertEquals(new DeskPageSource.RolePage(0), nav.back());
+
+        var dynamic = new DeskPageSource.DynamicPage("parole-status", "", 0);
+        nav.open(dynamic);
+        nav.open(new DeskPageSource.ConfirmPage("parole-settle", "x", List.of()));
+        assertEquals(dynamic, nav.back(),
+                "NU on a parole confirm lands back on the status page");
+    }
 }

@@ -79,7 +79,9 @@ class NpcDeskMenuSectionsTest {
             "delegation-window:AUDIENCE_REQUEST", "delegation-revoke:SO-1",
             "delegation-order-join_petition:ANY",
             "reputation-view", "reputation-correction", "arrest-record-admin",
-            "evidence-list"})
+            "evidence-list", "parole-docket", "parole-review:PH-1",
+            "parole-open:PH-1", "parole-decide-paroled:PH-1",
+            "parole-decide-denied:PH-1", "parole-decide-conditional:PH-1"})
     void commissionerConsoleClassifiesAsComisar(String actionId) {
         assertEquals(DeskSections.COMISAR, DeskSections.sectionFor(actionId));
     }
@@ -89,7 +91,12 @@ class NpcDeskMenuSectionsTest {
             "v2-campaign-status", "v2-professional-work", "v2-document-status",
             "v2-equipment-status", "v2-promotion-status", "reputation-self",
             "arrest-record", "faq:root_secretary", "main:secretary",
-            "more:secretary", "not-a-real-action", "", "parole-review:PH-1"})
+            "more:secretary", "not-a-real-action", "",
+            // The citizen side of parole — the prisoner's own desk rows and
+            // the victim/advocate answers — stays on the desk top.
+            "parole-status", "parole-file", "parole-appeal", "parole-advocate",
+            "parole-settle", "parole-checkin", "parole-object:PH-1",
+            "parole-advocate-answer:accept"})
     void everythingElseStaysOnTheRootPage(String actionId) {
         assertEquals(DeskSections.GENERAL, DeskSections.sectionFor(actionId),
                 actionId + " is not a drawer family");
@@ -176,7 +183,7 @@ class NpcDeskMenuSectionsTest {
     }
 
     @Test
-    void sectionContentPagesAtFortyFiveLikeEveryGrid() {
+    void sectionContentPagesLikeEveryGrid() {
         // The Comisar drawer is the dense case: five admin ids per member.
         var ids = new ArrayList<String>();
         for (int i = 0; i < 18; i++) {
@@ -196,8 +203,9 @@ class NpcDeskMenuSectionsTest {
                 DeskSections.header(DeskSections.COMISAR, comisar.size()), items, 0, true);
         var second = DeskLayout.grid("Secretariat — Comisar",
                 DeskSections.header(DeskSections.COMISAR, comisar.size()), items, 1, true);
-        assertEquals("Secretariat — Comisar — 1/2", first.title());
-        assertEquals("admin-dossier:member-9", second.buttonAt(0).actionId());
+        assertEquals("Secretariat — Comisar — 1/" + DeskLayout.pageCount(90), first.title());
+        // Page 2 opens on the row after the first page's eight.
+        assertEquals("admin-suspend:member-1", second.buttonAt(0).actionId());
         assertTrue(first.buttonAt(DeskLayout.NEXT_SLOT) != null);
         assertTrue(second.buttonAt(DeskLayout.PREV_SLOT) != null);
     }

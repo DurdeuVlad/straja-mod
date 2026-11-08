@@ -231,6 +231,33 @@ class WantedServiceTest {
         assertFalse(wanted.guardDamageBlocked(guardId, null, inmate));
     }
 
+    // --------------------------------------------------- unarmed guard veto
+
+    @Test
+    void unarmedFactionGuardTargetBlocked() {
+        var guardId = npcGuards.addGuard(52, 60, 52, 12);
+        npcGuards.guards.get(guardId).armed = false;
+        assertTrue(wanted.unarmedGuardTargetBlocked(guardId));
+    }
+
+    @Test
+    void armedFactionGuardMayFight() {
+        var guardId = npcGuards.addGuard(52, 60, 52, 12);
+        assertFalse(wanted.unarmedGuardTargetBlocked(guardId));
+    }
+
+    @Test
+    void unarmedVetoHonoursFactionAndPolicy() {
+        var wrongFaction = npcGuards.addGuard(52, 60, 52, 99);
+        npcGuards.guards.get(wrongFaction).armed = false;
+        assertFalse(wanted.unarmedGuardTargetBlocked(wrongFaction));
+        assertFalse(wanted.unarmedGuardTargetBlocked(inmate.uuid()));
+        var guardId = npcGuards.addGuard(52, 60, 52, 12);
+        npcGuards.guards.get(guardId).armed = false;
+        ctx.policies().storageUnarmedGuardsPassive = false;
+        assertFalse(wanted.unarmedGuardTargetBlocked(guardId));
+    }
+
     private PrisonerRegisterRecord reg(TestPlayer p) {
         return ctx.prisonerRegister().read().prisoner(p.uuid().toString());
     }

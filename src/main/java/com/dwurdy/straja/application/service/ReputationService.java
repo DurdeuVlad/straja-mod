@@ -164,12 +164,7 @@ public final class ReputationService {
         // the killer or suppress a later genuine death.
         String deathId = deathPrefix + current;
         boolean killerGuard = players.isOnDutyGuard(killer);
-        CustodyState victimState = ctx.custody().read().states.get(uuid(victim));
-        boolean restrained = victimState != null && (victimState.restraint == RestraintStatus.CUFFED
-                || victimState.condition == PlayerCondition.DOWNED
-                || victimState.condition == PlayerCondition.UNCONSCIOUS_CUSTODY
-                || victimState.custody == CustodyStatus.ARRESTED
-                || victimState.custody == CustodyStatus.JAILED);
+        boolean restrained = isRestrained(victim);
         if (killerGuard && restrained) {
             apply(killer, killer, "GUARD_EXECUTION", deathId,
                     ctx.policies().reputationGuardExecutionDelta,
@@ -180,9 +175,7 @@ public final class ReputationService {
                     victim.name(), uuid(victim), AuditResults.SUCCESS, "restrained_target");
             return;
         }
-        boolean lawful = killerGuard && !restrained
-                && bolos.hasAuthoritativeTask(victim)
-                && recentlyHostile(killer, victim);
+        boolean lawful = isLawfulForceKill(killer, victim);
         int delta;
         String source;
         if (lawful) {
@@ -217,6 +210,31 @@ public final class ReputationService {
                 // Dispatch is a notification layer — never drop the death event.
             }
         }
+    }
+
+    /** Cuffed, downed, arrested or jailed — the target is already caught. */
+    public boolean isRestrained(PlayerGateway target) {
+        if (target == null) return false;
+        CustodyState state = ctx.custody().read().states.get(uuid(target));
+        return state != null && (state.restraint == RestraintStatus.CUFFED
+                || state.condition == PlayerCondition.DOWNED
+                || state.condition == PlayerCondition.UNCONSCIOUS_CUSTODY
+                || state.custody == CustodyStatus.ARRESTED
+                || state.custody == CustodyStatus.JAILED);
+    }
+
+    /**
+     * §15a lawful force: an on-duty guard killing a hostile, unrestrained
+     * suspect who carries an active authoritative task. Shared with
+     * {@link MarkService} so the auto-mark exempts exactly what reputation
+     * already classifies as {@code LAWFUL_LETHAL_FORCE}.
+     */
+    public boolean isLawfulForceKill(PlayerGateway killer, PlayerGateway victim) {
+        return killer != null && victim != null
+                && players.isOnDutyGuard(killer)
+                && !isRestrained(victim)
+                && bolos.hasAuthoritativeTask(victim)
+                && recentlyHostile(killer, victim);
     }
 
     public synchronized ReputationEvent recordJailerAssault(PlayerGateway attacker,

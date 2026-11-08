@@ -16,6 +16,8 @@ public class SetupData {
     public Map<String, BribePost> bribePosts = new LinkedHashMap<>();
     /** FUN-10: declared work points where prisoners turn in job quotas. */
     public Map<String, JobPost> jobPosts = new LinkedHashMap<>();
+    /** POSTER-1: declared wanted-poster anchors — a face board that cycles. */
+    public Map<String, PosterSpot> posterSpots = new LinkedHashMap<>();
 
     /**
      * Fresh setup seeds the four reference checkpoint slots, all unplaced.
@@ -140,6 +142,16 @@ public class SetupData {
             double dx = px - x, dy = py - y, dz = pz - z;
             return dx * dx + dy * dy + dz * dz <= radius * radius;
         }
+    }
+
+    /** POSTER-1: a declared poster anchor — the display entities own the rest. */
+    public static class PosterSpot {
+        public String id = "";
+        public String name = "";
+        public String dimension = "minecraft:overworld";
+        public double x;
+        public double y;
+        public double z;
     }
 
     public Location location(String key) {

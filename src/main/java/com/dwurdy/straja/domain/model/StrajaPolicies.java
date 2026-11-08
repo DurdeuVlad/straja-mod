@@ -11,8 +11,9 @@ import java.util.Map;
  * Defaults mirror kubejs/startup_scripts/00_straja_config.js.
  */
 public class StrajaPolicies {
-    // identity
-    public String commissionerName = "dwurdy";
+    // identity — deliberately empty: the commissioner is selected in-world via
+    // /straja setup commissioner, never shipped as a baked-in default name.
+    public String commissionerName = "";
     public String commissionerUuid = "";
     public boolean requireUuid;
     public boolean allowNameFallback = true;
@@ -22,6 +23,11 @@ public class StrajaPolicies {
     public String npcProviderMode = "customnpcs";
     /** Explicit second gate for the diagnostic text provider. */
     public boolean npcDebugTextEnabled = false;
+    /** Brass coins a fallen officer drops — farming soldiers pays. */
+    public int npcSoldierCoinsMin = 1;
+    public int npcSoldierCoinsMax = 3;
+    /** Experience a fallen officer yields. */
+    public int npcSoldierXp = 8;
     /** Optional secret; never included in diagnostics or persisted domain data. */
     public String discordWebhookUrl = "";
 
@@ -117,6 +123,41 @@ public class StrajaPolicies {
     public boolean evidenceEnabled = true;
     public double searchRangeBlocks = 4;
     public int evidenceMaxReasonLength = 200;
+
+    // auto-mark (the law records crimes without a clerk)
+    public boolean autoMarkKills = true;
+    public boolean autoMarkWitnessOnly = false;
+    public boolean autoBountyEnabled = true;
+    public int autoBountyAmount = 200;
+    public int autoBountyAfterHours = 0; // 0 = priced on the next sweep; >0
+        // needs the mark's own TTL to outlive the grace window
+
+    // frisk (verificare corporală — consented inventory check)
+    public boolean friskEnabled = true;
+    public double friskRange = 5.0;
+    public int friskOfferSeconds = 30;
+    public int friskCooldownSeconds = 45;
+
+    // patrulier (the institution's physical force — no humans required)
+    public boolean patrolOfficerEnabled = true;
+    public double patrolPostRadius = 24.0;   // post jurisdiction
+    public double patrolScanRange = 24.0;    // how far the officer notices
+    public int patrolEngageCooldownSeconds = 3;
+
+    // poster — the public face board cycling active bounties
+    public boolean posterEnabled = true;
+    public double posterHoldRadius = 14.0;    // a watcher inside this freezes the swap
+    public int posterCycleSeconds = 15;       // cadence between faces while unobserved
+
+    // mask — a full-face cover beats casual recognition, never close scrutiny
+    public boolean maskEnabled = true;
+    public double maskRecognitionRadius = 3.0; // the officer sees through this close
+    public java.util.Set<String> maskItemIds = new java.util.LinkedHashSet<>(java.util.Set.of(
+            "minecraft:carved_pumpkin", "straja:head_sack",
+            "minecraft:zombie_head", "minecraft:creeper_head",
+            "minecraft:skeleton_skull", "minecraft:wither_skeleton_skull",
+            "minecraft:piglin_head", "minecraft:dragon_head",
+            "minecraft:player_head"));
 
     // cuffs
     public int cuffRequestTimeoutSeconds = 60;
@@ -428,6 +469,8 @@ public class StrajaPolicies {
     public int bribeDoorOpenSeconds = 90;
     /** Offer expires without an answer — the prisoner keeps the coins. */
     public int bribeOfferMs = 60_000;
+    /** Percent of NPC officers whose trait accepts a coin bribe. */
+    public int npcBribeAcceptPercent = 40;
     /** Seconds a blending prisoner walks free before the alarm fires. */
     public int blendGraceSeconds = 45;
     /** Contraband item ids confiscated on inspection or detection. */
@@ -648,6 +691,21 @@ public class StrajaPolicies {
     public int storageEnforcePeriodTicks = 200;
     public int storageSuspectRange = 8;
     public int storageAggroRange = 16;
+    // Unarmed faction NPCs never fight: the aggro sweep skips them and any
+    // player target they acquire (CustomNPCs retaliation) is vetoed live.
+    public boolean storageUnarmedGuardsPassive = true;
+
+    // predarea voluntară — a wanted player turns themselves in: debts settle,
+    // violent marks book a discounted sentence, offers re-notice on a cooldown.
+    public boolean surrenderEnabled = true;
+    public int surrenderDiscountPercent = 25;
+    public int surrenderOfferSeconds = 300;
+
+    // corupție — a bribe leaves a money trail; a denunț checks it and the
+    // evidence writes the warrant, witnessed exchanges mark on the spot.
+    public boolean corruptionEnabled = true;
+    public int corruptionReportCooldownSeconds = 300;
+    public double corruptionWitnessRadius = 8.0;
 
     // food/kits/equipment — kits are permanent owned gear granted at rank-up;
     // the former per-shift lease was removed (see docs/guard-gear-*).

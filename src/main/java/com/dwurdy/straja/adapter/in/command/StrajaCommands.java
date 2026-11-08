@@ -193,6 +193,18 @@ public final class StrajaCommands {
                         .postRemove(p, StringArgumentType.getString(c, "id"))))));
         root.then(post);
 
+        // POSTER-1 admin: declared face boards cycling active bounties.
+        var poster = adminOnly(Commands.literal("poster"));
+        poster.then(Commands.literal("list")
+                .executes(c -> player(c, StrajaRuntime.get().posters()::posterList)));
+        poster.then(Commands.literal("add").then(Commands.argument("id", StringArgumentType.word())
+                .executes(c -> player(c, p -> StrajaRuntime.get().posters()
+                        .posterAdd(p, StringArgumentType.getString(c, "id"))))));
+        poster.then(Commands.literal("remove").then(Commands.argument("id", StringArgumentType.word())
+                .executes(c -> player(c, p -> StrajaRuntime.get().posters()
+                        .posterRemove(p, StringArgumentType.getString(c, "id"))))));
+        root.then(poster);
+
         // FUN-10: prison economy — job board, labor-credit market trades,
         // and signed favor notes between prisoners.
         root.then(Commands.literal("job")
@@ -448,9 +460,16 @@ public final class StrajaCommands {
                 .then(Commands.argument("target", StringArgumentType.word())
                         .executes(c -> player(c, p -> StrajaRuntime.get().bounties()
                                 .cancel(p, StringArgumentType.getString(c, "target"))))));
+        // The bounty capture-flag stays reachable under the bounty node —
+        // the bare `surrender` literal belongs to SURR-1 predarea voluntară.
+        bounty.then(Commands.literal("surrender")
+                .executes(c -> player(c, StrajaRuntime.get().bounties()::surrender)));
         root.then(bounty);
         root.then(Commands.literal("surrender")
-                .executes(c -> player(c, StrajaRuntime.get().bounties()::surrender)));
+                .executes(c -> player(c, requester -> {
+                    var runtime = StrajaRuntime.get();
+                    if (runtime != null) runtime.surrenders().surrender(requester);
+                })));
         root.then(Commands.literal("bail")
                 .then(Commands.argument("player", StringArgumentType.word())
                         .executes(c -> player(c, p -> StrajaRuntime.get().bounties()
@@ -510,6 +529,12 @@ public final class StrajaCommands {
                         .showSetup(p, StrajaRuntime.get().setupProbes())));
         setup.then(Commands.literal("here")
                 .executes(c -> adminActor(c, StrajaRuntime.get().guards()::setupLocationsHere)));
+        // Data-first commissioner selection: name/uuid arg, appointment is
+        // persisted in the personnel store — no TOML edit, no restart.
+        setup.then(Commands.literal("commissioner")
+                .then(Commands.argument("player", StringArgumentType.word())
+                        .executes(c -> adminActor(c, p -> StrajaRuntime.get().guards()
+                                .setupCommissioner(p, StringArgumentType.getString(c, "player"))))));
         setup.then(Commands.literal("patrol")
                 .executes(c -> adminActor(c, StrajaRuntime.get().guards()::setupPatrol)));
         setup.then(Commands.literal("npcs").executes(NpcCommands::spawnMissing));
@@ -545,6 +570,17 @@ public final class StrajaCommands {
                                 .reset(p, StringArgumentType.getString(c, "key"))))));
         root.then(adminOnly(policy));
 
+        // commissioner identity bootstrap — OP4/console only; the secure path to
+        // pin the canonical commissioner UUID on non-local deployments.
+        var commissioner = Commands.literal("commissioner");
+        commissioner.then(Commands.literal("status")
+                .executes(c -> adminActor(c, StrajaRuntime.get().commissionerBootstrap()::status)));
+        commissioner.then(Commands.literal("select")
+                .then(Commands.argument("player", EntityArgument.player())
+                        .executes(c -> adminActor(c, p -> StrajaRuntime.get().commissionerBootstrap()
+                                .select(p, target(c, "player"))))));
+        root.then(adminOnly(commissioner));
+
         // inbox communication
         for (String op : new String[]{"report", "message", "request"}) {
             var command = Commands.literal(op)
@@ -579,6 +615,50 @@ public final class StrajaCommands {
         root.then(bookNode());
         // #248 officer-parity: manual document inspection — perm-0 root, the
         // use case refuses anyone who is not an on-duty officer.
+        // INST-2 verificare corporală — consented inventory check, open to
+        // anyone; the target's Acceptă/Refuză links carry the consent.
+        var frisk = Commands.literal("verificare")
+                .then(Commands.argument("player", EntityArgument.player())
+                        .executes(c -> player(c, requester -> {
+                            var runtime = StrajaRuntime.get();
+                            if (runtime == null) return;
+                            var target = target(c, "player");
+                            if (target == null) {
+                                requester.refuse("straja.cmd.unknown_target",
+                                        "straja.remedy.fix_retry");
+                                return;
+                            }
+                            runtime.frisks().request(requester, target);
+                        })))
+                .then(Commands.literal("accept")
+                        .executes(c -> player(c, target ->
+                                StrajaRuntime.get().frisks().acceptLatest(target))))
+                .then(Commands.literal("decline")
+                        .executes(c -> player(c, target ->
+                                StrajaRuntime.get().frisks().declineLatest(target))));
+        root.then(frisk);
+        root.then(Commands.literal("frisk").redirect(frisk.build()));
+
+        // SURR-1 predarea voluntară — a wanted player turns themselves in;
+        // the [Predă-te] chat link carries the same action id.
+        var predare = Commands.literal("predare")
+                .executes(c -> player(c, requester -> {
+                    var runtime = StrajaRuntime.get();
+                    if (runtime != null) runtime.surrenders().surrender(requester);
+                }));
+        root.then(predare);
+
+        // COR-1 denunț — accuse a corrupt guard; the money trail decides.
+        // String arg (not EntityArgument) — a logged-off guard stays reportable.
+        root.then(Commands.literal("denunt")
+                .then(Commands.argument("suspect", StringArgumentType.word())
+                        .executes(c -> player(c, reporter -> {
+                            var runtime = StrajaRuntime.get();
+                            if (runtime == null) return;
+                            runtime.corruptions().denunt(reporter,
+                                    StringArgumentType.getString(c, "suspect"));
+                        }))));
+
         root.then(Commands.literal("inspect")
                 .then(Commands.argument("player", EntityArgument.player())
                         .executes(c -> player(c, officer -> {
@@ -2854,6 +2934,11 @@ public final class StrajaCommands {
                 new PlayerHelpEntry("/straja regulament", "straja.help.player.cmd.regulament"),
                 new PlayerHelpEntry("/straja license", "straja.help.player.cmd.license"),
                 new PlayerHelpEntry("/straja inspect", "straja.help.player.cmd.inspect"),
+                new PlayerHelpEntry("/straja verificare", "straja.help.player.cmd.verificare"),
+                new PlayerHelpEntry("/straja frisk", "straja.help.player.cmd.frisk"),
+                new PlayerHelpEntry("/straja predare", "straja.help.player.cmd.predare"),
+                new PlayerHelpEntry("/straja surrender", "straja.help.player.cmd.surrender"),
+                new PlayerHelpEntry("/straja denunt", "straja.help.player.cmd.denunt"),
                 new PlayerHelpEntry("/straja dispatch", "straja.help.player.cmd.dispatch"),
                 new PlayerHelpEntry("/straja manhunt", "straja.help.player.cmd.manhunt"),
                 new PlayerHelpEntry("/straja transfer", "straja.help.player.cmd.transfer"),
@@ -2904,7 +2989,7 @@ public final class StrajaCommands {
                     "/straja report|message|request <text> | inbox",
                     "/straja mission|cuffs|prison|fine|complaint|room|archive|identity",
                     "/straja inspector|transporter grant|revoke|list | artifact check|revoke [OP 3]",
-                    "/straja emergency ...",
+                    "/straja emergency ... | poster add|remove|list [OP 3]",
                     "/straja checkpoint add|remove ... | set-checkpoint | set-mission-time | set-location [OP 4]",
                     "/straja setup ... | policy ... | migrate ... | npc ... | debug ... | test ... [OP 4]");
         }

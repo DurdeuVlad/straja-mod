@@ -32,6 +32,7 @@ public final class FormSubmissionRouter {
     private final com.dwurdy.straja.application.port.in.RoleplayExpansionUseCase expansion;
     private final com.dwurdy.straja.application.port.in.PromotionV2UseCase v2Promotions;
     private final com.dwurdy.straja.application.port.in.JoinRequestUseCase v2JoinRequests;
+    private final com.dwurdy.straja.application.port.in.ParoleUseCase parole;
 
     public FormSubmissionRouter(GuardRecruitmentUseCase guards, MissionRoleplayUseCase missions,
             ComplaintRoleplayUseCase complaints, FineRoleplayUseCase fines,
@@ -43,7 +44,8 @@ public final class FormSubmissionRouter {
             com.dwurdy.straja.application.port.in.CustodyRoleplayUseCase custody,
             com.dwurdy.straja.application.port.in.RoleplayExpansionUseCase expansion,
             com.dwurdy.straja.application.port.in.PromotionV2UseCase v2Promotions,
-            com.dwurdy.straja.application.port.in.JoinRequestUseCase v2JoinRequests) {
+            com.dwurdy.straja.application.port.in.JoinRequestUseCase v2JoinRequests,
+            com.dwurdy.straja.application.port.in.ParoleUseCase parole) {
         this.guards = guards;
         this.missions = missions;
         this.complaints = complaints;
@@ -57,6 +59,7 @@ public final class FormSubmissionRouter {
         this.expansion = expansion;
         this.v2Promotions = v2Promotions;
         this.v2JoinRequests = v2JoinRequests;
+        this.parole = parole;
     }
 
     public void submit(ServerPlayer player, FormSessionUseCase.Submission submission) {
@@ -377,6 +380,65 @@ public final class FormSubmissionRouter {
                     return;
                 }
                 expansion.correctReputation(gateway, values.get(FormField.SUBJECT), delta, values.get(FormField.REASON));
+            }
+            // FUN-11: the recordId carries the filing kind the opener chose;
+            // file() and advocate() re-verify every gate at consume time.
+            case PAROLE_FILE ->
+                    parole.file(gateway, submission.recordId(),
+                            values.getOrDefault(FormField.REASON, ""));
+            case PAROLE_ADVOCATE ->
+                    parole.advocate(gateway, values.getOrDefault(FormField.NAME, ""));
+            // FUN-9/10 detention-loop forms — every service re-verifies the
+            // custody/rank/funds gates on consume, same as the typed verbs.
+            case TRADE_OFFER -> {
+                Integer price = parseInt(values.get(FormField.AMOUNT));
+                if (price == null || price < 0) {
+                    player.sendSystemMessage(refusal("straja.form.order_invalid", "straja.remedy.fix_retry"));
+                    return;
+                }
+                com.dwurdy.straja.bootstrap.StrajaRuntime.get().prisonJobs()
+                        .tradeOffer(gateway, values.get(FormField.TARGET), price);
+            }
+            case IOU_ISSUE ->
+                    com.dwurdy.straja.bootstrap.StrajaRuntime.get().prisonJobs()
+                            .iou(gateway, values.get(FormField.TARGET),
+                                    values.getOrDefault(FormField.REASON, ""));
+            case BAIL_PAY ->
+                    com.dwurdy.straja.bootstrap.StrajaRuntime.get().bounties()
+                            .payBail(gateway, values.get(FormField.TARGET),
+                                    parseInt(values.get(FormField.AMOUNT)));
+            case BOUNTY_POST -> {
+                var runtime = com.dwurdy.straja.bootstrap.StrajaRuntime.get();
+                Integer amount = parseInt(values.get(FormField.AMOUNT));
+                var bountyTarget = runtime.playerQueries()
+                        .findPlayer(values.get(FormField.TARGET));
+                if (amount == null || bountyTarget == null) {
+                    player.sendSystemMessage(refusal("straja.form.order_invalid", "straja.remedy.fix_retry"));
+                    return;
+                }
+                runtime.bounties().post(gateway, bountyTarget, amount,
+                        values.getOrDefault(FormField.REASON, ""));
+            }
+            case INSPECT_PLAYER -> {
+                var runtime = com.dwurdy.straja.bootstrap.StrajaRuntime.get();
+                var traveler = runtime.playerQueries()
+                        .findPlayer(values.get(FormField.TARGET));
+                if (traveler == null) {
+                    player.sendSystemMessage(refusal("straja.cmd.player_offline", "straja.remedy.fix_retry"));
+                    return;
+                }
+                runtime.forgeryDetection().officerInspect(
+                        gateway, traveler, runtime.seizure(), runtime.bolos());
+            }
+            case ABSENCE_DECLARE -> {
+                Integer days = parseInt(values.get(FormField.DAYS));
+                if (days == null || days < 1) {
+                    player.sendSystemMessage(refusal("straja.form.order_invalid", "straja.remedy.fix_retry"));
+                    return;
+                }
+                com.dwurdy.straja.bootstrap.StrajaRuntime.get().guards()
+                        .declareAbsence(gateway, days,
+                                values.getOrDefault(FormField.REASON, ""));
             }
             default -> {}
         }

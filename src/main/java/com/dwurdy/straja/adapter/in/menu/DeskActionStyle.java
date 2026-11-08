@@ -108,7 +108,32 @@ public final class DeskActionStyle {
             Map.entry("tool-cell-confirm", "straja:npc_wand"),
             Map.entry("tool-survey-all", "straja:survey_rod"),
             Map.entry("inspect-documents", "minecraft:spyglass"),
-            Map.entry("armory-status", "straja:baton"));
+            Map.entry("armory-status", "straja:baton"),
+            Map.entry("parole-status", "straja:official_document"),
+            Map.entry("parole-file", "straja:carbon_paper"),
+            Map.entry("parole-appeal", "straja:carbon_paper"),
+            Map.entry("parole-advocate", "straja:identity_card"),
+            Map.entry("parole-checkin", "straja:baton"),
+            Map.entry("parole-settle", "straja:iou_note"),
+            Map.entry("parole-docket", "straja:order_book"),
+            // FUN-9/10 detention loop — the jailer desk's own rows.
+            Map.entry("job-status", "minecraft:iron_pickaxe"),
+            Map.entry("camp-status", "minecraft:campfire"),
+            Map.entry("trade-offer", "straja:iou_note"),
+            Map.entry("iou-issue", "straja:iou_note"),
+            Map.entry("bribe-offer", "minecraft:gold_ingot"),
+            Map.entry("debt-status", "straja:fine_book"),
+            Map.entry("debt-pay", "minecraft:gold_ingot"),
+            Map.entry("bail-pay", "minecraft:gold_ingot"),
+            Map.entry("bail-other", "minecraft:gold_ingot"),
+            Map.entry("surrender", "minecraft:white_banner"),
+            Map.entry("cell-search", "minecraft:spyglass"),
+            Map.entry("manhunt-board", "straja:alarm_whistle"),
+            Map.entry("transfer-board", "straja:cuffs"),
+            Map.entry("bounty-board", "straja:fine_notice"),
+            Map.entry("bounty-post", "straja:carbon_paper"),
+            Map.entry("inspect-player", "minecraft:spyglass"),
+            Map.entry("absence-declare", "straja:carbon_paper"));
 
     /** Parameterized (op:recordId) prefixes → icon, longest-prefix wins by order. */
     private static final List<Map.Entry<String, String>> ITEM_BY_PREFIX = List.of(
@@ -143,10 +168,16 @@ public final class DeskActionStyle {
             Map.entry("report-review:", "straja:seal_stamp"),
             Map.entry("petition-read:", "straja:archive_folder"),
             Map.entry("petition-review:", "straja:seal_stamp"),
-            // FUN-11 parole docket rows ride the delegation digest; the
-            // native action vocabulary has no parole op yet, so the row is
-            // display-only — themed like every other decision stamp.
+            // FUN-11: parole rows open the hearing page / officer verbs —
+            // review is the docket stamp, opens and decisions keep the
+            // confirm-page styling their weight deserves.
             Map.entry("parole-review:", "straja:seal_stamp"),
+            Map.entry("parole-open:", "straja:seal_stamp"),
+            Map.entry("parole-decide-paroled:", "minecraft:lime_dye"),
+            Map.entry("parole-decide-denied:", "minecraft:red_dye"),
+            Map.entry("parole-decide-conditional:", "straja:iou_note"),
+            Map.entry("parole-object:", "straja:alarm_whistle"),
+            Map.entry("parole-advocate-answer:", "straja:identity_card"),
             Map.entry("audience-review:", "straja:seal_stamp"),
             Map.entry("incident-", "straja:alarm_whistle"),
             Map.entry("dispatch-", "straja:alarm_whistle"),
@@ -162,6 +193,11 @@ public final class DeskActionStyle {
             Map.entry("armory-buy:", "minecraft:gold_ingot"),
             Map.entry("armory-reserve:", "straja:iou_note"),
             Map.entry("delegation-", "straja:order_book"),
+            Map.entry("manhunt-calloff:", "minecraft:barrier"),
+            Map.entry("transfer-join:", "minecraft:arrow"),
+            Map.entry("transfer-pickup:", "straja:cuffs"),
+            Map.entry("transfer-cancel:", "minecraft:barrier"),
+            Map.entry("bounty-cancel:", "minecraft:barrier"),
             Map.entry("army-plan-", "straja:order_book"),
             Map.entry("army-", "straja:baton"));
 
@@ -173,7 +209,10 @@ public final class DeskActionStyle {
             "mission-budget-adjust", "fine-draft-write", "fine-warrant",
             "complaint-submit", "archive-folder-create", "report-submit",
             "petition-request", "audience-request", "admin-authorize",
-            "admin-policy-set", "admin-emergency-alert", "admin-emergency-start");
+            "admin-policy-set", "admin-emergency-alert", "admin-emergency-start",
+            "parole-file", "parole-appeal", "parole-advocate",
+            "trade-offer", "iou-issue", "bail-other", "bounty-post",
+            "inspect-player", "absence-declare");
 
     /** Parameterized ops that open a native form (never confirm-gated). */
     private static final Set<String> FORM_PREFIXES = Set.of(
@@ -187,13 +226,23 @@ public final class DeskActionStyle {
             "evidence-transfer:", "evidence-destroy:", "tool-npc-rename:",
             "tool-npc-skin:");
 
+    /**
+     * Ids that open a live desk page — the menu stays open and swaps pages,
+     * so the lore must not promise a chat dump.
+     */
+    private static final Set<String> PAGE_ACTIONS = Set.of(
+            "v2-professional-work", "trades-list", "dispatch-board",
+            "army-status", "army-history",
+            "parole-status", "parole-docket",
+            "manhunt-board", "transfer-board", "bounty-board");
+
     /** Ids whose result is a chat dump (status, lists, ledger text). */
     private static final Set<String> CHAT_ACTIONS = Set.of(
             "rules", "guard-status", "v2-personnel-status", "v2-promotion-status",
             "v2-document-status", "v2-equipment-status", "v2-campaign-status",
-            "v2-professional-work", "trades-list", "trades-promote", "recruit",
+            "trades-promote", "recruit",
             "training-progress", "training-promote", "incident-list",
-            "dispatch-board", "duty-roster", "bolo-list", "reputation-self",
+            "duty-roster", "bolo-list", "reputation-self",
             "arrest-record", "arrest-record-admin", "evidence-list",
             "cuffs-status", "prison-status", "downed-status", "fine-list",
             "identity-list", "fine-task-list", "fine-draft-status",
@@ -203,7 +252,7 @@ public final class DeskActionStyle {
             "admin-roster", "admin-policies", "admin-emergency-status",
             "armory-status", "mission-list", "mission-draft-status",
             "mission-template-list", "inspect-documents",
-            "army-status", "army-history");
+            "job-status", "camp-status", "debt-status");
 
     /** Parameterized ops whose result is a chat dump. */
     private static final Set<String> CHAT_PREFIXES = Set.of(
@@ -219,7 +268,10 @@ public final class DeskActionStyle {
             "armory-buy:", "armory-reserve:", "mission-template-issue:");
 
     /** Immediate money-spending or record-destroying mutations gated by a DA/NU page. */
-    private static final Set<String> CONFIRM_ACTIONS = Set.of("room-release", "army-leave");
+    private static final Set<String> CONFIRM_ACTIONS = Set.of(
+            "room-release", "army-leave", "parole-settle",
+            "bribe-offer", "debt-pay", "bail-pay", "surrender",
+            "bribe-accept", "trade-accept");
     private static final Set<String> CONFIRM_PREFIXES = Set.of(
             "fine-pay:", "fine-refuse:", "complaint-confirm:",
             "custody-accept:", "custody-refuse:", "custody-release:",
@@ -228,7 +280,10 @@ public final class DeskActionStyle {
             "admin-fire:", "admin-reinstate:", "fine-task-arrest:",
             "bolo-cancel:", "evidence-return:", "evidence-deposit:",
             "archive-sheet-submit:", "archive-sheet-revoke:",
-            "tool-npc-remove-confirm:");
+            "tool-npc-remove-confirm:",
+            "parole-open:", "parole-decide-paroled:", "parole-decide-denied:",
+            "parole-decide-conditional:",
+            "manhunt-calloff:", "transfer-cancel:", "bounty-cancel:");
 
     /** The icon stack for one surface action; label passes through as the name. */
     public static DeskIcon icon(String label, String actionId) {
@@ -262,11 +317,7 @@ public final class DeskActionStyle {
             return List.copyOf(lines);
         }
         if (actionId.startsWith("faq:")) return faqLore(actionId);
-        // FUN-11 parole docket rows are display-only: nothing dispatches on
-        // them yet, so they must not promise an execution.
-        if (actionId.startsWith("parole-review:")) {
-            return List.of("Doar informativ — nu execută", "o acțiune.");
-        }
+        if (isPage(actionId)) return List.of("Deschide pagina.");
         if (isForm(actionId)) return List.of("Deschide formularul.");
         if (isGive(actionId)) return List.of("Primești obiectul.", "Se execută imediat.");
         if (isChat(actionId)) return List.of("Afișează rezultatul în chat.");
@@ -310,6 +361,21 @@ public final class DeskActionStyle {
         if ("army-leave".equals(actionId)) {
             return List.of("Părăsești unitatea militară;", "înscrierile la operații se anulează.");
         }
+        if ("parole-settle".equals(actionId)) {
+            return List.of("Cauțiunea se ia imediat", "din creditul de muncă.");
+        }
+        if (actionId.startsWith("parole-open:")) {
+            return List.of("Ședința începe; deținutul", "trebuie să fie prezent.");
+        }
+        if (actionId.startsWith("parole-decide-paroled:")) {
+            return List.of("Deținutul este eliberat imediat", "sub condiții de supraveghere.");
+        }
+        if (actionId.startsWith("parole-decide-denied:")) {
+            return List.of("Cererea este respinsă;", "redepunerea pornește după răgaz.");
+        }
+        if (actionId.startsWith("parole-decide-conditional:")) {
+            return List.of("Eliberarea așteaptă plata", "cauțiunii în fereastra ei.");
+        }
         if (actionId.startsWith("custody-accept:")) {
             return List.of("Accepți cererea — vei fi", "încătușat imediat.");
         }
@@ -318,6 +384,39 @@ public final class DeskActionStyle {
         }
         if (actionId.startsWith("custody-release:")) {
             return List.of("Persoana este eliberată imediat", "din custodie.");
+        }
+        if ("bribe-offer".equals(actionId)) {
+            return List.of("Oferta de mită ajunge la străjer;",
+                    "un refuz te raportează.");
+        }
+        if ("bribe-accept".equals(actionId)) {
+            return List.of("Iei mita — ușa celulei se deschide;",
+                    "actul se scrie în jurnal.");
+        }
+        if ("debt-pay".equals(actionId)) {
+            return List.of("Plata se ia imediat din monedele tale",
+                    "și acoperă datoriile în ordine.");
+        }
+        if ("bail-pay".equals(actionId)) {
+            return List.of("Cauțiunea se plătește acum;",
+                    "o datorie de captură acoperită eliberează.");
+        }
+        if ("surrender".equals(actionId)) {
+            return List.of("Te predai — următoarea reținere",
+                    "reusșește fără doborâre.");
+        }
+        if ("trade-accept".equals(actionId)) {
+            return List.of("Plata pleacă din creditul tău de muncă",
+                    "și obiectele îți ajung imediat.");
+        }
+        if (actionId.startsWith("manhunt-calloff:")) {
+            return List.of("Vânătoarea se oprește pentru", "toți fugitivii rămași.");
+        }
+        if (actionId.startsWith("transfer-cancel:")) {
+            return List.of("Cursa se anulează; deținutul", "revine în custodie.");
+        }
+        if (actionId.startsWith("bounty-cancel:")) {
+            return List.of("Recompensa și BOLO-ul legat", "se retrag imediat.");
         }
         if (actionId.startsWith("armory-buy:")) {
             return List.of("Cumperi echipamentul; monedele", "se iau imediat din inventar.");
@@ -359,6 +458,12 @@ public final class DeskActionStyle {
         var lore = new java.util.ArrayList<>(DeskLayout.wrapLore(guidance, DeskLayout.LORE_WRAP));
         if (lore.isEmpty()) lore.add("Alege o acțiune.");
         return new DeskIcon(itemId, title, lore);
+    }
+
+    private static boolean isPage(String actionId) {
+        // The live-page ops: plain ids plus the two parameterized viewers —
+        // digest rows and the trades enrolment tiles share the mechanic.
+        return PAGE_ACTIONS.contains(actionId) || actionId.startsWith("parole-review:");
     }
 
     private static boolean isForm(String actionId) {

@@ -193,6 +193,34 @@ public final class IncidentService {
         return incident;
     }
 
+    /**
+     * INST-3 — the law records a murder itself: a system-written incident
+     * naming killer and victim at the kill's location. Idempotent per
+     * (killer, victim) pair while active — repeat kills of the same victim
+     * don't stack cases.
+     */
+    public synchronized Incident createAutoMark(PlayerGateway killer,
+                                                PlayerGateway victim) {
+        if (killer == null || !enabled(null)) return null;
+        IncidentStore data = store();
+        String provenance = "AUTOMARK:" + uuid(killer) + ":" + uuid(victim);
+        Incident existing = data.incidents.stream()
+                .filter(i -> i != null && provenance.equals(i.provenance)
+                        && isActive(i.status))
+                .findFirst().orElse(null);
+        if (existing != null) return existing;
+        Incident incident = create(data, killer, IncidentType.MANUAL,
+                IncidentPriority.URGENT, "Ucidere — " + victim.name(),
+                killer.name() + " a ucis " + victim.name()
+                        + "; Straja a deschis dosarul automat.",
+                killer, "AUTOMARK");
+        if (incident != null) {
+            incident.provenance = provenance;
+            ctx.incidents().write(data);
+        }
+        return incident;
+    }
+
     /** System-generated Comisar review flag; never grants enforcement authority. */
     public synchronized Incident createDisciplinaryFlag(PlayerGateway guard,
                                                          PlayerGateway victim,

@@ -25,7 +25,7 @@ import java.util.function.Consumer;
  * Vanilla chest-menu provider for canonically bound NPC hosts.
  *
  * <p>Renders only {@link NpcSurfaceSnapshot#actions()}: enabled rows become
- * desk buttons paged at 45, disabled rows are omitted, and dialogue or
+ * desk buttons paged per DeskLayout, disabled rows are omitted, and dialogue or
  * quest entries simply never render — the binding still owns them, the
  * provider that owns dialogue (CustomNPCs) keeps it. Each click re-resolves
  * the published snapshot, mints a player-bound token through the

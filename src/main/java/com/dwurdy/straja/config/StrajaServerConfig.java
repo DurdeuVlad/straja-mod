@@ -23,6 +23,9 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.ConfigValue<String> ENVIRONMENT;
     public static final ModConfigSpec.ConfigValue<String> NPC_PROVIDER_MODE;
     public static final ModConfigSpec.BooleanValue NPC_DEBUG_TEXT_ENABLED;
+    public static final ModConfigSpec.IntValue NPC_SOLDIER_COINS_MIN;
+    public static final ModConfigSpec.IntValue NPC_SOLDIER_COINS_MAX;
+    public static final ModConfigSpec.IntValue NPC_SOLDIER_XP;
     public static final ModConfigSpec.BooleanValue NPC_MENUS_ENABLED;
     public static final ModConfigSpec.BooleanValue NPC_DESK_PROVIDER_ENABLED;
     public static final ModConfigSpec.ConfigValue<String> DISCORD_WEBHOOK_URL;
@@ -75,6 +78,33 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.BooleanValue EVIDENCE_ENABLED;
     public static final ModConfigSpec.DoubleValue SEARCH_RANGE_BLOCKS;
     public static final ModConfigSpec.IntValue EVIDENCE_MAX_REASON_LENGTH;
+
+    public static final ModConfigSpec.BooleanValue AUTO_MARK_KILLS;
+    public static final ModConfigSpec.BooleanValue AUTO_MARK_WITNESS_ONLY;
+    public static final ModConfigSpec.BooleanValue AUTO_BOUNTY_ENABLED;
+    public static final ModConfigSpec.IntValue AUTO_BOUNTY_AMOUNT;
+    public static final ModConfigSpec.IntValue AUTO_BOUNTY_AFTER_HOURS;
+
+    public static final ModConfigSpec.BooleanValue FRISK_ENABLED;
+    public static final ModConfigSpec.DoubleValue FRISK_RANGE;
+    public static final ModConfigSpec.IntValue FRISK_OFFER_SECONDS;
+    public static final ModConfigSpec.IntValue FRISK_COOLDOWN_SECONDS;
+    public static final ModConfigSpec.BooleanValue PATROL_ENABLED;
+    public static final ModConfigSpec.DoubleValue PATROL_POST_RADIUS;
+    public static final ModConfigSpec.DoubleValue PATROL_SCAN_RANGE;
+    public static final ModConfigSpec.IntValue PATROL_ENGAGE_COOLDOWN_SECONDS;
+    public static final ModConfigSpec.BooleanValue POSTER_ENABLED;
+    public static final ModConfigSpec.DoubleValue POSTER_HOLD_RADIUS;
+    public static final ModConfigSpec.IntValue POSTER_CYCLE_SECONDS;
+    public static final ModConfigSpec.BooleanValue MASK_ENABLED;
+    public static final ModConfigSpec.DoubleValue MASK_RECOGNITION_RADIUS;
+    public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> MASK_ITEM_IDS;
+    public static final ModConfigSpec.BooleanValue SURRENDER_ENABLED;
+    public static final ModConfigSpec.IntValue SURRENDER_DISCOUNT_PERCENT;
+    public static final ModConfigSpec.IntValue SURRENDER_OFFER_SECONDS;
+    public static final ModConfigSpec.BooleanValue CORRUPTION_ENABLED;
+    public static final ModConfigSpec.IntValue CORRUPTION_REPORT_COOLDOWN;
+    public static final ModConfigSpec.DoubleValue CORRUPTION_WITNESS_RADIUS;
 
     public static final ModConfigSpec.IntValue CUFF_REQUEST_TIMEOUT_SECONDS;
     public static final ModConfigSpec.IntValue SURRENDER_TIMEOUT_SECONDS;
@@ -172,6 +202,7 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.IntValue STORAGE_ENFORCE_PERIOD_TICKS;
     public static final ModConfigSpec.IntValue STORAGE_SUSPECT_RANGE;
     public static final ModConfigSpec.IntValue STORAGE_AGGRO_RANGE;
+    public static final ModConfigSpec.BooleanValue STORAGE_UNARMED_GUARDS_PASSIVE;
 
     public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> SALARY_PER_HOUR;
     public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> SALARY_PER_GRADE;
@@ -351,6 +382,7 @@ public final class StrajaServerConfig {
     public static final ModConfigSpec.DoubleValue BRIBE_RADIUS;
     public static final ModConfigSpec.IntValue BRIBE_DOOR_OPEN_SECONDS;
     public static final ModConfigSpec.IntValue BRIBE_OFFER_MS;
+    public static final ModConfigSpec.IntValue BRIBE_NPC_ACCEPT_PERCENT;
     public static final ModConfigSpec.IntValue BLEND_GRACE_SECONDS;
     public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> CONTRABAND_ITEMS;
     public static final ModConfigSpec.IntValue TUNNEL_FOUND_PENALTY_MINUTES;
@@ -403,8 +435,9 @@ public final class StrajaServerConfig {
         var defaults = new StrajaPolicies();
 
         B.push("identity");
-        COMMISSIONER_NAME = B.comment("Configured commissioner account name (local fallback only).")
-                .define("commissionerName", "dwurdy");
+        COMMISSIONER_NAME = B.comment("Configured commissioner account name (local fallback only). "
+                        + "Prefer /straja setup commissioner — no name ships by default.")
+                .define("commissionerName", "");
         COMMISSIONER_UUID = B.comment("Canonical commissioner UUID. Required outside local environments.")
                 .define("commissionerUuid", "");
         COMMISSIONER_TITLE = B.comment("Display title for the commissioner in rules/status text.")
@@ -426,6 +459,12 @@ public final class StrajaServerConfig {
         NPC_DEBUG_TEXT_ENABLED = B.comment(
                         "Explicitly permits the debug-text provider; it never becomes a normal player surface.")
                 .define("debugTextEnabled", defaults.npcDebugTextEnabled);
+        NPC_SOLDIER_COINS_MIN = B.comment(
+                        "Brass coins a fallen officer drops — farming soldiers pays.")
+                .defineInRange("soldierCoinsMin", defaults.npcSoldierCoinsMin, 0, 640);
+        NPC_SOLDIER_COINS_MAX = B.defineInRange("soldierCoinsMax", defaults.npcSoldierCoinsMax, 0, 640);
+        NPC_SOLDIER_XP = B.comment("Experience a fallen officer yields.")
+                .defineInRange("soldierXp", defaults.npcSoldierXp, 0, 1000);
         B.pop();
 
         B.push("npcMenus");
@@ -599,6 +638,81 @@ public final class StrajaServerConfig {
                 "searchRangeBlocks", defaults.searchRangeBlocks, 1.0, 32.0);
         EVIDENCE_MAX_REASON_LENGTH = B.defineInRange(
                 "maxReasonLength", defaults.evidenceMaxReasonLength, 1, 4000);
+        B.pop();
+
+        B.push("automark");
+        AUTO_MARK_KILLS = B.define("kills", defaults.autoMarkKills);
+        AUTO_MARK_WITNESS_ONLY = B.define("witnessOnly", defaults.autoMarkWitnessOnly);
+        AUTO_BOUNTY_ENABLED = B.define("bountyEnabled", defaults.autoBountyEnabled);
+        AUTO_BOUNTY_AMOUNT = B.defineInRange("bountyAmount", defaults.autoBountyAmount, 0, 1000000);
+        AUTO_BOUNTY_AFTER_HOURS = B.defineInRange("bountyAfterHours", defaults.autoBountyAfterHours, 0, 720);
+        B.pop();
+
+        B.push("frisk");
+        FRISK_ENABLED = B.define("enabled", defaults.friskEnabled);
+        FRISK_RANGE = B.defineInRange("range", defaults.friskRange, 1.0, 32.0);
+        FRISK_OFFER_SECONDS = B.defineInRange("offerSeconds", defaults.friskOfferSeconds, 5, 300);
+        FRISK_COOLDOWN_SECONDS = B.defineInRange("cooldownSeconds", defaults.friskCooldownSeconds, 0, 600);
+        B.pop();
+
+        B.push("patrol");
+        PATROL_ENABLED = B.define("enabled", defaults.patrolOfficerEnabled);
+        PATROL_POST_RADIUS = B.defineInRange("postRadius", defaults.patrolPostRadius, 4.0, 128.0);
+        PATROL_SCAN_RANGE = B.defineInRange("scanRange", defaults.patrolScanRange, 4.0, 128.0);
+        PATROL_ENGAGE_COOLDOWN_SECONDS = B.defineInRange("engageCooldownSeconds", defaults.patrolEngageCooldownSeconds, 1, 60);
+        B.pop();
+
+        B.push("poster");
+        POSTER_ENABLED = B.comment(
+                        "Wanted posters: declared spots cycle active bounties on",
+                        "display entities, swapping only while nobody watches.")
+                .define("enabled", defaults.posterEnabled);
+        POSTER_HOLD_RADIUS = B.comment(
+                        "A watcher inside this radius freezes the face swap.")
+                .defineInRange("holdRadius", defaults.posterHoldRadius, 1.0, 64.0);
+        POSTER_CYCLE_SECONDS = B.comment(
+                        "Cadence between faces while the spot is unobserved.")
+                .defineInRange("cycleSeconds", defaults.posterCycleSeconds, 1, 3600);
+        B.pop();
+
+        B.push("mask");
+        MASK_ENABLED = B.comment(
+                        "A covered face beats casual recognition — patrols must",
+                        "close in to see through it. Marks and BOLOs unaffected.")
+                .define("enabled", defaults.maskEnabled);
+        MASK_RECOGNITION_RADIUS = B.comment(
+                        "Inside this distance the engaging officer sees through the mask.")
+                .defineInRange("recognitionRadius", defaults.maskRecognitionRadius, 0.5, 32.0);
+        MASK_ITEM_IDS = B.defineListAllowEmpty(List.of("itemIds"),
+                new java.util.ArrayList<>(defaults.maskItemIds),
+                () -> "minecraft:carved_pumpkin", StrajaServerConfig::isNonBlankString);
+        B.pop();
+
+        B.push("surrender");
+        SURRENDER_ENABLED = B.comment(
+                        "A wanted player may turn themselves in — debts settle,",
+                        "violent marks book a sentence, no officer required.")
+                .define("enabled", defaults.surrenderEnabled);
+        SURRENDER_DISCOUNT_PERCENT = B.comment(
+                        "Sentence reduction for voluntary surrender — turning",
+                        "yourself in is always cheaper than being dragged in.")
+                .defineInRange("discountPercent", defaults.surrenderDiscountPercent, 0, 90);
+        SURRENDER_OFFER_SECONDS = B.comment(
+                        "Cooldown between [Predă-te] chat offers to wanted players.")
+                .defineInRange("offerSeconds", defaults.surrenderOfferSeconds, 60, 86400);
+        B.pop();
+
+        B.push("corruption");
+        CORRUPTION_ENABLED = B.comment(
+                        "Corrupt guards are accountable: bribe income leaves a",
+                        "money trail, reports check it, evidence writes the warrant.")
+                .define("enabled", defaults.corruptionEnabled);
+        CORRUPTION_REPORT_COOLDOWN = B.comment(
+                        "Cooldown between a reporter's corruption accusations.")
+                .defineInRange("reportCooldownSeconds", defaults.corruptionReportCooldownSeconds, 0, 86400);
+        CORRUPTION_WITNESS_RADIUS = B.comment(
+                        "How close a second on-duty guard must stand to witness a bribe.")
+                .defineInRange("witnessRadius", defaults.corruptionWitnessRadius, 1.0, 64.0);
         B.pop();
 
         B.push("cuffs");
@@ -851,6 +965,10 @@ public final class StrajaServerConfig {
         STORAGE_ENFORCE_PERIOD_TICKS = B.defineInRange("enforcePeriodTicks", 200, 1, 20000);
         STORAGE_SUSPECT_RANGE = B.defineInRange("suspectRange", 8, 1, 128);
         STORAGE_AGGRO_RANGE = B.defineInRange("aggroRange", 16, 1, 256);
+        STORAGE_UNARMED_GUARDS_PASSIVE = B.comment(
+                        "Faction NPCs holding no weapon never fight: the",
+                        "aggro sweep ignores them and retaliation is vetoed.")
+                .define("unarmedGuardsPassive", true);
         B.pop();
 
         B.push("salary");
@@ -1372,6 +1490,10 @@ public final class StrajaServerConfig {
         BRIBE_OFFER_MS = B.comment(
                         "Milliseconds a player-guard bribe offer stays pending.")
                 .defineInRange("bribeOfferMs", defaults.bribeOfferMs, 5000, 600000);
+        BRIBE_NPC_ACCEPT_PERCENT = B.comment(
+                        "Percent of NPC officers whose trait accepts a coin bribe —",
+                        "honesty is a stable per-officer trait, not a roll.")
+                .defineInRange("npcBribeAcceptPercent", defaults.npcBribeAcceptPercent, 0, 100);
         BLEND_GRACE_SECONDS = B.comment(
                         "Seconds a uniformed walk-out stays unflagged before",
                         "the alarm fires — real guards in radius blow it.")
@@ -1500,6 +1622,22 @@ public final class StrajaServerConfig {
 
     private StrajaServerConfig() {}
 
+    /**
+     * Pins the commissioner identity into this server config — the
+     * authoritative {@code straja-server.toml} identity section. Both values
+     * land in a single {@code save()} so the file never carries a UUID with a
+     * stale name; the return value is a readback so callers can surface a
+     * persisted-vs-volatile warning.
+     */
+    public static boolean pinCommissioner(String uuid, String name) {
+        COMMISSIONER_UUID.set(uuid);
+        COMMISSIONER_NAME.set(name);
+        // ConfigValue.set() only mutates the loaded in-memory config — the file
+        // write must be requested explicitly. One save covers both values.
+        COMMISSIONER_UUID.save();
+        return uuid.equals(COMMISSIONER_UUID.get());
+    }
+
     /** Maps the loaded ModConfigSpec values into the domain policy object. */
     public static com.dwurdy.straja.domain.model.StrajaPolicies toPolicies() {
         var p = new com.dwurdy.straja.domain.model.StrajaPolicies();
@@ -1512,6 +1650,9 @@ public final class StrajaServerConfig {
         p.environment = ENVIRONMENT.get();
         p.npcProviderMode = NPC_PROVIDER_MODE.get();
         p.npcDebugTextEnabled = NPC_DEBUG_TEXT_ENABLED.get();
+        p.npcSoldierCoinsMin = NPC_SOLDIER_COINS_MIN.get();
+        p.npcSoldierCoinsMax = NPC_SOLDIER_COINS_MAX.get();
+        p.npcSoldierXp = NPC_SOLDIER_XP.get();
         p.discordWebhookUrl = DISCORD_WEBHOOK_URL.get();
 
         p.checkpointUnlockMinutes = CHECKPOINT_UNLOCK_MINUTES.get();
@@ -1560,6 +1701,34 @@ public final class StrajaServerConfig {
         p.evidenceEnabled = EVIDENCE_ENABLED.get();
         p.searchRangeBlocks = SEARCH_RANGE_BLOCKS.get();
         p.evidenceMaxReasonLength = EVIDENCE_MAX_REASON_LENGTH.get();
+
+        p.autoMarkKills = AUTO_MARK_KILLS.get();
+        p.autoMarkWitnessOnly = AUTO_MARK_WITNESS_ONLY.get();
+        p.autoBountyEnabled = AUTO_BOUNTY_ENABLED.get();
+        p.autoBountyAmount = AUTO_BOUNTY_AMOUNT.get();
+        p.autoBountyAfterHours = AUTO_BOUNTY_AFTER_HOURS.get();
+
+        p.friskEnabled = FRISK_ENABLED.get();
+        p.friskRange = FRISK_RANGE.get();
+        p.friskOfferSeconds = FRISK_OFFER_SECONDS.get();
+        p.friskCooldownSeconds = FRISK_COOLDOWN_SECONDS.get();
+
+        p.patrolOfficerEnabled = PATROL_ENABLED.get();
+        p.patrolPostRadius = PATROL_POST_RADIUS.get();
+        p.patrolScanRange = PATROL_SCAN_RANGE.get();
+        p.patrolEngageCooldownSeconds = PATROL_ENGAGE_COOLDOWN_SECONDS.get();
+        p.posterEnabled = POSTER_ENABLED.get();
+        p.posterHoldRadius = POSTER_HOLD_RADIUS.get();
+        p.posterCycleSeconds = POSTER_CYCLE_SECONDS.get();
+        p.maskEnabled = MASK_ENABLED.get();
+        p.maskRecognitionRadius = MASK_RECOGNITION_RADIUS.get();
+        p.maskItemIds = new java.util.LinkedHashSet<>(MASK_ITEM_IDS.get());
+        p.surrenderEnabled = SURRENDER_ENABLED.get();
+        p.surrenderDiscountPercent = SURRENDER_DISCOUNT_PERCENT.get();
+        p.surrenderOfferSeconds = SURRENDER_OFFER_SECONDS.get();
+        p.corruptionEnabled = CORRUPTION_ENABLED.get();
+        p.corruptionReportCooldownSeconds = CORRUPTION_REPORT_COOLDOWN.get();
+        p.corruptionWitnessRadius = CORRUPTION_WITNESS_RADIUS.get();
 
         p.cuffRequestTimeoutSeconds = CUFF_REQUEST_TIMEOUT_SECONDS.get();
         p.surrenderTimeoutSeconds = SURRENDER_TIMEOUT_SECONDS.get();
@@ -1663,6 +1832,7 @@ public final class StrajaServerConfig {
         p.storageEnforcePeriodTicks = STORAGE_ENFORCE_PERIOD_TICKS.get();
         p.storageSuspectRange = STORAGE_SUSPECT_RANGE.get();
         p.storageAggroRange = STORAGE_AGGRO_RANGE.get();
+        p.storageUnarmedGuardsPassive = STORAGE_UNARMED_GUARDS_PASSIVE.get();
 
         p.salaryPerHour = mapOrDefault(StrajaPolicies.parseIntMap(SALARY_PER_HOUR.get()),
                 defaults().salaryPerHour);
@@ -1841,6 +2011,7 @@ public final class StrajaServerConfig {
         p.bribeRadius = BRIBE_RADIUS.get();
         p.bribeDoorOpenSeconds = BRIBE_DOOR_OPEN_SECONDS.get();
         p.bribeOfferMs = BRIBE_OFFER_MS.get();
+        p.npcBribeAcceptPercent = BRIBE_NPC_ACCEPT_PERCENT.get();
         p.blendGraceSeconds = BLEND_GRACE_SECONDS.get();
         p.contrabandItems = new ArrayList<>(CONTRABAND_ITEMS.get());
         p.tunnelFoundPenaltyMinutes = TUNNEL_FOUND_PENALTY_MINUTES.get();

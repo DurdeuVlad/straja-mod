@@ -9,7 +9,9 @@ import org.junit.jupiter.api.Test;
 class SetupChecklistTest {
 
     private static SetupChecklist.Probes probes() {
-        return new SetupChecklist.Probes(new StrajaPolicies(), 1, List.of());
+        // An in-world appointment satisfies the commissioner probe even with
+        // scrubbed config defaults — the checklist reads the marker, not TOML.
+        return new SetupChecklist.Probes(new StrajaPolicies(), 1, List.of(), "appointed-uuid");
     }
 
     private static SetupData fullSetup() {
@@ -55,6 +57,10 @@ class SetupChecklistTest {
         assertTrue(SetupChecklist.commissionerAppointed(
                 new SetupChecklist.Probes(policies, 1, List.of())),
                 "a configured uuid appoints the commissioner");
+
+        assertTrue(SetupChecklist.commissionerAppointed(
+                new SetupChecklist.Probes(new StrajaPolicies(), 1, List.of(), "uuid-abc")),
+                "the personnel appointment appoints the commissioner");
     }
 
     // ------------------------------------------------------------ prison cells
@@ -119,7 +125,7 @@ class SetupChecklistTest {
         String step = SetupChecklist.nextStep(setup, registry, List.of(), probes);
         assertNotNull(step);
         assertTrue(step.contains("Comisar"), "commissioner comes first — it gates setup here: " + step);
-        assertTrue(step.contains("straja-server.toml"), "points at the TOML fix: " + step);
+        assertTrue(step.contains("setup commissioner"), "points at the in-world command: " + step);
 
         step = SetupChecklist.nextStep(new SetupData(), registry, List.of(), probes());
         assertTrue(step.contains("setup here"), "locations next: " + step);
@@ -133,18 +139,23 @@ class SetupChecklistTest {
                 List.of("receptionist"), probes());
         assertTrue(step.contains("setup npcs"), "npcs next: " + step);
 
+        var noCells = new StrajaPolicies();
+        noCells.commissionerName = "dwurdy";
         step = SetupChecklist.nextStep(setup, registry, List.of(),
-                new SetupChecklist.Probes(new StrajaPolicies(), 0, List.of()));
+                new SetupChecklist.Probes(noCells, 0, List.of()));
         assertTrue(step.contains("prison_marker"), "cells next: " + step);
 
         StrajaPolicies noCoins = new StrajaPolicies();
+        noCoins.commissionerName = "dwurdy";
         noCoins.coinItemIds.clear();
         step = SetupChecklist.nextStep(setup, registry, List.of(),
                 new SetupChecklist.Probes(noCoins, 1, List.of()));
         assertTrue(step.contains("coinItemIds"), "currency next: " + step);
 
+        var badStations = new StrajaPolicies();
+        badStations.commissionerName = "dwurdy";
         step = SetupChecklist.nextStep(setup, registry, List.of(),
-                new SetupChecklist.Probes(new StrajaPolicies(), 1, List.of("missing:hq")));
+                new SetupChecklist.Probes(badStations, 1, List.of("missing:hq")));
         assertTrue(step.contains("station validate"), "stations last: " + step);
 
         assertNull(SetupChecklist.nextStep(setup, registry, List.of(), probes()));
@@ -155,11 +166,13 @@ class SetupChecklistTest {
     void isCompleteTracksEveryCategory() {
         SetupData setup = fullSetup();
         NpcRegistry registry = fullRegistry();
+        var policies = new StrajaPolicies();
+        policies.commissionerName = "dwurdy";
         assertFalse(SetupChecklist.isComplete(setup, registry, List.of(),
-                new SetupChecklist.Probes(new StrajaPolicies(), 0, List.of())),
+                new SetupChecklist.Probes(policies, 0, List.of())),
                 "missing cells block completion");
         assertFalse(SetupChecklist.isComplete(setup, registry, List.of(),
-                new SetupChecklist.Probes(new StrajaPolicies(), 1, List.of("cycle:a"))),
+                new SetupChecklist.Probes(policies, 1, List.of("cycle:a"))),
                 "station errors block completion");
     }
 }

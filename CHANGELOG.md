@@ -1,5 +1,169 @@
 # Changelog
 
+## 0.7.0 — 2026-11-04
+
+The institution advertises its hunts, and criminals can hide their faces:
+physical wanted posters that update themselves, and a disguise mechanic
+that turns patrol recognition into a real chase.
+
+### Afișe de căutare (POSTER-1)
+
+- **The board that updates itself**: an admin runs `/straja poster add
+  <id>` at a wall and the spot materializes a floating player head over
+  a caption — `CĂUTAT`, the target's name, the reward. The face cycles
+  through every active bounty on the feed.
+- **No mid-look flicker**: a poster only swaps its face while nobody
+  stands inside `poster.holdRadius` (default 14 blocks) — the board
+  waits for the reader to walk away. An empty feed shows "Nimic de
+  căutat" instead of going dark.
+- **Captured means down**: the moment a bounty resolves, its face stops
+  being advertised — the board shows the next hunt or the idle face on
+  the next sweep.
+- **Offline faces still post**: the wanted head resolves the target's
+  skin through the player list and the server profile cache — a logged-
+  out criminal keeps their face; an unresolvable profile degrades to a
+  plain head while name and reward still read.
+- Boards persist across restarts (`SetupData.posterSpots`), entities are
+  tagged `strajaPoster` and adopted-or-cleared on reload — never
+  duplicated. `/straja poster remove <id>` tears the spot down.
+
+### Masca (MASK-1)
+
+- **A covered face beats the scan**: a wanted player wearing a full-face
+  item from `mask.itemIds` — carved pumpkin, head sack, mob or player
+  heads — is unrecognized by patrol scan. The officer walks past.
+- **Not immunity**: the mask only defeats casual recognition. An officer
+  inside `mask.recognitionRadius` (default 3 blocks) still makes you,
+  checkpoints demand ID regardless, and the mark itself never clears —
+  remove the cover and the hunt resumes instantly.
+- The pumpkin's tunnel-vision cost is the balance the mechanic needed:
+  evasion you pay for in awareness.
+
+## 0.6.1 — 2026-11-04
+
+The institution runs itself: automatic criminal marking, an NPC patrol
+force, voluntary surrender, consented frisks, corruption reporting and
+item-first bribery — everything below works with zero admins online.
+
+### Autonomous institution (INST-1..4)
+
+- **Desk GUIs read as menus, not chests**: labeled desk actions replace
+  icon grids so the institution's surfaces explain themselves.
+- **Verificare corporală**: officers can request a consented inventory
+  check; refusing costs nothing, and the check never runs without a DA.
+- **Automatic criminal marking**: an unlawful kill writes the incident,
+  the BOLO and the wanted mark without a clerk — the state also posts
+  the bounty itself after the grace window.
+- **Patrulier — the institution's force**: patrol NPCs scan their post,
+  engage wanted players, apply system cuffs and book them into free
+  cells. No human officer required; desk NPCs stay at their desks.
+- **Unarmed faction NPCs never fight**: a CustomNPC with empty hands
+  stays passive — armament is the engagement license.
+
+### Predarea voluntară (SURR-1)
+
+- Wanted players get a clickable `[Predă-te]` in chat, re-offered on a
+  cooldown. Debt offences settle through one pooled payment and clear;
+  violent offenders take system cuffs and a discounted sentence through
+  the same booking path a patrol uses — no admin needed.
+
+### Corupția se plătește (COR-1)
+
+- Every pocketed bribe writes an auditable money trail. Any citizen can
+  run `/straja denunt <nume|uuid>` — the report checks the ledger, not
+  the accusation: a proven trail writes a system warrant a patrol will
+  serve, a clean file stays unproven. A witnessed exchange convicts on
+  the spot. Reporter cooldown prevents spam; offline guards stay
+  answerable through uuid and trail-name resolution.
+
+### Mită cu monede & soldați plătitori (ITEM-1 + DROP-1)
+
+- **Bribery is an item, not a command**: a jailed prisoner holding any
+  coin denomination right-clicks an officer — human guards get the
+  `[Acceptă]`/`[Refuză]` prompt; NPC officers answer by a stable
+  honesty trait (`escape.npcBribeAcceptPercent`, default 40%). Honest
+  refusals report the attempt; a witnessed acceptance relieves the
+  officer on the spot — natives are dismissed, bound CustomNPCs lose
+  the binding, registered entities lose the badge. No BOLO is ever
+  written on an identity a patrol cannot serve.
+- **Soldiers pay their own bounty**: killing a patrulier or jailer on
+  a player-attributed kill drops ~2 brass (`npc.soldierCoinsMin..Max`)
+  plus `npc.soldierXp` experience — farming the force is a real
+  criminal income. Desk roles and environmental kills drop nothing.
+
+## 0.6.0 — 2026-10-24
+
+Polish + stability over 0.5.0, then the gendarmerie institution: native
+desk GUIs for police and army work, commissioner setup as a command,
+clickable consent links, and a full custody-to-bail loop.
+
+### Institution surfaces & custody loop (rc.4)
+
+The gendarmerie desks become the real way things get done: commissioner
+setup is a single command, custody and bail run through the custom GUI,
+and common paperwork stops needing typed commands.
+
+- **Commissioner setup is one command**: `/straja setup commissioner
+  <player>` appoints through the personnel register — effective
+  immediately, survives restarts, and hands the mandate over cleanly when
+  re-run. `/straja commissioner select` remains as the config-pin
+  bootstrap path. The `/straja setup` checklist shows who's appointed.
+- **Clickable answers instead of typed replies**: cuff requests,
+  surrender offers, bribe and trade proposals arrive as `[Acceptă]` /
+  `[Refuză]` links in chat — one click, time-limited, re-checked by the
+  server.
+- **The Temniță desk covers the whole custody loop**: prisoners see work
+  quotas, trades, IOUs, bribes, debt, bail and parole status; officers
+  get cell search, manhunt/transfer/bounty boards and document checks.
+  Money and destructive actions confirm with a DA/NU page first.
+- **Bail and trade flow through native forms**: a friend can pay a
+  prisoner's bail at the jailer desk (`Plătește cauțiunea altui
+  deținut`), and prisoner-to-prisoner trade offers open a form that
+  delivers a clickable offer to the buyer.
+- **Reliability fixes**: promotion petitions, trade/IOU/bail/bounty and
+  inspection forms now open reliably from desk tiles on all NPC surfaces.
+- **Commissioner authority tightened**: the config pin is now strictly a
+  bootstrap seed — once a commissioner is appointed through the personnel
+  register, the register alone decides who holds the role. The pin can no
+  longer linger as a second, parallel grant.
+- Desk pages lead with urgent actions, questions sit behind FAQ, and
+  every refusal explains the remedy.
+
+### Regression fixes (rc.5)
+
+- **A held book no longer locks out the Secretary desk**: the
+  "hold a book to get a copy" affordance used to swallow the whole
+  interaction, so anyone carrying paperwork (an arrest proces-verbal, a
+  signed order) could never reach `Registre și dosare` or file a report.
+  The copy still happens — the desk GUI now opens on top of it, keeping
+  institution tasks on the clear custom GUI instead of an item-only flow.
+- **`/straja test reset-all` clears real players' inventories too**:
+  scenario state used to leak across test journeys (an arrest's
+  proces-verbal survived into the next run and poisoned held-slot
+  checks); every reset now leaves the world truly clean for the next
+  journey.
+
+### Earlier release candidates (rc.1–rc.3)
+
+- **Idle operations resolve quietly**: auto-scheduled unit operations
+  that nobody signed up for and nobody attended drop from the ledger
+  instead of recording `-8` readiness failures every cycle — units stop
+  sliding to 0 while the garrison sleeps. Committed no-shows and
+  officer-planned operations still fail honestly.
+- Terminology normalized: members are `străjer` (RO) / displayed rank
+  names (EN) across refusal, custody and mission text; the player help
+  intro, FAQ "Despre Strajă", manual oath and quickstarts now describe
+  Straja as the garrison's police *and* army.
+- Fixes a server crash when an idle auto-operation resolved while
+  another operation was due in the same tick.
+- **Commissioner bootstrap**: `/straja commissioner select <player>`
+  (OP 4 / console) pins the commissioner identity into the authoritative
+  server config and applies it immediately — non-local installs no longer
+  need hand-edited TOML to grant the role. `/straja commissioner status`
+  reads back the pin; every selection is audited.
+- Small copy corrections in the player/admin quickstarts and config
+  comments.
+
 ## 0.5.0 — 2026-10-18
 
 The Straja career epic: the faction now matches the public recruitment
@@ -106,25 +270,6 @@ upgrade in place; no world migration is required over 0.4.0.
   `seal_stamp`, `official_document`, `guard_uniform`, `identity_card`,
   `training_manual` and the rest no longer render as missing-texture
   placeholders.
-
-## 0.5.1 — 2026-10-24
-
-Polish + stability over 0.5.0: institution copy is consistent, and the
-army treadmill no longer bleeds unattended units.
-
-- **Idle operations resolve quietly**: auto-scheduled unit operations
-  that nobody signed up for and nobody attended drop from the ledger
-  instead of recording `-8` readiness failures every cycle — units stop
-  sliding to 0 while the garrison sleeps. Committed no-shows and
-  officer-planned operations still fail honestly.
-- Terminology normalized: members are `străjer` (RO) / displayed rank
-  names (EN) across refusal, custody and mission text; the player help
-  intro, FAQ "Despre Strajă", manual oath and quickstarts now describe
-  Straja as the garrison's police *and* army.
-- Fixes a server crash when an idle auto-operation resolved while
-  another operation was due in the same tick.
-- Small copy corrections in the player/admin quickstarts and config
-  comments.
 
 ## 0.4.0 — 2026-10-06
 

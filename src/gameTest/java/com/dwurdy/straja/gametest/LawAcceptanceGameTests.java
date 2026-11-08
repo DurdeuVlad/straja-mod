@@ -59,6 +59,18 @@ public final class LawAcceptanceGameTests {
         return runtime;
     }
 
+    /**
+     * The test commissioner holds the personnel appointment — the same
+     * in-world selection {@code /straja setup commissioner} performs. No
+     * identity ships as a config default, so fixtures grant the mandate.
+     */
+    private static VirtualPlayerGateway appointCommissioner(StrajaRuntime runtime) {
+        var commissioner = new VirtualPlayerGateway("la_commissioner");
+        commissioner.setOp(true); // the cold-start op path /straja setup commissioner allows
+        runtime.guards().setupCommissioner(commissioner, commissioner.uuid().toString());
+        return commissioner;
+    }
+
     private static MinecraftPlayerGateway gateway(ServerPlayer player) {
         return new MinecraftPlayerGateway(player.getServer(), player.getUUID());
     }
@@ -445,6 +457,7 @@ public final class LawAcceptanceGameTests {
         cell.maxX = anchor.getX() - 25; cell.maxY = anchor.getY() + 5;
         cell.maxZ = anchor.getZ() - 25;
         cell.doorX = anchor.getX() - 27; cell.doorY = anchor.getY(); cell.doorZ = anchor.getZ() - 27;
+        prison.cells.removeIf(c -> cell.id.equalsIgnoreCase(c.id));
         prison.cells.add(cell);
         runtime.context().prison().write(prison);
 
@@ -762,8 +775,7 @@ public final class LawAcceptanceGameTests {
         };
         cleanup.run();
 
-        var commissioner = new VirtualPlayerGateway("dwurdy");
-        commissioner.setOp(true);
+        var commissioner = appointCommissioner(runtime);
         commissioner.setDimension(dim);
         var min = helper.absolutePos(new BlockPos(0, -60, 0));
         var max = helper.absolutePos(new BlockPos(10, 10, 10));
@@ -857,22 +869,29 @@ public final class LawAcceptanceGameTests {
 
         Runnable cleanup = () -> {
             removeSite(runtime, "at8_gate");
-            removeCell(runtime, "at8_cell");
+            removeCell(runtime, "at0_cell");
             removeCustodyState(runtime, suspectUuid);
             removeCustodyState(runtime, officerUuid);
         };
         cleanup.run();
 
         // Cell the prisoner belongs to — uncuff inside it restores custody.
+        // The id sorts before every other test cell ("at0" < "at1*"/"at3"),
+        // and firstFree picks the lowest free id, so this test's own booking
+        // — which runs atomically in the same tick as the registration —
+        // deterministically lands here. A shared-pool id lets another test's
+        // cleanup remove the assigned cell mid-flight and flip the uncuff
+        // outcome to FUGITIVE.
         var prison = runtime.context().prison().read();
         var cell = new com.dwurdy.straja.domain.model.Cell();
-        cell.id = "at8_cell";
+        cell.id = "at0_cell";
         cell.dimension = dim;
         cell.minX = anchor.getX() - 30; cell.minY = anchor.getY() - 5;
         cell.minZ = anchor.getZ() - 30;
         cell.maxX = anchor.getX() - 24; cell.maxY = anchor.getY() + 5;
         cell.maxZ = anchor.getZ() - 24;
         cell.doorX = anchor.getX() - 27; cell.doorY = anchor.getY(); cell.doorZ = anchor.getZ() - 27;
+        prison.cells.removeIf(c -> cell.id.equalsIgnoreCase(c.id));
         prison.cells.add(cell);
         runtime.context().prison().write(prison);
 
@@ -892,8 +911,7 @@ public final class LawAcceptanceGameTests {
         var officerGw = qualifyOfficer(runtime, officer);
         var suspectGw = gateway(suspect);
 
-        var commissioner = new VirtualPlayerGateway("dwurdy");
-        commissioner.setOp(true);
+        var commissioner = appointCommissioner(runtime);
         commissioner.setDimension(dim);
         // Book the suspect into a cell so "inside custody" has meaning. The
         // cell pool is shared with concurrent tests, so the assignment may
@@ -1157,6 +1175,7 @@ public final class LawAcceptanceGameTests {
         cell.maxZ = anchor.getZ() - 25;
         cell.doorX = anchor.getX() - 27; cell.doorY = anchor.getY() + 94;
         cell.doorZ = anchor.getZ() - 27;
+        prison.cells.removeIf(c -> cell.id.equalsIgnoreCase(c.id));
         prison.cells.add(cell);
         runtime.context().prison().write(prison);
 
@@ -1348,6 +1367,7 @@ public final class LawAcceptanceGameTests {
             cell.maxZ = anchor.getZ() - 25;
             cell.doorX = anchor.getX() - 27; cell.doorY = anchor.getY() + 106;
             cell.doorZ = anchor.getZ() - 27;
+            prison.cells.removeIf(c -> cell.id.equalsIgnoreCase(c.id));
             prison.cells.add(cell);
             // The locker pool feeds routeLocker — arrest seizure pours the
             // prisoner's coins into this chest like a live booking would.
@@ -1356,8 +1376,7 @@ public final class LawAcceptanceGameTests {
             prison.lockerPool.add(lockerPoint);
             runtime.context().prison().write(prison);
 
-            var commissioner = new VirtualPlayerGateway("dwurdy");
-            commissioner.setOp(true);
+            var commissioner = appointCommissioner(runtime);
             commissioner.setDimension(dim);
             var campMin = helper.absolutePos(new BlockPos(12, 102, 0));
             var campMax = helper.absolutePos(new BlockPos(20, 110, 8));
@@ -1567,6 +1586,7 @@ public final class LawAcceptanceGameTests {
             var cell = new Cell();
             cell.id = "at11_cell";
             cell.dimension = fixtureDim;
+            seededPrison.cells.removeIf(c -> cell.id.equalsIgnoreCase(c.id));
             seededPrison.cells.add(cell);
             runtime.context().prison().write(seededPrison);
             var seededCamps = runtime.context().laborCamps().read();

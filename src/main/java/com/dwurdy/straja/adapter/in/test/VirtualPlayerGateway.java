@@ -61,6 +61,20 @@ public final class VirtualPlayerGateway implements PlayerGateway {
     public void setAbsorption(double value) { this.absorption = value; }
 
     @Override public void tell(String text) { messageLog.add(text); }
+    /**
+     * Clickable notices degrade to the plain key plus one {@code link:}
+     * line per action — the harness asserts the action id the real client
+     * would have rendered as a clickable label.
+     */
+    @Override public void tellAction(String translationKey,
+                                     java.util.List<ActionLink> links, Object... args) {
+        tellKey(translationKey, args);
+        if (links != null) {
+            for (ActionLink link : links) {
+                if (link != null) messageLog.add("link:" + link.actionId());
+            }
+        }
+    }
     @Override public void refuse(String reasonKey, String remedyKey, Object... reasonArgs) {
         messageLog.add(VirtualLang.refusal(reasonKey, remedyKey, reasonArgs));
     }

@@ -319,9 +319,29 @@ public final class PrisonJobService {
                 price);
         var bg = findOnline(buyer);
         if (bg != null) {
-            bg.tellKey("straja.trade.offer", seller.name(),
-                    held.count() + "×" + held.id(), price);
+            bg.tellAction("straja.trade.offer",
+                    List.of(new PlayerGateway.ActionLink("Acceptă", "trade-accept",
+                                    Math.max(1, ctx.policies().tradeOfferMs)),
+                            new PlayerGateway.ActionLink("Refuză", "trade-decline",
+                                    Math.max(1, ctx.policies().tradeOfferMs))),
+                    seller.name(), held.count() + "×" + held.id(), price);
         }
+    }
+
+    /** True while a live trade offer awaits this buyer's answer. */
+    public boolean pendingTradeFor(String buyerUuid) {
+        if (buyerUuid == null || buyerUuid.isBlank()) return false;
+        long now = now();
+        var it = offers.values().iterator();
+        while (it.hasNext()) {
+            var o = it.next();
+            if (o == null || now > o.expiresAt) {
+                it.remove();
+                continue;
+            }
+            if (buyerUuid.equalsIgnoreCase(o.buyerUuid)) return true;
+        }
+        return false;
     }
 
     /** {@code /straja trade accept|decline} — the buyer answers. */

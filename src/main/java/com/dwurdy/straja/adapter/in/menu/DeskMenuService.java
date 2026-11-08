@@ -120,6 +120,28 @@ public final class DeskMenuService {
     }
 
     /**
+     * A standalone live-data page — a chat-token click (digest row, action
+     * link) opens the matching desk page as a fresh session rooted there.
+     * Returns false for virtual players, a disabled flag, or unknown kinds,
+     * so the caller keeps its chat fallback.
+     */
+    public static boolean openDynamic(Player player, String kind, String recordId) {
+        try {
+            if (!(player instanceof ServerPlayer serverPlayer)
+                    || kind == null || kind.isBlank()) {
+                return false;
+            }
+            if (!enabled() || StrajaRuntime.get() == null) return false;
+            return DeskMenuSession.forDynamic(serverPlayer, kind,
+                    recordId == null ? "" : recordId).open();
+        } catch (Throwable openFailed) {
+            StrajaMod.LOGGER.warn(Text.STRAJA_PREFIX
+                    + "Dynamic desk page failed to open", openFailed);
+            return false;
+        }
+    }
+
+    /**
      * Opens the published surface of a desk-provider-bound NPC as a chest
      * grid — the session resolves the snapshot through {@code bridge} on
      * every render and submits clicks through the provider token path.

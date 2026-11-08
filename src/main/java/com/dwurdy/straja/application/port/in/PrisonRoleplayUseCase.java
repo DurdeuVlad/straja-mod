@@ -1,11 +1,19 @@
 package com.dwurdy.straja.application.port.in;
 
 import com.dwurdy.straja.application.port.out.PlayerGateway;
+import com.dwurdy.straja.domain.model.PrisonerStatus;
 import com.dwurdy.straja.domain.model.Sentence;
 
 /** Player-facing prison surface: sentences, cells, waitlist and recovery. */
 public interface PrisonRoleplayUseCase {
     Sentence activeSentence(PlayerGateway target);
+
+    /**
+     * The viewer's prisoner-register status (IN_CELL / IN_CAMP / FUGITIVE …)
+     * or {@code null} when the register holds no record — desk rows read this
+     * projection instead of the store.
+     */
+    PrisonerStatus registerStatus(PlayerGateway player);
 
     Sentence arrest(
             PlayerGateway target,

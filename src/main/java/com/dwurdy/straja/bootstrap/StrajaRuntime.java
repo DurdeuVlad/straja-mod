@@ -45,6 +45,11 @@ public final class StrajaRuntime {
     private final com.dwurdy.straja.application.service.NpcAdminService npcs;
     private final com.dwurdy.straja.application.service.MissionService missions;
     private final com.dwurdy.straja.application.service.CustodyService custody;
+    private final com.dwurdy.straja.application.service.FriskService frisks;
+    private final com.dwurdy.straja.application.service.MarkService marks;
+    private final com.dwurdy.straja.application.service.SurrenderService surrenders;
+    private final com.dwurdy.straja.application.service.CorruptionService corruptions;
+    private final com.dwurdy.straja.application.service.PatrolService patrols;
     private final com.dwurdy.straja.application.service.PrisonService prison;
     private final com.dwurdy.straja.application.service.FineService fines;
     private final com.dwurdy.straja.application.service.DebtService debt;
@@ -68,6 +73,7 @@ public final class StrajaRuntime {
     private final com.dwurdy.straja.application.service.FormSessionService formSessions;
     private volatile com.dwurdy.straja.adapter.in.form.FormSubmissionRouter npcFormRouter;
     private final com.dwurdy.straja.application.service.PolicyService policyService;
+    private final com.dwurdy.straja.application.service.CommissionerBootstrapService commissionerBootstrap;
     private final com.dwurdy.straja.application.service.IncidentService incidents;
     private final com.dwurdy.straja.application.service.DispatchService dispatch;
     private final com.dwurdy.straja.application.service.ManhuntService manhunts;
@@ -77,6 +83,7 @@ public final class StrajaRuntime {
     private com.dwurdy.straja.application.service.ParoleService parole;
     private final com.dwurdy.straja.application.service.BoloService bolos;
     private final com.dwurdy.straja.application.service.BountyService bounties;
+    private final com.dwurdy.straja.application.service.PosterService posters;
     private final com.dwurdy.straja.application.service.ProtocolService protocol;
     private final com.dwurdy.straja.application.service.StorageService storage;
     private final com.dwurdy.straja.application.service.CheckpointService checkpoints;
@@ -356,6 +363,8 @@ public final class StrajaRuntime {
         this.npcs = new com.dwurdy.straja.application.service.NpcAdminService(ctx);
         this.missions = new com.dwurdy.straja.application.service.MissionService(ctx, players, audit);
         this.custody = new com.dwurdy.straja.application.service.CustodyService(ctx, players, audit);
+        this.frisks = new com.dwurdy.straja.application.service.FriskService(ctx, audit);
+        this.frisks.useCustody(custody);
         this.prison = new com.dwurdy.straja.application.service.PrisonService(ctx, players, audit, custody);
         this.seizure = new com.dwurdy.straja.application.service.SeizureService(ctx, audit);
         this.prison.useSeizure(seizure);
@@ -406,6 +415,12 @@ public final class StrajaRuntime {
             com.dwurdy.straja.StrajaMod.LOGGER.warn(
                     Text.STRAJA_PREFIX + "Ignored malformed policy override '{}' in straja-policies.yaml", failed);
         }
+        // Commissioner identity bootstrap pins the canonical UUID into the
+        // authoritative server config — deliberately NOT through the policy
+        // override layer (identity fields are excluded there by design).
+        this.commissionerBootstrap = new com.dwurdy.straja.application.service.CommissionerBootstrapService(
+                ctx, audit, StrajaServerConfig::pinCommissioner,
+                StrajaServerConfig.COMMISSIONER_UUID::get);
         // Persisted policy overrides cannot re-enable Straja's generic downed
         // owner while an optional provider is present.
         OptionalModCompatibility.applyFailSafe(compatibility, policies);
@@ -490,6 +505,56 @@ public final class StrajaRuntime {
         this.bounties.useDispatch(this.dispatch);
         // DEBT-2: bail lands on the debt ledger; in-custody issue levies.
         this.bounties.useDebt(this.debt);
+        // POSTER-1: the public face board — declared spots cycle active
+        // bounties on display entities, swapping only while unobserved.
+        this.posters = new com.dwurdy.straja.application.service.PosterService(
+                ctx, bounties, audit);
+        this.posters.useBoard(
+                new com.dwurdy.straja.adapter.out.minecraft.MinecraftPosterBoard(server));
+        // INST-3: the law records crimes without a clerk — auto-marks and
+        // the state bounty sweep for unpriced wanted players.
+        this.marks = new com.dwurdy.straja.application.service.MarkService(
+                ctx, audit, incidents, bolos, bounties, wanted, reputation);
+        // INST-4: the patrulier enforces physically with no humans on duty —
+        // scan post, engage wanted, restrain, book into the nearest cell.
+        this.patrols = new com.dwurdy.straja.application.service.PatrolService(
+                ctx, audit, wanted, custody, prison, reputation);
+        this.patrols.useDispatch(this.dispatch);
+        // SURR-1: the wanted turn themselves in — debts settle, violent
+        // marks book a discounted sentence, no officer required.
+        this.surrenders = new com.dwurdy.straja.application.service.SurrenderService(
+                ctx, audit, wanted, custody, prison, fines, bolos);
+        // COR-1: corrupt guards answer to the same institution — bribe money
+        // leaves a trail, reports check it, evidence writes the warrant.
+        this.corruptions = new com.dwurdy.straja.application.service.CorruptionService(
+                ctx, audit, players, bolos);
+        this.escapes.useCorruptions(this.corruptions);
+        // ITEM-1: a convicted NPC officer can't serve a player warrant —
+        // the institution relieves it on the spot. A native officer is
+        // dismissed outright; a bound/registered entity keeps its body but
+        // loses the badge — the entity belongs to its provider.
+        this.corruptions.useNpcDiscipline(uuid -> {
+            boolean dismissed = false;
+            try {
+                var id = java.util.UUID.fromString(uuid);
+                for (var level : server.getAllLevels()) {
+                    var entity = level.getEntity(id);
+                    if (entity instanceof com.dwurdy.straja.adapter.in.npc.StrajaNpcEntity npc) {
+                        npc.discard();
+                        dismissed = true;
+                    }
+                }
+            } catch (IllegalArgumentException ignored) {}
+            try {
+                if (NpcPresentationRuntime.unbindHost(uuid)) dismissed = true;
+            } catch (RuntimeException ignored) {}
+            try {
+                if (npcs.registration(uuid) != null && npcs.remove(uuid).ok()) {
+                    dismissed = true;
+                }
+            } catch (RuntimeException ignored) {}
+            return dismissed;
+        });
         // #242: guided tester protocol — scripted state beats + fake suspect.
         this.protocol = new com.dwurdy.straja.application.service.ProtocolService(
                 ctx, new SavedStores.Protocol(stores), players, audit);
@@ -606,7 +671,7 @@ public final class StrajaRuntime {
                 instance.guards, instance.missions, instance.complaints, instance.fines,
                 instance.archive, instance.reports, instance.audiences, instance.admin,
                 instance.adminTools, instance.custody, instance.expansion, instance.v2Promotions,
-                instance.v2JoinRequests);
+                instance.v2JoinRequests, instance.parole);
         // This is the reusable equivalent of the original
         // instance.adminTools, instance.custody, instance.expansion)::submit
         // wiring; NPC and native forms now share the same authenticated route.
@@ -627,10 +692,11 @@ public final class StrajaRuntime {
      */
     private void logDeploymentGates() {
         if (policies.isLocalEnvironment()) return;
-        if (policies.requireCommissionerUuidOutsideLocal && policies.commissionerUuid.isEmpty()) {
+        if (policies.requireCommissionerUuidOutsideLocal && policies.commissionerUuid.isEmpty()
+                && v2Personnel.commissioner() == null) {
             com.dwurdy.straja.StrajaMod.LOGGER.error(
-                    Text.STRAJA_PREFIX + "DEPLOYMENT GATE FAILED: commissionerUuid is not pinned outside a local "
-                            + "environment — no commissioner identity will be granted");
+                    Text.STRAJA_PREFIX + "DEPLOYMENT GATE FAILED: no commissioner is appointed outside a local "
+                            + "environment — run /straja setup commissioner <player> or pin commissionerUuid");
         }
         if (policies.requireDebugDisabledOutsideLocal && policies.debugEnabled) {
             com.dwurdy.straja.StrajaMod.LOGGER.error(
@@ -681,6 +747,11 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.port.in.AdminToolsUseCase adminTools() { return adminTools; }
     public com.dwurdy.straja.application.port.in.FineRoleplayUseCase fineRoleplay() { return fines; }
     public com.dwurdy.straja.application.port.in.CustodyRoleplayUseCase custodyRoleplay() { return custody; }
+    public com.dwurdy.straja.application.service.FriskService frisks() { return frisks; }
+    public com.dwurdy.straja.application.service.SurrenderService surrenders() { return surrenders; }
+    public com.dwurdy.straja.application.service.CorruptionService corruptions() { return corruptions; }
+    public com.dwurdy.straja.application.service.MarkService marks() { return marks; }
+    public com.dwurdy.straja.application.service.PatrolService patrols() { return patrols; }
     public com.dwurdy.straja.application.port.in.PrisonRoleplayUseCase prisonRoleplay() { return prison; }
     public com.dwurdy.straja.application.port.in.RoomRoleplayUseCase roomRoleplay() { return rooms; }
     public com.dwurdy.straja.application.port.in.ArchiveRoleplayUseCase archiveRoleplay() { return archive; }
@@ -703,6 +774,7 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.application.service.BoloService bolos() { return bolos; }
 
     public com.dwurdy.straja.application.service.BountyService bounties() { return bounties; }
+    public com.dwurdy.straja.application.service.PosterService posters() { return posters; }
     public com.dwurdy.straja.application.service.ProtocolService protocol() { return protocol; }
     public com.dwurdy.straja.application.service.StorageService storage() { return storage; }
     public com.dwurdy.straja.application.service.CheckpointService checkpoints() { return checkpoints; }
@@ -730,8 +802,10 @@ public final class StrajaRuntime {
     public com.dwurdy.straja.domain.model.SetupChecklist.Probes setupProbes() {
         var stationErrors = com.dwurdy.straja.domain.model.SetupChecklist.stationProblems(
                 v2Stations.get("hq"), v2Stations.validateFallbacks());
+        var appointed = v2Personnel.commissioner();
         return new com.dwurdy.straja.domain.model.SetupChecklist.Probes(
-                ctx.policies(), ctx.prison().read().cells.size(), stationErrors);
+                ctx.policies(), ctx.prison().read().cells.size(), stationErrors,
+                appointed == null ? "" : appointed.playerUuid);
     }
     public com.dwurdy.straja.application.service.DocumentService v2Documents() { return v2Documents; }
     public com.dwurdy.straja.application.service.EquipmentLedgerService v2EquipmentLedger() { return v2EquipmentLedger; }
@@ -796,7 +870,9 @@ public final class StrajaRuntime {
             boolean configuredCommissioner = players.isConfiguredCommissioner(player);
             var legacy = ctx.players().read(player.uuid());
             var record = v2Personnel.projectLegacy(player.uuid(), legacy, player.uuid().toString());
-            if (configuredCommissioner) {
+            // The TOML pin only bootstraps — once a live appointment exists it is
+            // authoritative, so a stale pin must never resurrect a second Comisar.
+            if (configuredCommissioner && v2Personnel.commissioner() == null) {
                 record = v2Personnel.ensureCommissioner(player.uuid().toString());
                 if (!record.hasAppointment(com.dwurdy.straja.domain.model.AppointmentType.COMMISSIONER, clock.nowMillis())) {
                     v2Personnel.appointInternal(player.uuid().toString(),
@@ -840,6 +916,7 @@ public final class StrajaRuntime {
         if (router != null) router.submit(player, submission);
     }
     public com.dwurdy.straja.application.port.in.PolicyConfigUseCase policyConfig() { return policyService; }
+    public com.dwurdy.straja.application.service.CommissionerBootstrapService commissionerBootstrap() { return commissionerBootstrap; }
     public com.dwurdy.straja.application.port.out.MutableClock clock() { return clock; }
     public com.dwurdy.straja.adapter.in.test.TestPlayerRegistry testPlayers() { return testPlayers; }
     public String bootId() { return bootId; }

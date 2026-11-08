@@ -39,7 +39,10 @@ public class FormSessionService implements FormSessionUseCase {
             Action.AUDIENCE_REQUEST, Action.ADMIN_AUTHORIZE, Action.ADMIN_POLICY_SET,
             Action.ADMIN_EMERGENCY_ALERT, Action.ADMIN_EMERGENCY_START, Action.INCIDENT_REPORT,
             Action.BOLO_CREATE, Action.EVIDENCE_CASE_VIEW,
-            Action.ARREST_HANDOFF, Action.REPUTATION_VIEW, Action.REPUTATION_CORRECTION);
+            Action.ARREST_HANDOFF, Action.REPUTATION_VIEW, Action.REPUTATION_CORRECTION,
+            Action.TRADE_OFFER, Action.IOU_ISSUE, Action.BAIL_PAY, Action.BOUNTY_POST,
+            Action.INSPECT_PLAYER, Action.ABSENCE_DECLARE, Action.PAROLE_ADVOCATE,
+            Action.PETITION_REQUEST);
 
     private final Clock clock;
     private final IdGenerator ids;

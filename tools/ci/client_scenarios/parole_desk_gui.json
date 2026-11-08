@@ -1,0 +1,304 @@
+{
+  "name": "parole-desk-gui",
+  "group": "client-desk",
+  "timeoutSeconds": 300,
+  "observable": "the client is arrested and made parole-eligible, interacts with a spawned jailer NPC, the native Straja desk opens showing the live parole rows, the status page renders every gate check, the native filing form submits a real reason, the server docket shows the FILED case, and (once commissioned) the officer docket row opens the live hearing page — every step through real GUI clicks, with screenshots retained",
+  "failure": "the desk never opens, the parole rows or gate checks are absent, the form never opens or submits, the docket row is missing, or any npc-action label cannot be resolved to a real tile",
+  "prerequisites": [
+    "combined server running",
+    "client joined as ci_straja"
+  ],
+  "steps": [
+    {
+      "name": "reset-state",
+      "type": "rcon",
+      "setup": true,
+      "command": "straja test reset-all"
+    },
+    {
+      "name": "create-officer",
+      "type": "rcon",
+      "setup": true,
+      "command": "straja test create-player par_com",
+      "expectNotContains": "disabled"
+    },
+    {
+      "name": "commissioner-officer",
+      "type": "rcon",
+      "setup": true,
+      "command": "straja test set-commissioner par_com",
+      "expectRegex": "commissioner"
+    },
+    {
+      "name": "arrest-client",
+      "type": "rcon",
+      "setup": true,
+      "command": "straja test prison-arrest par_com {account} 30",
+      "expectRegex": "sentence="
+    },
+    {
+      "name": "client-standing",
+      "type": "rcon",
+      "setup": true,
+      "command": "straja test prison-record {account} standing 60",
+      "expectContains": "standing=60"
+    },
+    {
+      "name": "client-served",
+      "type": "rcon",
+      "setup": true,
+      "command": "straja test prison-record {account} servedPercent 60",
+      "expectContains": "servedPercent=60"
+    },
+    {
+      "name": "client-labor",
+      "type": "rcon",
+      "setup": true,
+      "command": "straja test prison-record {account} labor 500",
+      "expectContains": "labor=500"
+    },
+    {
+      "name": "player-position",
+      "type": "mct",
+      "setup": true,
+      "args": ["position", "get"],
+      "captures": [
+        {"name": "px", "regex": "\"x\"\\s*:\\s*(-?[0-9.]+)"},
+        {"name": "py", "regex": "\"y\"\\s*:\\s*(-?[0-9.]+)"},
+        {"name": "pz", "regex": "\"z\"\\s*:\\s*(-?[0-9.]+)"}
+      ]
+    },
+    {
+      "name": "spawn-jailer",
+      "type": "rcon",
+      "setup": true,
+      "command": "straja npc spawn jailer {px} {py} {pz}",
+      "capture": {"name": "jailer_uuid", "regex": "creat: ([0-9a-f-]{36})"}
+    },
+    {
+      "name": "interact-jailer",
+      "type": "mct",
+      "setup": true,
+      "args": ["entity", "interact", "--type", "straja:straja_npc", "--nearest", "--max-distance", "8"]
+    },
+    {
+      "name": "surface-settle",
+      "type": "sleep",
+      "seconds": 2,
+      "setup": true
+    },
+    {
+      "name": "desk-opened",
+      "type": "mct",
+      "args": ["gui", "wait-open", "--timeout", "20"],
+      "timeout": 30,
+      "expect": [{"rawRegex": "StrajaDeskScreen"}]
+    },
+    {
+      "name": "parole-rows-present",
+      "type": "rcon",
+      "command": "straja test desk-actions {account}",
+      "expectRegex": "Statutul eliber.{1,2}rii[\\s\\S]*Cere eliberarea condi.{1,2}ionat"
+    },
+    {
+      "name": "desk-root-evidence",
+      "type": "screenshot",
+      "name": "parole-prisoner-desk"
+    },
+    {
+      "name": "open-status-page",
+      "type": "npc-action",
+      "label": "Statutul eliberării"
+    },
+    {
+      "name": "status-settle",
+      "type": "sleep",
+      "seconds": 1,
+      "setup": true
+    },
+    {
+      "name": "status-checks-render",
+      "type": "rcon",
+      "command": "straja test desk-actions {account}",
+      "expectRegex": "custodie[\\s\\S]*reputa.{1,2}ie|reputa.{1,2}ie[\\s\\S]*custodie"
+    },
+    {
+      "name": "status-page-evidence",
+      "type": "screenshot",
+      "name": "parole-status-page"
+    },
+    {
+      "name": "back-to-root",
+      "type": "npc-action",
+      "label": "Înapoi"
+    },
+    {
+      "name": "back-settle",
+      "type": "sleep",
+      "seconds": 1,
+      "setup": true
+    },
+    {
+      "name": "open-file-form",
+      "type": "npc-action",
+      "label": "Cere eliberarea condiționată"
+    },
+    {
+      "name": "file-form-fill",
+      "type": "form",
+      "fill": ["Munca si linistea"],
+      "expectTitleRegex": "Cerere de eliberare"
+    },
+    {
+      "name": "file-form-evidence",
+      "type": "screenshot",
+      "name": "parole-file-form"
+    },
+    {
+      "name": "file-form-submit",
+      "type": "form",
+      "submit": true
+    },
+    {
+      "name": "case-filed-server-side",
+      "type": "rcon",
+      "command": "straja test parole-docket par_com",
+      "expectRegex": "docket=PAR-\\d+ PAROLE FILED"
+    },
+    {
+      "name": "post-file-settle",
+      "type": "sleep",
+      "seconds": 2,
+      "setup": true
+    },
+    {
+      "name": "reinteract-after-file",
+      "type": "mct",
+      "setup": true,
+      "args": ["entity", "interact", "--type", "straja:straja_npc", "--nearest", "--max-distance", "8"]
+    },
+    {
+      "name": "reopen-settle",
+      "type": "sleep",
+      "seconds": 2,
+      "setup": true
+    },
+    {
+      "name": "advocate-row-shows",
+      "type": "rcon",
+      "command": "straja test desk-actions {account}",
+      "expectRegex": "Desemneaz.{1,2} un avocat|Dosar PAR-\\d+"
+    },
+    {
+      "name": "filed-evidence",
+      "type": "screenshot",
+      "name": "parole-filed-desk"
+    },
+    {
+      "name": "client-becomes-officer",
+      "type": "rcon",
+      "setup": true,
+      "command": "straja test set-commissioner {account}",
+      "expectRegex": "commissioner"
+    },
+    {
+      "name": "close-for-officer",
+      "type": "mct",
+      "setup": true,
+      "args": ["gui", "close"]
+    },
+    {
+      "name": "reopen-desk",
+      "type": "mct",
+      "setup": true,
+      "args": ["entity", "interact", "--type", "straja:straja_npc", "--nearest", "--max-distance", "8"]
+    },
+    {
+      "name": "officer-settle",
+      "type": "sleep",
+      "seconds": 2,
+      "setup": true
+    },
+    {
+      "name": "docket-row-present",
+      "type": "rcon",
+      "command": "straja test desk-actions {account}",
+      "expectRegex": "Dosare de eliberare"
+    },
+    {
+      "name": "open-docket",
+      "type": "npc-action",
+      "label": "Dosare de eliberare"
+    },
+    {
+      "name": "docket-settle",
+      "type": "sleep",
+      "seconds": 1,
+      "setup": true
+    },
+    {
+      "name": "docket-shows-case",
+      "type": "rcon",
+      "command": "straja test desk-actions {account}",
+      "expectRegex": "PAR-1"
+    },
+    {
+      "name": "docket-evidence",
+      "type": "screenshot",
+      "name": "parole-officer-docket"
+    },
+    {
+      "name": "open-hearing-page",
+      "type": "npc-action",
+      "label": "PAR-1"
+    },
+    {
+      "name": "hearing-settle",
+      "type": "sleep",
+      "seconds": 1,
+      "setup": true
+    },
+    {
+      "name": "hearing-facts-render",
+      "type": "rcon",
+      "command": "straja test desk-actions {account}",
+      "expectRegex": "PAR-1.{1,4}PAROLE.{1,4}FILED"
+    },
+    {
+      "name": "hearing-page-evidence",
+      "type": "screenshot",
+      "name": "parole-hearing-page"
+    },
+    {
+      "name": "close-desk",
+      "type": "mct",
+      "setup": true,
+      "args": ["gui", "close"]
+    }
+  ],
+  "cleanup": [
+    {
+      "name": "close-any-gui",
+      "type": "mct",
+      "setup": true,
+      "args": ["gui", "close"]
+    },
+    {
+      "name": "release-client-custody",
+      "type": "rcon",
+      "setup": true,
+      "command": "straja test prison-release par_com {account}"
+    },
+    {
+      "name": "remove-jailer",
+      "type": "rcon",
+      "command": "straja npc remove {jailer_uuid}"
+    },
+    {
+      "name": "cleanup-reset",
+      "type": "rcon",
+      "setup": true,
+      "command": "straja test reset-all"
+    }
+  ]
+}

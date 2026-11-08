@@ -88,7 +88,7 @@ public final class Fakes {
 
     // ---------------------------------------------------------------- player
 
-    public static final class TestPlayer implements PlayerGateway {
+    public static class TestPlayer implements PlayerGateway {
         public TestServer server;
         public final UUID uuid;
         public String name;
@@ -119,6 +119,8 @@ public final class Fakes {
         public final List<String> books = new ArrayList<>();
         /** Items that did not fit the inventory on giveStack — spilled drops. */
         public final List<String> spilled = new ArrayList<>();
+        /** Equipped head item — EMPTY by default; set to simulate a mask. */
+        public ItemView headItem = ItemView.EMPTY;
 
         public TestPlayer(String name, int slots) {
             this.uuid = UUID.nameUUIDFromBytes(name.getBytes());
@@ -172,6 +174,7 @@ public final class Fakes {
         @Override public ItemView mainHand() {
             return selectedSlot >= 0 && selectedSlot < inventory.slots() ? inventory.stackAt(selectedSlot) : ItemView.EMPTY;
         }
+        @Override public ItemView headItem() { return headItem; }
         @Override public PlayerGateway.BookCopyResult copyMainHandBook() {
             ItemView held = mainHand();
             if (held.isEmpty() || switch (held.id()) {
@@ -398,6 +401,7 @@ public final class Fakes {
             public int aggroRange = 0;
             public UUID target;
             public boolean dead;
+            public boolean armed = true;
             public final Set<UUID> lineOfSight = new HashSet<>();
         }
 
@@ -466,6 +470,10 @@ public final class Fakes {
         @Override public boolean isGuardOf(UUID entityId, int factionId) {
             Guard g = guards.get(entityId);
             return g != null && !g.dead && g.factionId == factionId;
+        }
+        @Override public boolean armed(UUID entityId) {
+            Guard g = guards.get(entityId);
+            return g == null || g.armed;
         }
     }
 
@@ -612,8 +620,7 @@ public final class Fakes {
 
     /** Full context backed by in-memory SavedData-equivalent stores. */
     public static StrajaContext context(TestServer server, FixedClock clock) {
-        StrajaPolicies policies = new StrajaPolicies();
-        return context(server, clock, policies);
+        return context(server, clock, policies());
     }
 
     public static StrajaContext context(TestServer server, FixedClock clock, StrajaPolicies policies) {
@@ -738,6 +745,9 @@ public final class Fakes {
     public static StrajaPolicies policies() {
         StrajaPolicies p = new StrajaPolicies();
         p.testCommandsEnabled = true;
+        // The production default ships blank (the commissioner is appointed
+        // in-world); fixtures that exercise a named commissioner pin it here.
+        p.commissionerName = "dwurdy";
         return p;
     }
 }

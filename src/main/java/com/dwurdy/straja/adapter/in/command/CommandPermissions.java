@@ -50,6 +50,7 @@ final class CommandPermissions {
             Map.entry("set-location", SETUP),
             Map.entry("setup", SETUP),
             Map.entry("policy", SETUP),
+            Map.entry("commissioner", SETUP),
             Map.entry("report", ADMIN),
             Map.entry("storage", ADMIN),
             Map.entry("message", ADMIN),
@@ -86,6 +87,7 @@ final class CommandPermissions {
             Map.entry("bribe", 0),
             Map.entry("search", 0),
             Map.entry("post", ADMIN),
+            Map.entry("poster", ADMIN),
             Map.entry("job", 0),
             Map.entry("jobpost", ADMIN),
             Map.entry("trade", 0),
@@ -94,6 +96,11 @@ final class CommandPermissions {
             Map.entry("status", 0),
             Map.entry("rules", 0),
             Map.entry("regulament", 0),
+            Map.entry("verificare", 0),
+            Map.entry("frisk", 0),
+            Map.entry("predare", 0),
+            Map.entry("surrender", 0),
+            Map.entry("denunt", 0),
             Map.entry("npc-action", 0));
 
     private CommandPermissions() {}
