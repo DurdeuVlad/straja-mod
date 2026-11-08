@@ -223,13 +223,24 @@ def _gh(args: list, token: str = None) -> str:
 def _gh_upload_release_assets(repo: str, tag: str, files: list,
                               attempts: int = 5, delay: float = 5.0):
     """Upload release assets, retrying the transient 404 that
-    uploads.github.com returns while a freshly-created release propagates."""
+    uploads.github.com returns while a freshly-created release propagates.
+
+    `gh release upload` can also report a 404 from a read-after-write lag on
+    GitHub's own upload-confirmation response even though the asset was
+    created successfully. Before retrying/raising, check whether every
+    requested file is already present as an asset; if so, treat it as a
+    success instead of burning retries or failing a complete release."""
     for attempt in range(attempts):
         try:
             _gh(["release", "upload", tag] + files +
                 ["--repo", repo, "--clobber"])
             return
         except PublishError:
+            rel = gh_release(repo, tag)
+            have = {a["name"] for a in (rel or {}).get("assets", [])}
+            wanted = {os.path.basename(f) for f in files}
+            if wanted <= have:
+                return
             if attempt == attempts - 1:
                 raise
             time.sleep(delay * (2 ** attempt))

@@ -302,6 +302,45 @@ class GitHubTests(unittest.TestCase):
         self.assertTrue(any(a[0] == "release" and a[1] == "upload"
                             for a in calls))
 
+    def test_upload_404_but_asset_already_landed_is_not_retried(self):
+        """Reproduces run 42475565345: `gh release upload` reports a 404
+        from read-after-write lag even though the asset was already
+        created. The verify-check should treat that as success."""
+        calls = []
+
+        def fake(args, token=None):
+            calls.append(args)
+            if "upload" in args:
+                raise pub.PublishError("HTTP 404: Not Found")
+            if "view" in args:
+                return json.dumps({"id": 5, "tagName": "v0.7.1",
+                                   "assets": [{"name": os.path.basename(self.jar)}]})
+            return ""
+
+        with mock.patch.object(pub, "_gh", fake):
+            pub._gh_upload_release_assets("r/r", "v0.7.1", [self.jar])
+        upload_calls = [c for c in calls if "upload" in c]
+        self.assertEqual(len(upload_calls), 1,
+                         "should not retry once the asset is verified present")
+
+    def test_upload_404_and_asset_genuinely_missing_still_retries(self):
+        calls = []
+
+        def fake(args, token=None):
+            calls.append(args)
+            if "upload" in args:
+                raise pub.PublishError("HTTP 404: Not Found")
+            if "view" in args:
+                return json.dumps({"id": 5, "tagName": "v0.7.1", "assets": []})
+            return ""
+
+        with mock.patch.object(pub, "_gh", fake):
+            with self.assertRaises(pub.PublishError):
+                pub._gh_upload_release_assets("r/r", "v0.7.1", [self.jar],
+                                              attempts=2, delay=0)
+        upload_calls = [c for c in calls if "upload" in c]
+        self.assertEqual(len(upload_calls), 2)
+
 
 class ResolveRcTests(unittest.TestCase):
     def test_highest_green_on_commit_wins(self):
