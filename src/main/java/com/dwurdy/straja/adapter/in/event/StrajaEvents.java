@@ -171,6 +171,7 @@ public final class StrajaEvents {
     public void onNameFormat(PlayerEvent.NameFormat event) {
         StrajaRuntime runtime = StrajaRuntime.get();
         if (runtime == null || !runtime.policies().rankPrefixChat) return;
+        if (event.getEntity().getServer() == null) return; // client-side Player (e.g. rendering), no server to query
         var gateway = new MinecraftPlayerGateway(event.getEntity().getServer(), event.getEntity().getUUID());
         String prefix = runtime.playerQueries().rankPrefixFor(gateway);
         if (prefix != null) {
@@ -183,6 +184,7 @@ public final class StrajaEvents {
     public void onTabListNameFormat(PlayerEvent.TabListNameFormat event) {
         StrajaRuntime runtime = StrajaRuntime.get();
         if (runtime == null || !runtime.policies().rankPrefixTab) return;
+        if (event.getEntity().getServer() == null) return; // client-side Player (e.g. rendering), no server to query
         var gateway = new MinecraftPlayerGateway(event.getEntity().getServer(), event.getEntity().getUUID());
         String prefix = runtime.playerQueries().rankPrefixFor(gateway);
         if (prefix != null) {
